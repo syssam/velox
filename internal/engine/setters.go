@@ -234,7 +234,7 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 	} else {
 		// In the caller's transaction, run there with no savepoint of its
 		// own, as Exec (a recorded write takes one, recordedTx); outside one,
-		// in velox's, whose Changes reach their sinks after its COMMIT.
+		// in velox's, whose sink runs before its COMMIT.
 		err = ownTx(ctx, db, run)
 	}
 	if err != nil {
@@ -284,7 +284,7 @@ func updateByKey(ctx context.Context, db *DB, t Table, st *Statement, vals []any
 	}
 	// In the caller's transaction, run there with no savepoint of its own,
 	// as Exec (a recorded write takes one, recordedTx); outside one, in
-	// velox's, whose Changes reach their sinks after its COMMIT.
+	// velox's, whose sink runs before its COMMIT.
 	if err := ownTx(ctx, db, run); err != nil {
 		return nil, err
 	}

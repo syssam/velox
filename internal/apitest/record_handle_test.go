@@ -26,13 +26,21 @@ func recInto(t *testing.T, h *velox.DB, r *velox.Recorder) bool {
 		return false
 	}
 	before := r.Len()
-	if err := rc.Sink(context.Background(), engine.ChangeRow{}); err != nil {
+	if err := rc.Sink(context.Background(), nil, []engine.ChangeRow{{}}); err != nil {
 		t.Fatal(err)
 	}
 	return r.Len() == before+1
 }
 
-// TestRecordHandleOnly: Record returns a new handle; the one it was called
+// ignoresOne reports whether m names one column of one entity, entity.
+func ignoresOne(m map[*engine.EntityInfo][]int, entity string) bool {
+	for in, cols := range m {
+		return len(m) == 1 && in.Name == entity && len(cols) == 1
+	}
+	return false
+}
+
+// TestRecordHandleOnly:Record returns a new handle; the one it was called
 // on records nothing and sends what it sent before.
 func TestRecordHandleOnly(t *testing.T) {
 	ctx := context.Background()
@@ -111,8 +119,8 @@ func TestRecordPropagates(t *testing.T) {
 	if rc := recEngine(rdb).Recording(); rc.Keep == nil || rc.Drop == nil {
 		t.Error("a Recorder sink has no Keep or Drop")
 	}
-	fn := db.Record(velox.RecordFunc(func(context.Context, velox.Change) error { return nil }), velox.RecordIgnore("updated_at"))
-	if rc := recEngine(fn).Recording(); rc.Keep != nil || rc.Drop != nil || len(rc.Ignore) != 1 || rc.Ignore[0] != "updated_at" {
+	fn := db.Record(velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error { return nil }), velox.RecordIgnore(I.Note))
+	if rc := recEngine(fn).Recording(); rc.Keep != nil || rc.Drop != nil || !ignoresOne(rc.Ignore, "testmodel.Invoice") {
 		t.Errorf("a RecordFunc's recording is %+v", rc)
 	}
 }

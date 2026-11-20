@@ -331,13 +331,13 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 	// The server version, for a recorded write, where a failure to read it
 	// cannot abort a transaction: before the BEGIN, or in a savepoint of its
 	// own in the caller's (primeVersion). newRepoint only looks at it.
-	if db.recording(ctx) != nil {
+	if db.rec != nil {
 		primeVersion(ctx, db)
 	}
-	// db.Tx, but that a recording handle's sink, outside a transaction,
-	// runs after the COMMIT (ownTx).
+	// db.Tx, but that through a recording handle fn is one recorded write
+	// (batched), whose sink runs before the RELEASE or the COMMIT.
 	if db.InTx {
-		return db.Tx(ctx, fn)
+		return db.Tx(ctx, batched(db, false, fn))
 	}
 	return ownTxPrimed(ctx, db, true, fn)
 }
@@ -356,7 +356,7 @@ type repoint struct {
 // newRepoint is the repoint of a write of in through db under ctx, nil
 // when db does not record it.
 func newRepoint(ctx context.Context, db *DB, in *EntityInfo) *repoint {
-	if db.recording(ctx) == nil {
+	if db.rec == nil {
 		return nil
 	}
 	tw := tracker{in: in, t: InfoTable(in), cols: everyColumn(in), old: returnsOld(ctx, db)}
@@ -398,11 +398,11 @@ func (r *repoint) report(rows []ChangeRow) {
 
 // emit reports what the write changed to tx's recording (emit): an updated
 // row whose statements left it as it was is not reported.
-func (r *repoint) emit(ctx context.Context, tx *DB) error {
+func (r *repoint) emit(tx *DB) error {
 	if r == nil {
 		return nil
 	}
-	return emit(ctx, tx, r.rows)
+	return emit(tx, r.rows)
 }
 
 // bidiUpdate sends an update that sets bidirectional keys of row k, and then
@@ -462,7 +462,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *MutationState, keys []bidiKey, 
 				}
 			}
 		}
-		return r.emit(ctx, tx)
+		return r.emit(tx)
 	})
 	if err != nil {
 		return err
@@ -561,6 +561,6 @@ func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, k
 				return err
 			}
 		}
-		return r.emit(ctx, tx)
+		return r.emit(tx)
 	})
 }

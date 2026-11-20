@@ -225,7 +225,7 @@ func TestDiff(t *testing.T) {
 func TestRecorderDrop(t *testing.T) {
 	var rec Recorder
 	a := rec.keep(Change{Key: 1})
-	_ = rec.Record(t.Context(), Change{Key: 2})
+	_ = rec.Record(t.Context(), nil, []Change{{Key: 2}})
 	c := rec.keep(Change{Key: 3})
 	_ = rec.keep(Change{Key: 4})
 	rec.drop([]uint64{a, c, 99}) // 99: never kept

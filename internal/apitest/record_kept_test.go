@@ -215,15 +215,13 @@ func TestRecordBidiSinkErrorInTx(t *testing.T) {
 		{spouse(2, 0)}, {spouse(2, 5)},
 	}}
 	boom := errors.New("boom")
-	var tx *velox.DB
-	sink := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
+	sink := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, _ []velox.Change) error {
 		if _, err := tx.Delete[testmodel.Invoice]().Where(I.ID.EQ(99)).Exec(ctx); err != nil { // the sink's write
 			return err
 		}
 		return boom
 	})
-	err := openFake(velox.Postgres, e).Record(sink).Tx(ctx, func(ctx context.Context, t2 *velox.DB) error {
-		tx = t2
+	err := openFake(velox.Postgres, e).Record(sink).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		if err := tx.Save(&bspouse{ID: 5, SpouseID: new(int64(2))}, bspouses.SpouseID).Exec(ctx); !errors.Is(err, boom) {
 			t.Errorf("Save: %v, want the sink's error", err)
 		}

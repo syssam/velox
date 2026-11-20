@@ -16,27 +16,43 @@ type ChangeRow struct {
 	Soft     bool
 	In       *EntityInfo
 	Old, New unsafe.Pointer
-	// ignore is the recording's RecordIgnore columns, which Diff leaves
-	// out; set by emit.
-	ignore []string
+	// rec is the recording the row was emitted to, whose ignored columns
+	// Diff leaves out; set by emit.
+	rec *Recording
 }
 
-// Recording is what a recording handle does with each ChangeRow: Sink
-// receives it, and Ignore names the columns left out of an update's
-// comparison. Keep and Drop are set only when the sink is a
-// *velox.Recorder: Keep keeps a ChangeRow and returns its id, unique in the
-// Recorder and growing, and Drop drops the rows of the ids given,
-// ascending, for a transaction or savepoint that rolls back. In the
-// caller's transaction emit calls Keep in place of Sink and the
+// Recording is what a recording handle does with the ChangeRows of each
+// write: Sink receives them, all of one write in one call, with the write's
+// transaction handle (one that does not record). Ignore names, per entity,
+// columns left out of an update's comparison; Include names columns with an
+// UpdateDefault, which are left out unless named here. Keep and Drop are set
+// only when the sink is a *velox.Recorder: Keep keeps a ChangeRow and returns
+// its id, unique in the Recorder and growing, and Drop drops the rows of the
+// ids given, ascending, for a transaction or savepoint that rolls back. Where
+// velox sees the transaction end, flush calls Keep in place of Sink and the
 // transaction notes the id (txFrame.kept): rows are dropped by id, not by
 // position, so a Recorder shared by concurrent transactions loses only the
 // rows of the one that rolls back. A transaction the caller began on its own
 // *sql.Tx (UseTx), whose end velox never sees, calls Sink and keeps nothing.
 type Recording struct {
-	Sink   func(ctx context.Context, r ChangeRow) error
-	Ignore []string
-	Keep   func(r ChangeRow) uint64
-	Drop   func(ids []uint64)
+	Sink    func(ctx context.Context, tx *DB, rows []ChangeRow) error
+	Ignore  map[*EntityInfo][]int
+	Include map[*EntityInfo][]int
+	Keep    func(r ChangeRow) uint64
+	Drop    func(ids []uint64)
+}
+
+// ignores reports whether r leaves column col of entity in out of an
+// update's comparison: Ignore names it, or it has an UpdateDefault that
+// Include does not name.
+func (r *Recording) ignores(in *EntityInfo, col int) bool {
+	if r != nil && slices.Contains(r.Ignore[in], col) {
+		return true
+	}
+	if in.Columns[col].UpdateDefault == nil {
+		return false
+	}
+	return r == nil || !slices.Contains(r.Include[in], col)
 }
 
 // Record returns a DB like db whose writes go to r, as do those of the
@@ -45,7 +61,7 @@ type Recording struct {
 // and configuration, and Close on it closes nothing.
 func (db *DB) Record(r *Recording) *DB {
 	c := *db
-	c.rec, c.owned = r, false
+	c.rec, c.owned, c.batch = r, false, nil
 	return &c
 }
 
@@ -113,7 +129,7 @@ func (r ChangeRow) Diff() []FieldChange {
 	var out []FieldChange
 	for i := range r.In.Columns {
 		c := &r.In.Columns[i]
-		if c.Sensitive || slices.Contains(r.ignore, c.Name) {
+		if c.Sensitive || r.rec.ignores(r.In, i) {
 			continue
 		}
 		if a, b := r.value(i, r.Old), r.value(i, r.New); !EqualValues(a, b) {
@@ -134,57 +150,45 @@ func (r ChangeRow) value(col int, p unsafe.Pointer) any {
 // does not ignore: an update that changes none is not reported.
 func (r ChangeRow) changed() bool {
 	for i := range r.In.Columns {
-		if !slices.Contains(r.ignore, r.In.Columns[i].Name) && !EqualValues(r.value(i, r.Old), r.value(i, r.New)) {
+		if !r.rec.ignores(r.In, i) && !EqualValues(r.value(i, r.Old), r.value(i, r.New)) {
 			return true
 		}
 	}
 	return false
 }
 
-// sinkKey marks the context a Recording's sink runs under. A write through a
-// handle recording to r, under a context so marked, is not recorded: the
-// audit row a sink writes for a Change is not itself audited.
-type sinkKey struct{ r *Recording }
-
-// recording is what db's write under ctx is recorded to: nil when db does
-// not record, or when ctx is that of its recording's sink.
-func (db *DB) recording(ctx context.Context) *Recording {
-	if db.rec == nil || ctx.Value(sinkKey{db.rec}) != nil {
-		return nil
-	}
-	return db.rec
+// batch is the Changes of one recorded write, a caller's call (an Exec, an
+// Insert, a Rel.Add…), collected across its statements and handed to the
+// sink in one call before the write's frame ends (flush): before the RELEASE
+// of its savepoint in the caller's transaction, or the COMMIT of the
+// transaction velox opened for it. own says velox opened that transaction.
+// The handle of the write's frame, and those derived from it and of the
+// savepoints within it, carry it (DB.batch), so that the write's parts join
+// it; a handle Record returns carries none.
+type batch struct {
+	rows []ChangeRow
+	own  bool
 }
 
-// pending is the Changes the recorded writes in a transaction velox opened
-// for them made, each with its recording, waiting for the COMMIT.
-type pending struct {
-	rows []pendingRow
-}
-
-type pendingRow struct {
-	r   *Recording
-	row ChangeRow
-}
-
-// len is the number of Changes waiting; 0 for a nil p.
-func (p *pending) len() int {
-	if p == nil {
+// len is the number of Changes collected; 0 for a nil b.
+func (b *batch) len() int {
+	if b == nil {
 		return 0
 	}
-	return len(p.rows)
+	return len(b.rows)
 }
 
-// truncate drops the Changes after the first n, those of a savepoint that
-// rolled back. A nil p holds none.
-func (p *pending) truncate(n int) {
-	if p != nil && n < len(p.rows) {
-		clear(p.rows[n:])
-		p.rows = p.rows[:n]
+// truncate drops the Changes after the first n, those of a savepoint within
+// the write that rolled back. A nil b holds none.
+func (b *batch) truncate(n int) {
+	if b != nil && n < len(b.rows) {
+		clear(b.rows[n:])
+		b.rows = b.rows[:n]
 	}
 }
 
-// keptRow is a ChangeRow a Recorder kept in the caller's transaction: its
-// recording and the id Keep returned, for Drop on a rollback.
+// keptRow is a ChangeRow a Recorder kept in a transaction: its recording and
+// the id Keep returned, for Drop on a rollback.
 type keptRow struct {
 	r  *Recording
 	id uint64
@@ -214,53 +218,76 @@ func (f *txFrame) unkeep(n int) {
 	f.kept = f.kept[:n]
 }
 
-// emit reports rows, the rows a write through db changed, to db's recording:
+// emit adds rows, the rows a write through db changed, to the write's batch:
 // each update that changed a column the recording does not ignore, and every
-// other row, in order. In a transaction velox opened for the write (ownTx),
-// they wait for its COMMIT. Otherwise each goes to the sink now: in the
-// caller's transaction, when db is in one, after the write's statements and
-// in the savepoint recordedTx holds them in. The
-// first error a sink returns is emit's, and the rest are not reported.
-func emit(ctx context.Context, db *DB, rows []ChangeRow) error {
+// other row, in order. The sink gets them when the write's frame ends
+// (flush).
+func emit(db *DB, rows []ChangeRow) error {
 	r := db.rec
 	if r == nil {
 		return nil
 	}
-	var pend *pending
-	if db.txRoot != nil {
-		pend = db.txRoot.pend
+	b := db.batch
+	if b == nil {
+		return errors.New("velox: internal error: a recorded write reported its changes outside its transaction")
 	}
-	var sctx context.Context
 	for _, row := range rows {
-		row.ignore = r.Ignore
+		row.rec = r
 		if row.Op == OpUpdate && !row.changed() {
 			continue
 		}
-		if pend != nil {
-			pend.rows = append(pend.rows, pendingRow{r: r, row: row})
-			continue
-		}
-		if r.Keep != nil && db.txRoot != nil && !db.txRoot.adopted {
-			// A Recorder neither fails nor writes: it needs no sink context.
-			db.txRoot.kept = append(db.txRoot.kept, keptRow{r: r, id: r.Keep(row)})
-			continue
-		}
-		if sctx == nil {
-			sctx = context.WithValue(ctx, sinkKey{r}, true)
-		}
-		if err := r.Sink(sctx, row); err != nil {
-			return err
-		}
+		b.rows = append(b.rows, row)
 	}
 	return nil
 }
 
-// ownTx runs fn on db when db is in a transaction, the caller's. Otherwise
-// it runs fn in a transaction of its own, and, when db records, the Changes
-// emitted in it go to their sinks after its COMMIT: the write is committed
-// when a sink runs, and a sink's error, which ownTx returns, undoes nothing.
-// A recorded write in fn, on db's transaction, runs in a savepoint of its own
-// (recordedTx).
+// flush hands b's Changes, those of the write whose frame tx is, to tx's
+// recording, before the frame's RELEASE or COMMIT: a Recorder keeps them,
+// and the transaction notes their ids, to drop on a rollback; any other sink
+// gets them in one call, with a handle on tx's transaction that does not
+// record, so that what the sink writes through it joins the write's
+// transaction and is not recorded. In a transaction the caller began on its
+// own *sql.Tx (UseTx) a Recorder gets them as any sink does, as velox never
+// sees that transaction end. A write that changed nothing calls no sink.
+func (b *batch) flush(ctx context.Context, tx *DB) error {
+	r := tx.rec
+	if len(b.rows) == 0 || r == nil {
+		return nil
+	}
+	if r.Keep != nil && !tx.txRoot.adopted {
+		for _, row := range b.rows {
+			tx.txRoot.kept = append(tx.txRoot.kept, keptRow{r: r, id: r.Keep(row)})
+		}
+		return nil
+	}
+	h := *tx
+	h.rec, h.batch = nil, nil
+	return r.Sink(ctx, &h, b.rows)
+}
+
+// batched is fn as the body of a recorded write's frame, own when velox
+// opened its transaction: it gives the frame's handle a batch, runs fn, and
+// flushes the batch. It is fn as it is when db does not record, or when a
+// write of db is under way already (db.batch): fn's writes join its batch.
+func batched(db *DB, own bool, fn func(ctx context.Context, tx *DB) error) func(ctx context.Context, tx *DB) error {
+	if db.rec == nil || db.batch != nil {
+		return fn
+	}
+	return func(ctx context.Context, tx *DB) error {
+		b := &batch{own: own}
+		tx.batch = b
+		if err := fn(ctx, tx); err != nil {
+			return err
+		}
+		return b.flush(ctx, tx)
+	}
+}
+
+// ownTx runs fn on db when db is in a transaction, the caller's or velox's.
+// Otherwise it runs fn in a transaction of its own; when db records, fn is
+// one recorded write (batched), whose sink runs before the COMMIT, so that a
+// sink's error rolls the write back. A recorded write in fn, in the caller's
+// transaction, runs in a savepoint of its own (recordedTx).
 //
 // Before the BEGIN of a transaction for a recording handle it learns the
 // server version (primeVersion), where a failure to read it cannot abort
@@ -278,34 +305,25 @@ func ownTxPrimed(ctx context.Context, db *DB, primed bool, fn func(ctx context.C
 	if db.rec == nil {
 		return db.Tx(ctx, fn)
 	}
-	if !primed && db.recording(ctx) != nil {
+	if !primed {
 		primeVersion(ctx, db)
 	}
-	p := &pending{}
-	err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
-		p.truncate(0) // anew, on a retry
-		tx.txRoot.pend = p
-		return fn(ctx, tx)
-	})
-	if err != nil {
-		return err
-	}
-	for _, pr := range p.rows {
-		if err := pr.r.Sink(context.WithValue(ctx, sinkKey{pr.r}, true), pr.row); err != nil {
-			return err
-		}
-	}
-	return nil
+	return db.Tx(ctx, batched(db, true, fn))
 }
 
+// inOwnTx reports whether db is in a transaction velox opened for a recorded
+// write, which is under way.
+func inOwnTx(db *DB) bool { return db.batch != nil && db.batch.own }
+
 // recordedTx runs fn, a recorded write's statements and its emit, so that
-// a write that fails took no effect. In the caller's transaction it runs fn
-// in a savepoint: an error from a statement or from a sink rolls back to it.
-// In a transaction velox opened (ownTx) it runs fn there, as that
-// transaction rolls back on an error. Outside a transaction it is ownTx.
+// a write that fails took no effect and its sink runs before its frame ends.
+// In the caller's transaction it runs fn in a savepoint: an error from a
+// statement or from the sink rolls back to it. In a transaction velox opened
+// for the write (ownTx) it runs fn there, as that transaction rolls back on
+// an error. Outside a transaction it is ownTx.
 func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
-	if db.InTx && db.txRoot.pend == nil {
-		return db.Tx(ctx, fn)
+	if db.InTx && !inOwnTx(db) {
+		return db.Tx(ctx, batched(db, false, fn))
 	}
 	// Its writes asked the server version already, when they needed it.
 	return ownTxPrimed(ctx, db, true, fn)
@@ -320,7 +338,7 @@ func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB
 // savepoint. In a transaction velox opened, the version was asked before
 // its BEGIN (primeVersion), and outside one returnsOld asked it.
 func versionedTx(ctx context.Context, db *DB, old *bool, fn func(ctx context.Context, tx *DB) error) error {
-	if *old || !db.InTx || db.txRoot.pend != nil || !versionUnknown(ctx, db) {
+	if *old || !db.InTx || inOwnTx(db) || !versionUnknown(ctx, db) {
 		return recordedTx(ctx, db, fn)
 	}
 	var verr error
@@ -345,10 +363,12 @@ func versionedTx(ctx context.Context, db *DB, old *bool, fn func(ctx context.Con
 
 // atomically runs fn in a savepoint when db is in a transaction, and else
 // in a transaction of velox's own, as ownTx: in both, fn's writes commit or
-// roll back together.
+// roll back together. Through a recording handle fn is one recorded write
+// (batched): one sink call, before the RELEASE or the COMMIT, has the
+// Changes of all of fn's statements.
 func atomically(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
 	if db.InTx {
-		return db.Tx(ctx, fn)
+		return db.Tx(ctx, batched(db, false, fn))
 	}
 	return ownTx(ctx, db, fn)
 }

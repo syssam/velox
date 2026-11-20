@@ -398,7 +398,7 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 		return err
 	}
 	ends := t.defaultRuns(db, xs, cols)
-	if db.recording(ctx) != nil {
+	if db.rec != nil {
 		return t.recordMany(ctx, db, xs, cols, per, ends, cf, out)
 	}
 	if len(ends) == 1 && xs.n <= per && !ConditionedUpsert(ctx, db, t.info, cf, xs.n) {
@@ -433,15 +433,14 @@ func (t *table) recordMany(ctx context.Context, db *DB, xs TableRows, cols []int
 			return err
 		}
 	}
-	// On PostgreSQL 18 an upsert reads no row first: one statement is single.
+	// On PostgreSQL 18 an upsert reads no row first.
 	old := cf != nil && returnsOld(ctx, db)
-	single := len(ends) == 1 && xs.n <= per && (cf == nil || old && !ConditionedUpsert(ctx, db, t.info, cf, xs.n))
 	var n int64
 	var oldp *bool
 	if cf != nil {
 		oldp = &old
 	}
-	err := recordedInsert(ctx, db, single, oldp, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+	err := recordedInsert(ctx, db, oldp, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
 		var changes []ChangeRow
 		var err error
 		n, err = t.insertBatches(ctx, tx, xs, cols, per, ends, cf, func(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int) (int64, error) {

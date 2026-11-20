@@ -555,7 +555,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
-	mark, kmark := db.txRoot.pend.len(), len(db.txRoot.kept)
+	mark, kmark := db.batch.len(), len(db.txRoot.kept)
 	finished := false
 	defer func() {
 		if !finished {
@@ -563,10 +563,10 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
-	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec}, db.txRoot)
+	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
-		db.txRoot.pend.truncate(mark)
+		db.batch.truncate(mark)
 		db.txRoot.unkeep(kmark)
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
@@ -582,7 +582,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		// The nested Tx fails, so its work must not commit with the
 		// transaction: undo it, or break the transaction when that fails too.
 		err = savepointErr(sctx, "release savepoint", err)
-		db.txRoot.pend.truncate(mark)
+		db.batch.truncate(mark)
 		db.txRoot.unkeep(kmark)
 		rerr := db.undoSavepoint(ctx, name)
 		db.breakOn(rerr)
@@ -730,9 +730,6 @@ type txFrame struct {
 	ended      atomic.Bool
 	savepoints atomic.Uint64
 	broken     error
-	// pend is, on the frame of a transaction velox opened for a recorded
-	// write (ownTx), the Changes waiting for its COMMIT; nil on any other.
-	pend *pending
 	// kept is, on the root, the rows Recorders kept in the transaction, in
 	// order: a savepoint that rolls back drops those after its mark, and a
 	// transaction that does not commit drops them all (unkeep).

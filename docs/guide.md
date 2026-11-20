@@ -1044,33 +1044,39 @@ handle like `db` whose writes report each row they change to the sink: one
 before and after the write. velox reads the old row in the write's own
 transaction, locked, so it is the row the write replaced.
 
-Here every change in a transaction becomes an audit row in the same
-transaction. `veloxgen.AuditLog` is your own audit entity, not part of the
-tour (`I := veloxgen.Invoices`):
+The sink gets all of a write's changes in one call, inside the write's
+transaction, before it commits, with `tx`, a handle on that transaction
+that does not record. Here a sink set up once, at startup, turns every
+write's changes into audit rows in the write's own transaction.
+`veloxgen.AuditLog` is your own audit entity, not part of the tour
+(`I := veloxgen.Invoices`):
 
 ```go
-var tx *velox.DB
-audit := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
-	old, err := json.Marshal(c.OldRow()) // null for an insert
-	if err != nil {
-		return err
+audit := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, changes []velox.Change) error {
+	rows := make([]veloxgen.AuditLog, len(changes))
+	for i, c := range changes {
+		old, err := json.Marshal(c.OldRow()) // null for an insert
+		if err != nil {
+			return err
+		}
+		cur, err := json.Marshal(c.NewRow()) // null for a delete
+		if err != nil {
+			return err
+		}
+		var changed []string
+		for _, f := range c.Diff() {
+			changed = append(changed, f.Name)
+		}
+		rows[i] = veloxgen.AuditLog{
+			Entity: c.Entity, Key: fmt.Sprint(c.Key), Op: c.Op.String(),
+			Old: old, New: cur, Changed: changed,
+		}
 	}
-	cur, err := json.Marshal(c.NewRow()) // null for a delete
-	if err != nil {
-		return err
-	}
-	var changed []string
-	for _, f := range c.Diff() {
-		changed = append(changed, f.Name)
-	}
-	return tx.Insert(&veloxgen.AuditLog{
-		Entity: c.Entity, Key: fmt.Sprint(c.Key), Op: c.Op.String(),
-		Old: old, New: cur, Changed: changed,
-	}).Exec(ctx) // the ctx the sink is given: this insert is not recorded
+	return tx.InsertAll(rows).Exec(ctx) // in the write's transaction, not recorded
 })
-rdb := db.Record(audit, velox.RecordIgnore("updated_at"))
-err := rdb.Tx(ctx, func(ctx context.Context, t *velox.DB) error {
-	tx = t
+rdb := db.Record(audit) // once, at startup
+
+err := rdb.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 	_, err := tx.Update[veloxgen.Invoice]().Where(I.TotalCents.LT(10000)).Set(I.TotalCents.Add(500)).Exec(ctx)
 	return err
 })
@@ -1088,11 +1094,14 @@ SELECT "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "cust
 UPDATE "invoices" SET "total_cents" = "total_cents" + $1, "updated_at" = $2
   WHERE "total_cents" < $3 AND "id" IN ($4, $5) AND "deleted_at" IS NULL AND "org_id" = $6
   RETURNING "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "customer", "status", "total_cents"
-INSERT INTO "audit_logs" …  -- the sink, once per row
-INSERT INTO "audit_logs" …
+INSERT INTO "audit_logs" … VALUES (…), (…)  -- the sink, once for the write
 RELEASE SAVEPOINT velox_1
 COMMIT
 ```
+
+Outside `Tx` the same write sends the same statements in a transaction of
+velox's own, with no SAVEPOINT: the SHOW, BEGIN, the read, the UPDATE, the
+sink's INSERT, COMMIT. A sink error rolls the write back in both.
 
 SQLite sends the same without `FOR UPDATE` and the SHOW, and with its
 guard against integer overflow in the Add: `"total_cents" = CASE WHEN
@@ -1114,7 +1123,8 @@ what a transaction, a savepoint or a retried attempt rolled back, so once
 `Tx` returns it holds what committed. A Recorder shared by concurrent
 transactions also holds, in `All` and `Len`, the rows of those still running,
 until they commit or roll back. [ExampleDB_Record](../example_record_test.go) builds
-an audit batch this way.
+an audit batch this way, and ExampleRecordFunc there writes audit rows
+through the sink's `tx`.
 
 ### What a Change holds
 
@@ -1132,9 +1142,12 @@ an audit batch this way.
 - An insert's new row holds what velox reads back: the generated key and
   the declared database defaults. A value a trigger or an undeclared
   database default sets is the Go zero there.
-- An update that changes no column is not reported. `RecordIgnore` names
-  columns that do not count, such as `updated_at`; Diff leaves them out,
-  but the getters and the rows still hold them.
+- An update that changes no column is not reported. A column an
+  `UpdateDefault` fills, such as `updated_at`, does not count: every update
+  changes it. `velox.RecordIgnore(I.Customer)` names more columns that do
+  not count, and `velox.RecordKeep(I.UpdatedAt)` takes an UpdateDefault
+  column back in; pass one of each per entity. Diff leaves ignored columns
+  out, but the getters and the rows still hold them.
 - A `Sensitive` column keeps ent's meaning: it is not printed or
   serialized. The getters and `RowsOf` give its real value, `OldRow` and
   `NewRow` marshal without it, and Diff leaves it out. Nothing is masked.
@@ -1143,23 +1156,27 @@ an audit batch this way.
 
 ### When the sink runs
 
-The sink runs after the write's statements, before the write returns, once
-per Change, in order. Its error is the write's error.
+The sink runs once per write (an `Exec`, a `One`, an `Insert`, an
+`InsertAll`, a `Save`, the edge writes of a `Rel.Add`), after its
+statements and inside its transaction, before COMMIT, with every Change of
+the write in order. A write that changed nothing does not call it. Its
+error is the write's error, and rolls the write back.
 
 - In a transaction, the write and the sink run under a savepoint. An error
   from either rolls back to it, so a recorded write that returns an error
-  took no effect, and an audit row written on the transaction commits or
-  rolls back with the change.
-- Outside a transaction, the write commits first. A sink error undoes
-  nothing, and the write's later changes are not delivered.
-- A `RecordFunc` sees each change as it happens, including one a later
-  rollback undoes. For side effects outside the database, use a Recorder.
+  took no effect.
+- Outside a transaction, velox opens one for the write, and the sink runs
+  before its COMMIT.
+- `tx` is a handle on the write's transaction that does not record: what
+  the sink writes through it commits or rolls back with the change, and is
+  not recorded itself.
+- A `RecordFunc` sees each write's changes before the commit, including
+  those a later rollback of your transaction undoes. For side effects
+  outside the database, use a Recorder and act once `Tx` returns.
 - velox never sees a transaction you began yourself (`velox.UseTx`) end:
   every change goes to the sink, and a Recorder used through it keeps the
-  changes of a transaction that rolls back.
-- A sink writes with the `ctx` it is given, or through a handle that does
-  not record. A write through the recording handle under another context is
-  recorded, and comes back to the sink.
+  changes of a transaction that rolls back. What the sink writes through
+  `tx` there rolls back with your transaction.
 
 ### Which writes are recorded
 
@@ -1192,11 +1209,7 @@ A handle that does not record sends what it always sent. A recording one
 adds:
 
 - below PostgreSQL 18, one locked read per update or delete;
-- outside a transaction, a BEGIN and a COMMIT, unless the write is one
-  statement that commits by itself: an insert of one statement, and on
-  PostgreSQL 18 an update or delete of one row by key when the DB has no
-  Rewrite hooks, or an upsert of one statement whose update branch gets no
-  policy or interceptor condition;
+- outside a transaction, a BEGIN and a COMMIT, for a single statement too;
 - in a transaction, a SAVEPOINT and a RELEASE per write;
 - on PostgreSQL, one `SHOW server_version_num` per pool, at the first
   recorded write.

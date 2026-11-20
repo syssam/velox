@@ -56,6 +56,9 @@ type DB struct {
 	bypass string
 	// rec is Record's: a DB whose writes go to its sink; nil on any other.
 	rec *Recording
+	// batch is, on the handles of a recorded write's transaction or
+	// savepoint, the write's Changes so far (batched); nil elsewhere.
+	batch *batch
 }
 
 // Open is velox.Open's DB, opts given as a slice.

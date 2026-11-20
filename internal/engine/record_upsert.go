@@ -14,30 +14,22 @@ import (
 type insertSend func(ctx context.Context, tx *DB, st *Statement) (int64, error)
 
 // recordedInsert runs fn, which sends a recorded insert's statements and
-// returns its Changes, and emits them. A single INSERT outside a transaction
-// (an upsert's too, on PostgreSQL 18, which reads no row first) is sent as
-// it is: it commits on its own, so the sink, which runs after it,
-// sees a committed write, and the handle sends what one that does not record
-// sends. Anything else runs under recordedTx: an upsert, whose locked read
-// and INSERT must be one, and an InsertAll of several statements, in a
-// transaction of velox's own, whose COMMIT the sink waits for; and, in the
-// caller's transaction, every insert, in a savepoint that holds its
-// statements and the sink.
+// returns its Changes, and emits them, under recordedTx: outside a
+// transaction in one of velox's own, a single INSERT's too, and in the
+// caller's in a savepoint; either holds the statements and the sink, which
+// runs before the COMMIT or the RELEASE.
 //
 // old is nil for a plain insert. For an upsert it says whether it reads its
 // old values in the INSERT (PostgreSQL 18: returnsOld); in the caller's
 // transaction, with the server version not known yet, versionedTx learns it
 // inside the write's savepoint and sets it.
-func recordedInsert(ctx context.Context, db *DB, single bool, old *bool, fn func(ctx context.Context, tx *DB) ([]ChangeRow, error)) error {
+func recordedInsert(ctx context.Context, db *DB, old *bool, fn func(ctx context.Context, tx *DB) ([]ChangeRow, error)) error {
 	run := func(ctx context.Context, tx *DB) error {
 		rows, err := fn(ctx, tx)
 		if err != nil {
 			return err
 		}
-		return emit(ctx, tx, rows)
-	}
-	if single && !db.InTx {
-		return run(ctx, db)
+		return emit(tx, rows)
 	}
 	if old != nil {
 		return versionedTx(ctx, db, old, run)
@@ -86,8 +78,7 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 		if cp.Conflict != nil {
 			old = &cp.returnOld
 		}
-		// On PostgreSQL 18 an upsert is one statement too.
-		err = recordedInsert(ctx, db, cp.Conflict == nil || cp.returnOld, old, send)
+		err = recordedInsert(ctx, db, old, send)
 	}
 	out.Affected = n
 	return err

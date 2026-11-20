@@ -2,6 +2,10 @@
 
 - Status: accepted, 2026-11-20. Replaces this ADR's first text,
   `Mutation.Track` and `Mutation.Changes` in a hook, which was never pushed.
+  Amended the same day (A++ round): the sink gets the write's transaction
+  and all of the write's Changes in one call, always before COMMIT; the
+  context guard of rule 6 is gone; UpdateDefault columns are ignored by
+  default, and `RecordIgnore` is typed.
 
 ## Context
 
@@ -26,24 +30,27 @@ Recording is a property of the `*velox.DB` a write goes through, as
 `WithoutPolicy` is:
 
 ```go
-var rec velox.Recorder
-rdb := db.Record(&rec, velox.RecordIgnore("updated_at"))
-rdb.Update[veloxgen.Invoice]().Where(I.TotalCents.LT(10000)).Set(I.TotalCents.Add(500)).Exec(ctx)
-for c := range rec.All() {
-	batch.Add(c.Entity, c.Key, c.Op, c.OldRow(), c.NewRow(), c.Diff())
-	if c.Changed(I.TotalCents) {
-		log.Printf("total_cents %v -> %v", I.TotalCents.Old(c), I.TotalCents.New(c))
+// Once, at startup: every write's Changes become audit rows in the write's
+// own transaction.
+rdb := db.Record(velox.RecordFunc(func(ctx context.Context, tx *velox.DB, cs []velox.Change) error {
+	rows := make([]veloxgen.AuditLog, len(cs))
+	for i, c := range cs {
+		rows[i] = auditRow(c) // c.Entity, c.Key, c.Op, c.OldRow(), c.NewRow(), c.Diff()
 	}
-}
+	return tx.InsertAll(rows).Exec(ctx)
+}))
+rdb.Update[veloxgen.Invoice]().Where(I.TotalCents.LT(10000)).Set(I.TotalCents.Add(500)).Exec(ctx)
 ```
 
 ### API
 
 - `db.Record(s Sink, opts ...RecordOption) *DB`. A nil sink panics.
-  `RecordIgnore(columns...)` is the one option.
-- `Sink` has `Record(ctx, Change) error`. `RecordFunc` is a function as a
-  Sink. `Recorder` is a Sink that keeps what it receives: `All`, `Len`,
-  `Reset`. Its zero value is ready, and it is safe for concurrent use.
+  `RecordIgnore[E](cols...)` and `RecordKeep[E](cols...)` are the options,
+  typed, one per entity.
+- `Sink` has `Record(ctx, tx *DB, changes []Change) error`. `RecordFunc` is
+  a function as a Sink. `Recorder` is a Sink that keeps what it receives
+  and ignores tx: `All`, `Len`, `Reset`. Its zero value is ready, and it is
+  safe for concurrent use.
 - `Change{Entity, Op, Key, Soft}` and unexported rows. `Entity` is the Go
   type's name ("Invoice"). `Key` is the primary key after the write for an
   insert or an update, and before it for a delete; a `[]any` for a composite
@@ -71,13 +78,18 @@ package. As handle methods they cost a few KB per entity package
    its `Tx` and savepoints, its `WithoutPolicy`, and a hook's `Mutation.DB()`
    on one of its writes. `Record` on a recording handle replaces the sink
    and options. Raw SQL, dry runs (`SQL(ctx)`) and a hook that skips next
-   are not recorded. Nothing is read from the context, except the mark on
-   the sink's own ctx (rule 6). `Record` on a transaction's handle replaces
-   the sink for that handle; a rollback still drops a Recorder's rows.
-2. **One Change per row.** An update or delete reports its rows in key
-   order, an insert in the order given. An update reports a row only when a
-   column outside `RecordIgnore` differs. Values compare by an `Equal`
-   method, `bytes.Equal` for bytes, else `reflect.DeepEqual`.
+   are not recorded. Nothing about recording is read from or stored in the
+   context. `Record` on a transaction's handle replaces the sink for that
+   handle; a rollback still drops a Recorder's rows.
+2. **One Change per row, one sink call per write.** An update or delete
+   reports its rows in key order, an insert in the order given. An update
+   reports a row only when a column it does not ignore differs (rule 3).
+   Values compare by an `Equal` method, `bytes.Equal` for bytes, else
+   `reflect.DeepEqual`. All the Changes of one write method call (`Exec`,
+   `One`, `Insert`, `InsertAll`, a `Save`, the edge writes of `Rel.Add`,
+   `Remove`, `Set`, `Clear`, a soft delete's `Exec`) go to the sink in one
+   call, across its chunks, re-point steps, mirror rows and default runs
+   (0093); a write that changed nothing calls no sink.
 3. **Values.** Plain Go values, as `Mutation.Value` gives them; a JSON
    column's decoded value. An insert's new row holds what velox reads back
    (0093): a generated key and the declared database defaults. A value a
@@ -87,18 +99,20 @@ package. As handle methods they cost a few KB per entity package
      marshal without the column (`json:"-"`), and `Diff` leaves it out.
      Nothing is masked. An update that changes only a Sensitive column is
      reported with an empty `Diff`; `c.Changed(col)` tells it changed.
-   - `RecordIgnore` columns are left out of `Diff` and do not make a row
-     changed. `Old`, `New`, `Changed`, `OldRow` and `NewRow` still read them.
-4. **When the sink runs.** After the write's statements, before the write
-   returns, once per Change, in order. A sink error is the write's error.
+   - Ignored columns are left out of `Diff` and do not make a row changed.
+     `Old`, `New`, `Changed`, `OldRow` and `NewRow` still read them. A
+     column an `UpdateDefault` fills (`updated_at`) is ignored without being
+     named, as every update changes it; `RecordKeep` takes it back in.
+     `RecordIgnore` names more, and wins over `RecordKeep`.
+4. **When the sink runs.** After the write's statements, inside the write's
+   transaction, before its COMMIT or the RELEASE of its savepoint. A sink
+   error is the write's error, and rolls the write back, everywhere.
    - In a caller's transaction the write and the sink run under a
      savepoint. An error from either rolls back to it, so a recorded write
      that returns an error took no effect.
-   - In a transaction velox opens for the write, the Changes wait for its
-     COMMIT.
-   - Outside a transaction the sink runs after COMMIT, and its error undoes
-     nothing; the write's later Changes are not delivered, though the write
-     stays committed.
+   - Outside a transaction velox opens one for every recorded write, a
+     single statement's too, and the sink runs before its COMMIT.
+   - Code that acts after the commit reads a `Recorder` once `Tx` returns.
 5. **Rollback.** A `Recorder` drops what a transaction, a savepoint or a
    `TxRetrySerializable` attempt recorded when it rolls back. It drops by
    id, so a Recorder shared by concurrent transactions loses only the rows
@@ -108,11 +122,15 @@ package. As handle methods they cost a few KB per entity package
    - velox never sees a transaction the caller began on its own `*sql.Tx`
      (`UseTx`) end. There every Change goes to the sink, a Recorder's too,
      and none is dropped when that transaction rolls back: a Recorder used
-     through `UseTx` holds every Change delivered.
-6. **No recursion.** A sink's write through the recording handle with the
-   ctx it was given is not recorded. A write under another ctx is, and comes
-   back to the sink. A sink can also write through a handle that does not
-   record.
+     through `UseTx` holds every Change delivered. The sink runs inside the
+     caller's `*sql.Tx`, so what it writes through tx rolls back with it.
+6. **No recursion: the sink's tx does not record.** The sink's `tx` is a
+   handle on the write's transaction (the caller's transaction or
+   savepoint frame, or the one velox opened), derived as `WithoutPolicy`
+   derives one, with recording off. What the sink writes through it joins
+   the write's transaction and is not recorded. This replaces the first
+   text's mark on the sink's context, which made a sink set up at startup
+   capture a transaction variable to write in it.
 7. **Old values match the write.**
    - PostgreSQL 18 and later: one statement, `UPDATE … RETURNING old.*,
      new.*`, `DELETE … RETURNING old.*`, and an upsert's `INSERT … ON
@@ -129,12 +147,8 @@ package. As handle methods they cost a few KB per entity package
      time, a padded `CHAR`) takes the place of the chunk's one row, or fails
      the write, rolled back.
    - Outside a transaction a recorded write runs in a transaction of its
-     own, but for one statement that commits by itself: an insert of one
-     statement, and on PostgreSQL 18 an update or delete that names one row
-     by its key when the DB has no Rewrite hooks, or an upsert of one
-     statement whose update branch gets no policy or interceptor condition.
-     With a Rewrite hook that update or delete gets BEGIN and COMMIT. More
-     rows than `MaxRows` fail with `ErrTooManyRows`, nothing kept.
+     own (rule 4). More rows than `MaxRows` fail with `ErrTooManyRows`,
+     nothing kept.
    - The PostgreSQL version is read once per pool
      (`SHOW server_version_num`), only by a recording handle, and no hook
      sees it. In a caller's transaction it is read inside the write's
@@ -177,13 +191,16 @@ package. As handle methods they cost a few KB per entity package
 | `c.Old(col)` on Change, through a `Valued` marker | about 23 KB per entity package |
 | `OldValues`/`NewValues`/`ChangedFields` maps | string keys; replaced by the getters and `Diff` |
 | `"***"` for Sensitive values | ent's Sensitive means not serialized, not masked |
+| A sink call per Change, after COMMIT outside a transaction (the first text) | a sink error left a committed write with no audit row; a 10k-row update made 10k audit INSERTs |
+| A mark on the sink's ctx to stop recursion (the first text's rule 6) | a sink set up once could not write in the caller's transaction without capturing a `*DB` variable, racy and nil outside a transaction |
+| `RecordIgnore(names ...string)` | untyped; a renamed column fails silently |
 
 ## Consequences
 
 - A handle that does not record sends exactly what it sent before.
-- Below PostgreSQL 18 a recorded update or delete adds one locked read. A
-  recorded update that pins one row by key runs in a transaction of its own
-  there (BEGIN and COMMIT). In a caller's transaction every recorded write
+- Below PostgreSQL 18 a recorded update or delete adds one locked read.
+  Outside a transaction every recorded write adds BEGIN and COMMIT, a
+  single statement's too. In a caller's transaction every recorded write
   adds SAVEPOINT and RELEASE. A bidirectional re-point adds a read per
   step.
 - Below PostgreSQL 18 the first read cannot lock a row that is not there:

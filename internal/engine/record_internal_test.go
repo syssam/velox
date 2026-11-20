@@ -32,55 +32,78 @@ func TestTrackedWriteRefuses(t *testing.T) {
 	}
 }
 
-// TestPendingTruncatedBySavepoint: in a transaction velox opened for a
+// TestBatchTruncatedBySavepoint: in a transaction velox opened for a
 // recorded write, the Changes emitted in a savepoint that rolls back, or
-// whose RELEASE fails, are dropped; the others reach the sink after COMMIT.
-func TestPendingTruncatedBySavepoint(t *testing.T) {
+// whose RELEASE fails, are dropped; the others reach the sink in one call,
+// before COMMIT, with a handle on the transaction that does not record.
+func TestBatchTruncatedBySavepoint(t *testing.T) {
 	ctx := context.Background()
 	marks := make([]int, 5)
 	row := func(i int) ChangeRow { return ChangeRow{Op: OpDelete, Old: unsafe.Pointer(&marks[i])} }
 	var got []int
+	var calls int
 	var log []string
 	e := &fakeconn.Exec{}
-	rec := &Recording{Sink: func(_ context.Context, r ChangeRow) error {
-		got = append(got, int((uintptr(r.Old)-uintptr(unsafe.Pointer(&marks[0])))/unsafe.Sizeof(marks[0])))
-		log = append(log, e.Log[len(e.Log)-1])
+	rec := &Recording{Sink: func(_ context.Context, tx *DB, rows []ChangeRow) error {
+		calls++
+		if !tx.InTx || tx.rec != nil || tx.batch != nil {
+			t.Errorf("the sink's tx: InTx %v, recording %v, batch %v; want in the transaction, not recording", tx.InTx, tx.rec, tx.batch)
+		}
+		for _, r := range rows {
+			got = append(got, int((uintptr(r.Old)-uintptr(unsafe.Pointer(&marks[0])))/unsafe.Sizeof(marks[0])))
+		}
+		log = slices.Clone(e.Log)
 		return nil
 	}}
 	db := (&DB{D: Postgres, Ex: e, Cfg: newConfig(nil)}).Record(rec)
 	undo := errors.New("undo")
 	err := ownTx(ctx, db, func(ctx context.Context, tx *DB) error {
-		if err := emit(ctx, tx, []ChangeRow{row(0)}); err != nil {
+		if err := emit(tx, []ChangeRow{row(0)}); err != nil {
 			return err
 		}
 		if err := tx.Tx(ctx, func(ctx context.Context, sp *DB) error {
-			_ = emit(ctx, sp, []ChangeRow{row(1)})
+			_ = emit(sp, []ChangeRow{row(1)})
 			return undo
 		}); !errors.Is(err, undo) {
 			t.Errorf("a savepoint that fails: %v", err)
 		}
 		if err := tx.Tx(ctx, func(ctx context.Context, sp *DB) error {
-			_ = emit(ctx, sp, []ChangeRow{row(2)})
+			_ = emit(sp, []ChangeRow{row(2)})
 			e.Errs = []error{errors.New("release refused")} // the RELEASE
 			return nil
 		}); err == nil {
 			t.Error("a savepoint whose RELEASE fails succeeded")
 		}
 		if err := tx.Tx(ctx, func(ctx context.Context, sp *DB) error {
-			return emit(ctx, sp, []ChangeRow{row(3)})
+			return emit(sp, []ChangeRow{row(3)})
 		}); err != nil {
 			return err
 		}
-		return emit(ctx, tx, []ChangeRow{row(4)})
+		return emit(tx, []ChangeRow{row(4)})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(got, []int{0, 3, 4}) {
-		t.Errorf("the sink got rows %v, want 0, 3 and 4", got)
+	if calls != 1 || !slices.Equal(got, []int{0, 3, 4}) {
+		t.Errorf("the sink got %d calls, rows %v; want one call with rows 0, 3 and 4", calls, got)
 	}
-	if !slices.Equal(log, []string{"COMMIT", "COMMIT", "COMMIT"}) {
-		t.Errorf("the sink ran after %q, want after COMMIT", log)
+	if slices.Contains(log, "COMMIT") || !slices.Contains(log, "BEGIN") {
+		t.Errorf("the sink ran after %q, want inside the transaction, before COMMIT", log)
+	}
+	if e.Log[len(e.Log)-1] != "COMMIT" {
+		t.Errorf("the transaction ended with %q, want COMMIT", e.Log[len(e.Log)-1])
+	}
+}
+
+// TestEmitOutsideBatch: a recorded write's emit outside the frame of its
+// write is an internal error, not a lost Change.
+func TestEmitOutsideBatch(t *testing.T) {
+	db := (&DB{D: Postgres, Cfg: newConfig(nil)}).Record(&Recording{})
+	if err := emit(db, []ChangeRow{{Op: OpDelete}}); err == nil {
+		t.Error("emit outside a batch succeeded")
+	}
+	if err := emit(&DB{}, []ChangeRow{{Op: OpDelete}}); err != nil {
+		t.Errorf("emit on a handle that does not record: %v", err)
 	}
 }
 
@@ -93,7 +116,7 @@ func TestAdoptedTxKeepsNothing(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 	var sunk int
 	rec := &Recording{
-		Sink: func(context.Context, ChangeRow) error { sunk++; return nil },
+		Sink: func(_ context.Context, _ *DB, rows []ChangeRow) error { sunk += len(rows); return nil },
 		Keep: func(ChangeRow) uint64 { t.Error("Keep in an adopted transaction"); return 0 },
 		Drop: func([]uint64) { t.Error("Drop in an adopted transaction") },
 	}
@@ -102,7 +125,12 @@ func TestAdoptedTxKeepsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := emit(ctx, tx, []ChangeRow{{Op: OpDelete}, {Op: OpDelete}}); err != nil {
+	b := &batch{}
+	tx.batch = b
+	if err := emit(tx, []ChangeRow{{Op: OpDelete}, {Op: OpDelete}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.flush(ctx, tx); err != nil {
 		t.Fatal(err)
 	}
 	if sunk != 2 || len(tx.txRoot.kept) != 0 {

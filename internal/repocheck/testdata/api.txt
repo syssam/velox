@@ -369,7 +369,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
-func (f RecordFunc) Record(ctx context.Context, c Change) error
+func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation) Affected() int64
 func (m *Mutation) DB() *DB
@@ -440,7 +440,7 @@ func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
 func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
 func (r *Recorder) All() iter.Seq[Change]
 func (r *Recorder) Len() int
-func (r *Recorder) Record(_ context.Context, c Change) error
+func (r *Recorder) Record(_ context.Context, _ *DB, changes []Change) error
 func (r *Recorder) Reset()
 func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E]
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
@@ -545,7 +545,8 @@ func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
-func RecordIgnore(columns ...string) RecordOption
+func RecordIgnore[E any](cols ...Column[E]) RecordOption
+func RecordKeep[E any](cols ...Column[E]) RecordOption
 func RowScopeFromContext(ctx context.Context) RowScope
 func RowsOf[E any, PE Entity[E]](c Change) (old, cur *E, ok bool)
 func SQLConn(db *sql.DB) Conn
@@ -658,7 +659,7 @@ type Query[E any] struct { }
 type RawQuery[E any] struct { }
 type RawRow = engine.RawRow
 type RawRows = engine.RawRows
-type RecordFunc func(ctx context.Context, c Change) error
+type RecordFunc func(ctx context.Context, tx *DB, changes []Change) error
 type RecordOption struct { }
 type Recorder struct { }
 type Rel[E, T any] struct { I int32 }
@@ -673,7 +674,7 @@ type SchemaError = veloxtype.SchemaError
 type Selectable[E any] any
 type Setter[E any] struct { }
 type Shard = engine.Shard
-type Sink interface { Record(ctx context.Context, c Change) error }
+type Sink interface { Record(ctx context.Context, tx *DB, changes []Change) error }
 type Statement = engine.Statement
 type StringCol[E any, V ~string] struct { I int32 }
 type Subquery[V any] struct { }

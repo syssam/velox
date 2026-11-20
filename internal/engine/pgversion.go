@@ -67,7 +67,7 @@ func primeVersion(ctx context.Context, db *DB) {
 	case !versionUnknown(ctx, db):
 	case !db.InTx:
 		serverVersion(ctx, db)
-	case db.txRoot.pend == nil:
+	case !inOwnTx(db):
 		_ = db.Tx(ctx, func(ctx context.Context, sp *DB) error {
 			_, err := loadVersion(ctx, sp)
 			return err

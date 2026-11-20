@@ -82,11 +82,9 @@ func EqualValues(a, b any) bool {
 // as deleted. It sets mu.Affected.
 //
 // On PostgreSQL 18 and later (returnsOld) st is sent as it is, once, and
-// returns its rows before and after it (tracker.both). Outside a
-// transaction, a write that pins one row by its key (pinsOneRow), on a DB
-// with no Rewrite hook (which could widen it), sends no BEGIN; any other
-// runs in a transaction of velox's own, so that a count of rows over
-// WithMaxRows rolls it back.
+// returns its rows before and after it (tracker.both), in the same
+// transaction, so that a count of rows over WithMaxRows, or a sink's error,
+// rolls it back.
 func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st *Statement) error {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
@@ -99,23 +97,13 @@ func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st
 	}
 	tw := tracker{in: in, t: InfoTable(in), cols: cols, old: returnsOld(ctx, db)}
 	tw.read = keyAnd(in, tw.cols)
-	if tw.old && !db.InTx && len(db.Cfg.Rewrites) == 0 && pinsOneRow(in, st) {
-		// One statement on one row: it commits on its own, as it would
-		// through a handle that does not record, and the sink runs after.
-		mu.Affected = 0
-		rows, err := tw.run(ctx, db, mu, st)
-		if err != nil {
-			return err
-		}
-		return emit(ctx, db, rows)
-	}
 	return versionedTx(ctx, db, &tw.old, func(ctx context.Context, tx *DB) error {
 		mu.Affected = 0
 		rows, err := tw.run(ctx, tx, mu, st)
 		if err != nil {
 			return err
 		}
-		return emit(ctx, tx, rows)
+		return emit(tx, rows)
 	})
 }
 
@@ -148,21 +136,6 @@ type tracker struct {
 	// old says the write reads its rows before and after it in one
 	// statement, RETURNING old and new (PostgreSQL 18: returnsOld).
 	old bool
-}
-
-// pinsOneRow reports whether st, an update or a delete, matches one row at
-// most: not All, and its conditions hold, at their top level,
-// <column> = v for every primary-key column, v not nil.
-func pinsOneRow(in *EntityInfo, st *Statement) bool {
-	if st.AllRows || len(in.PrimaryKey) == 0 {
-		return false
-	}
-	for _, k := range in.PrimaryKey {
-		if _, ok := pinnedValue(int32(k), st.Where); !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // run is trackedWrite's work on tx.

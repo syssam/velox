@@ -9,30 +9,32 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// Sink receives the Changes of the writes made through a recording handle,
-// one call per Change, in order. An error from Record is the write's error.
-// Outside a transaction the write has committed when the sink runs: after an
-// error the write's remaining Changes are not delivered, and the write stays
-// committed.
+// Sink receives the Changes of the writes made through a recording handle:
+// one call per write (an Exec, a One, an Insert, an InsertAll, a Save, the
+// edge writes of a Rel.Add…) with every Change of that write, in order, and
+// no call for a write that changed nothing. It runs inside the write's
+// transaction, before its COMMIT, or before the RELEASE of the write's
+// savepoint in the caller's transaction: an error from Record is the
+// write's error, and rolls the write back.
 //
-// A sink that writes, an audit row say, must write with the ctx it is given,
-// or through a handle that does not record: a write through the recording
-// handle under that ctx is not recorded, but one under another context is,
-// and its Change comes back to the sink.
+// tx is a handle on the write's transaction that does not record: what the
+// sink writes through it, audit rows say, commits or rolls back with the
+// write, and is not itself recorded. It is valid while that transaction is.
 //
 // An upsert's old rows, and on MySQL its new rows, are read without the
 // scope or the Read policy (see DB.Record), so a sink can see values the
 // caller's policy hides.
 type Sink interface {
-	Record(ctx context.Context, c Change) error
+	Record(ctx context.Context, tx *DB, changes []Change) error
 }
 
-// RecordFunc is a function as a Sink. Like any Sink, a RecordFunc that
-// writes must write with the ctx it is given (see Sink).
-type RecordFunc func(ctx context.Context, c Change) error
+// RecordFunc is a function as a Sink.
+type RecordFunc func(ctx context.Context, tx *DB, changes []Change) error
 
 // Record calls f.
-func (f RecordFunc) Record(ctx context.Context, c Change) error { return f(ctx, c) }
+func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error {
+	return f(ctx, tx, changes)
+}
 
 // Recorder is a Sink that keeps the Changes it receives, in order. Its zero
 // value is ready, and it is safe for concurrent use.
@@ -49,9 +51,11 @@ type Recorder struct {
 	last    uint64   // the last id given
 }
 
-// Record keeps c. It never fails.
-func (r *Recorder) Record(_ context.Context, c Change) error {
-	r.keep(c)
+// Record keeps changes; it ignores tx and never fails.
+func (r *Recorder) Record(_ context.Context, _ *DB, changes []Change) error {
+	for _, c := range changes {
+		r.keep(c)
+	}
 	return nil
 }
 
@@ -110,18 +114,32 @@ func (r *Recorder) Reset() {
 
 // RecordOption configures a recording handle.
 type RecordOption struct {
-	ignore []string
+	owner func() (*EntityInfo, error)
+	cols  []int
+	keep  bool
 }
 
-// RecordIgnore names columns an update's comparison leaves out: an update
-// that changes only these columns records no Change, and Change.Diff does
-// not list them. Old, New, Changed, OldRow and NewRow still read them.
-func RecordIgnore(columns ...string) RecordOption {
-	return RecordOption{ignore: slices.Clone(columns)}
+// RecordIgnore names columns of entity E an update's comparison leaves out:
+// an update that changes only these columns records no Change, and
+// Change.Diff does not list them. Old, New, Changed, OldRow and NewRow still
+// read them. A column an UpdateDefault fills (updated_at) is left out
+// without it; RecordKeep takes it back in. For several entities, pass one
+// RecordIgnore per entity.
+func RecordIgnore[E any](cols ...Column[E]) RecordOption {
+	return RecordOption{owner: ownerOf[E], cols: columnIndexes(cols)}
+}
+
+// RecordKeep names columns of entity E filled by an UpdateDefault that an
+// update's comparison takes in: without it such a column (updated_at) is
+// left out, as RecordIgnore leaves a column out, so an update that only
+// bumps it records no Change. RecordIgnore wins over RecordKeep.
+func RecordKeep[E any](cols ...Column[E]) RecordOption {
+	return RecordOption{owner: ownerOf[E], cols: columnIndexes(cols), keep: true}
 }
 
 // Record returns a DB like db whose writes are reported to s, one Change per
-// row, after the write's statements succeed. It records the writes made
+// row, all of a write's in one call, after the write's statements succeed
+// and before its transaction commits (see Sink). It records the writes made
 // through it, through the transactions and savepoints it begins, through its
 // WithoutPolicy, and through the Mutation.DB of a hook on one of its writes;
 // raw SQL, dry runs and the writes of db itself are not recorded. Record on a
@@ -129,17 +147,18 @@ func RecordIgnore(columns ...string) RecordOption {
 // for that handle, and a rollback still drops a Recorder's Changes.
 //
 // Inside a transaction a recorded write runs under a savepoint that holds
-// its statements and the sink's calls: a failed statement or a sink's error
+// its statements and the sink's call: a failed statement or a sink's error
 // rolls back to it, so a recorded write that returns an error took no
-// effect. Outside one it runs in a transaction of its own, but for an
-// insert of one statement, which commits by itself, and the sink is called
-// after the COMMIT: a sink's error is returned and undoes nothing, and the
-// write's remaining Changes are not delivered.
+// effect. Outside one it runs in a transaction of its own, a single
+// statement's too, and the sink is called before the COMMIT: a sink's error
+// rolls the write back. Code that acts after the commit reads a Recorder
+// once Tx returns.
 //
 // velox never sees the end of a transaction the caller began on its own
-// *sql.Tx (UseTx): there each Change goes to the sink, a Recorder's too, and
+// *sql.Tx (UseTx): there the Changes go to the sink, a Recorder's too, and
 // none is dropped when that transaction rolls back, so a Recorder used
-// through UseTx holds every Change delivered.
+// through UseTx holds every Change delivered; what a sink writes through
+// its tx there rolls back with the transaction.
 //
 // Below PostgreSQL 18, and on SQLite and MySQL, a recorded update or delete
 // first reads its rows, locked, then writes them by key. A delete there
@@ -153,16 +172,12 @@ func RecordIgnore(columns ...string) RecordOption {
 // the BEGIN of a transaction of its own, or in the caller's transaction
 // inside a savepoint (the write's), so that a failure to read it rolls back
 // to the savepoint and leaves the transaction usable; such a write then takes
-// the locked read, and a later one asks again. There an update or delete
-// that names one row by its key, or an upsert of one statement, outside a
-// transaction, commits by itself; any other runs in a transaction of its
-// own, which a count of rows over WithMaxRows rolls back. An update's or a
+// the locked read, and a later one asks again. A count of rows over
+// WithMaxRows rolls the write back. An update's or a
 // delete's Changes come in key order as Go compares the key values: the
 // database's order for numeric and UUID keys, but a text key under a
 // collation other than C may order otherwise. An upsert's Changes come in
 // the order the database returns its rows.
-// The sink's writes are recorded only when made under another context than
-// the one it was given (see Sink).
 //
 // Below PostgreSQL 18 a recorded upsert reads the rows its rows conflict
 // with, locked, before its INSERT, without the scope or the Read policy, as the database finds a
@@ -191,11 +206,26 @@ func (db *DB) Record(s Sink, opts ...RecordOption) *DB {
 	if s == nil {
 		panic("velox: Record: the Sink is nil")
 	}
-	r := &engine.Recording{Sink: func(ctx context.Context, row engine.ChangeRow) error {
-		return s.Record(ctx, changeOf(row))
+	r := &engine.Recording{Sink: func(ctx context.Context, tx *engine.DB, rows []engine.ChangeRow) error {
+		changes := make([]Change, len(rows))
+		for i, row := range rows {
+			changes[i] = changeOf(row)
+		}
+		return s.Record(ctx, pub(tx), changes)
 	}}
 	for _, o := range opts {
-		r.Ignore = append(r.Ignore, o.ignore...)
+		in, err := o.owner()
+		if err != nil {
+			panic("velox: Record: " + err.Error())
+		}
+		m := &r.Ignore
+		if o.keep {
+			m = &r.Include
+		}
+		if *m == nil {
+			*m = map[*EntityInfo][]int{}
+		}
+		(*m)[in] = append((*m)[in], o.cols...)
 	}
 	if rec, ok := s.(*Recorder); ok {
 		r.Keep = func(row engine.ChangeRow) uint64 { return rec.keep(changeOf(row)) }

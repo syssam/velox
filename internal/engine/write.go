@@ -267,7 +267,7 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 		mu.SQL, mu.Args, err = db.DryRun(ctx, st)
 		return err
 	}
-	if db.recording(ctx) != nil {
+	if db.rec != nil {
 		return trackedWrite(ctx, db, mu, everyColumn(st.Entity), st)
 	}
 	res, err := ExecWrite(ctx, db, st)

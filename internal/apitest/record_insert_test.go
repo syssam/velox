@@ -122,7 +122,8 @@ func TestRecordInsert(t *testing.T) {
 			if err := openFake(c.d, one).Record(&rec).Insert(&a).Exec(ctx); err != nil {
 				t.Fatal(err)
 			}
-			wantLog(t, one, c.oneLog)
+			// Recorded, in a transaction of its own: the sink runs before COMMIT.
+			wantLog(t, one, append(append([]string{"BEGIN"}, c.oneLog...), "COMMIT"))
 			cs := slices.Collect(rec.All())
 			if len(cs) != 1 {
 				t.Fatalf("Insert: %d Changes, want 1", len(cs))
@@ -181,7 +182,7 @@ func recDefs() []dDef {
 func TestRecordInsertInTx(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "new", int64(7), "n"}}}
 	var at []int
-	sink := velox.RecordFunc(func(context.Context, velox.Change) error {
+	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
 		at = append(at, len(e.Log))
 		return nil
 	})
@@ -204,13 +205,13 @@ func TestRecordInsertInTx(t *testing.T) {
 }
 
 // TestRecordInsertOutsideTx: a recorded single-statement insert outside a
-// transaction sends no BEGIN; the sink runs after the INSERT, which has
-// committed, and its error undoes nothing.
+// transaction runs in one of velox's own; the sink runs after the INSERT,
+// before COMMIT, and its error rolls the insert back.
 func TestRecordInsertOutsideTx(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "new", int64(7), "n"}}}
 	errBoom := errors.New("boom")
 	var at []int
-	sink := velox.RecordFunc(func(context.Context, velox.Change) error {
+	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
 		at = append(at, len(e.Log))
 		return errBoom
 	})
@@ -218,8 +219,8 @@ func TestRecordInsertOutsideTx(t *testing.T) {
 	if err != errBoom {
 		t.Fatalf("got %v, want the sink's error", err)
 	}
-	wantLog(t, e, []string{`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`})
-	if !slices.Equal(at, []int{1}) {
+	wantLog(t, e, []string{"BEGIN", `INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`, "ROLLBACK"})
+	if !slices.Equal(at, []int{2}) {
 		t.Errorf("the sink ran after %v statements, want once after the INSERT", at)
 	}
 }
@@ -522,9 +523,9 @@ func TestRecordUpsertInOwnTx(t *testing.T) {
 	}}
 	var at []int
 	var got []velox.Change
-	sink := velox.RecordFunc(func(_ context.Context, c velox.Change) error {
+	sink := velox.RecordFunc(func(_ context.Context, _ *velox.DB, cs []velox.Change) error {
 		at = append(at, len(e.Log))
-		got = append(got, c)
+		got = append(got, cs...)
 		return nil
 	})
 	xs := []dDef{{ID: 1, Name: "a"}, {ID: 2, Name: "b", Score: 5}}
@@ -540,8 +541,8 @@ func TestRecordUpsertInOwnTx(t *testing.T) {
 		ins,
 		"COMMIT",
 	})
-	if !slices.Equal(at, []int{6, 6}) {
-		t.Errorf("the sink ran after %v statements, want twice after COMMIT (6)", at)
+	if !slices.Equal(at, []int{5}) {
+		t.Errorf("the sink ran after %v statements, want once before COMMIT (5)", at)
 	}
 	if len(got) != 2 || got[0].Op != velox.OpInsert || got[0].Key != int64(1) || got[1].Op != velox.OpUpdate || got[1].Key != int64(2) ||
 		dDefs.Name.Old(got[1]) != "old" || dDefs.Score.New(got[1]) != 5 {
@@ -551,7 +552,8 @@ func TestRecordUpsertInOwnTx(t *testing.T) {
 
 // TestRecordRewriteDropsReturning: a recorded insert or upsert reports the
 // rows its RETURNING reads, so a Rewrite hook that drops it is refused
-// before the INSERT is sent: a plain Insert sends nothing, and an upsert,
+// before the INSERT is sent: a plain Insert opens its transaction and rolls
+// it back, and an upsert,
 // whose locked read went first, rolls back. Without recording the same
 // hook is allowed, as before.
 func TestRecordRewriteDropsReturning(t *testing.T) {
@@ -567,9 +569,10 @@ func TestRecordRewriteDropsReturning(t *testing.T) {
 	var rec velox.Recorder
 	rdb := openFake(velox.Postgres, e, drop).Record(&rec)
 	err := rdb.Insert(&dDef{Name: "a"}).Exec(ctx)
-	if err == nil || !strings.Contains(err.Error(), refused) || len(e.Log) != 0 {
+	if err == nil || !strings.Contains(err.Error(), refused) || !slices.Equal(e.Log, []string{"BEGIN", "ROLLBACK"}) {
 		t.Errorf("Insert: %v, sent %q", err, e.Log)
 	}
+	e.Log, e.ArgLog = nil, nil
 
 	tk := testmodel.Ticket{OrgID: 7, Owner: "ann", Title: "a", Done: true}
 	err = rdb.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7))

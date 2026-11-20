@@ -370,7 +370,7 @@ func errBidiUpdate(in *EntityInfo) error {
 // it is compiled once; the transaction's closure works on copies, made only
 // for such a row, so that no other insert allocates for it.
 func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
-	if db.recording(ctx) != nil {
+	if db.rec != nil {
 		return recordInsertRow(ctx, db, p, st, gen, out)
 	}
 	if in := st.Entity; len(infoBidiKeys(in)) > 0 {

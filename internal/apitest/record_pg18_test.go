@@ -55,8 +55,8 @@ func prefixCols(p, cols string) string {
 func pair(before, after []any) []any { return append(slices.Clone(before), after...) }
 
 // TestRecordPG18UpdateSQL: on PostgreSQL 18 a recorded update that pins one
-// row is one statement, sent as it is, RETURNING the row before and after it:
-// no locked read, no BEGIN, and the sink runs after it. On 17 it is Task 3's
+// row is one statement, sent as it is, RETURNING the row before and after it,
+// no locked read, in a transaction whose COMMIT follows the sink. On 17 it is Task 3's
 // locked read, narrowed write and RETURNING, in a transaction. With
 // WithoutReturningOld the version is not asked, and the write is 17's.
 func TestRecordPG18UpdateSQL(t *testing.T) {
@@ -77,19 +77,19 @@ func TestRecordPG18UpdateSQL(t *testing.T) {
 		sinkAt  int // statements sent when the sink ran
 	}{
 		{"18", 180000, nil, [][][]any{{pair(invoiceRow(1), recNewRow(1, t1))}},
-			[]string{showVersion, upd + ` RETURNING ` + oldNew(allCols)}, 2},
+			[]string{showVersion, "BEGIN", upd + ` RETURNING ` + oldNew(allCols), "COMMIT"}, 3},
 		{"17", 170000, nil, [][][]any{{invoiceRow(1)}, {recNewRow(1, t1)}},
-			append([]string{showVersion}, locked...), 5},
+			append([]string{showVersion}, locked...), 4},
 		{"WithoutReturningOld", 180000, []velox.Option{engine.WithoutReturningOld()}, [][][]any{{invoiceRow(1)}, {recNewRow(1, t1)}},
-			locked, 4},
+			locked, 3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := &fakeconn.Exec{Results: c.results, Affected: 1}
 			var at []int
 			var cs []velox.Change
-			sink := velox.RecordFunc(func(_ context.Context, ch velox.Change) error {
+			sink := velox.RecordFunc(func(_ context.Context, _ *velox.DB, chs []velox.Change) error {
 				at = append(at, len(e.Log))
-				cs = append(cs, ch)
+				cs = append(cs, chs...)
 				return nil
 			})
 			n, err := openFake18(e, c.version, c.opts...).Record(sink).Update[testmodel.Invoice]().
@@ -104,7 +104,7 @@ func TestRecordPG18UpdateSQL(t *testing.T) {
 			if len(cs) != 1 || cs[0].Op != velox.OpUpdate || cs[0].Key != int64(1) {
 				t.Fatalf("Changes %+v", cs)
 			}
-			want := []velox.FieldChange{{Name: "updated_at", Old: t0, New: t1}, {Name: "total", Old: 12.5, New: 13.5}}
+			want := []velox.FieldChange{{Name: "total", Old: 12.5, New: 13.5}} // updated_at, an UpdateDefault column, is ignored
 			if got := cs[0].Diff(); !reflect.DeepEqual(got, want) {
 				t.Errorf("Diff %+v, want %+v", got, want)
 			}
@@ -114,15 +114,15 @@ func TestRecordPG18UpdateSQL(t *testing.T) {
 
 // TestRecordPG18UpdateOne: on PostgreSQL 18 UpdateQuery.One asks the version
 // before the BEGIN of its own transaction, sends the update once, RETURNING
-// old and new, then reads the row; the sink waits for the COMMIT.
+// old and new, then reads the row; the sink runs before the COMMIT.
 func TestRecordPG18UpdateOne(t *testing.T) {
 	cur := recNewRow(1, t0.Add(time.Hour))
 	e := &fakeconn.Exec{Results: [][][]any{{pair(invoiceRow(1), cur)}, {cur}}}
 	var rec velox.Recorder
 	var at []int
-	sink := velox.RecordFunc(func(ctx context.Context, ch velox.Change) error {
+	sink := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, chs []velox.Change) error {
 		at = append(at, len(e.Log))
-		return rec.Record(ctx, ch)
+		return rec.Record(ctx, tx, chs)
 	})
 	got, err := openFake18(e, 180000).Record(sink).Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(13.5)).One(ctx)
 	if err != nil || got.Total != 13.5 {
@@ -135,7 +135,7 @@ func TestRecordPG18UpdateOne(t *testing.T) {
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2`,
 		"COMMIT",
 	})
-	if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log)}) {
+	if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log) - 1}) {
 		t.Errorf("%d Changes, sink after %v of %d statements", rec.Len(), at, len(e.Log))
 	}
 }
@@ -260,7 +260,7 @@ func TestRecordPG18Delete(t *testing.T) {
 		if _, err := openFake18(e, 180000).Record(&rec).Delete[testmodel.Invoice]().Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		wantLog(t, e, []string{showVersion, `DELETE FROM "invoices" WHERE "id" = $1 RETURNING ` + olds(allCols)})
+		wantLog(t, e, []string{showVersion, "BEGIN", `DELETE FROM "invoices" WHERE "id" = $1 RETURNING ` + olds(allCols), "COMMIT"})
 		if rec.Len() != 1 {
 			t.Errorf("%d Changes, want 1", rec.Len())
 		}
@@ -288,7 +288,9 @@ func TestRecordPG18Upsert(t *testing.T) {
 		pair(nullTicket, recTicket(2, "ann", "b", true)),
 	}}, []string{
 		showVersion,
+		"BEGIN",
 		ins + `DO UPDATE SET "done" = EXCLUDED."done" RETURNING ` + oldNew(ticketCols),
+		"COMMIT",
 	}}, {170000, [][][]any{
 		{recTicket(1, "bob", "a", false)},
 		{recTicket(1, "bob", "a", true), recTicket(2, "ann", "b", true)},
@@ -330,7 +332,7 @@ func TestRecordPG18Upsert(t *testing.T) {
 		if err := openFake18(e, 180000).Record(&rec).InsertAll(xs).OnConflict(Tk.OrgID, Tk.Title).DoNothing().Exec(as("ann", 7)); err != nil {
 			t.Fatal(err)
 		}
-		wantLog(t, e, []string{showVersion, ins + `DO NOTHING RETURNING ` + oldNew(ticketCols)})
+		wantLog(t, e, []string{showVersion, "BEGIN", ins + `DO NOTHING RETURNING ` + oldNew(ticketCols), "COMMIT"})
 		cs := slices.Collect(rec.All())
 		if len(cs) != 1 || cs[0].Op != velox.OpInsert || cs[0].Key != int64(2) {
 			t.Fatalf("Changes %+v, want the insert of b", cs)
@@ -362,8 +364,8 @@ func TestRecordPG18Upsert(t *testing.T) {
 		if err := openFake18(e, 180000).Record(&rec).Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil {
 			t.Fatal(err)
 		}
-		wantLog(t, e, []string{showVersion,
-			`INSERT INTO "tickets" (` + ticketInsertCols + `) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" RETURNING ` + oldNew(ticketCols)})
+		wantLog(t, e, []string{showVersion, "BEGIN",
+			`INSERT INTO "tickets" (` + ticketInsertCols + `) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" RETURNING ` + oldNew(ticketCols), "COMMIT"})
 		cs := slices.Collect(rec.All())
 		if len(cs) != 1 || cs[0].Op != velox.OpUpdate || tk.ID != 1 {
 			t.Fatalf("Changes %+v, key %d", cs, tk.ID)
@@ -431,7 +433,9 @@ func TestRecordVersionReadOnce(t *testing.T) {
 		upd + ` AND "id" IN ($4) RETURNING ` + allCols,
 		"COMMIT",
 		showVersion,
+		"BEGIN",
 		upd + ` RETURNING ` + oldNew(allCols),
+		"COMMIT",
 	})
 }
 
@@ -448,7 +452,9 @@ func TestRecordPG18SoftDelete(t *testing.T) {
 	}
 	wantLog(t, e, []string{
 		showVersion,
+		"BEGIN",
 		`UPDATE "s_docs" SET "deleted_at" = $1 WHERE "id" = $2 AND "deleted_at" IS NULL RETURNING ` + oldNew(cols),
+		"COMMIT",
 	})
 	cs := slices.Collect(rec.All())
 	if len(cs) != 1 || cs[0].Op != velox.OpDelete || !cs[0].Soft || cs[0].Key != int64(2) {
@@ -575,7 +581,7 @@ func TestRecordVersionPastHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	upd := `UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 RETURNING ` + oldNew(allCols)
-	wantLog(t, e, []string{showVersion, upd})
+	wantLog(t, e, []string{showVersion, "BEGIN", upd, "COMMIT"})
 	if !slices.Equal(seen, []string{upd}) {
 		t.Errorf("the hook saw %q, want the UPDATE alone", seen)
 	}

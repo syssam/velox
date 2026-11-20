@@ -77,7 +77,9 @@ func (c Change) OldRow() any { return c.row.Row(c.row.Old) }
 func (c Change) NewRow() any { return c.row.Row(c.row.New) }
 
 // Diff returns an update's columns whose old and new values differ, in
-// column order, but neither Sensitive columns nor those RecordIgnore names.
+// column order, but neither Sensitive columns nor those the recording
+// ignores: those RecordIgnore names, and those an UpdateDefault fills unless
+// RecordKeep names them.
 // Values compare by their Equal method when their type has one (time.Time,
 // a decimal), as bytes when they are a byte slice, and else with
 // reflect.DeepEqual. It is nil for an insert or a delete.

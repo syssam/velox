@@ -21,7 +21,7 @@ import (
 func TestRecordPinnedUpdateInTx(t *testing.T) {
 	e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {recNewRow(1, t0.Add(time.Hour))}}, Affected: 1}
 	var at []int
-	sink := velox.RecordFunc(func(context.Context, velox.Change) error {
+	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
 		at = append(at, len(e.Log))
 		return nil
 	})
@@ -109,8 +109,7 @@ func TestRecordChunkFailureInTxSQLite(t *testing.T) {
 func TestRecordSinkErrorInTxUndoesSinkWrite(t *testing.T) {
 	db, _ := recInvoices(t)
 	boom := errors.New("boom")
-	var tx *velox.DB
-	sink := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
+	sink := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, _ []velox.Change) error {
 		audit := testmodel.Invoice{OrgID: 2, Number: "audit", Data: []byte("a")}
 		if err := tx.Insert(&audit).Exec(ctx); err != nil {
 			return err
@@ -118,8 +117,7 @@ func TestRecordSinkErrorInTxUndoesSinkWrite(t *testing.T) {
 		return boom
 	})
 	var werr error
-	err := db.Record(sink).Tx(ctx, func(ctx context.Context, t *velox.DB) error {
-		tx = t
+	err := db.Record(sink).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, werr = tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(99)).Exec(ctx)
 		return nil
 	})
@@ -276,8 +274,10 @@ func TestRecorderPanicAndCommitFailure(t *testing.T) {
 func TestRecordFuncSeesRollback(t *testing.T) {
 	db, _ := recInvoices(t)
 	var keys []any
-	sink := velox.RecordFunc(func(_ context.Context, c velox.Change) error {
-		keys = append(keys, c.Key)
+	sink := velox.RecordFunc(func(_ context.Context, _ *velox.DB, cs []velox.Change) error {
+		for _, c := range cs {
+			keys = append(keys, c.Key)
+		}
 		return nil
 	})
 	err := db.Record(sink).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {

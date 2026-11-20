@@ -31,12 +31,12 @@ func changed(c velox.Change, name string) (velox.FieldChange, bool) {
 // TestRecordBulkUpdate: on each database a recorded bulk update reports
 // every row it changed, in key order, with the old and new values the
 // database holds; updated_at, the UpdateDefault column, is a changed field
-// unless RecordIgnore names it, and invoice 2, whose note was already "a
+// only when RecordKeep names it, and invoice 2, whose note was already "a
 // note", lists only total and updated_at.
 func TestRecordBulkUpdate(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		var rec, ign velox.Recorder
-		n, err := tg.db.Record(&rec).Update[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.ID.LT(3)).Set(I.Total.Add(1), I.Note.Set("a note")).Exec(ctx)
+		n, err := tg.db.Record(&rec, velox.RecordKeep(I.UpdatedAt)).Update[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.ID.LT(3)).Set(I.Total.Add(1), I.Note.Set("a note")).Exec(ctx)
 		if err != nil || n != 2 {
 			t.Fatalf("Update: %d, %v", n, err)
 		}
@@ -62,7 +62,7 @@ func TestRecordBulkUpdate(t *testing.T) {
 				t.Errorf("invoice %d: number %q -> %q, total %v", id, I.Number.Old(c), I.Number.New(c), I.Total.New(c))
 			}
 		}
-		if _, err := tg.db.Record(&ign, velox.RecordIgnore("updated_at")).Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+		if _, err := tg.db.Record(&ign).Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		cs = slices.Collect(ign.All())

@@ -84,7 +84,7 @@ func TestRecordUpdateSQL(t *testing.T) {
 					t.Errorf("change %d: %+v", i, ch)
 				}
 				got := ch.Diff()
-				want := []velox.FieldChange{{Name: "updated_at", Old: t0, New: t1}, {Name: "total", Old: 12.5, New: 13.5}}
+				want := []velox.FieldChange{{Name: "total", Old: 12.5, New: 13.5}} // not updated_at, an UpdateDefault column
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("change %d: Diff %+v, want %+v", i, got, want)
 				}
@@ -153,11 +153,11 @@ func TestRecordDeleteSQL(t *testing.T) {
 
 // TestRecordPinnedUpdateOutsideTx: an update pinned to one row by its key,
 // outside a transaction, still runs in one of velox's own, so that the
-// locked read and the update are one; the sink runs after its COMMIT.
+// locked read and the update are one; the sink runs before its COMMIT.
 func TestRecordPinnedUpdateOutsideTx(t *testing.T) {
 	e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {recNewRow(1, t0.Add(time.Hour))}}, Affected: 1}
 	var at []int
-	sink := velox.RecordFunc(func(context.Context, velox.Change) error {
+	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
 		at = append(at, len(e.Log))
 		return nil
 	})
@@ -171,14 +171,14 @@ func TestRecordPinnedUpdateOutsideTx(t *testing.T) {
 		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
 		"COMMIT",
 	})
-	if !slices.Equal(at, []int{4}) {
-		t.Errorf("the sink ran after %v statements, want once after COMMIT (4)", at)
+	if !slices.Equal(at, []int{3}) {
+		t.Errorf("the sink ran after %v statements, want once before COMMIT (3)", at)
 	}
 }
 
 // TestRecordUpdateOne: UpdateQuery.One on a recording handle returns the row
 // and records one Change, sending the UPDATE once; inside its own
-// transaction the sink waits for the COMMIT.
+// transaction the sink runs before the COMMIT.
 func TestRecordUpdateOne(t *testing.T) {
 	for _, c := range []struct {
 		d    velox.Dialect
@@ -208,9 +208,9 @@ func TestRecordUpdateOne(t *testing.T) {
 			e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {cur}, {cur}}, Affected: 1}
 			var rec velox.Recorder
 			var at []int
-			sink := velox.RecordFunc(func(ctx context.Context, ch velox.Change) error {
+			sink := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, chs []velox.Change) error {
 				at = append(at, len(e.Log))
-				return rec.Record(ctx, ch)
+				return rec.Record(ctx, tx, chs)
 			})
 			rdb := openFake(c.d, e).Record(sink)
 			got, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(13.5)).One(ctx)
@@ -218,7 +218,7 @@ func TestRecordUpdateOne(t *testing.T) {
 				t.Fatalf("One: %+v, %v", got, err)
 			}
 			wantLog(t, e, c.want)
-			if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log)}) {
+			if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log) - 1}) {
 				t.Errorf("%d Changes, sink after %v of %d statements", rec.Len(), at, len(e.Log))
 			}
 		})
@@ -276,12 +276,12 @@ func TestRecordKeyChange(t *testing.T) {
 	}
 }
 
-// TestRecordUnchangedRowsAreSkipped: an update that leaves every column
-// outside RecordIgnore as it was reports no Change.
+// TestRecordUnchangedRowsAreSkipped: an update that leaves every column as
+// it was reports no Change.
 func TestRecordUnchangedRowsAreSkipped(t *testing.T) {
 	db, _ := recInvoices(t)
 	var rec velox.Recorder
-	rdb := db.Record(&rec)
+	rdb := db.Record(&rec, velox.RecordKeep(I.UpdatedAt))
 	one, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx) // as stored
 	if err != nil {
 		t.Fatal(err)
@@ -292,14 +292,27 @@ func TestRecordUnchangedRowsAreSkipped(t *testing.T) {
 	if rec.Len() != 0 {
 		t.Errorf("an update to the current values: %d Changes", rec.Len())
 	}
-	ign := db.Record(&rec, velox.RecordIgnore("updated_at"))
-	if _, err := ign.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.Total.Set(one.Total)).Exec(ctx); err != nil {
+}
+
+// TestUpdateDefaultIgnored: a column an UpdateDefault fills (updated_at) is
+// left out of the comparison by default: an update that only bumps it
+// reports nothing, and Diff leaves it out, while the getters and the rows
+// still hold it. RecordKeep takes it back in.
+func TestUpdateDefaultIgnored(t *testing.T) {
+	db, _ := recInvoices(t)
+	var rec velox.Recorder
+	rdb := db.Record(&rec)
+	one, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.Total.Set(one.Total)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if rec.Len() != 0 {
-		t.Errorf("an update of only an ignored column: %d Changes", rec.Len())
+		t.Errorf("an update that only bumps updated_at: %d Changes", rec.Len())
 	}
-	if _, err := ign.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	cs := slices.Collect(rec.All())
@@ -315,41 +328,160 @@ func TestRecordUnchangedRowsAreSkipped(t *testing.T) {
 	if cur, ok := cs[0].NewRow().(*testmodel.Invoice); !ok || cur.UpdatedAt.IsZero() {
 		t.Errorf("NewRow lost an ignored column: %+v", cs[0].NewRow())
 	}
-	// Without the ignore, updated_at alone is a change.
+
+	// RecordKeep: updated_at alone is a change, and Diff lists it.
 	rec.Reset()
-	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.UpdatedAt.Set(one.UpdatedAt.Add(time.Hour))).Exec(ctx); err != nil {
+	keep := db.Record(&rec, velox.RecordKeep(I.UpdatedAt))
+	if _, err := keep.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.Total.Set(one.Total + 1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if cs := slices.Collect(rec.All()); len(cs) != 1 || len(cs[0].Diff()) != 1 || cs[0].Diff()[0].Name != "updated_at" {
-		t.Errorf("an update of updated_at: %+v", cs)
+		t.Errorf("an update of updated_at alone, kept: %+v", cs)
+	}
+	// RecordIgnore wins over RecordKeep.
+	rec.Reset()
+	both := db.Record(&rec, velox.RecordKeep(I.UpdatedAt), velox.RecordIgnore(I.UpdatedAt))
+	if _, err := both.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.Total.Set(one.Total + 1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Len() != 0 {
+		t.Errorf("updated_at kept and ignored: %d Changes", rec.Len())
 	}
 }
 
-// TestRecordSinkWritesAreNotRecorded: writes a sink makes through the
-// recording handle run, and are not recorded: no audit row is audited.
-func TestRecordSinkWritesAreNotRecorded(t *testing.T) {
+// TestRecordIgnoreTyped: RecordIgnore takes typed columns, and the options
+// of several entities combine, one RecordIgnore per entity: an update that
+// changes only ignored columns reports nothing, and Diff leaves them out.
+func TestRecordIgnoreTyped(t *testing.T) {
 	db, _ := recInvoices(t)
-	var rdb *velox.DB
+	var rec velox.Recorder
+	rdb := db.Record(&rec, velox.RecordIgnore(I.Note, I.Paid), velox.RecordIgnore(testmodel.Items.Qty))
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Note.Set("n"), I.Paid.Set(true)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Len() != 0 {
+		t.Errorf("an update of ignored columns: %d Changes", rec.Len())
+	}
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Note.Set("m"), I.Total.Add(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cs := slices.Collect(rec.All())
+	if len(cs) != 1 {
+		t.Fatalf("%d Changes, want 1", len(cs))
+	}
+	if f := cs[0].Diff(); len(f) != 1 || f[0].Name != "total" {
+		t.Errorf("Diff %+v, want total alone", f)
+	}
+	if I.Note.New(cs[0]) != "m" || !cs[0].Changed(I.Note) {
+		t.Error("the getters lost an ignored column")
+	}
+	rc := recEngine(rdb).Recording()
+	if len(rc.Ignore) != 2 {
+		t.Errorf("RecordIgnore of two entities: %d entities", len(rc.Ignore))
+	}
+}
+
+// TestSinkGetsTx: a sink set up once gets the write's transaction: the audit
+// rows it writes with tx.InsertAll commit with the write, outside a
+// transaction and in the caller's, are not recorded themselves, and roll
+// back with the caller's transaction.
+func TestSinkGetsTx(t *testing.T) {
+	db, _ := recInvoices(t)
+	var calls int
 	var keys []any
-	sink := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
-		keys = append(keys, c.Key)
-		audit := testmodel.Invoice{OrgID: 2, Number: fmt.Sprintf("audit-%v", c.Key), Data: []byte("a")}
-		if err := rdb.Insert(&audit).Exec(ctx); err != nil {
-			return err
+	sink := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, cs []velox.Change) error {
+		calls++
+		audits := make([]testmodel.Invoice, len(cs))
+		for i, c := range cs {
+			keys = append(keys, c.Key)
+			audits[i] = testmodel.Invoice{OrgID: 2, Number: fmt.Sprintf("audit-%d-%v", calls, c.Key), Note: "audit", Data: []byte("a")}
 		}
-		_, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(audit.ID)).Set(I.Note.Set("audited")).Exec(ctx)
-		return err
+		return tx.InsertAll(audits).Exec(ctx)
 	})
-	rdb = db.Record(sink)
+	rdb := db.Record(sink)
+	countAudits := func() int {
+		t.Helper()
+		n, err := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(2), I.Note.EQ("audit")).Count(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return int(n)
+	}
 	if _, err := rdb.Update[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Set(I.Paid.Set(true)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(keys, []any{int64(1), int64(2)}) {
-		t.Errorf("the sink saw %v, want the keys 1 and 2 once each", keys)
+	if calls != 1 || !slices.Equal(keys, []any{int64(1), int64(2)}) || countAudits() != 2 {
+		t.Errorf("outside a transaction: %d calls, keys %v, %d audit rows; want one call, 1 and 2, 2 rows", calls, keys, countAudits())
 	}
-	audits, err := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(2), I.Note.EQ("audited")).AllowUnbounded().All(ctx)
-	if err != nil || len(audits) != 2 {
-		t.Errorf("audit rows: %d, %v", len(audits), err)
+
+	// In the caller's transaction, which rolls back: the audit rows go too.
+	boom := errors.New("boom")
+	err := rdb.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if _, err := tx.Update[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+			return err
+		}
+		if got, err := tx.Query[testmodel.Invoice]().Where(I.OrgID.EQ(2), I.Note.EQ("audit")).Count(ctx); err != nil || got != 4 {
+			t.Errorf("audit rows in the transaction: %d, %v; want 4", got, err)
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Tx: %v", err)
+	}
+	if calls != 2 || countAudits() != 2 {
+		t.Errorf("after the rollback: %d calls, %d audit rows; want 2 calls, 2 rows", calls, countAudits())
+	}
+
+	// In the caller's transaction, which commits, with a Recorder beside:
+	// the audit rows are not recorded.
+	var rec velox.Recorder
+	both := db.Record(velox.RecordFunc(func(ctx context.Context, tx *velox.DB, cs []velox.Change) error {
+		if err := rec.Record(ctx, tx, cs); err != nil {
+			return err
+		}
+		return sink(ctx, tx, cs)
+	}))
+	err = both.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Len() != 1 || countAudits() != 3 {
+		t.Errorf("%d Changes, %d audit rows; want 1 (the audit row is not recorded) and 3", rec.Len(), countAudits())
+	}
+}
+
+// TestSinkOneCallPerWrite: a bulk update of three rows calls the sink once,
+// with the three Changes in key order; a write that changes nothing calls
+// it not at all.
+func TestSinkOneCallPerWrite(t *testing.T) {
+	db, _ := recInvoices(t)
+	if err := db.Insert(&testmodel.Invoice{OrgID: 1, Number: "N3", Total: 30, Data: []byte("d")}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var calls [][]any
+	rdb := db.Record(velox.RecordFunc(func(_ context.Context, _ *velox.DB, cs []velox.Change) error {
+		var keys []any
+		for _, c := range cs {
+			keys = append(keys, c.Key)
+		}
+		calls = append(calls, keys)
+		return nil
+	}))
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(calls, [][]any{{int64(1), int64(2), int64(3)}}) {
+		t.Errorf("the sink got %v, want one call with 1, 2 and 3", calls)
+	}
+	calls = nil
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.OrgID.EQ(9)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if calls != nil {
+		t.Errorf("a write that changed nothing called the sink: %v", calls)
 	}
 }
 
@@ -358,7 +490,7 @@ func TestRecordSinkWritesAreNotRecorded(t *testing.T) {
 func TestRecordSinkErrorInTx(t *testing.T) {
 	db, _ := recInvoices(t)
 	boom := errors.New("boom")
-	rdb := db.Record(velox.RecordFunc(func(context.Context, velox.Change) error { return boom }))
+	rdb := db.Record(velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error { return boom }))
 	err := rdb.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(99)).Exec(ctx)
 		return err
@@ -371,17 +503,29 @@ func TestRecordSinkErrorInTx(t *testing.T) {
 	}
 }
 
-// TestRecordSinkErrorOutsideTx: outside a transaction the write is
-// committed when the sink runs: its error is returned and undoes nothing.
-func TestRecordSinkErrorOutsideTx(t *testing.T) {
+// TestSinkErrorOutsideTxRollsBack: outside a transaction the sink runs
+// before the COMMIT of the transaction velox opened: its error rolls the
+// write back, and nothing is committed, an insert's or an update's.
+func TestSinkErrorOutsideTxRollsBack(t *testing.T) {
 	db, _ := recInvoices(t)
 	boom := errors.New("boom")
-	rdb := db.Record(velox.RecordFunc(func(context.Context, velox.Change) error { return boom }))
+	rdb := db.Record(velox.RecordFunc(func(ctx context.Context, tx *velox.DB, _ []velox.Change) error {
+		if err := tx.Insert(&testmodel.Invoice{OrgID: 2, Number: "audit", Data: []byte("a")}).Exec(ctx); err != nil {
+			return err
+		}
+		return boom
+	}))
 	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(99)).Exec(ctx); !errors.Is(err, boom) {
-		t.Fatalf("got %v, want the sink's error", err)
+		t.Fatalf("Update: got %v, want the sink's error", err)
 	}
-	if got, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err != nil || got.Total != 99 {
+	if err := rdb.Insert(&testmodel.Invoice{OrgID: 1, Number: "N9", Total: 9, Data: []byte("d")}).Exec(ctx); !errors.Is(err, boom) {
+		t.Fatalf("Insert: got %v, want the sink's error", err)
+	}
+	if got, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err != nil || got.Total != 10 {
 		t.Errorf("after the sink's error: %+v, %v", got, err)
+	}
+	if n, err := db.Query[testmodel.Invoice]().Count(ctx); err != nil || n != 2 {
+		t.Errorf("rows after the sink's errors: %d, %v; want the 2 seeded, no insert and no audit row", n, err)
 	}
 }
 
@@ -453,16 +597,14 @@ func TestRecordDryRun(t *testing.T) {
 func TestRecordSinkInTx(t *testing.T) {
 	db, _ := recInvoices(t)
 	var rec velox.Recorder
-	var tx *velox.DB
-	sink := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
-		if err := rec.Record(ctx, c); err != nil {
+	sink := velox.RecordFunc(func(ctx context.Context, tx *velox.DB, cs []velox.Change) error {
+		if err := rec.Record(ctx, tx, cs); err != nil {
 			return err
 		}
 		_, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(2)).Set(I.Note.Set("audited")).Exec(ctx)
 		return err
 	})
-	err := db.Record(sink).Tx(ctx, func(ctx context.Context, t *velox.DB) error {
-		tx = t
+	err := db.Record(sink).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(11)).Exec(ctx)
 		return err
 	})

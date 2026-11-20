@@ -45,7 +45,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `I.Total.Old(c)` and `I.Total.New(c)`, or any entity's rows with
   `c.OldRow()`, `c.NewRow()` and `c.Diff()`. Old values are read locked in
   the write's transaction, or on PostgreSQL 18 returned by the write itself.
-  `velox.Diff` compares two rows of an entity.
+  `velox.Diff` compares two rows of an entity. The sink,
+  `Record(ctx, tx *DB, changes []Change)`, gets all of a write's Changes in
+  one call, inside the write's transaction before its COMMIT (velox opens
+  one outside a transaction, a single statement's too), so its error rolls
+  the write back; `tx` is a handle on that transaction that does not
+  record, so audit rows written with `tx.InsertAll` commit with the write.
+  A column an `UpdateDefault` fills (`updated_at`) is ignored by default;
+  `velox.RecordIgnore(cols...)` and `velox.RecordKeep(cols...)` take typed
+  columns, one call per entity.
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with
   `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's

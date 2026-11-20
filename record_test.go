@@ -15,7 +15,7 @@ func TestRecorderConcurrent(t *testing.T) {
 	for range 8 {
 		wg.Go(func() {
 			for range 100 {
-				if err := rec.Record(t.Context(), velox.Change{Entity: "X"}); err != nil {
+				if err := rec.Record(t.Context(), nil, []velox.Change{{Entity: "X"}}); err != nil {
 					t.Error(err)
 				}
 			}
@@ -36,12 +36,12 @@ func TestRecorderConcurrent(t *testing.T) {
 func TestRecorderAllIsASnapshot(t *testing.T) {
 	var rec velox.Recorder
 	ctx := context.Background()
-	_ = rec.Record(ctx, velox.Change{Key: 1})
-	_ = rec.Record(ctx, velox.Change{Key: 2})
+	_ = rec.Record(ctx, nil, []velox.Change{{Key: 1}})
+	_ = rec.Record(ctx, nil, []velox.Change{{Key: 2}})
 	var keys []any
 	for c := range rec.All() {
 		keys = append(keys, c.Key)
-		_ = rec.Record(ctx, velox.Change{Key: 3})
+		_ = rec.Record(ctx, nil, []velox.Change{{Key: 3}})
 	}
 	if len(keys) != 2 || keys[0] != 1 || keys[1] != 2 {
 		t.Errorf("All yielded %v, want [1 2]", keys)
@@ -54,11 +54,11 @@ func TestRecorderAllIsASnapshot(t *testing.T) {
 // TestRecordFuncIsASink: a RecordFunc is a Sink that calls the function.
 func TestRecordFuncIsASink(t *testing.T) {
 	var got []velox.Change
-	var s velox.Sink = velox.RecordFunc(func(_ context.Context, c velox.Change) error {
-		got = append(got, c)
+	var s velox.Sink = velox.RecordFunc(func(_ context.Context, _ *velox.DB, cs []velox.Change) error {
+		got = append(got, cs...)
 		return nil
 	})
-	_ = s.Record(t.Context(), velox.Change{Entity: "X"})
+	_ = s.Record(t.Context(), nil, []velox.Change{{Entity: "X"}})
 	if len(got) != 1 || got[0].Entity != "X" {
 		t.Errorf("got %v", got)
 	}
