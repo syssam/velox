@@ -112,12 +112,14 @@ column does nothing; its `Mutation.Set` stores the value
 A constant `Default` is also the column's `DEFAULT`, as in ent: `Default("")`
 gives `DEFAULT ''` and `Default(0)` gives `DEFAULT 0` (a bool, number, string
 or enum; a `DefaultFunc` gives none). `SchemaDefault` is for a column default
-that `Default` cannot say, such as `now()`, or for one without a Go default. It
-is the column's default only: velox's inserts write every
-column, so only rows written outside velox take it; the column is an ent
-database's `NOT NULL DEFAULT true`. A field left unset stores its Go zero,
-never the column's `DEFAULT`, so `SchemaDefault` is not the value of an
-`Optional` field: an unset one stores its zero.
+that `Default` cannot say, such as `now()`, or for one without a Go default.
+An insert leaves such a column out when the row holds the field's zero
+value, so the database fills it, and velox reads the value back into the
+struct: `RETURNING` on PostgreSQL and SQLite, a `SELECT` by key on MySQL
+([ADR 0093](decisions/0093-lean-inserts.md)). ent leaves out any field the
+builder did not set; velox, which has no "set" bit on a struct field, reads
+the zero value as unset for such a column only, as GORM's `default` tag
+does. A nil Nillable field is left out too, as in ent.
 `CreateDefault` is filled in by gqlgen when a client leaves the field out.
 
 The same holds for a string: with `Default("x")`, an insert can never store `""`.

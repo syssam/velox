@@ -37,7 +37,8 @@ func TestJSONWrites(t *testing.T) {
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), int64(2), []byte("null"), []byte("null"), []byte(`{"w":0,"h":0}`), nil})
+		// The nil nums, a nullable column, is left out (ADR 0093).
+		fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), int64(2), []byte("null"), []byte("null"), []byte(`{"w":0,"h":0}`)})
 	})
 	t.Run("InsertAll", func(t *testing.T) {
 		e := &fakeconn.Exec{Affected: 2}
@@ -373,17 +374,19 @@ func TestJSONNullableNoPointer(t *testing.T) {
 	if err := db.Insert(&jOpt{ID: 1}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// The nil blob is NULL in the only row: written as the literal, no argument.
-	fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), nil, nil, []byte("null")})
-	if !strings.HasSuffix(e.SQL, ", NULL)") {
-		t.Errorf("the nil blob is not the literal NULL: %s", e.SQL)
+	// The nil tags, attrs and blob are NULL in the only row: the columns are
+	// left out (ADR 0093). Fixed has no Nullable, so its nil is JSON null.
+	fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), []byte("null")})
+	if want := `INSERT INTO "j_opts" ("id", "fixed") VALUES ($1, $2)`; e.SQL != want {
+		t.Errorf("Insert of nil values:\n got %s\nwant %s", e.SQL, want)
 	}
 	// With a blob in another row, the nil one is a parameter: an untyped nil.
 	if err := db.InsertAll([]jOpt{{ID: 3}, {ID: 4, Blob: []byte{1}}}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Args) != 10 || e.Args[4] != nil {
-		t.Errorf("a nil blob beside a value binds %#v, want an untyped nil in 10 arguments", e.Args)
+	// Tags and attrs are nil in both rows, so left out: id, fixed, blob.
+	if len(e.Args) != 6 || e.Args[2] != nil {
+		t.Errorf("a nil blob beside a value binds %#v, want an untyped nil in 6 arguments", e.Args)
 	}
 	if err := db.Insert(&jOpt{ID: 2, Tags: []string{}, Attrs: map[string]any{"k": 1}, Blob: []byte{}}).Exec(ctx); err != nil {
 		t.Fatal(err)

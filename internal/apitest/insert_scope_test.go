@@ -17,7 +17,7 @@ import (
 
 // ticketInsertCols are the columns an insert of a Ticket with a generated key
 // writes.
-const ticketInsertCols = `"created_by", "org_id", "owner", "title", "done", "invoice_id", "parent_id"`
+const ticketInsertCols = `"created_by", "org_id", "owner", "title", "done", "invoice_id"`
 
 // as returns a context acting as user, scoped to the org.
 func as(user string, org int64) context.Context {
@@ -42,7 +42,7 @@ func TestInsertFillsTheScope(t *testing.T) {
 	if tk.OrgID != 7 || tk.CreatedBy != "ann" || tk.ID != 5 {
 		t.Errorf("OrgID %d, CreatedBy %q, ID %d", tk.OrgID, tk.CreatedBy, tk.ID)
 	}
-	wantSent(t, e, `INSERT INTO "tickets" (`+ticketInsertCols+`) VALUES ($1, $2, $3, $4, $5, $6, NULL) RETURNING "id"`,
+	wantSent(t, e, `INSERT INTO "tickets" (`+ticketInsertCols+`) VALUES ($1, $2, $3, $4, $5, $6) RETURNING "id"`,
 		"ann", int64(7), "ann", "t", false, int64(0))
 }
 
@@ -153,8 +153,8 @@ func TestUpsertGetsThePolicy(t *testing.T) {
 		d     velox.Dialect
 		where string
 	}{
-		{velox.Postgres, `($1, $2, $3, $4, $5, $6, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $7 AND "tickets"."owner" = $8 AND "tickets"."owner" = $9 RETURNING "id"`},
-		{velox.SQLite, `(?, ?, ?, ?, ?, ?, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ? RETURNING "id"`},
+		{velox.Postgres, `($1, $2, $3, $4, $5, $6) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $7 AND "tickets"."owner" = $8 AND "tickets"."owner" = $9 RETURNING "id"`},
+		{velox.SQLite, `(?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ? RETURNING "id"`},
 	} {
 		// Twice: the second statement's text comes from the render cache.
 		for range 2 {
@@ -356,7 +356,7 @@ func TestUpsertConditionFromAHookIsScoped(t *testing.T) {
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `INSERT INTO "tickets" (`+ticketCols+`) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $8) AND "tickets"."org_id" = $9 AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
+	wantSent(t, e, `INSERT INTO "tickets" ("id", "created_by", "org_id", "owner", "title", "done", "invoice_id") VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $8) AND "tickets"."org_id" = $9 AND "tickets"."owner" = $10 AND "tickets"."owner" = $11`,
 		int64(1), "ann", int64(7), "ann", "t", false, int64(3), int64(7), int64(7), "ann", "ann")
 }
 

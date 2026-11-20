@@ -33,8 +33,9 @@
 // # Defaults
 //
 // Default and DefaultExpr give a column a DEFAULT of one SQL text on every
-// dialect, and DefaultExprs one for each. The column's default is all they set:
-// velox's inserts write every column, so it serves rows written outside velox.
+// dialect, and DefaultExprs one for each. An insert leaves the column out when
+// every row holds the field's zero value, so the DEFAULT applies, and reads
+// the stored value back into the entity (ADR 0093).
 // A MySQL text, blob or JSON column takes only an expression, in parentheses.
 package sqlschema
 
@@ -380,8 +381,9 @@ func IncrementStart(n int) Annotation { return Annotation{IncrementStart: &n} }
 func WithComments(on bool) Annotation { return Annotation{WithComments: &on} }
 
 // Default sets a column's DEFAULT to the SQL text value on every dialect:
-// Default("100"), Default("'new'"). It is the column's default only, for rows
-// written outside velox; a Go-side default is the field's Default.
+// Default("100"), Default("'new'"). An insert of the field's zero value
+// leaves the column to it and reads the stored value back (ADR 0093); a
+// Go-side default is the field's Default.
 func Default(value string) Annotation { return Annotation{Default: value} }
 
 // DefaultExpr sets a column's DEFAULT to the SQL expression expr on every

@@ -1243,9 +1243,10 @@ func (u sdUser) Fields() []schema.Field {
 	return []schema.Field{f, field.String("name")}
 }
 
-// A SchemaDefault is for the migration planner only: Generate gives the same
-// files with and without it.
-func TestSchemaDefaultChangesNoCode(t *testing.T) {
+// A SchemaDefault changes one thing in the generated code: the column's
+// descriptor lists its dialects as DBDefault, which an insert leaves a zero
+// value to (ADR 0093).
+func TestSchemaDefaultIsDBDefault(t *testing.T) {
 	gen := func(u sdUser) map[string]string {
 		g, err := build(t, u)
 		if err != nil {
@@ -1265,11 +1266,23 @@ func TestSchemaDefaultChangesNoCode(t *testing.T) {
 	if len(without) != len(with) {
 		t.Fatalf("%d files without, %d with", len(without), len(with))
 	}
+	const line = `, DBDefault: []velox.Dialect{velox.Postgres}`
 	for name, a := range without {
-		if b, ok := with[name]; !ok || a != b {
-			t.Errorf("%s differs with a SchemaDefault", name)
+		b, ok := with[name]
+		if !ok {
+			t.Fatalf("%s is missing with a SchemaDefault", name)
+		}
+		if strings.Count(b, line) != boolInt(name == "sd_user.go") || strings.Replace(b, line, "", 1) != a {
+			t.Errorf("%s with a SchemaDefault differs by more than %q", name, line)
 		}
 	}
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // velox.go carries no hash of the model: no file Generate writes has one.

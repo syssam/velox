@@ -235,6 +235,7 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 func TestScopedSQLGolden(t *testing.T) {
 	const (
 		pgCols    = `"id", "created_by", "org_id", "owner", "title", "done", "invoice_id", "parent_id"`
+		insCols   = `"id", "created_by", "org_id", "owner", "title", "done", "invoice_id"` // a nil parent_id is left out (ADR 0093)
 		mysqlCols = "`id`, `created_by`, `org_id`, `owner`, `title`, `done`, `invoice_id`, `parent_id`"
 	)
 	type golden struct {
@@ -255,7 +256,7 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{"new", int64(1), int64(7), "ann", "ann"}},
 			del: golden{`DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3 AND "owner" = $4 AND "owner" = $5`,
 				[]any{int64(1), true, int64(7), "ann", "ann"}},
-			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $8 AND "tickets"."owner" = $9 AND "tickets"."owner" = $10`,
+			upsert: golden{`INSERT INTO "tickets" (` + insCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = $8 AND "tickets"."owner" = $9 AND "tickets"."owner" = $10`,
 				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), int64(7), "ann", "ann"}},
 		},
 		{d: velox.MySQL,
@@ -278,7 +279,7 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{"new", int64(1), int64(7), "ann", "ann"}},
 			del: golden{`DELETE FROM "tickets" WHERE "id" = ? AND "done" = ? AND "org_id" = ? AND "owner" = ? AND "owner" = ?`,
 				[]any{int64(1), true, int64(7), "ann", "ann"}},
-			upsert: golden{`INSERT INTO "tickets" (` + pgCols + `) VALUES (?, ?, ?, ?, ?, ?, ?, NULL) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ?`,
+			upsert: golden{`INSERT INTO "tickets" (` + insCols + `) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("org_id", "title") DO UPDATE SET "done" = EXCLUDED."done" WHERE "tickets"."org_id" = ? AND "tickets"."owner" = ? AND "tickets"."owner" = ?`,
 				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), int64(7), "ann", "ann"}},
 		},
 	} {

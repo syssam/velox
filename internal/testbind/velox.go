@@ -4,7 +4,7 @@ package testbind
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion23
+const _ = velox.GeneratedCodeIsVersion24
 
 // BindKind is the type of Bind's kind field.
 type BindKind string

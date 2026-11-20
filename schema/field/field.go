@@ -91,10 +91,11 @@ func (c common[B]) SchemaType(m map[string]string) B {
 
 // SchemaDefault sets the column's default in the database per dialect, as
 // SQL written as the database prints it, such as {field.Postgres: "now()"}.
-// velox's inserts write every column, so it serves rows written outside
-// velox and existing rows when the column is added, never an insert of
-// velox's: a field left unset stores its Default, or its Go zero value. It
-// does not count as the value of an Optional field. The keys are Postgres,
+// An insert leaves the column out when every row holds the field's zero
+// value, so the database's default applies, and reads the stored value back
+// into the entity (RETURNING, or a SELECT by key on MySQL; ADR 0093). A
+// non-zero value, or a non-nil pointer to a zero, is written. It does not
+// count as the value of an Optional field. The keys are Postgres,
 // MySQL and SQLite; any other, or an empty value, is a misuse. A time's default
 // on SQLite must write velox's form, not CURRENT_TIMESTAMP's: see the velox
 // package's SQLite section.

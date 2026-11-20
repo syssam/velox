@@ -11,6 +11,12 @@ type ColumnDescriptor struct {
 	Immutable     bool       // an update may not assign the column
 	Version       bool       // the optimistic-locking version: every update adds 1
 	Sensitive     bool       // the column holds a secret (velox logs no values)
+	// DBDefault lists the dialects on which the column has a DEFAULT that the
+	// schema declared (SchemaDefault, or a sqlschema default), as velox-gen
+	// sets it. On those dialects an insert whose rows all hold the field's
+	// zero value (nil, for a pointer) leaves the column out, so the database
+	// fills it, and reads the value back into the entity.
+	DBDefault []Dialect
 	// Nullable says the column holds NULL though the field is no pointer:
 	// a slice or a map, whose nil velox binds as NULL and reads NULL back
 	// into. velox-gen sets it on a json field of an Optional or Nillable

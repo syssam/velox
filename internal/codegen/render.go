@@ -401,6 +401,9 @@ func columnParts(f *OutField) []string {
 	if f.RequiredEdge != "" {
 		parts = append(parts, "RequiredEdge: "+strconv.Quote(f.RequiredEdge))
 	}
+	if len(f.DBDefault) > 0 {
+		parts = append(parts, "DBDefault: []velox.Dialect{"+strings.Join(f.DBDefault, ", ")+"}")
+	}
 	if f.JSON {
 		parts = append(parts, "Encode: json.Marshal", "Decode: json.Unmarshal")
 	}

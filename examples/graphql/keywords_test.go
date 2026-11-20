@@ -57,7 +57,7 @@ func TestKeywordFilters(t *testing.T) {
 		want:  `{"data": {"createPost": {"keywords": ["go", "sql"]}}}`,
 		stmts: []string{
 			viewerCheck + ` [2]`,
-			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 2 Keyed draft 0 ["go","sql"]]`,
+			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "keywords") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 2 Keyed draft 0 ["go","sql"]]`,
 		},
 	})
 	seeded := postTitles(t, s, "1", `{}`)

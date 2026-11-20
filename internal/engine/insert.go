@@ -388,37 +388,13 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 }
 
 // sendOne sends st, the insert of the row at p with its generated key column
-// gen, on db, reads that key back into the row, and sets out.Affected.
+// gen, planned by PlanInsert, on db, reads back into the row what the
+// database assigned (the key, and the columns its defaults filled), and sets
+// out.Affected.
 func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
 	in := st.Entity
-	if gen < 0 {
-		res, err := ExecWrite(ctx, db, st)
-		if err != nil {
-			return err
-		}
-		out.Affected = res.Affected
-		return CheckUpserted(st, res.Affected)
-	}
-	if db.D != MySQL {
-		var back int64 // the rows that came back
-		read := func(r Rows) error {
-			if !r.Next() {
-				return nil
-			}
-			back = 1
-			// A hook may have redirected Returning: then the row does not
-			// hold the key.
-			if len(st.Returning) == 1 && st.Returning[0] == gen {
-				return r.Scan(ScanDst(in, gen, fieldAddr(in, p, gen)))
-			}
-			return nil
-		}
-		var err error
-		if db.Hooked() {
-			err = db.Run(ctx, st, read, nil)
-		} else {
-			err = db.Plain(ctx, st, read, nil)
-		}
+	if len(st.ret) > 0 && db.D != MySQL {
+		back, err := sendReturning(ctx, db, st, p, nil)
 		if err != nil {
 			return err
 		}
@@ -436,13 +412,25 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		return err
 	}
 	out.Affected = res.Affected
-	// st.Conflict, not cf: a rewrite hook may have added or removed the clause.
-	// Without a conflict clause a successful insert wrote its row, whether
-	// the driver reported the count or not (-1).
-	if st.Conflict == nil && res.HasLastID && res.Affected != 0 {
-		return setKey(in, gen, fieldAddr(in, p, gen), res.LastID)
+	if gen < 0 {
+		if err := CheckUpserted(st, res.Affected); err != nil {
+			return err
+		}
+	} else {
+		// st.Conflict, not cf: a rewrite hook may have added or removed the
+		// clause. Without a conflict clause a successful insert wrote its
+		// row, whether the driver reported the count or not (-1).
+		if st.Conflict != nil || !res.HasLastID || res.Affected == 0 {
+			return nil
+		}
+		if err := setKey(in, gen, fieldAddr(in, p, gen), res.LastID); err != nil {
+			return err
+		}
 	}
-	return nil
+	if db.D != MySQL || res.Affected == 0 || len(st.fill) == 0 {
+		return nil
+	}
+	return readFilled(ctx, db, st, []unsafe.Pointer{p})
 }
 
 // ConditionedUpsert predicts, before the scope runs, whether it will give

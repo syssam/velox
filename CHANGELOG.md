@@ -21,6 +21,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Lean inserts (ADR 0093): an INSERT leaves out a column that every row
+  leaves empty: a nil nullable column, or the zero value in a column whose
+  database default the schema declares (`field.SchemaDefault`,
+  `sqlschema.Default`, `DefaultExpr`, `DefaultExprs`). The database fills it,
+  and velox reads it back into the entity: `RETURNING` on PostgreSQL and
+  SQLite, a SELECT by key on MySQL. InsertAll returns every row's generated
+  key and splits its rows into runs that leave the same columns out.
+  Regenerate: `velox.GeneratedCodeIsVersion24` replaces Version23, and
+  descriptors carry `ColumnDescriptor.DBDefault`. A nil column now lets a
+  `DEFAULT` the schema does not declare apply, where NULL was stored.
+
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with
   `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's

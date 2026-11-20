@@ -37,12 +37,13 @@ func TestDryRunSplitInsertAllSQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `INSERT INTO "invoices" ("created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "note", "data") VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8), ($9, $10, $11, $12, $13, $14, NULL, $15, $16)`
+	const want = `INSERT INTO "invoices" ("created_at", "updated_at", "org_id", "number", "total", "paid", "note", "data") VALUES ($1, $2, $3, $4, $5, $6, $7, $8), ($9, $10, $11, $12, $13, $14, $15, $16) RETURNING "id"`
 	if sql != want {
 		t.Errorf("SQL\n got %s\nwant %s", sql, want)
 	}
-	// paid_at is nil in every row, so it is the literal NULL and holds no
-	// argument; the rows per statement still count it (insert.go PerStatement).
+	// paid_at is nil in every row, so it is left out and holds no argument
+	// (ADR 0093); the rows per statement still count it (PerStatementOf).
+	// RETURNING reads the generated keys back.
 	if len(args) != 16 {
 		t.Fatalf("%d args, want 16: %v", len(args), args)
 	}

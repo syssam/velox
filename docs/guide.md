@@ -143,10 +143,24 @@ db.Insert(&g).Set(veloxgen.Groups.Open.Set(false)).Exec(ctx) // open = false
 
 A GraphQL create input leaves such a field optional (`active: Boolean`): left
 out it takes the `Default`, and `false` is stored. A constant `Default` is
-also the column's `DEFAULT`. `SchemaDefault` sets only the column's
-`DEFAULT`, for rows written outside velox, and
-`Annotations(sqlschema.Default("100"))` is the same with one SQL text for
-every dialect (`sqlschema.DefaultExprs` takes one for each).
+also the column's `DEFAULT`. `SchemaDefault` sets a database `DEFAULT`
+per dialect, and `Annotations(sqlschema.Default("100"))` is the same with one
+SQL text for every dialect (`sqlschema.DefaultExprs` takes one for each). An
+insert of the zero value leaves such a column out, so the database fills it,
+and reads the value back into the struct
+([ADR 0093](decisions/0093-lean-inserts.md)):
+
+```go
+// field.Time("created_at").Annotations(sqlschema.DefaultExpr("CURRENT_TIMESTAMP"))
+// field.String("status").SchemaDefault(map[string]string{field.Postgres: "'new'"})
+inv := veloxgen.Invoice{Number: "A-1"}
+db.Insert(&inv).Exec(ctx)
+// INSERT INTO "invoices" ("number") VALUES ($1) RETURNING "id", "created_at", "status"
+// inv.ID, inv.CreatedAt and inv.Status now hold what the database stored.
+```
+
+To store the zero itself in such a column, make the field Nillable and set a
+pointer to the zero: a non-nil value is always written.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column
@@ -277,7 +291,7 @@ command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion23`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion24`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 

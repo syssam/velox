@@ -8,10 +8,11 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-// TestInsertWritesZerosOverDatabaseDefaults: a column whose DEFAULT is not the
-// zero value, as SchemaDefault gives one, still stores the zero a row holds, and
-// a nil Nillable column stores NULL, because velox writes every column and no
-// DEFAULT applies to it. A SchemaDefault is for rows written outside velox.
+// TestInsertWritesZerosOverDatabaseDefaults: a column with a DEFAULT that the
+// schema does not declare (no DBDefault) still stores the zero a row holds: a
+// NOT NULL column is written whatever it holds. A nil column is left out (ADR
+// 0093), so the database's own DEFAULT applies to it, as in ent and old velox;
+// with none, it stores NULL.
 func TestInsertWritesZerosOverDatabaseDefaults(t *testing.T) {
 	raw, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -35,7 +36,7 @@ func TestInsertWritesZerosOverDatabaseDefaults(t *testing.T) {
 		return
 	}
 
-	// Insert and InsertAll, whose columns are literal when every row is nil.
+	// Insert and InsertAll, which leave out a column that every row holds nil in.
 	for name, insert := range map[string]func() error{
 		"Insert": func() error { return db.Insert(&testmodel.Invoice{OrgID: 1, Data: []byte{}}).Exec(ctx) },
 		"InsertAll": func() error {
@@ -49,8 +50,8 @@ func TestInsertWritesZerosOverDatabaseDefaults(t *testing.T) {
 		if total != 0 || paid || number != "" || note != "" {
 			t.Errorf("%s: total %v, paid %v, number %q, note %q: the zeros are not stored; a DEFAULT took over", name, total, paid, number, note)
 		}
-		if paidAt.Valid {
-			t.Errorf("%s: a nil paid_at stored %q, want NULL beside the column's DEFAULT", name, paidAt.String)
+		if !paidAt.Valid || paidAt.String != "2000-01-01 00:00:00" {
+			t.Errorf("%s: a nil paid_at stored %v, want the column's DEFAULT", name, paidAt)
 		}
 	}
 }

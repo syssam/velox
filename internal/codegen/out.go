@@ -105,15 +105,16 @@ type OutField struct {
 	Tag                  string // the struct tag, including backquotes
 	Comment              string
 	Sensitive, Immutable bool
-	Version              bool   // the optimistic-locking version: its ColumnDescriptor says Version
-	Implicit             bool   // the foreign key velox added for an edge, which ent keeps unexported: not in JSON, not in String
-	JSON                 bool   // a json field: its ColumnDescriptor's codec is encoding/json's, which the file imports
-	RequiredEdge         string // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDescriptor says RequiredEdge; "" when none
-	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDescriptor says Nullable
-	DefaultCode          string // "" or a Go expression for ColumnDescriptor.Default
-	DefaultFuncCode      string // "" or "func() any { … }"
-	ZeroFillCode         string // "" or "func() any { … }": the value an unset Optional JSON slice, map or pointer is written as, ColumnDescriptor.DefaultFunc when DefaultFuncCode is ""
-	UpdateDefaultCode    string // "" or "func() any { … }"
+	Version              bool     // the optimistic-locking version: its ColumnDescriptor says Version
+	Implicit             bool     // the foreign key velox added for an edge, which ent keeps unexported: not in JSON, not in String
+	JSON                 bool     // a json field: its ColumnDescriptor's codec is encoding/json's, which the file imports
+	RequiredEdge         string   // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDescriptor says RequiredEdge; "" when none
+	NilIsNull            bool     // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDescriptor says Nullable
+	DefaultCode          string   // "" or a Go expression for ColumnDescriptor.Default
+	DefaultFuncCode      string   // "" or "func() any { … }"
+	ZeroFillCode         string   // "" or "func() any { … }": the value an unset Optional JSON slice, map or pointer is written as, ColumnDescriptor.DefaultFunc when DefaultFuncCode is ""
+	UpdateDefaultCode    string   // "" or "func() any { … }"
+	DBDefault            []string // the dialects of the field's declared database default, as velox constants ("velox.Postgres"): its ColumnDescriptor's DBDefault
 }
 
 // OutRel is a relation of an entity.
@@ -146,4 +147,4 @@ const privacyPkg = "github.com/syssam/velox/privacy"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 23
+const GeneratedCodeVersion = 24

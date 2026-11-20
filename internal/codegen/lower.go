@@ -331,6 +331,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	if reserved[f.GoName] {
 		s.fail(where, "its Go name %s is reserved: it is a method of the entity", f.GoName)
 	}
+	o.DBDefault = dbDefaultDialects(f.SchemaDefault)
 	if e != nil && f.Nillable {
 		// A Required edge whose key is NULL-able: velox refuses it nil, as
 		// ent's create check does, since the database cannot.
@@ -1369,4 +1370,17 @@ func (l *lowerer) complete(s *entState) {
 	}
 	o.NeedsSch = s.sch
 	l.out.NeedsSch = l.out.NeedsSch || s.sch
+}
+
+// dbDefaultDialects is the dialects a field's SchemaDefault (its own, or a
+// sqlschema default lowered into it) gives a database default on, as the
+// velox constants its ColumnDescriptor's DBDefault lists, in a fixed order.
+func dbDefaultDialects(m map[string]string) []string {
+	var out []string
+	for _, d := range [...]struct{ key, name string }{{"postgres", "velox.Postgres"}, {"mysql", "velox.MySQL"}, {"sqlite", "velox.SQLite"}} {
+		if m[d.key] != "" {
+			out = append(out, d.name)
+		}
+	}
+	return out
 }

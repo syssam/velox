@@ -161,6 +161,10 @@ type Statement struct {
 	// bidi is set on a statement of a bidirectional one-to-one write, whose
 	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
 	bidi *bidiStep
+	// fill is an insert's columns that the database's defaults fill, which
+	// MySQL reads back after it (PlanInsert); ret is the RETURNING list
+	// PlanInsert set, which the rows are scanned by while Returning holds it.
+	fill, ret []int
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or

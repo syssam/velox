@@ -173,8 +173,18 @@ func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E] {
 // row, the key stays zero. A LastInsertId that does not fit the key's type is
 // an error.
 //
-// InsertAll reads nothing back. Give every entity its key, or leave every key
-// at zero for the database to assign. An InsertAll that needs several
+// A column whose database default the schema declares, and every row holds
+// the zero value in, is left out, and a nullable column every row holds nil
+// in; the database fills them. What it filled is read back into the entity:
+// with RETURNING, or a SELECT by key in the same transaction on MySQL (ADR
+// 0093).
+//
+// InsertAll reads every row's key back too, and the columns the database
+// filled: on MySQL the keys of one statement are consecutive from
+// LastInsertId, for one without OnConflict that wrote every row. An InsertAll
+// with DoNothing reads nothing back. Give every entity its key, or leave
+// every key at zero for the database to assign. Rows that leave different
+// columns to the database go in different statements. An InsertAll that needs several
 // statements is atomic: outside a transaction it runs them in one, and inside
 // one it runs them under a savepoint. So is an upsert of several rows whose
 // update branch gets the policy's conditions, so that the error for a hidden
@@ -306,12 +316,10 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 			return err
 		}
 	} else {
-		cols, per, err := prepareMany(ctx, &q.db.e, q.meta, q.many)
-		if err != nil {
+		var err error
+		if st, err = engine.InsertAllStatement(ctx, &q.db.e, q.meta.Info, unsafe.Pointer(unsafe.SliceData(q.many)), unsafe.Sizeof(q.many[0]), len(q.many), q.conflict); err != nil {
 			return err
 		}
-		inTx := q.db.e.InTx || len(q.many) > per || engine.ConditionedUpsert(ctx, &q.db.e, q.meta.Info, q.conflict, len(q.many))
-		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
 	var err error
 	mu.SQL, mu.Args, err = q.db.e.DryRun(ctx, &st)
@@ -381,8 +389,8 @@ func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p 
 	if engine.InfoBidi(m.Info) {
 		engine.MirrorRows(&st)
 	}
-	if gen >= 0 && db.D != MySQL {
-		st.Returning = []int{gen}
+	if err := engine.PlanInsert(db.D, &st, gen); err != nil {
+		return Statement{}, -1, err
 	}
 	engine.BidiInTx(&st, unsafe.Pointer(p))
 	return st, gen, nil
@@ -397,105 +405,11 @@ func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E,
 	return engine.InsertRow(ctx, db, unsafe.Pointer(p), &st, gen, out)
 }
 
-// prepareMany prepares every entity in xs, as InsertAll's Exec does, and
-// returns the columns to insert and the most rows one statement holds.
-func prepareMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E) (cols []int, per int, err error) {
-	if err := engine.RefuseBidiRows(m.Info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
-		return nil, 0, err
-	}
-	gen := generatedKey(m, &xs[0])
-	for i := range xs {
-		if (generatedKey(m, &xs[i]) >= 0) != (gen >= 0) {
-			return nil, 0, fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", m.Info.Name)
-		}
-	}
-	cols = engine.InsertColumns(m.Info, gen)
-	if len(cols) == 0 {
-		return nil, 0, engine.ErrNothingToInsert(m.Info)
-	}
-	for i := range xs {
-		if err := engine.ValidateRow(m.Info, unsafe.Pointer(&xs[i]), cols); err != nil {
-			return nil, 0, err
-		}
-	}
-	for i := range xs {
-		if err := engine.InsertAllowed(ctx, db, m.Info, unsafe.Pointer(&xs[i])); err != nil {
-			return nil, 0, err
-		}
-	}
-	return cols, engine.PerStatementOf(db, m.Info, cols, len(xs), func(i, c int) any { return m.Addr(&xs[i], c) }), nil
-}
-
-// batch is the statement that inserts xs, prepared, in one statement.
-func batch[E any](m *metaState[E], xs []E, cols []int, cf *ConflictClause, inTx bool) Statement {
-	st := Statement{Op: OpInsert, Entity: m.Info, Columns: cols, Conflict: cf, InTx: inTx, Rows: make([][]any, 0, len(xs))}
-	for i := range xs {
-		st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
-	}
-	if engine.InfoBidi(m.Info) {
-		engine.MirrorRows(&st)
-	}
-	return st
-}
-
-// insertMany inserts every entity in xs and sets out.Affected.
+// insertMany inserts every entity in xs and sets out.Affected, with the
+// untyped API's batch insert (engine.InsertAllRows).
 func insertMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E, cf *ConflictClause, out *Result) error {
 	if len(xs) == 0 {
 		return nil
 	}
-	// Before the batches' Tx, which would fail as the transaction's: the
-	// error names the entity on every path. The dry run first, as run and
-	// plain check it.
-	if IsDryRun(ctx) {
-		return fmt.Errorf("velox: %s: %w", m.Info.Name, ErrDryRun)
-	}
-	if db.Foreign(ctx) {
-		return fmt.Errorf("velox: %s: %w", m.Info.Name, ErrOutsideTx)
-	}
-	cols, per, err := prepareMany(ctx, db, m, xs)
-	if err != nil {
-		return err
-	}
-	if len(xs) <= per && !engine.ConditionedUpsert(ctx, db, m.Info, cf, len(xs)) {
-		n, err := insertBatches(ctx, db, m, xs, cols, per, cf)
-		if err == nil {
-			out.Affected = n
-		}
-		return err
-	}
-	var n int64 // in the transaction's closure: only this path pays for it
-	err = db.Tx(ctx, func(ctx context.Context, db *engine.DB) error {
-		var err error
-		n, err = insertBatches(ctx, db, m, xs, cols, per, cf)
-		return err
-	})
-	if err == nil {
-		out.Affected = n
-	}
-	return err
-}
-
-// insertBatches sends xs, prepared, in statements of at most per rows, and
-// returns the rows they affected: -1 when a batch's count is unknown.
-func insertBatches[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E, cols []int, per int, cf *ConflictClause) (int64, error) {
-	var affected int64
-	unknown := false
-	for start := 0; start < len(xs); start += per {
-		st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.InTx)
-		res, err := engine.ExecWrite(ctx, db, &st)
-		if err != nil {
-			return 0, err
-		}
-		if err := engine.CheckUpserted(&st, res.Affected); err != nil {
-			return 0, err
-		}
-		if res.Affected < 0 {
-			unknown = true
-		}
-		affected += res.Affected
-	}
-	if unknown {
-		return -1, nil
-	}
-	return affected, nil
+	return engine.InsertAllRows(ctx, db, m.Info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs), cf, out)
 }

@@ -257,12 +257,10 @@ func (q TableInsert) render(ctx context.Context, mu *MutationState) error {
 			return err
 		}
 	} else {
-		cols, per, err := q.t.prepareMany(ctx, q.e, q.many)
-		if err != nil {
+		var err error
+		if st, err = q.t.firstBatch(ctx, q.e, q.many, q.conflict); err != nil {
 			return err
 		}
-		inTx := q.e.InTx || q.many.n > per || ConditionedUpsert(ctx, q.e, q.t.info, q.conflict, q.many.n)
-		st = q.t.batch(q.many, 0, min(per, q.many.n), cols, q.conflict, inTx)
 	}
 	var err error
 	mu.SQL, mu.Args, err = q.e.DryRun(ctx, &st)
@@ -331,8 +329,8 @@ func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *
 	if InfoBidi(t.info) {
 		MirrorRows(&st)
 	}
-	if gen >= 0 && db.D != MySQL {
-		st.Returning = []int{gen}
+	if err := PlanInsert(db.D, &st, gen); err != nil {
+		return Statement{}, -1, err
 	}
 	BidiInTx(&st, p)
 	return st, gen, nil
@@ -375,7 +373,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []i
 
 // batch is the statement that inserts xs's rows from to to, prepared.
 func (t *table) batch(xs TableRows, from, to int, cols []int, cf *ConflictClause, inTx bool) Statement {
-	st := Statement{Op: OpInsert, Entity: t.info, Columns: cols, Conflict: cf, InTx: inTx, Rows: make([][]any, 0, to-from)}
+	st := Statement{Op: OpInsert, Entity: t.info, Columns: slices.Clone(cols), Conflict: cf, InTx: inTx, Rows: make([][]any, 0, to-from)}
 	for i := from; i < to; i++ {
 		st.Rows = append(st.Rows, t.rowValues(xs.at(i), cols))
 	}
@@ -399,8 +397,9 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	if err != nil {
 		return err
 	}
-	if xs.n <= per && !ConditionedUpsert(ctx, db, t.info, cf, xs.n) {
-		n, err := t.insertBatches(ctx, db, xs, cols, per, cf)
+	ends := t.defaultRuns(db, xs, cols)
+	if len(ends) == 1 && xs.n <= per && !ConditionedUpsert(ctx, db, t.info, cf, xs.n) {
+		n, err := t.insertBatches(ctx, db, xs, cols, per, ends, cf)
 		if err == nil {
 			out.Affected = n
 		}
@@ -409,7 +408,7 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	var n int64
 	err = db.Tx(ctx, func(ctx context.Context, db *DB) error {
 		var err error
-		n, err = t.insertBatches(ctx, db, xs, cols, per, cf)
+		n, err = t.insertBatches(ctx, db, xs, cols, per, ends, cf)
 		return err
 	})
 	if err == nil {
@@ -418,22 +417,67 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	return err
 }
 
-func (t *table) insertBatches(ctx context.Context, db *DB, xs TableRows, cols []int, per int, cf *ConflictClause) (int64, error) {
+// firstBatch prepares xs as insertMany does and returns the first statement
+// it would send, for SQL(ctx).
+func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *ConflictClause) (Statement, error) {
+	cols, per, err := t.prepareMany(ctx, db, xs)
+	if err != nil {
+		return Statement{}, err
+	}
+	ends := t.defaultRuns(db, xs, cols)
+	inTx := db.InTx || len(ends) > 1 || xs.n > per || ConditionedUpsert(ctx, db, t.info, cf, xs.n)
+	st := t.batch(xs, 0, min(per, ends[0]), cols, cf, inTx)
+	if err := PlanInsert(db.D, &st, t.generatedKey(xs.at(0))); err != nil {
+		return Statement{}, err
+	}
+	return st, nil
+}
+
+// InsertAllRows is InsertAll's Exec for the n entities of in that start at
+// p, size bytes apart: the untyped API's InsertAll, which the typed one
+// shares, so that no entity compiles a batch insert of its own.
+func InsertAllRows(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, cf *ConflictClause, out *Result) error {
+	return InfoTable(in).state().insertMany(ctx, db, TableRows{p: p, size: size, n: n, info: in}, cf, out)
+}
+
+// InsertAllStatement is the first statement InsertAllRows would send, for
+// SQL(ctx).
+func InsertAllStatement(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, cf *ConflictClause) (Statement, error) {
+	return InfoTable(in).state().firstBatch(ctx, db, TableRows{p: p, size: size, n: n, info: in}, cf)
+}
+
+// defaultRuns is DefaultRuns over xs.
+func (t *table) defaultRuns(db *DB, xs TableRows, cols []int) []int {
+	return DefaultRuns(t.info, db.D, cols, xs.n, func(i, c int) any { return Elem(t.addr(xs.at(i), c)) })
+}
+
+// insertBatches is the root's insertBatches for xs.
+func (t *table) insertBatches(ctx context.Context, db *DB, xs TableRows, cols []int, per int, ends []int, cf *ConflictClause) (int64, error) {
+	gen := t.generatedKey(xs.at(0))
 	var affected int64
 	unknown := false
-	for start := 0; start < xs.n; start += per {
-		st := t.batch(xs, start, min(start+per, xs.n), cols, cf, db.InTx)
-		res, err := ExecWrite(ctx, db, &st)
-		if err != nil {
-			return 0, err
+	from := 0
+	for _, end := range ends {
+		for start := from; start < end; start += per {
+			stop := min(start+per, end)
+			st := t.batch(xs, start, stop, cols, cf, db.InTx)
+			if err := PlanInsert(db.D, &st, gen); err != nil {
+				return 0, err
+			}
+			rows := make([]unsafe.Pointer, stop-start)
+			for i := range rows {
+				rows[i] = xs.at(start + i)
+			}
+			n, err := SendBatch(ctx, db, &st, rows, gen)
+			if err != nil {
+				return 0, err
+			}
+			if n < 0 {
+				unknown = true
+			}
+			affected += n
 		}
-		if err := CheckUpserted(&st, res.Affected); err != nil {
-			return 0, err
-		}
-		if res.Affected < 0 {
-			unknown = true
-		}
-		affected += res.Affected
+		from = end
 	}
 	if unknown {
 		return -1, nil

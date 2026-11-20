@@ -487,7 +487,7 @@ func TestBatchInMutation(t *testing.T) {
 		]}}}}}`,
 		stmts: []string{
 			viewerCheck + ` [1]`,
-			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 1 Zeta draft 0 []]`,
+			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "keywords") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 1 Zeta draft 0 []]`,
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT 1 [1]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
 			// The author, the returned row's edge, alone; then its posts and
@@ -875,7 +875,7 @@ func TestCreatePost(t *testing.T) {
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
 		stmts: []string{
 			viewerCheck + ` [2]`,
-			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at", "keywords") VALUES (?, ?, ?, ?, ?, NULL, ?) RETURNING "id" [1 2 Epsilon draft 0 []]`,
+			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "keywords") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 2 Epsilon draft 0 []]`,
 			`SELECT "id" FROM "tags" WHERE "id" IN (?, ?) LIMIT 2 [1 2]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
 			// The selection, of the returned row alone: the author, and the

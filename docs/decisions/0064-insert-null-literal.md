@@ -1,6 +1,6 @@
 # 0064. An INSERT writes a NULL that every row holds as the literal NULL
 
-- Status: accepted, 2026-11-10.
+- Status: superseded by [0093](0093-lean-inserts.md), 2026-11-20.
 
 ## Context
 

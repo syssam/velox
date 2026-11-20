@@ -345,7 +345,7 @@ func TestBidiOne(t *testing.T) {
 		probe  = `SELECT 1 FROM "bspouses" WHERE "id" = $1 LIMIT $2`
 		ins    = `INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2)`
 		// A key left nil in the only row is the literal NULL, with no argument.
-		insNull = `INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, NULL)`
+		insNull = `INSERT INTO "bspouses" ("id") VALUES ($1)` // a nil spouse_id is left out (ADR 0093)
 	)
 	type stmt struct {
 		sql  string

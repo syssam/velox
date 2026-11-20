@@ -82,6 +82,8 @@ type ColumnInfo struct {
 	Immutable     bool // an update may not assign the column
 	Version       bool // the optimistic-locking version: every update adds 1
 	Sensitive     bool // the column holds a secret (velox logs no values)
+	// dbDefault has bit 1<<d set for each dialect d of ColumnDescriptor.DBDefault.
+	dbDefault uint8
 	// RequiredEdge is ColumnDescriptor.RequiredEdge: the Required edge whose
 	// NULL-able key the column holds, which a write may not leave nil; "" when
 	// none.

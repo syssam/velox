@@ -126,6 +126,12 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 		HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 		Immutable: c.Immutable, Version: c.Version, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 	ci.val, ci.fast = valType(ft), fastOf(ft)
+	for _, d := range c.DBDefault {
+		if d != Postgres && d != MySQL && d != SQLite {
+			return fail("column %s has a DBDefault on %v, which is no dialect", c.Name, d)
+		}
+		ci.dbDefault |= dbDefaultBit(d)
+	}
 	if (c.Encode == nil) != (c.Decode == nil) {
 		return fail("column %s has one of Encode and Decode; a codec needs both", c.Name)
 	}

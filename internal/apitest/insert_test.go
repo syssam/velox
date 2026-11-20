@@ -14,7 +14,9 @@ import (
 	"github.com/syssam/velox/internal/testmodel"
 )
 
-const insertCols = `"created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "note", "data"`
+// insertCols are the columns an insert of an Invoice with a generated key
+// and a nil PaidAt writes: the nil column is left out (ADR 0093).
+const insertCols = `"created_at", "updated_at", "org_id", "number", "total", "paid", "note", "data"`
 
 func TestInsertReadsBackTheKey(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(42)}}}
@@ -23,7 +25,7 @@ func TestInsertReadsBackTheKey(t *testing.T) {
 	if err := db.Insert(&inv).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	want := `INSERT INTO "invoices" (` + insertCols + `) VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, $8) RETURNING "id"`
+	want := `INSERT INTO "invoices" (` + insertCols + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING "id"`
 	if inv.ID != 42 || e.SQL != want {
 		t.Fatalf("ID %d\n got %s\nwant %s", inv.ID, e.SQL, want)
 	}
@@ -138,7 +140,7 @@ func TestInsertAll(t *testing.T) {
 	if err := db.InsertAll(two).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(e.SQL, "($9, $10, $11, $12, $13, $14, NULL, $15, $16)") || len(e.Args) != 16 || two[0].CreatedAt.IsZero() {
+	if !strings.HasSuffix(e.SQL, `($9, $10, $11, $12, $13, $14, $15, $16) RETURNING "id"`) || len(e.Args) != 16 || two[0].CreatedAt.IsZero() {
 		t.Errorf("%s (%d args)", e.SQL, len(e.Args))
 	}
 }
