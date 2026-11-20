@@ -11,6 +11,25 @@ import (
 // RequiredEdge among cols, then checks every column in cols whose value is
 // not a nil pointer. Non-generic.
 func ValidateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
+	return validateRow(in, p, cols, nil)
+}
+
+// ValidateInsert checks the row of in at p, which an insert of the columns
+// cols on dialect d, with the conflict clause cf (nil for none), writes, as
+// ValidateRow does, except that a column the insert leaves to the
+// database's default (leftToDB) skips its validators: the database stores
+// its default, not the Go zero value (D10), so an enum with a declared
+// default inserts with its zero. A column cf writes (conflictWritten) is
+// sent as the row holds it (ADR 0093), and is validated.
+func ValidateInsert(in *EntityInfo, d Dialect, p unsafe.Pointer, cols []int, cf *ConflictClause) error {
+	return validateRow(in, p, cols, func(c int, v any) bool {
+		return !conflictWritten(cf, c) && leftToDB(in, d, c, v)
+	})
+}
+
+// validateRow is ValidateRow, which skips the validators of each column
+// col whose value v skip, when not nil, reports.
+func validateRow(in *EntityInfo, p unsafe.Pointer, cols []int, skip func(col int, v any) bool) error {
 	for _, c := range cols {
 		if err := checkCol(in, c); err != nil {
 			return err
@@ -27,7 +46,11 @@ func ValidateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
 		return nil
 	}
 	for _, c := range cols {
-		if err := in.checkValue(c, in.kit.Value(p, c)); err != nil {
+		v := in.kit.Value(p, c)
+		if skip != nil && skip(c, v) {
+			continue
+		}
+		if err := in.checkValue(c, v); err != nil {
 			return err
 		}
 	}

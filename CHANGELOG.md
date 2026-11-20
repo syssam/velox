@@ -41,6 +41,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Regenerate: `velox.GeneratedCodeIsVersion24` replaces Version23, and
   descriptors carry `ColumnDescriptor.DBDefault`. A nil column now lets a
   `DEFAULT` the schema does not declare apply, where NULL was stored.
+- An insert's zero value left to a declared database default skips the
+  field's validators (ADR 0093), so an enum with `SchemaDefault` inserts
+  with its zero and stores the default; a column an upsert's conflict
+  clause writes is validated as before. velox-gen warns of a field that is
+  not Nillable whose `SchemaDefault` or `sqlschema.Default` is a non-zero
+  literal (`true`, `5`, `'x'`): the zero value cannot be stored through
+  Insert.
 - `velox.SetExpr(col, text, args...)` (ADR 0095): an UPDATE sets a column
   to an SQL expression, `SET views = (views * 2)`, with `Expr`'s guarded
   text and arguments, and keeps the Write policy, the scope and the

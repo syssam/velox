@@ -319,7 +319,7 @@ func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *
 	if len(cols) == 0 {
 		return Statement{}, -1, ErrNothingToInsert(t.info)
 	}
-	if err := ValidateRow(t.info, p, cols); err != nil {
+	if err := ValidateInsert(t.info, db.D, p, cols, cf); err != nil {
 		return Statement{}, -1, err
 	}
 	if err := InsertAllowed(ctx, db, t.info, p); err != nil {
@@ -344,7 +344,7 @@ func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, cf *Con
 	return InsertRow(ctx, db, p, &st, gen, out)
 }
 
-func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []int, per int, err error) {
+func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows, cf *ConflictClause) (cols []int, per int, err error) {
 	if err := RefuseBidiRows(t.info, xs.p, xs.size, xs.n); err != nil {
 		return nil, 0, err
 	}
@@ -359,7 +359,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows) (cols []i
 		return nil, 0, ErrNothingToInsert(t.info)
 	}
 	for i := range xs.n {
-		if err := ValidateRow(t.info, xs.at(i), cols); err != nil {
+		if err := ValidateInsert(t.info, db.D, xs.at(i), cols, cf); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -393,7 +393,7 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	if db.Foreign(ctx) {
 		return fmt.Errorf("velox: %s: %w", t.info.Name, ErrOutsideTx)
 	}
-	cols, per, err := t.prepareMany(ctx, db, xs)
+	cols, per, err := t.prepareMany(ctx, db, xs, cf)
 	if err != nil {
 		return err
 	}
@@ -462,7 +462,7 @@ func (t *table) recordMany(ctx context.Context, db *DB, xs TableRows, cols []int
 // firstBatch prepares xs as insertMany does and returns the first statement
 // it would send, for SQL(ctx).
 func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *ConflictClause) (Statement, error) {
-	cols, per, err := t.prepareMany(ctx, db, xs)
+	cols, per, err := t.prepareMany(ctx, db, xs, cf)
 	if err != nil {
 		return Statement{}, err
 	}

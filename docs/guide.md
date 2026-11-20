@@ -153,15 +153,22 @@ and reads the value back into the struct
 
 ```go
 // field.Time("created_at").Annotations(sqlschema.DefaultExpr("CURRENT_TIMESTAMP"))
-// field.String("status").SchemaDefault(map[string]string{field.Postgres: "'new'"})
+// field.Enum("status").Values("new", "paid").SchemaDefault(map[string]string{field.Postgres: "'new'"})
 inv := veloxgen.Invoice{Number: "A-1"}
 db.Insert(&inv).Exec(ctx)
 // INSERT INTO "invoices" ("number") VALUES ($1) RETURNING "id", "created_at", "status"
 // inv.ID, inv.CreatedAt and inv.Status now hold what the database stored.
 ```
 
+A zero left to the database skips the field's validators, so an enum whose
+zero, `""`, is none of its values inserts and stores its default. A value
+given is validated, and so is a column an upsert's conflict clause writes.
+
 To store the zero itself in such a column, make the field Nillable and set a
-pointer to the zero: a non-nil value is always written.
+pointer to the zero: a non-nil value is always written. velox-gen warns of a
+field that is not Nillable whose database default is a non-zero literal,
+such as `field.Bool("active").SchemaDefault(...)` with `true`: no `Insert`
+can store its `false`, a setter's included.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column

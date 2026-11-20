@@ -46,6 +46,16 @@ upsert's update branch copies from the inserted row: MySQL's `new.<col>`
 names only a column the INSERT lists, and PostgreSQL's `EXCLUDED.<col>`
 would hold the column's DEFAULT, not the row's NULL.
 
+Validation follows the same rule (amended 2026-11-20, A++ round D10). A
+value an insert leaves to the database's default skips the field's
+validators, since the database stores its default, not the zero: an enum
+whose `SchemaDefault` is `'new'` inserts with its zero value, and the row holds
+`new`. The test is the one that leaves the cell out (`leftToDB`), on the
+insert's dialect, for `Insert`, `InsertAll` and an upsert's inserted rows.
+A column the conflict clause writes is sent as the row holds it, and is
+validated as before; so is a value a hook set, and every value an `Update`
+sets, the zero included.
+
 An insert whose every column is left empty lists none: `INSERT INTO t
 DEFAULT VALUES` on PostgreSQL and SQLite, `INSERT INTO t () VALUES ()` on
 MySQL, so every declared default applies. Writing one column as the row
@@ -137,6 +147,12 @@ smaller (`compilecost_test.go`).
   `Insert`: the default replaces it. This matches GORM's `default` tag. To
   store the zero, make the field Nillable and set a pointer to the zero
   (a non-nil value is always written), or `Update` the row after the insert.
+  velox-gen warns of a field that is not Nillable whose declared default is
+  a non-zero literal of its type (`true`, a number other than 0, a
+  non-empty string): "the zero value cannot be stored through Insert; make
+  it Nillable to store it". A Go `Default` beside it does not help: a
+  setter's zero is still left to the database. An enum, whose zero is none
+  of its values, a zero literal and an expression (`now()`) get no warning.
 - `GeneratedCodeIsVersion24`: descriptors carry `DBDefault`.
 - An insert with a declared default sends one statement more on MySQL, and
   a single-row upsert that leaves a column to one also opens a transaction

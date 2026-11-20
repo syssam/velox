@@ -379,7 +379,7 @@ func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p 
 	if len(cols) == 0 {
 		return Statement{}, -1, engine.ErrNothingToInsert(m.Info)
 	}
-	if err := engine.ValidateRow(m.Info, unsafe.Pointer(p), cols); err != nil {
+	if err := engine.ValidateInsert(m.Info, db.D, unsafe.Pointer(p), cols, cf); err != nil {
 		return Statement{}, -1, err
 	}
 	if err := engine.InsertAllowed(ctx, db, m.Info, unsafe.Pointer(p)); err != nil {

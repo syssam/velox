@@ -94,7 +94,10 @@ func (c common[B]) SchemaType(m map[string]string) B {
 // An insert leaves the column out when every row holds the field's zero
 // value, so the database's default applies, and reads the stored value back
 // into the entity (RETURNING, or a SELECT by key on MySQL; ADR 0093). A
-// non-zero value, or a non-nil pointer to a zero, is written. It does not
+// non-zero value, or a non-nil pointer to a zero, is written. A zero left
+// to the database skips the field's validators, so an enum inserts with
+// its zero; velox-gen warns of a non-zero literal default on a field that
+// is not Nillable, whose zero no Insert can store. It does not
 // count as the value of an Optional field. The keys are Postgres,
 // MySQL and SQLite; any other, or an empty value, is a misuse. A time's default
 // on SQLite must write velox's form, not CURRENT_TIMESTAMP's: see the velox
