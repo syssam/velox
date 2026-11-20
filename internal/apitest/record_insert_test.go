@@ -548,3 +548,45 @@ func TestRecordUpsertInOwnTx(t *testing.T) {
 		t.Errorf("Changes %+v", got)
 	}
 }
+
+// TestRecordRewriteDropsReturning: a recorded insert or upsert reports the
+// rows its RETURNING reads, so a Rewrite hook that drops it is refused
+// before the INSERT is sent: a plain Insert sends nothing, and an upsert,
+// whose locked read went first, rolls back. Without recording the same
+// hook is allowed, as before.
+func TestRecordRewriteDropsReturning(t *testing.T) {
+	drop := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Op == velox.OpInsert {
+			st.Returning = nil
+		}
+		return nil
+	})
+	const refused = "a Rewrite hook changed the RETURNING of a recorded write"
+
+	e := &fakeconn.Exec{Affected: 1}
+	var rec velox.Recorder
+	rdb := openFake(velox.Postgres, e, drop).Record(&rec)
+	err := rdb.Insert(&dDef{Name: "a"}).Exec(ctx)
+	if err == nil || !strings.Contains(err.Error(), refused) || len(e.Log) != 0 {
+		t.Errorf("Insert: %v, sent %q", err, e.Log)
+	}
+
+	tk := testmodel.Ticket{OrgID: 7, Owner: "ann", Title: "a", Done: true}
+	err = rdb.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7))
+	if err == nil || !strings.Contains(err.Error(), refused) {
+		t.Fatalf("upsert: %v", err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		`SELECT ` + ticketCols + ` FROM "tickets" WHERE ("org_id", "title") IN (($1, $2)) FOR UPDATE`,
+		"ROLLBACK",
+	})
+	if rec.Len() != 0 {
+		t.Errorf("%d Changes", rec.Len())
+	}
+
+	e = &fakeconn.Exec{Affected: 1}
+	if err := openFake(velox.Postgres, e, drop).Insert(&dDef{Name: "a"}).Exec(ctx); err != nil || len(e.Log) != 1 || strings.Contains(e.Log[0], "RETURNING") {
+		t.Errorf("without recording: %v, sent %q", err, e.Log)
+	}
+}

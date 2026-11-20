@@ -118,10 +118,11 @@ func RecordIgnore(columns ...string) RecordOption {
 // not returned, and not reported); on MySQL a read by the conflict columns
 // follows, and a count of affected rows it does not account for fails the
 // write, as when a row conflicted on another unique key (this needs the
-// clientFoundRows=true that Open asks for). MySQL returns no keys, so a
-// recorded upsert there of a row that cannot conflict and whose key only
-// the database knows, a NULL conflict column or a generated key left zero,
-// is refused: insert such rows without OnConflict. Below PostgreSQL 18 the
+// clientFoundRows=true that Open asks for). A row with NULL in a conflict
+// column, or a generated key left zero in the conflict columns, cannot be
+// found after the INSERT on MySQL, which returns no keys, so a recorded
+// upsert there refuses it: insert such rows without OnConflict. A Rewrite
+// hook may not change the RETURNING of a recorded insert or upsert. Below PostgreSQL 18 the
 // first read cannot lock a row that is not there, so a row another session
 // inserts under the same key at once is reported as an insert although the
 // upsert updated it. On MySQL that read takes gap locks: two recorded

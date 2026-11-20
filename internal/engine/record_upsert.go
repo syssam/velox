@@ -54,6 +54,7 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	// holds, stay where the caller put them: an insert through a handle
 	// that does not record allocates nothing for this path.
 	cp := *st
+	cp.recorded = true
 	rows := []unsafe.Pointer{p}
 	var n int64
 	err := recordedInsert(ctx, db, cp.Conflict == nil, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
@@ -71,10 +72,11 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 }
 
 // refuseUnfindable refuses, on MySQL, a recorded upsert of rows (gen the
-// generated key column, -1 for none) holding a row that cannot conflict and
-// whose key only the database knows: a NULL in a conflict column, or the
-// generated key left zero in the conflict columns. MySQL returns no keys
-// from an upsert, so such a row could not be found after it.
+// generated key column, -1 for none) holding a row with NULL in a conflict
+// column, or the generated key left zero in the conflict columns: such a row
+// cannot be found after the INSERT on MySQL, which returns no keys, and
+// whose read after it is by the conflict values. That covers a row whose
+// key the caller set (a UUID) as well.
 func refuseUnfindable(d Dialect, in *EntityInfo, cf *ConflictClause, gen int, rows []unsafe.Pointer) error {
 	if d != MySQL || cf == nil {
 		return nil
@@ -88,7 +90,7 @@ func refuseUnfindable(d Dialect, in *EntityInfo, cf *ConflictClause, gen int, ro
 				why = "is NULL"
 			}
 			if why != "" {
-				return fmt.Errorf("velox: %s: a recorded upsert on MySQL cannot find a row whose conflict column %s %s, as MySQL returns no keys: insert such rows without OnConflict", in.Name, in.Columns[c].Name, why)
+				return fmt.Errorf("velox: %s: a row whose conflict column %s %s cannot be found after the INSERT on MySQL, which returns no keys, so a recorded upsert refuses it: insert such rows without OnConflict", in.Name, in.Columns[c].Name, why)
 			}
 		}
 	}
@@ -105,6 +107,7 @@ func refuseUnfindable(d Dialect, in *EntityInfo, cf *ConflictClause, gen int, ro
 // MySQL with send.
 func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int, send insertSend) ([]ChangeRow, int64, error) {
 	if st.Conflict != nil {
+		st.recorded = true
 		cr, err := lockConflicts(ctx, tx, st, rows, gen)
 		if err != nil {
 			return nil, 0, err
@@ -123,6 +126,7 @@ func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poin
 		cs, err := cr.counted(ctx, tx, rows, n)
 		return cs, n, err
 	}
+	st.recorded = true
 	n, err := send(ctx, tx, st)
 	if err != nil {
 		return nil, 0, err
@@ -173,8 +177,9 @@ func ownCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 //     inserted row counts 1, an updated one 2, and one matched and left as
 //     it was 1, under the clientFoundRows=true velox requires). A count
 //     that differs, as when a row conflicted on another unique key than the
-//     conflict columns, fails the write, which rolls back. A row that
-//     cannot conflict and whose key only the database knows is refused
+//     conflict columns, fails the write, which rolls back. A row with NULL
+//     in a conflict column, or a generated key left zero in the conflict
+//     columns, cannot be found after the INSERT on MySQL, and is refused
 //     before anything is sent (refuseUnfindable).
 //
 // A touched row is paired with a row of the first read by its primary key
