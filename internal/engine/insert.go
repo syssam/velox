@@ -414,6 +414,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 	if err != nil {
 		return err
 	}
+	st.sent = res
 	out.Affected = res.Affected
 	if gen < 0 {
 		if err := CheckUpserted(st, res.Affected); err != nil {

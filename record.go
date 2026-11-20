@@ -16,6 +16,10 @@ import (
 // or through a handle that does not record: a write through the recording
 // handle under that ctx is not recorded, but one under another context is,
 // and its Change comes back to the sink.
+//
+// An upsert's old and new rows are read without the scope or the Read
+// policy (see DB.Record), so a sink can see values the caller's policy
+// hides.
 type Sink interface {
 	Record(ctx context.Context, c Change) error
 }
@@ -105,6 +109,17 @@ func RecordIgnore(columns ...string) RecordOption {
 // after the COMMIT: a sink's error is returned and undoes nothing.
 // The sink's writes are recorded only when made under another context than
 // the one it was given (see Sink).
+//
+// A recorded upsert reads the rows its rows conflict with, locked, before
+// its INSERT, and the rows as stored after it, both without the scope or
+// the Read policy, as the database finds a conflict whatever they hide: a
+// sink can see values the caller's policy hides. Below PostgreSQL 18 the
+// first read cannot lock a row that is not there, so a row another session
+// inserts under the same key at once is reported as an insert although
+// the upsert updated it. On MySQL that read takes gap locks: two recorded
+// upserts of new keys in the same gap, at once, can deadlock, and one
+// fails with ER_LOCK_DEADLOCK, which TxRetrySerializable retries. Rows of
+// one InsertAll that share a conflict key give one Change per stored row.
 //
 // The DB it returns shares db's pool and options, and Close on it closes
 // nothing. Record panics when s is nil.

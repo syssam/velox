@@ -319,6 +319,7 @@ func SendBatch(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointer
 	if err != nil {
 		return 0, err
 	}
+	st.sent = res
 	if err := CheckUpserted(st, res.Affected); err != nil {
 		return 0, err
 	}

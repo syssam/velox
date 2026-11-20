@@ -154,6 +154,18 @@ func TestRecordInsert(t *testing.T) {
 					t.Errorf("InsertAll change %d: %+v, key %v, name %q, status %q", i, ch, ch.Key, dDefs.Name.New(ch), dDefStatus.New(ch))
 				}
 			}
+			// The caller's slice changed after InsertAll does not reach the
+			// Changes.
+			names := make([]string, len(xs))
+			for i := range xs {
+				names[i] = xs[i].Name
+				xs[i].Name, xs[i].Status, *xs[i].Note = "changed later", "changed later", "changed later"
+			}
+			for i, ch := range cs {
+				if _, cur, _ := velox.RowsOf[dDef](ch); dDefs.Name.New(ch) != names[i] || dDefStatus.New(ch) != "new" || cur == nil || *cur.Note != "n" {
+					t.Errorf("InsertAll change %d after the caller changed its row: name %q, status %q, row %+v", i, dDefs.Name.New(ch), dDefStatus.New(ch), cur)
+				}
+			}
 		})
 	}
 }
@@ -373,5 +385,95 @@ func TestRecordUpsertOneColumnInTx(t *testing.T) {
 	want := []velox.FieldChange{{Name: "name", Old: "a", New: "b"}}
 	if got := cs[0].Diff(); !slices.Equal(got, want) || dDefStatus.New(cs[0]) != "done" {
 		t.Errorf("Diff %+v, status %q", got, dDefStatus.New(cs[0]))
+	}
+}
+
+// TestRecordUpsertFailsClosed: a row the upsert wrote that its read-back
+// does not find, with no other stored row left to be it, fails the write,
+// which rolls back: a Change is never silently lost.
+func TestRecordUpsertFailsClosed(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{
+		{},
+		{{int64(1)}, {int64(2)}},
+		{recTicket(1, "ann", "a", true)},
+	}}
+	var rec velox.Recorder
+	xs := []testmodel.Ticket{{OrgID: 7, Owner: "ann", Title: "a", Done: true}, {OrgID: 7, Owner: "ann", Title: "b", Done: true}}
+	err := openFake(velox.Postgres, e).Record(&rec).InsertAll(xs).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7))
+	if err == nil || !strings.Contains(err.Error(), "found no stored row for 1 of the rows it wrote") {
+		t.Fatalf("got %v, want the read-back's refusal", err)
+	}
+	if last := e.Log[len(e.Log)-1]; last != "ROLLBACK" || rec.Len() != 0 {
+		t.Errorf("last statement %q, %d Changes; want ROLLBACK and none", last, rec.Len())
+	}
+}
+
+// TestRecordUpsertDoNothingMySQL: on MySQL a DoNothing upsert reads the
+// conflicting rows locked, sends its INSERT, and reads the rows back; the
+// kept row is not reported, the new one is.
+func TestRecordUpsertDoNothingMySQL(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1, Results: [][][]any{
+		{recTicket(1, "bob", "a", false)},
+		{recTicket(1, "bob", "a", false), recTicket(2, "ann", "b", true)},
+	}}
+	var rec velox.Recorder
+	xs := []testmodel.Ticket{{OrgID: 7, Owner: "ann", Title: "a", Done: true}, {OrgID: 7, Owner: "ann", Title: "b", Done: true}}
+	if err := openFake(velox.MySQL, e).Record(&rec).InsertAll(xs).OnConflict(Tk.OrgID, Tk.Title).DoNothing().Exec(as("ann", 7)); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SELECT " + ticketColsMy + " FROM `tickets` WHERE ((`org_id` = ? AND `title` = ?) OR (`org_id` = ? AND `title` = ?)) FOR UPDATE",
+		"INSERT INTO `tickets` (" + strings.ReplaceAll(ticketInsertCols, `"`, "`") + ") VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?) AS new ON DUPLICATE KEY UPDATE `org_id` = `tickets`.`org_id`",
+		"SELECT " + ticketColsMy + " FROM `tickets` WHERE ((`org_id` = ? AND `title` = ?) OR (`org_id` = ? AND `title` = ?))",
+		"COMMIT",
+	})
+	cs := slices.Collect(rec.All())
+	if len(cs) != 1 || cs[0].Op != velox.OpInsert || cs[0].Key != int64(2) {
+		t.Errorf("Changes %+v, want the insert of b", cs)
+	}
+}
+
+// TestRecordUpsertInOwnTx: an upsert InsertAll that ADR 0093 splits into two
+// statements runs in velox's own transaction, each statement with its
+// locked read and read-back, and the sink runs after the COMMIT, once per
+// Change, in the order of the rows.
+func TestRecordUpsertInOwnTx(t *testing.T) {
+	const cols = `"id", "name", "status", "score", "note", "tag"`
+	e := &fakeconn.Exec{Results: [][][]any{
+		{},
+		{{"new", "n"}},
+		{{int64(1), "a", "new", int64(7), "n", nil}},
+		{{int64(2), "old", "new", int64(1), "n", nil}},
+		{{"new", "n"}},
+		{{int64(2), "b", "new", int64(5), "n", nil}},
+	}}
+	var at []int
+	var got []velox.Change
+	sink := velox.RecordFunc(func(_ context.Context, c velox.Change) error {
+		at = append(at, len(e.Log))
+		got = append(got, c)
+		return nil
+	})
+	xs := []dDef{{ID: 1, Name: "a"}, {ID: 2, Name: "b", Score: 5}}
+	if err := openFake(velox.Postgres, e).Record(sink).InsertAll(xs).OnConflict(dDefs.ID).Update(dDefs.Name, dDefs.Score).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		`SELECT ` + cols + ` FROM "ddefs" WHERE "id" IN ($1) FOR UPDATE`,
+		`INSERT INTO "ddefs" ("id", "name", "score") VALUES ($1, $2, $3) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "score" = EXCLUDED."score" RETURNING "status", "note"`,
+		`SELECT ` + cols + ` FROM "ddefs" WHERE "id" IN ($1)`,
+		`SELECT ` + cols + ` FROM "ddefs" WHERE "id" IN ($1) FOR UPDATE`,
+		`INSERT INTO "ddefs" ("id", "name", "score") VALUES ($1, $2, $3) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "score" = EXCLUDED."score" RETURNING "status", "note"`,
+		`SELECT ` + cols + ` FROM "ddefs" WHERE "id" IN ($1)`,
+		"COMMIT",
+	})
+	if !slices.Equal(at, []int{8, 8}) {
+		t.Errorf("the sink ran after %v statements, want twice after COMMIT (8)", at)
+	}
+	if len(got) != 2 || got[0].Op != velox.OpInsert || got[0].Key != int64(1) || got[1].Op != velox.OpUpdate || got[1].Key != int64(2) ||
+		dDefs.Name.Old(got[1]) != "old" || dDefs.Score.New(got[1]) != 5 {
+		t.Errorf("Changes %+v", got)
 	}
 }

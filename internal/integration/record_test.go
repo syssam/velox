@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -200,6 +201,74 @@ func TestRecordUpsert(t *testing.T) {
 		cs = slices.Collect(rec.All())
 		if len(cs) != 1 || cs[0].Op != velox.OpUpdate || cs[0].Key != int64(1) || !Tk.Done.Old(cs[0]) || Tk.Done.New(cs[0]) {
 			t.Errorf("single upsert: %+v", cs)
+		}
+	})
+}
+
+// TestRecordUpsertCollation: the database's collation decides what
+// conflicts, and recording follows it: "Alice@x" sent over a stored
+// "alice@x", under a case-insensitive title, is one update with the real
+// old and new values, and the title as stored. PostgreSQL has no
+// case-insensitive collation without an extension, and is skipped.
+func TestRecordUpsertCollation(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		var ddl string
+		switch tg.d {
+		case velox.SQLite:
+			ddl = strings.Replace(sqliteTickets, "title TEXT NOT NULL", "title TEXT COLLATE NOCASE NOT NULL", 1)
+		case velox.MySQL:
+			ddl = strings.Replace(mysqlTickets, "title VARCHAR(64) NOT NULL", "title VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL", 1)
+		default:
+			t.Skip("no case-insensitive collation without an extension")
+		}
+		tg.exec(t, "DROP TABLE tickets")
+		tg.exec(t, ddl)
+		tg.exec(t, "INSERT INTO tickets (created_by, id, org_id, owner, title, done, invoice_id) VALUES ('seed', 1, 1, 'ann', 'alice@x', ?, 1)", false)
+		var rec velox.Recorder
+		tk := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "Alice@x", Done: true}
+		if err := tg.db.Record(&rec).Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(testmodel.WithUser(ctx, "zed")); err != nil {
+			t.Fatal(err)
+		}
+		cs := slices.Collect(rec.All())
+		if len(cs) != 1 {
+			t.Fatalf("%d Changes, want 1: %+v", len(cs), cs)
+		}
+		c := cs[0]
+		if c.Op != velox.OpUpdate || c.Key != int64(1) || Tk.Done.Old(c) || !Tk.Done.New(c) || Tk.Title.Old(c) != "alice@x" || Tk.Title.New(c) != "alice@x" || Tk.Owner.New(c) != "ann" {
+			t.Errorf("change %+v: done %v -> %v, title %q -> %q", c, Tk.Done.Old(c), Tk.Done.New(c), Tk.Title.Old(c), Tk.Title.New(c))
+		}
+	})
+}
+
+// TestRecordUpsertGeneratedKey: an upsert whose conflict column is the
+// generated key, left zero, never conflicts (the INSERT leaves the key
+// out): each row is an insert with the key the database gave it, for
+// Insert and for a DoNothing InsertAll.
+func TestRecordUpsertGeneratedKey(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		var rec velox.Recorder
+		rdb := tg.db.Record(&rec)
+		zed := testmodel.WithUser(ctx, "zed")
+		one := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "G1"}
+		if err := rdb.Insert(&one).OnConflict(Tk.ID).Update(Tk.Done).Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		xs := []testmodel.Ticket{{OrgID: 1, Owner: "zed", Title: "G2"}, {OrgID: 1, Owner: "zed", Title: "G3"}}
+		if err := rdb.InsertAll(xs).OnConflict(Tk.ID).DoNothing().Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		cs := slices.Collect(rec.All())
+		if len(cs) != 3 {
+			t.Fatalf("%d Changes, want 3: %+v", len(cs), cs)
+		}
+		for i, title := range []string{"G1", "G2", "G3"} {
+			var id int64
+			if err := tg.direct.QueryRow(rebind(tg.d, "SELECT id FROM tickets WHERE org_id = 1 AND title = ?"), title).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			if c := cs[i]; c.Op != velox.OpInsert || c.Key != id || Tk.Title.New(c) != title {
+				t.Errorf("change %d: %+v, key %v, want %d", i, c, c.Key, id)
+			}
 		}
 	})
 }

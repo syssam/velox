@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -53,7 +55,7 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	var res Result
 	err := recordedInsert(ctx, db, cp.Conflict == nil, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
 		cp.InTx = tx.InTx
-		return sendRecorded(ctx, tx, &cp, rows, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
+		return sendRecorded(ctx, tx, &cp, rows, gen, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
 			err := sendOne(ctx, tx, p, st, gen, &res)
 			return res.Affected, err
 		})
@@ -62,18 +64,24 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	return err
 }
 
-// sendRecorded sends st, the recorded insert of the entities at rows, with
-// send, and returns a ChangeRow per row, in order. A plain insert reports
-// each row as an insert whose new row is a copy of the entity, taken after
-// send read back what the database filled; none when the statement affected
-// no row, as when an Around hook kept it from the database. An upsert
+// sendRecorded sends st, the recorded insert of the entities at rows with
+// the generated key column gen (-1 for none), with send, and returns their
+// ChangeRows. A plain insert reports each row, in order, as an insert whose
+// new row is a copy of the entity, taken after send read back what the
+// database filled; none when the statement affected no row. An upsert
 // reports as conflictRead says.
-func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, send insertSend) ([]ChangeRow, error) {
+func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int, send insertSend) ([]ChangeRow, error) {
 	var cr *conflictRead
 	if st.Conflict != nil {
 		var err error
-		if cr, err = lockConflicts(ctx, tx, st, rows); err != nil {
+		if cr, err = lockConflicts(ctx, tx, st, rows, gen); err != nil {
 			return nil, err
+		}
+		if tx.D != MySQL && gen >= 0 && len(st.Returning) == 0 && slices.Contains(st.Conflict.Columns, gen) {
+			// A DoNothing InsertAll reads nothing back (PlanInsert), but on
+			// the generated key, which the INSERT leaves out, no row
+			// conflicts: each comes back, in order, and its key finds it.
+			st.Returning, st.ret = []int{gen}, []int{gen}
 		}
 	}
 	n, err := send(ctx, tx, st)
@@ -81,7 +89,7 @@ func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poin
 		return nil, err
 	}
 	if cr != nil {
-		return cr.changes(ctx, tx, rows)
+		return cr.changes(ctx, tx, st, rows)
 	}
 	if n == 0 {
 		return nil, nil
@@ -114,71 +122,113 @@ func ownCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 	return dst
 }
 
-// conflictRead is a recorded upsert's read, before its INSERT, of the rows
-// its rows conflict with: by the conflict columns, every column, locked
-// where the dialect can (not on SQLite, whose transaction holds the
-// database). A row whose conflict key it found is the update branch's, or
-// DoNothing's; any other row is an insert.
+// conflictRead is a recorded upsert below PostgreSQL 18: a read, before
+// its INSERT, of the rows its rows conflict with, by the conflict columns,
+// every column, locked where the dialect can (not on SQLite, whose
+// transaction holds the database); and a read after it of the rows as
+// stored. The database compares the keys in both, so its collation decides
+// what matches, as it does for the conflict. A row of the second read is
+// paired with one of the first by its primary key as stored: the pair is an
+// update, which emit leaves out when nothing changed (as a row DoNothing
+// kept), and a row with no pair is an insert.
 //
-// Below PostgreSQL 18 this read cannot lock a row that is not there: a row
-// another session inserts under a key the read did not find, before the
-// INSERT, is reported as an insert although the upsert updated it, with no
-// old values. PostgreSQL 18's RETURNING old and new (one statement) closes
-// it there. On MySQL, whose ON DUPLICATE KEY UPDATE takes a conflict on any
-// unique key, a row that conflicts on a key other than the conflict columns
-// is reported the same way.
+// Known limits:
+//   - A read cannot lock a row that is not there: a row another session
+//     inserts under a key the first read did not find, before the INSERT,
+//     is reported as an insert although the upsert updated it, with no old
+//     values. PostgreSQL 18's RETURNING old and new (one statement) closes
+//     it there.
+//   - On MySQL the locked read takes gap (next-key) locks: two recorded
+//     upserts of new keys in the same gap, at once, can deadlock, and one
+//     fails with ER_LOCK_DEADLOCK, which TxRetrySerializable retries.
+//   - On MySQL, whose ON DUPLICATE KEY UPDATE takes a conflict on any
+//     unique key, a row that conflicts on another key than the conflict
+//     columns is not found by the second read, and the write fails.
+//   - Rows of one InsertAll that share a conflict key give one Change per
+//     row stored.
+//   - Both reads see the rows without the scope or the Read policy: the
+//     database finds a conflict whatever they hide, so a sink can see
+//     values the caller's policy hides.
 type conflictRead struct {
 	in   *EntityInfo
 	t    Table
-	cols []int   // the conflict columns
-	keys [][]any // each row's conflict key, in order; nil for one holding a NULL, which never conflicts
-	q    [][]any // the distinct keys, which the reads look up
+	cols []int // the conflict columns
+	gen  int   // the generated key column, -1 for none
 	olds map[string]unsafe.Pointer
-	keep bool // DoNothing: a conflicting row is kept, and not reported
 }
 
-// lockConflicts reads, locked, the rows that rows, the entities st inserts,
-// conflict with on st's conflict columns, before st is sent.
-func lockConflicts(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer) (*conflictRead, error) {
+// lockConflicts reads, locked, the rows that rows, the entities st inserts
+// with the generated key column gen, conflict with on st's conflict
+// columns, before st is sent, and keeps them by primary key.
+func lockConflicts(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int) (*conflictRead, error) {
 	in := st.Entity
-	cr := &conflictRead{in: in, t: InfoTable(in), cols: st.Conflict.Columns, keep: st.Conflict.DoNothing || len(st.Conflict.Update) == 0,
-		keys: make([][]any, len(rows))}
+	cr := &conflictRead{in: in, t: InfoTable(in), cols: st.Conflict.Columns, gen: gen}
+	var keys [][]any
 	seen := make(map[string]bool, len(rows))
-	for i, p := range rows {
-		k := make([]any, len(cr.cols))
-		for j, c := range cr.cols {
-			v, ok := plain(in.kit.Value(p, c))
-			if !ok {
-				k = nil
-				break
-			}
-			k[j] = v
-		}
-		cr.keys[i] = k
-		if k != nil && !seen[keyString(k)] {
+	for _, p := range rows {
+		// A row whose generated key is zero leaves it out of the INSERT,
+		// and one with a NULL in a conflict column never conflicts.
+		if k, ok := cr.key(p, cr.cols, nil); ok && !seen[keyString(k)] {
 			seen[keyString(k)] = true
-			cr.q = append(cr.q, k)
+			keys = append(keys, k)
 		}
 	}
-	olds, err := cr.read(ctx, tx, true)
+	got, err := cr.read(ctx, tx, conflictIn(cr.t, tx.D, cr.cols, keys), len(keys) > 0, true)
 	if err != nil {
 		return nil, err
 	}
-	cr.olds = olds
+	cr.olds = make(map[string]unsafe.Pointer, len(got))
+	for _, p := range got {
+		cr.olds[keyString(cr.stored(p, in.PrimaryKey))] = p
+	}
 	return cr, nil
 }
 
-// read reads the rows of cr's keys, every column, by key, locked when lock
-// is set and the dialect can. It reads without the scope or the Read
-// policy: the database finds a conflict whatever they hide, and the rows
-// are those the caller's own insert meets.
-func (cr *conflictRead) read(ctx context.Context, tx *DB, lock bool) (map[string]unsafe.Pointer, error) {
-	out := make(map[string]unsafe.Pointer, len(cr.q))
-	if len(cr.q) == 0 {
-		return out, nil
+// key is the values of cols in the entity at p; id stands for its
+// generated key, when not nil. It reports false when one is NULL, or is
+// the generated key left zero.
+func (cr *conflictRead) key(p unsafe.Pointer, cols []int, id any) ([]any, bool) {
+	k := make([]any, len(cols))
+	for j, c := range cols {
+		if c == cr.gen {
+			if id != nil {
+				k[j] = id
+				continue
+			}
+			if ZeroInt(fieldAddr(cr.in, p, c)) {
+				return nil, false
+			}
+		}
+		v, ok := plain(cr.in.kit.Value(p, c))
+		if !ok {
+			return nil, false
+		}
+		k[j] = v
+	}
+	return k, true
+}
+
+// stored is the values of cols in the row at p, as the database returned
+// it.
+func (cr *conflictRead) stored(p unsafe.Pointer, cols []int) []any {
+	k := make([]any, len(cols))
+	for j, c := range cols {
+		k[j], _ = plain(cr.in.kit.Value(p, c))
+	}
+	return k
+}
+
+// read reads the rows where, every column, locked when lock is set and the
+// dialect can, in the order the database returns them; nothing when some is
+// false. It reads without the scope or the Read policy: the database finds
+// a conflict whatever they hide, and the rows are those the caller's own
+// insert meets.
+func (cr *conflictRead) read(ctx context.Context, tx *DB, where Predicate, some, lock bool) ([]unsafe.Pointer, error) {
+	if !some {
+		return nil, nil
 	}
 	rdb := tx.WithoutPolicy("velox: the rows a recorded upsert meets")
-	q := QueryTable(rdb, cr.t).Where(conflictIn(cr.t, tx.D, cr.cols, cr.q)).Columns(everyColumn(cr.in)...).AllowUnbounded()
+	q := QueryTable(rdb, cr.t).Where(where).Columns(everyColumn(cr.in)...).AllowUnbounded()
 	q.st.unscoped = true
 	if lock && tx.D != SQLite {
 		q = q.ForUpdate()
@@ -187,54 +237,119 @@ func (cr *conflictRead) read(ctx context.Context, tx *DB, lock bool) (map[string
 	if err != nil {
 		return nil, err
 	}
-	k := make([]any, len(cr.cols))
-	for i := range got.n {
-		p := got.at(i)
-		for j, c := range cr.cols {
-			k[j], _ = plain(cr.in.kit.Value(p, c))
-		}
-		out[keyString(k)] = p
+	out := make([]unsafe.Pointer, got.n)
+	for i := range out {
+		out[i] = got.at(i)
 	}
 	return out, nil
 }
 
-// changes reads the rows the upsert left, by their conflict keys, and
-// returns a ChangeRow per row sent, in order: an update, with the old row
-// the locked read found and the new row as stored, for a row that
-// conflicted, unless DoNothing kept it; an insert, with the row as stored,
-// for any other. A row the read-back does not find was not written (an
-// Around hook kept it) and is left out, and so is a second row of the same
-// key, which wrote the row the first one did.
-func (cr *conflictRead) changes(ctx context.Context, tx *DB, rows []unsafe.Pointer) ([]ChangeRow, error) {
-	news, err := cr.read(ctx, tx, false)
+// ids is the generated key of each of rows, the entities st inserted, as a
+// value of the key's type, where the entity holds none: on MySQL, whose
+// upsert sets no key, the driver's LastInsertId and those after it, when
+// every row was inserted (MySQL counts an updated row twice), as ent's
+// batch insert reads them. nil when there is nothing to stand in.
+func (cr *conflictRead) ids(st *Statement, rows []unsafe.Pointer) []any {
+	if cr.gen < 0 || !slices.Contains(cr.cols, cr.gen) {
+		return nil
+	}
+	if res := st.sent; !res.HasLastID || res.Affected != int64(len(rows)) || slices.ContainsFunc(rows, func(p unsafe.Pointer) bool {
+		return !ZeroInt(fieldAddr(cr.in, p, cr.gen))
+	}) {
+		return nil
+	}
+	typ := GoType(cr.in.Columns[cr.gen])
+	out := make([]any, len(rows))
+	for i := range rows {
+		out[i] = reflect.ValueOf(st.sent.LastID + int64(i)).Convert(typ).Interface()
+	}
+	return out
+}
+
+// changes reads the rows the upsert st of rows left, as stored: by the
+// conflict columns of each entity after the send, which holds what
+// RETURNING or the driver read back, or by its primary key for one with a
+// NULL in a conflict column. It pairs each with the locked read's row of
+// the same primary key, as stored: an update when there is one, an insert
+// when not. The Changes are in the order of rows for those whose key holds
+// the values a stored row holds, then the other stored rows, in the order
+// read: rows the database's collation matched to another value (as
+// "Alice@x" to a stored "alice@x") come out of the order of rows.
+//
+// It fails closed: a row sent whose key finds no stored row, when no stored
+// row is left to be it, is an error, and the write rolls back; never a
+// Change silently lost.
+func (cr *conflictRead) changes(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer) ([]ChangeRow, error) {
+	in := cr.in
+	ids := cr.ids(st, rows)
+	byKey := make([][]any, len(rows)) // each row's conflict key, nil for none
+	byPK := make([][]any, len(rows))  // each row's primary key, for one with no conflict key
+	var keys, pks [][]any
+	for i, p := range rows {
+		var id any
+		if ids != nil {
+			id = ids[i]
+		}
+		if k, ok := cr.key(p, cr.cols, id); ok {
+			byKey[i], keys = k, append(keys, k)
+			continue
+		}
+		k, ok := cr.key(p, in.PrimaryKey, id)
+		if !ok {
+			return nil, fmt.Errorf("velox: %s: a recorded upsert cannot find the row it wrote: its conflict columns hold NULL and the database gave its key without saying it", in.Name)
+		}
+		byPK[i], pks = k, append(pks, k)
+	}
+	got, err := cr.read(ctx, tx, conflictIn(cr.t, tx.D, cr.cols, keys), len(keys) > 0, false)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ChangeRow, 0, len(rows))
-	done := make(map[string]bool, len(rows))
-	for i, k := range cr.keys {
-		if k == nil {
-			// A NULL in a conflict column never conflicts: the row was
-			// inserted, and the entity holds what was read back.
-			out = append(out, ChangeRow{Op: OpInsert, In: cr.in, New: ownCopy(cr.in, rows[i])})
+	more, err := cr.read(ctx, tx, keysIn(cr.t, pks), len(pks) > 0, false)
+	if err != nil {
+		return nil, err
+	}
+	news := append(got, more...)
+	exact := make(map[string]unsafe.Pointer, len(news)) // by conflict key and by primary key, as stored
+	for _, p := range news {
+		exact["k"+keyString(cr.stored(p, cr.cols))] = p
+		exact["p"+keyString(cr.stored(p, in.PrimaryKey))] = p
+	}
+	out := make([]ChangeRow, 0, len(news))
+	done := make(map[unsafe.Pointer]bool, len(news))
+	add := func(p unsafe.Pointer) {
+		if done[p] {
+			return // a second row of the key wrote the same stored row
+		}
+		done[p] = true
+		row := ChangeRow{Op: OpInsert, In: in, New: p}
+		if old, ok := cr.olds[keyString(cr.stored(p, in.PrimaryKey))]; ok {
+			row.Op, row.Old = OpUpdate, old
+		}
+		out = append(out, row)
+	}
+	unmatched := 0
+	for i := range rows {
+		var p unsafe.Pointer
+		if byKey[i] != nil {
+			p = exact["k"+keyString(byKey[i])]
+		} else {
+			p = exact["p"+keyString(byPK[i])]
+		}
+		if p == nil {
+			unmatched++
 			continue
 		}
-		ks := keyString(k)
-		if done[ks] {
-			continue
+		add(p)
+	}
+	left := 0
+	for _, p := range news {
+		if !done[p] {
+			left++
+			add(p)
 		}
-		done[ks] = true
-		cur := news[ks]
-		if cur == nil {
-			continue
-		}
-		if old, ok := cr.olds[ks]; ok {
-			if !cr.keep {
-				out = append(out, ChangeRow{Op: OpUpdate, In: cr.in, Old: old, New: cur})
-			}
-			continue
-		}
-		out = append(out, ChangeRow{Op: OpInsert, In: cr.in, New: cur})
+	}
+	if unmatched > 0 && left == 0 {
+		return nil, fmt.Errorf("velox: %s: a recorded upsert found no stored row for %d of the rows it wrote, so it cannot report them; the write is rolled back", in.Name, unmatched)
 	}
 	return out, nil
 }
