@@ -1246,7 +1246,8 @@ adds:
   and on MySQL one read of every column by key per statement, in place of
   the read of the declared defaults;
 - outside a transaction, a BEGIN and a COMMIT, for a single statement too;
-- in a transaction, a SAVEPOINT and a RELEASE per write;
+- in a transaction, one SAVEPOINT and RELEASE per write, an edge write
+  of several statements too;
 - on PostgreSQL, one `SHOW server_version_num` per pool, at the first
   recorded write.
 

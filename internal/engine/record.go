@@ -163,13 +163,11 @@ func (r ChangeRow) changed() bool {
 // Insert, a Rel.Add…), collected across its statements and handed to the
 // sink in one call before the write's frame ends (flush): before the RELEASE
 // of its savepoint in the caller's transaction, or the COMMIT of the
-// transaction velox opened for it. own says velox opened that transaction.
-// The handle of the write's frame, and those derived from it and of the
+// transaction velox opened for it. The handle of the write's frame, and those derived from it and of the
 // savepoints within it, carry it (DB.batch), so that the write's parts join
 // it; a handle Record returns carries none.
 type batch struct {
 	rows []ChangeRow
-	own  bool
 }
 
 // len is the number of Changes collected; 0 for a nil b.
@@ -299,16 +297,16 @@ func (b *batch) flush(ctx context.Context, tx *DB) error {
 	return r.Sink(ctx, &h, b.rows)
 }
 
-// batched is fn as the body of a recorded write's frame, own when velox
-// opened its transaction: it gives the frame's handle a batch, runs fn, and
-// flushes the batch. It is fn as it is when db does not record, or when a
+// batched is fn as the body of a recorded write's frame, a savepoint in
+// the caller's transaction or velox's own transaction: it gives the
+// frame's handle a batch, runs fn, and flushes the batch. It is fn as it is when db does not record, or when a
 // write of db is under way already (db.batch): fn's writes join its batch.
-func batched(db *DB, own bool, fn func(ctx context.Context, tx *DB) error) func(ctx context.Context, tx *DB) error {
+func batched(db *DB, fn func(ctx context.Context, tx *DB) error) func(ctx context.Context, tx *DB) error {
 	if db.rec == nil || db.batch != nil {
 		return fn
 	}
 	return func(ctx context.Context, tx *DB) error {
-		b := &batch{own: own}
+		b := &batch{}
 		tx.batch = b
 		if err := fn(ctx, tx); err != nil {
 			return err
@@ -342,22 +340,23 @@ func ownTxPrimed(ctx context.Context, db *DB, primed bool, fn func(ctx context.C
 	if !primed {
 		primeVersion(ctx, db)
 	}
-	return db.Tx(ctx, batched(db, true, fn))
+	return db.Tx(ctx, batched(db, fn))
 }
-
-// inOwnTx reports whether db is in a transaction velox opened for a recorded
-// write, which is under way.
-func inOwnTx(db *DB) bool { return db.batch != nil && db.batch.own }
 
 // recordedTx runs fn, a recorded write's statements and its emit, so that
 // a write that fails took no effect and its sink runs before its frame ends.
 // In the caller's transaction it runs fn in a savepoint: an error from a
-// statement or from the sink rolls back to it. In a transaction velox opened
-// for the write (ownTx) it runs fn there, as that transaction rolls back on
-// an error. Outside a transaction it is ownTx.
+// statement or from the sink rolls back to it. Within a recorded write's
+// frame already (db.batch: the transaction velox opened for it, or its
+// savepoint in the caller's, as an edge write's), it runs fn there, with no
+// savepoint of its own: the frame rolls back on fn's error, and fn's
+// Changes join its batch. Outside a transaction it is ownTx.
 func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
-	if db.InTx && !inOwnTx(db) {
-		return db.Tx(ctx, batched(db, false, fn))
+	switch {
+	case db.batch != nil:
+		return fn(ctx, db)
+	case db.InTx:
+		return db.Tx(ctx, batched(db, fn))
 	}
 	// Its writes asked the server version already, when they needed it.
 	return ownTxPrimed(ctx, db, true, fn)
@@ -370,9 +369,13 @@ func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB
 // and sets *old. A failed read rolls that savepoint back, so the caller's
 // transaction stays usable, and fn runs on the locked-read path in a fresh
 // savepoint. In a transaction velox opened, the version was asked before
-// its BEGIN (primeVersion), and outside one returnsOld asked it.
+// its BEGIN (primeVersion), and outside one returnsOld asked it. Within a
+// recorded write's frame already (db.batch), which has no savepoint to
+// spare for the read, it does not ask: the frame primed the version before
+// it opened (atomically, bidiTx), and when that failed fn takes the locked
+// read, right on every version.
 func versionedTx(ctx context.Context, db *DB, old *bool, fn func(ctx context.Context, tx *DB) error) error {
-	if *old || !db.InTx || inOwnTx(db) || !versionUnknown(ctx, db) {
+	if *old || !db.InTx || db.batch != nil || !versionUnknown(ctx, db) {
 		return recordedTx(ctx, db, fn)
 	}
 	var verr error
@@ -399,10 +402,20 @@ func versionedTx(ctx context.Context, db *DB, old *bool, fn func(ctx context.Con
 // in a transaction of velox's own, as ownTx: in both, fn's writes commit or
 // roll back together. Through a recording handle fn is one recorded write
 // (batched): one sink call, before the RELEASE or the COMMIT, has the
-// Changes of all of fn's statements.
+// Changes of all of fn's statements. Within a recorded write's frame
+// already (db.batch) fn runs there, as recordedTx runs a write. Before it
+// opens a savepoint in the caller's transaction for a recording handle it
+// learns the server version (primeVersion), as bidiTx does, so that fn's
+// writes, which ask nothing within the frame (versionedTx), know it.
 func atomically(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
-	if db.InTx {
-		return db.Tx(ctx, batched(db, false, fn))
+	switch {
+	case db.batch != nil:
+		return fn(ctx, db)
+	case db.InTx:
+		if db.rec != nil {
+			primeVersion(ctx, db)
+		}
+		return db.Tx(ctx, batched(db, fn))
 	}
 	return ownTx(ctx, db, fn)
 }

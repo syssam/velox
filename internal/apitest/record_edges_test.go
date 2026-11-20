@@ -1,6 +1,8 @@
 package apitest
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -346,4 +348,127 @@ func TestRecordM2M(t *testing.T) {
 			t.Errorf("Changes %q, want none", friends(t, &rec))
 		}
 	})
+}
+
+// TestRecordEdgeWriteOneSavepoint: in the caller's transaction a recorded
+// edge write is one frame, one savepoint: the recorded insert of its join
+// rows runs inside it, with no savepoint of its own, and the sink runs
+// before its RELEASE.
+func TestRecordEdgeWriteOneSavepoint(t *testing.T) {
+	friendsOf := velox.Rel[bnode, bnode]{I: 0}
+	const fcols = `"node_id", "friend_id"`
+	links := [][]any{{int64(1), int64(2)}, {int64(2), int64(1)}}
+	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{{{int64(1)}}, {{int64(2)}}, {}, links}}
+	var at []int
+	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
+		at = append(at, len(e.Log))
+		return nil
+	})
+	err := openFake(velox.Postgres, e).Record(sink).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Update[bnode]().Set(friendsOf.Add(2)).Where(velox.NumberCol[bnode, int64]{I: 0}.EQ(1)).Exec(ctx)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SAVEPOINT velox_1",
+		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
+		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT $2`,
+		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE ("node_id", "friend_id") IN (($1, $2), ($3, $4)) FOR UPDATE`,
+		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + fcols,
+		"RELEASE SAVEPOINT velox_1",
+		"COMMIT",
+	})
+	if !slices.Equal(at, []int{6}) {
+		t.Errorf("the sink ran after %v statements, want once before the RELEASE (6)", at)
+	}
+}
+
+// TestRecordEdgeWriteVersionInTx: in the caller's transaction, with the
+// server version not known yet, a recorded edge write learns it in a
+// savepoint of its own before its frame opens (primeVersion), and its
+// writes, inside the one savepoint of the frame, ask nothing: on
+// PostgreSQL 18 the join rows' upsert returns old and new. When the read
+// fails, the frame's writes take the locked read, still in one savepoint.
+func TestRecordEdgeWriteVersionInTx(t *testing.T) {
+	friendsOf := velox.Rel[bnode, bnode]{I: 0}
+	const fcols = `"node_id", "friend_id"`
+	add := func(e *fakeconn.Exec) {
+		t.Helper()
+		var rec velox.Recorder
+		err := openFake18(e, 180000).Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			_, err := tx.Update[bnode]().Set(friendsOf.Add(2)).Where(velox.NumberCol[bnode, int64]{I: 0}.EQ(1)).Exec(ctx)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := friends(t, &rec), []string{"insert 1-2", "insert 2-1"}; !slices.Equal(got, want) {
+			t.Errorf("Changes %q, want %q", got, want)
+		}
+	}
+	null := []any{nil, nil}
+	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{{{int64(1)}}, {{int64(2)}},
+		{pair(null, []any{int64(1), int64(2)}), pair(null, []any{int64(2), int64(1)})}}}
+	add(e)
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SAVEPOINT velox_1",
+		showVersion,
+		"RELEASE SAVEPOINT velox_1",
+		"SAVEPOINT velox_2",
+		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
+		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT $2`,
+		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + oldNew(fcols),
+		"RELEASE SAVEPOINT velox_2",
+		"COMMIT",
+	})
+
+	links := [][]any{{int64(1), int64(2)}, {int64(2), int64(1)}}
+	e = &fakeconn.Exec{AbortOnError: true, Affected: 2,
+		Errs:    []error{nil, errors.New("boom")}, // SAVEPOINT, SHOW
+		Results: [][][]any{{{int64(1)}}, {{int64(2)}}, {}, links}}
+	add(e)
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SAVEPOINT velox_1",
+		showVersion,
+		"ROLLBACK TO SAVEPOINT velox_1",
+		"RELEASE SAVEPOINT velox_1",
+		"SAVEPOINT velox_2",
+		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
+		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT $2`,
+		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE ("node_id", "friend_id") IN (($1, $2), ($3, $4)) FOR UPDATE`,
+		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + fcols,
+		"RELEASE SAVEPOINT velox_2",
+		"COMMIT",
+	})
+}
+
+// TestRecordUpdateOneEdgesOneSavepoint: in the caller's transaction a
+// recorded UpdateQuery.One that writes an edge is one frame: one savepoint,
+// whatever the edge write inside it does.
+func TestRecordUpdateOneEdgesOneSavepoint(t *testing.T) {
+	friendsOf := velox.Rel[bnode, bnode]{I: 0}
+	links := [][]any{{int64(1), int64(2)}, {int64(2), int64(1)}}
+	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{{{int64(1)}}, {{int64(2)}}, {}, links, {{int64(1)}}}}
+	var rec velox.Recorder
+	err := openFake(velox.Postgres, e).Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Update[bnode]().Set(friendsOf.Add(2)).Where(velox.NumberCol[bnode, int64]{I: 0}.EQ(1)).One(ctx)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, s := range e.Log {
+		if strings.HasPrefix(s, "SAVEPOINT") {
+			n++
+		}
+	}
+	if n != 1 || rec.Len() != 2 {
+		t.Errorf("%d savepoints, %d Changes; want 1 and 2:\n%s", n, rec.Len(), strings.Join(e.Log, "\n"))
+	}
 }

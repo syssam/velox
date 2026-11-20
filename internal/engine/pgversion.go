@@ -59,15 +59,16 @@ func versionUnknown(ctx context.Context, db *DB) bool {
 // about to make, when it is not known yet, where a failure cannot abort a
 // transaction: outside a transaction, before the BEGIN of one velox opens
 // (ownTx); in the caller's transaction, in a savepoint of its own, which a
-// failure rolls back. In a transaction velox opened it does nothing: that
-// transaction primed it before its BEGIN. A failure is not kept; the writes
-// then take the locked read.
+// failure rolls back. Within a recorded write's frame (db.batch) it does
+// nothing: velox's own transaction primed it before its BEGIN, and a
+// savepoint frame before it opened, and the frame opens no savepoint
+// within it. A failure is not kept; the writes then take the locked read.
 func primeVersion(ctx context.Context, db *DB) {
 	switch {
 	case !versionUnknown(ctx, db):
 	case !db.InTx:
 		serverVersion(ctx, db)
-	case !inOwnTx(db):
+	case db.batch == nil:
 		_ = db.Tx(ctx, func(ctx context.Context, sp *DB) error {
 			_, err := loadVersion(ctx, sp)
 			return err

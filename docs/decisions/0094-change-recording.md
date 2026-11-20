@@ -118,7 +118,10 @@ package. As handle methods they cost a few KB per entity package
    error is the write's error, and rolls the write back, everywhere.
    - In a caller's transaction the write and the sink run under a
      savepoint. An error from either rolls back to it, so a recorded write
-     that returns an error took no effect.
+     that returns an error took no effect. A write is one savepoint: the
+     recorded statements inside it (an edge write's join rows, a
+     re-point's steps, `UpdateQuery.One`'s edges) run in it, with none of
+     their own.
    - Outside a transaction velox opens one for every recorded write, a
      single statement's too, and the sink runs before its COMMIT.
    - Code that acts after the commit reads a `Recorder` once `Tx` returns.
@@ -165,9 +168,11 @@ package. As handle methods they cost a few KB per entity package
    - The PostgreSQL version is read once per pool
      (`SHOW server_version_num`), only by a recording handle, and no hook
      sees it. In a caller's transaction it is read inside the write's
-     savepoint, and for velox's own transaction before BEGIN, so a failed
-     read never aborts a transaction. That write takes the locked read, and
-     a later one asks again.
+     savepoint, or, for a write of several recorded statements (an edge
+     write, a re-point), in a savepoint of its own before the write's; for
+     velox's own transaction it is read before BEGIN, so a failed read never
+     aborts a transaction. That write takes the locked read, and a later one
+     asks again.
 8. **Upserts.** A row that conflicted and was updated is an update with its
    real old values; an inserted row is an insert; a row `DoNothing` kept is
    not reported. Below PostgreSQL 18 the conflicting rows are read first,
@@ -214,8 +219,8 @@ package. As handle methods they cost a few KB per entity package
 - Below PostgreSQL 18 a recorded update or delete adds one locked read.
   Outside a transaction every recorded write adds BEGIN and COMMIT, a
   single statement's too. In a caller's transaction every recorded write
-  adds SAVEPOINT and RELEASE. A bidirectional re-point adds a read per
-  step.
+  adds one SAVEPOINT and RELEASE, however many statements it sends. A
+  bidirectional re-point adds a read per step.
 - Below PostgreSQL 18 the first read cannot lock a row that is not there:
   a row another session inserts under the same key at once is reported as an
   insert although the upsert updated it. PostgreSQL 18 closes this.

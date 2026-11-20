@@ -335,9 +335,14 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 		primeVersion(ctx, db)
 	}
 	// db.Tx, but that through a recording handle fn is one recorded write
-	// (batched), whose sink runs before the RELEASE or the COMMIT.
-	if db.InTx {
-		return db.Tx(ctx, batched(db, false, fn))
+	// (batched), whose sink runs before the RELEASE or the COMMIT; within a
+	// recorded write's frame already (db.batch), fn runs there, with no
+	// savepoint of its own (recordedTx).
+	switch {
+	case db.batch != nil:
+		return fn(ctx, db)
+	case db.InTx:
+		return db.Tx(ctx, batched(db, fn))
 	}
 	return ownTxPrimed(ctx, db, true, fn)
 }
