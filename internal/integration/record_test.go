@@ -243,13 +243,21 @@ func TestRecordUpsertCollation(t *testing.T) {
 // TestRecordUpsertGeneratedKey: an upsert whose conflict column is the
 // generated key, left zero, never conflicts (the INSERT leaves the key
 // out): each row is an insert with the key the database gave it, for
-// Insert and for a DoNothing InsertAll.
+// Insert and for a DoNothing InsertAll. MySQL, which returns no keys from
+// an upsert, refuses it before sending anything.
 func TestRecordUpsertGeneratedKey(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		var rec velox.Recorder
 		rdb := tg.db.Record(&rec)
 		zed := testmodel.WithUser(ctx, "zed")
 		one := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "G1"}
+		if tg.d == velox.MySQL {
+			err := rdb.Insert(&one).OnConflict(Tk.ID).Update(Tk.Done).Exec(zed)
+			if err == nil || !strings.Contains(err.Error(), "insert such rows without OnConflict") {
+				t.Errorf("MySQL: %v, want the refusal", err)
+			}
+			return
+		}
 		if err := rdb.Insert(&one).OnConflict(Tk.ID).Update(Tk.Done).Exec(zed); err != nil {
 			t.Fatal(err)
 		}
@@ -269,6 +277,54 @@ func TestRecordUpsertGeneratedKey(t *testing.T) {
 			if c := cs[i]; c.Op != velox.OpInsert || c.Key != id || Tk.Title.New(c) != title {
 				t.Errorf("change %d: %+v, key %v, want %d", i, c, c.Key, id)
 			}
+		}
+	})
+}
+
+// TestRecordUpsertNullConflict: under a unique parent_id, a row whose
+// parent_id is NULL never conflicts: it is an insert with the key the
+// database gave it (MySQL, which returns no keys, refuses it before sending
+// anything). A DoNothing InsertAll whose generated key is not in the
+// conflict target reports exactly the rows it inserted, not the one kept.
+func TestRecordUpsertNullConflict(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		uq := ", CONSTRAINT tickets_parent_uq UNIQUE (parent_id))"
+		tg.exec(t, "DROP TABLE tickets")
+		tg.exec(t, strings.TrimSuffix(strings.TrimSpace(tg.tickets), ")")+uq)
+		tg.exec(t, "INSERT INTO tickets (created_by, id, org_id, owner, title, done, invoice_id) VALUES ('seed', 1, 1, 'ann', 'K', ?, 1)", false)
+		var rec velox.Recorder
+		rdb := tg.db.Record(&rec)
+		zed := testmodel.WithUser(ctx, "zed")
+		id := func(title string) int64 {
+			var id int64
+			if err := tg.direct.QueryRow(rebind(tg.d, "SELECT id FROM tickets WHERE org_id = 1 AND title = ?"), title).Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		n := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "N"}
+		err := rdb.Insert(&n).OnConflict(Tk.ParentID).Update(Tk.Done).Exec(zed)
+		if tg.d == velox.MySQL {
+			if err == nil || !strings.Contains(err.Error(), "conflict column parent_id is NULL") {
+				t.Errorf("MySQL: %v, want the refusal", err)
+			}
+		} else {
+			if err != nil {
+				t.Fatal(err)
+			}
+			cs := slices.Collect(rec.All())
+			if len(cs) != 1 || cs[0].Op != velox.OpInsert || cs[0].Key != id("N") {
+				t.Errorf("NULL conflict: %+v, want an insert of key %d", cs, id("N"))
+			}
+		}
+		rec.Reset()
+		xs := []testmodel.Ticket{{OrgID: 1, Owner: "zed", Title: "K"}, {OrgID: 1, Owner: "zed", Title: "M"}}
+		if err := rdb.InsertAll(xs).OnConflict(Tk.OrgID, Tk.Title).DoNothing().Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		cs := slices.Collect(rec.All())
+		if len(cs) != 1 || cs[0].Op != velox.OpInsert || cs[0].Key != id("M") || Tk.Title.New(cs[0]) != "M" {
+			t.Errorf("DoNothing: %+v, want the insert of M (key %d)", cs, id("M"))
 		}
 	})
 }

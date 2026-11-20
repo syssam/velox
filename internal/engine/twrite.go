@@ -422,19 +422,25 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 
 // recordMany is insertMany on a recording handle: the same statements, and
 // a Change per row, in the order of xs, across the statements (an
-// upsert's as conflictRead.changes orders them).
+// upsert's as conflictRead.paired orders them).
 func (t *table) recordMany(ctx context.Context, db *DB, xs TableRows, cols []int, per int, ends []int, cf *ConflictClause, out *Result) error {
+	if cf != nil && db.D == MySQL {
+		rows := make([]unsafe.Pointer, xs.n)
+		for i := range rows {
+			rows[i] = xs.at(i)
+		}
+		if err := refuseUnfindable(db.D, t.info, cf, t.generatedKey(xs.at(0)), rows); err != nil {
+			return err
+		}
+	}
 	single := len(ends) == 1 && xs.n <= per && cf == nil
 	var n int64
 	err := recordedInsert(ctx, db, single, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
 		var changes []ChangeRow
 		var err error
 		n, err = t.insertBatches(ctx, tx, xs, cols, per, ends, cf, func(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int) (int64, error) {
-			var k int64
-			cs, err := sendRecorded(ctx, tx, st, rows, gen, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
-				var err error
-				k, err = SendBatch(ctx, tx, st, rows, gen)
-				return k, err
+			cs, k, err := sendRecorded(ctx, tx, st, rows, gen, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
+				return SendBatch(ctx, tx, st, rows, gen)
 			})
 			changes = append(changes, cs...)
 			return k, err

@@ -169,10 +169,6 @@ type Statement struct {
 	// MySQL reads back after it (PlanInsert); ret is the RETURNING list
 	// PlanInsert set, which the rows are scanned by while Returning holds it.
 	fill, ret []int
-	// sent is the driver's result of an INSERT that sendOne or SendBatch
-	// sent without RETURNING: a recorded upsert on MySQL reads the keys the
-	// database gave from it.
-	sent execResult
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or

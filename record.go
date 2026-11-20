@@ -17,9 +17,9 @@ import (
 // handle under that ctx is not recorded, but one under another context is,
 // and its Change comes back to the sink.
 //
-// An upsert's old and new rows are read without the scope or the Read
-// policy (see DB.Record), so a sink can see values the caller's policy
-// hides.
+// An upsert's old rows, and on MySQL its new rows, are read without the
+// scope or the Read policy (see DB.Record), so a sink can see values the
+// caller's policy hides.
 type Sink interface {
 	Record(ctx context.Context, c Change) error
 }
@@ -111,15 +111,24 @@ func RecordIgnore(columns ...string) RecordOption {
 // the one it was given (see Sink).
 //
 // A recorded upsert reads the rows its rows conflict with, locked, before
-// its INSERT, and the rows as stored after it, both without the scope or
-// the Read policy, as the database finds a conflict whatever they hide: a
-// sink can see values the caller's policy hides. Below PostgreSQL 18 the
+// its INSERT, without the scope or the Read policy, as the database finds a
+// conflict whatever they hide: a sink can see values the caller's policy
+// hides. The database names the rows the upsert touched: on PostgreSQL and
+// SQLite the INSERT returns every column of them (a row DoNothing kept is
+// not returned, and not reported); on MySQL a read by the conflict columns
+// follows, and a count of affected rows it does not account for fails the
+// write, as when a row conflicted on another unique key (this needs the
+// clientFoundRows=true that Open asks for). MySQL returns no keys, so a
+// recorded upsert there of a row that cannot conflict and whose key only
+// the database knows, a NULL conflict column or a generated key left zero,
+// is refused: insert such rows without OnConflict. Below PostgreSQL 18 the
 // first read cannot lock a row that is not there, so a row another session
-// inserts under the same key at once is reported as an insert although
-// the upsert updated it. On MySQL that read takes gap locks: two recorded
-// upserts of new keys in the same gap, at once, can deadlock, and one
-// fails with ER_LOCK_DEADLOCK, which TxRetrySerializable retries. Rows of
-// one InsertAll that share a conflict key give one Change per stored row.
+// inserts under the same key at once is reported as an insert although the
+// upsert updated it. On MySQL that read takes gap locks: two recorded
+// upserts of new keys in the same gap, at once, can deadlock, and one fails
+// with ER_LOCK_DEADLOCK, which TxRetrySerializable retries. Rows of one
+// InsertAll that share a conflict key give one Change per stored row (on
+// MySQL, the count fails the write).
 //
 // The DB it returns shares db's pool and options, and Close on it closes
 // nothing. Record panics when s is nil.
