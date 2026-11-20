@@ -33,17 +33,52 @@ func (f RecordFunc) Record(ctx context.Context, c Change) error { return f(ctx, 
 
 // Recorder is a Sink that keeps the Changes it receives, in order. Its zero
 // value is ready, and it is safe for concurrent use.
+//
+// A Recorder drops the Changes recorded in a transaction or savepoint that
+// rolls back, and in an attempt of TxRetrySerializable before its retry, so
+// after Tx returns it holds what committed. Shared by concurrent
+// transactions, it drops only the Changes of the one that rolls back.
 type Recorder struct {
 	mu      sync.Mutex
 	changes []Change
+	ids     []uint64 // each Change's id, ascending: for drop
+	last    uint64   // the last id given
 }
 
 // Record keeps c. It never fails.
 func (r *Recorder) Record(_ context.Context, c Change) error {
-	r.mu.Lock()
-	r.changes = append(r.changes, c)
-	r.mu.Unlock()
+	r.keep(c)
 	return nil
+}
+
+// keep keeps c and returns its id, which grows with each Change kept.
+func (r *Recorder) keep(c Change) uint64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.last++
+	r.changes = append(r.changes, c)
+	r.ids = append(r.ids, r.last)
+	return r.last
+}
+
+// drop drops the Changes of ids, ascending, those of a transaction or
+// savepoint that rolled back; an id no longer kept (after Reset) is skipped.
+func (r *Recorder) drop(ids []uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n, j := 0, 0
+	for i, id := range r.ids {
+		for j < len(ids) && ids[j] < id {
+			j++
+		}
+		if j < len(ids) && ids[j] == id {
+			continue
+		}
+		r.changes[n], r.ids[n] = r.changes[i], id
+		n++
+	}
+	clear(r.changes[n:])
+	r.changes, r.ids = r.changes[:n], r.ids[:n]
 }
 
 // All returns the Changes kept when All is called, in order. A Change
@@ -65,20 +100,7 @@ func (r *Recorder) Len() int {
 // Reset drops the Changes kept.
 func (r *Recorder) Reset() {
 	r.mu.Lock()
-	r.changes = nil
-	r.mu.Unlock()
-}
-
-// mark is the number of Changes kept, for truncate to return to.
-func (r *Recorder) mark() int { return r.Len() }
-
-// truncate drops the Changes kept after the first n.
-func (r *Recorder) truncate(n int) {
-	r.mu.Lock()
-	if n < len(r.changes) {
-		clear(r.changes[n:])
-		r.changes = r.changes[:n]
-	}
+	r.changes, r.ids = nil, nil
 	r.mu.Unlock()
 }
 
@@ -144,7 +166,8 @@ func (db *DB) Record(s Sink, opts ...RecordOption) *DB {
 		r.Ignore = append(r.Ignore, o.ignore...)
 	}
 	if rec, ok := s.(*Recorder); ok {
-		r.Mark, r.Truncate = rec.mark, rec.truncate
+		r.Keep = func(row engine.ChangeRow) uint64 { return rec.keep(changeOf(row)) }
+		r.Drop = rec.drop
 	}
 	return pub(db.e.Record(r))
 }

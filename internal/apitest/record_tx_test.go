@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -157,5 +158,177 @@ func TestRecordCompositeKey(t *testing.T) {
 	}
 	if f := cs[1].Diff(); len(f) != 1 || f[0].Name != "price" || f[0].Old != nil || f[0].New != wgCents(9) {
 		t.Errorf("Diff %+v", f)
+	}
+}
+
+// setTotal sets invoice id's total on db, a recorded write; it reports a
+// failure with t.Error, as it may run on another goroutine.
+func setTotal(ctx context.Context, t *testing.T, db *velox.DB, id int64, total float64) {
+	t.Helper()
+	if _, err := db.Update[testmodel.Invoice]().Where(I.ID.EQ(id)).Set(I.Total.Set(total)).Exec(ctx); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestRecorderTxRollback: a Tx that rolls back leaves its Recorder without
+// the Changes its writes recorded.
+func TestRecorderTxRollback(t *testing.T) {
+	db, _ := recInvoices(t)
+	var rec velox.Recorder
+	boom := errors.New("boom")
+	err := db.Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		setTotal(ctx, t, tx, 1, 11)
+		setTotal(ctx, t, tx, 2, 21)
+		if rec.Len() != 2 {
+			t.Errorf("inside the Tx: %d Changes, want 2", rec.Len())
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatal(err)
+	}
+	if rec.Len() != 0 {
+		t.Errorf("after the rollback: %d Changes, want 0", rec.Len())
+	}
+}
+
+// TestRecorderSavepointRollback: a nested Tx that fails drops its own
+// Changes and keeps those recorded before it.
+func TestRecorderSavepointRollback(t *testing.T) {
+	db, _ := recInvoices(t)
+	var rec velox.Recorder
+	boom := errors.New("boom")
+	err := db.Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		setTotal(ctx, t, tx, 1, 11)
+		if err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			setTotal(ctx, t, tx, 2, 21)
+			return boom
+		}); !errors.Is(err, boom) {
+			t.Errorf("the nested Tx: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := slices.Collect(rec.All())
+	if len(got) != 1 || got[0].Key != int64(1) {
+		t.Errorf("after the savepoint's rollback: %+v, want the Change of invoice 1", got)
+	}
+}
+
+// TestRecorderRetry: an attempt of TxRetrySerializable that fails drops its
+// Changes; the Recorder holds those of the attempt that committed.
+func TestRecorderRetry(t *testing.T) {
+	db, _ := recInvoices(t)
+	var rec velox.Recorder
+	attempts := 0
+	err := db.Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		attempts++
+		if attempts == 1 {
+			setTotal(ctx, t, tx, 1, 11)
+			setTotal(ctx, t, tx, 2, 21)
+			return &pgconn.PgError{Code: "40001"} // a serialization failure
+		}
+		setTotal(ctx, t, tx, 1, 12)
+		return nil
+	}, velox.TxRetrySerializable(2))
+	if err != nil || attempts != 2 {
+		t.Fatalf("%v, %d attempts", err, attempts)
+	}
+	got := slices.Collect(rec.All())
+	if len(got) != 1 || got[0].Key != int64(1) || I.Total.New(got[0]) != 12 {
+		t.Errorf("after the retry: %+v, want the second attempt's one Change", got)
+	}
+}
+
+// TestRecorderPanicAndCommitFailure: a Tx whose fn panics, and one whose
+// COMMIT fails, drop their Changes.
+func TestRecorderPanicAndCommitFailure(t *testing.T) {
+	db, _ := recInvoices(t)
+	var rec velox.Recorder
+	func() {
+		defer func() { _ = recover() }()
+		_ = db.Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			setTotal(ctx, t, tx, 1, 11)
+			panic("boom")
+		})
+	}()
+	if rec.Len() != 0 {
+		t.Errorf("after a panic: %d Changes", rec.Len())
+	}
+	commit := errors.New("commit failed")
+	e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {recNewRow(1, t0.Add(time.Hour))}}, Affected: 1, CommitErr: commit}
+	err := openFake(velox.Postgres, e).Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(13.5)).Exec(ctx)
+		return err
+	})
+	if !errors.Is(err, commit) {
+		t.Fatal(err)
+	}
+	if rec.Len() != 0 {
+		t.Errorf("after a failed COMMIT: %d Changes", rec.Len())
+	}
+}
+
+// TestRecordFuncSeesRollback: a RecordFunc is called for the changes of a
+// savepoint that then rolls back; it sees changes as they happen (R5).
+func TestRecordFuncSeesRollback(t *testing.T) {
+	db, _ := recInvoices(t)
+	var keys []any
+	sink := velox.RecordFunc(func(_ context.Context, c velox.Change) error {
+		keys = append(keys, c.Key)
+		return nil
+	})
+	err := db.Record(sink).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_ = tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			setTotal(ctx, t, tx, 2, 21)
+			return errors.New("boom")
+		})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(keys, []any{int64(2)}) {
+		t.Errorf("the RecordFunc saw %v, want the rolled-back Change of invoice 2", keys)
+	}
+}
+
+// TestRecorderSharedConcurrentTx: one Recorder shared by two transactions
+// on two goroutines, their Changes interleaved: the one that rolls back
+// drops only its own, and the other's survive.
+func TestRecorderSharedConcurrentTx(t *testing.T) {
+	dbA, _ := recInvoices(t)
+	dbB, _ := recInvoices(t)
+	var rec velox.Recorder
+	aWrote, bWrote := make(chan struct{}), make(chan struct{})
+	boom := errors.New("boom")
+	errs := make(chan error, 2)
+	go func() {
+		errs <- dbA.Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			setTotal(ctx, t, tx, 1, 11)
+			close(aWrote)
+			<-bWrote
+			setTotal(ctx, t, tx, 2, 21)
+			return boom
+		})
+	}()
+	go func() {
+		errs <- dbB.Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			<-aWrote
+			setTotal(ctx, t, tx, 1, 99)
+			close(bWrote)
+			return nil
+		})
+	}()
+	for range 2 {
+		if err := <-errs; err != nil && !errors.Is(err, boom) {
+			t.Fatal(err)
+		}
+	}
+	got := slices.Collect(rec.All())
+	if len(got) != 1 || got[0].Key != int64(1) || I.Total.New(got[0]) != 99 {
+		t.Errorf("after A's rollback: %+v, want B's one Change", got)
 	}
 }

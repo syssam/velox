@@ -446,11 +446,14 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
 	defer releaseConn(db, holdConn(o.caller, db, f)) // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true)                        // before the note, and after the rollback
-	finished := false
+	finished, committedOK := false, false
 	defer func() {
 		if !finished {
 			endTx(info, TxRollback)
 			_ = db.rollback(ctx, ctl)
+		}
+		if !committedOK {
+			f.unkeep(0) // rolled back, or a COMMIT that failed; and before a retry
 		}
 	}()
 	if err := fn(&f.ctx, &f.db); err != nil {
@@ -508,6 +511,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		return true, endedErr(ctx, "transaction", fmt.Errorf("velox: commit: %w", err))
 	}
 	endTx(info, TxCommit)
+	committedOK = true
 	return true, nil
 }
 
@@ -551,17 +555,19 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
+	mark, kmark := db.txRoot.pend.len(), len(db.txRoot.kept)
 	finished := false
 	defer func() {
 		if !finished {
+			db.txRoot.unkeep(kmark)
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
 	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec}, db.txRoot)
-	mark := db.txRoot.pend.len()
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		db.txRoot.pend.truncate(mark)
+		db.txRoot.unkeep(kmark)
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
 		rerr := db.undoSavepoint(ctx, name)
@@ -577,6 +583,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		// transaction: undo it, or break the transaction when that fails too.
 		err = savepointErr(sctx, "release savepoint", err)
 		db.txRoot.pend.truncate(mark)
+		db.txRoot.unkeep(kmark)
 		rerr := db.undoSavepoint(ctx, name)
 		db.breakOn(rerr)
 		if rerr != nil && !ended(rerr) && !db.pastTxDeadline() {
@@ -726,6 +733,10 @@ type txFrame struct {
 	// pend is, on the frame of a transaction velox opened for a recorded
 	// write (ownTx), the Changes waiting for its COMMIT; nil on any other.
 	pend *pending
+	// kept is, on the root, the rows Recorders kept in the transaction, in
+	// order: a savepoint that rolls back drops those after its mark, and a
+	// transaction that does not commit drops them all (unkeep).
+	kept []keptRow
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.

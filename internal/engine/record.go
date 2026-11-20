@@ -22,14 +22,19 @@ type ChangeRow struct {
 
 // Recording is what a recording handle does with each ChangeRow: Sink
 // receives it, and Ignore names the columns left out of an update's
-// comparison. Mark and Truncate are set only when the sink is a
-// *velox.Recorder: Mark is how many Changes it holds, and Truncate drops
-// those after the first n, for a transaction or savepoint that rolls back.
+// comparison. Keep and Drop are set only when the sink is a
+// *velox.Recorder: Keep keeps a ChangeRow and returns its id, unique in the
+// Recorder and growing, and Drop drops the rows of the ids given,
+// ascending, for a transaction or savepoint that rolls back. In the
+// caller's transaction emit calls Keep in place of Sink and the
+// transaction notes the id (txFrame.kept): rows are dropped by id, not by
+// position, so a Recorder shared by concurrent transactions loses only the
+// rows of the one that rolls back.
 type Recording struct {
-	Sink     func(ctx context.Context, r ChangeRow) error
-	Ignore   []string
-	Mark     func() int
-	Truncate func(n int)
+	Sink   func(ctx context.Context, r ChangeRow) error
+	Ignore []string
+	Keep   func(r ChangeRow) uint64
+	Drop   func(ids []uint64)
 }
 
 // Record returns a DB like db whose writes go to r, as do those of the
@@ -176,6 +181,37 @@ func (p *pending) truncate(n int) {
 	}
 }
 
+// keptRow is a ChangeRow a Recorder kept in the caller's transaction: its
+// recording and the id Keep returned, for Drop on a rollback.
+type keptRow struct {
+	r  *Recording
+	id uint64
+}
+
+// unkeep drops from their Recorders the rows kept in f's transaction after
+// the first n, those of a transaction or savepoint that rolled back, and
+// forgets them. f is the transaction's root frame.
+func (f *txFrame) unkeep(n int) {
+	if n >= len(f.kept) {
+		return
+	}
+	for rest := f.kept[n:]; len(rest) > 0; {
+		// One recording's ids at a time; a tx handle may switch recording.
+		r, ids, others := rest[0].r, make([]uint64, 0, len(rest)), []keptRow(nil)
+		for _, k := range rest {
+			if k.r == r {
+				ids = append(ids, k.id)
+			} else {
+				others = append(others, k)
+			}
+		}
+		r.Drop(ids)
+		rest = others
+	}
+	clear(f.kept[n:])
+	f.kept = f.kept[:n]
+}
+
 // emit reports rows, the rows a write through db changed, to db's recording:
 // each update that changed a column the recording does not ignore, and every
 // other row, in order. In a transaction velox opened for the write (ownTx),
@@ -200,6 +236,11 @@ func emit(ctx context.Context, db *DB, rows []ChangeRow) error {
 		}
 		if pend != nil {
 			pend.rows = append(pend.rows, pendingRow{r: r, row: row})
+			continue
+		}
+		if r.Keep != nil && db.txRoot != nil {
+			// A Recorder neither fails nor writes: it needs no sink context.
+			db.txRoot.kept = append(db.txRoot.kept, keptRow{r: r, id: r.Keep(row)})
 			continue
 		}
 		if sctx == nil {

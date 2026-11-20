@@ -220,15 +220,21 @@ func TestDiff(t *testing.T) {
 	}
 }
 
-// TestRecorderTruncate: truncate drops what was recorded after a mark.
-func TestRecorderTruncate(t *testing.T) {
+// TestRecorderDrop: drop drops the Changes of the ids given, whatever their
+// position, and skips ids no longer kept.
+func TestRecorderDrop(t *testing.T) {
 	var rec Recorder
-	_ = rec.Record(t.Context(), Change{Key: 1})
-	m := rec.mark()
+	a := rec.keep(Change{Key: 1})
 	_ = rec.Record(t.Context(), Change{Key: 2})
-	rec.truncate(m)
-	rec.truncate(5) // past the end: nothing to drop
-	if got := slices.Collect(rec.All()); len(got) != 1 || got[0].Key != 1 {
-		t.Errorf("after truncate: %v", got)
+	c := rec.keep(Change{Key: 3})
+	_ = rec.keep(Change{Key: 4})
+	rec.drop([]uint64{a, c, 99}) // 99: never kept
+	if got := slices.Collect(rec.All()); len(got) != 2 || got[0].Key != 2 || got[1].Key != 4 {
+		t.Errorf("after drop: %v", got)
+	}
+	rec.Reset()
+	rec.drop([]uint64{a}) // after Reset: nothing to drop
+	if e := rec.keep(Change{Key: 5}); e <= c || rec.Len() != 1 {
+		t.Errorf("after Reset: id %d, %d Changes", e, rec.Len())
 	}
 }

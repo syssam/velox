@@ -107,12 +107,12 @@ func TestRecordPropagates(t *testing.T) {
 	if !recInto(t, both, &b) {
 		t.Error("the replacing sink does not receive")
 	}
-	// A Recorder's mark and truncate are set, a RecordFunc's are not.
-	if rc := recEngine(rdb).Recording(); rc.Mark == nil || rc.Truncate == nil {
-		t.Error("a Recorder sink has no Mark or Truncate")
+	// A Recorder's Keep and Drop are set, a RecordFunc's are not.
+	if rc := recEngine(rdb).Recording(); rc.Keep == nil || rc.Drop == nil {
+		t.Error("a Recorder sink has no Keep or Drop")
 	}
 	fn := db.Record(velox.RecordFunc(func(context.Context, velox.Change) error { return nil }), velox.RecordIgnore("updated_at"))
-	if rc := recEngine(fn).Recording(); rc.Mark != nil || rc.Truncate != nil || len(rc.Ignore) != 1 || rc.Ignore[0] != "updated_at" {
+	if rc := recEngine(fn).Recording(); rc.Keep != nil || rc.Drop != nil || len(rc.Ignore) != 1 || rc.Ignore[0] != "updated_at" {
 		t.Errorf("a RecordFunc's recording is %+v", rc)
 	}
 }
