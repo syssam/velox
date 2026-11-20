@@ -104,7 +104,7 @@ type Statement struct {
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
-	Returning    []int           // INSERT: columns read back (PostgreSQL and SQLite)
+	Returning    []int           // INSERT, and a tracked UPDATE (Mutation.Track): columns read back (PostgreSQL and SQLite); a Rewrite hook may not change an UPDATE's
 	AllRows      bool            // UPDATE and DELETE: the statement said All
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent
@@ -150,6 +150,10 @@ type Statement struct {
 	// loaded says a With load runs it, for owners read under this statement's scope:
 	// its join rows need no condition of their own.
 	loaded bool
+	// unscoped says velox reads rows it has just written, by their keys,
+	// inside the write's transaction: the scope adds no row condition, as
+	// the write itself was scoped and may have moved the rows out of view.
+	unscoped bool
 	// upsertPolicy is set by the scope when it added the policy's conditions to
 	// the upsert's update branch: an upsert that then affected fewer rows than it
 	// sent met a row the policy hides.
@@ -227,6 +231,8 @@ func SetStmtHanded(st *Statement) { st.handed = true }
 
 // SetStmtIter records that Iter runs st.
 func SetStmtIter(st *Statement) { st.iter = true }
+
+func stmtUnscoped(st *Statement) bool { return st.unscoped }
 
 func stmtUpsertPolicy(st *Statement) bool { return st.upsertPolicy }
 

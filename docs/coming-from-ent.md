@@ -222,6 +222,11 @@ relation's included, before the Read policy, and `WithoutPolicy` does not
 lift it. A hook that must use the typed API of `veloxgen` (another entity, say)
 is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
 
+ent's `m.OldTitle(ctx)` reads one row's old value, on a one-row update,
+with a query outside the update's lock. velox's hook calls `m.Track()`
+before next and reads `m.Changes()` after it: every row of a bulk update or
+delete, old and new values, read locked in the write's transaction.
+
 A mixin declares behaviour as ent's does, with the same plain methods.
 velox reads them for every entity that lists the mixin, mixins first,
 in `Mixin()` order, then the entity's own. The policies are ANDed, so none

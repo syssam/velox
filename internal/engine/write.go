@@ -213,7 +213,9 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 // For an update it adds the UpdateDefault assignments, refuses a column
 // assigned twice or an Immutable one and runs the validators; then it sends
 // the statement through the pipeline, whose guard runs first, or under
-// SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected.
+// SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected. A
+// write a hook called Track on is sent by trackedWrite, which reads the
+// rows before and after it; under SQL(ctx) it renders as any other.
 //
 // An update that sets the key of a bidirectional one-to-one edge (EdgeBidi)
 // must name one row by its primary key, and is sent with the statements that
@@ -253,6 +255,9 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 					return err
 				}
 				st.InTx = true // Exec sends it in a transaction, bidiUpdate's
+				if mu.Trk != nil && !mu.Dry {
+					return errTrackBidi(in)
+				}
 				if !mu.Dry {
 					return bidiUpdate(ctx, db, mu, keys, k, vs)
 				}
@@ -263,6 +268,9 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 		var err error
 		mu.SQL, mu.Args, err = db.DryRun(ctx, st)
 		return err
+	}
+	if ts := trackingOf(mu); ts != nil {
+		return trackedWrite(ctx, db, mu, ts, st)
 	}
 	res, err := ExecWrite(ctx, db, st)
 	if err != nil {

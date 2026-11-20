@@ -56,6 +56,8 @@ type rewriteSnapshot struct {
 	bidi           *bidiStep
 	pin            Target
 	iter, loaded   bool
+	unscoped       bool
+	ret            []int // an update's Returning, which velox reads by position
 }
 
 // takeRewriteSnapshot records st before cloneForHooks and the Rewrite hooks.
@@ -67,6 +69,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins, project: st.Project,
 		was: st.Each, returning: len(st.Returning) > 0,
 		bidi: stmtBidi(st), pin: stmtPin(st), iter: st.iter, loaded: st.loaded,
+		unscoped: st.unscoped, ret: st.Returning,
 	}
 }
 
@@ -76,7 +79,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	setStmtBidi(st, s.bidi)
 	setStmtPin(st, s.pin)
-	st.iter, st.loaded = s.iter, s.loaded
+	st.iter, st.loaded, st.unscoped = s.iter, s.loaded, s.unscoped
 	name := s.entity.Name
 	changed := func(what string) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's %s", name, what)
@@ -113,6 +116,10 @@ func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	if (s.count || s.exists || s.agg != 0) && !slices.Equal(st.Columns, s.cols) {
 		// The scan depends on them: one value, of the column's type.
 		return changed("Columns")
+	}
+	if s.op == OpUpdate && !slices.Equal(st.Returning, s.ret) {
+		// A tracked update reads the new values by position (ADR 0094).
+		return changed("Returning")
 	}
 	if st.Lock != s.lock || st.LockWait != s.wait {
 		// The guard checked them.

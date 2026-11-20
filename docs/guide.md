@@ -952,6 +952,35 @@ the DB. Inside it, `m.DB()` is the DB the write runs on, so inside `db.Tx`
 the audit row commits or rolls back with the write. See the
 [hooks example](../examples/hooks).
 
+A change log needs the values a write replaced. A hook calls `m.Track()`
+before next, and ranges over `m.Changes()` after it: one `velox.Change` per
+row, bulk writes included, with the row's key and each tracked column's
+old and new value. `Change.Changed()` lists the columns that differ:
+
+```go
+func audit(next velox.Mutator) velox.Mutator {
+	return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+		if err := m.Track(); err != nil { // the columns the update assigns
+			return err
+		}
+		if err := next.Mutate(ctx, m); err != nil {
+			return err
+		}
+		for c := range m.Changes() {
+			for _, f := range c.Changed() {
+				log.Printf("%v %s: %v -> %v", c.Key, f.Name, f.Old, f.New)
+			}
+		}
+		return nil
+	})
+}
+```
+
+velox reads the rows, locked, in the write's transaction, then sends the
+write narrowed to their keys, so the old values are the ones it replaced.
+Nothing is read unless a hook calls Track. `velox.Diff(before, after)`
+compares two rows you already hold.
+
 ### Policies
 
 A policy decides what the caller may see and change, from the context. It
