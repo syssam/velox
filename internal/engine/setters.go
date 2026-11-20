@@ -223,7 +223,9 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 			}
 			read = tx.WithoutPolicy("velox: the row UpdateQuery.One wrote")
 		}
-		out, err = QueryTable(read, t).Where(key...).one(ctx)
+		back := QueryTable(read, t).Where(key...)
+		back.st.unscoped = read != tx // the row written: no interceptor hides it
+		out, err = back.one(ctx)
 		return err
 	}
 	var err error
@@ -271,7 +273,11 @@ func updateByKey(ctx context.Context, db *DB, t Table, st *Statement, vals []any
 		if err != nil {
 			return err
 		}
-		out, err = QueryTable(tx.WithoutPolicy("velox: the row UpdateQuery.One wrote"), t).Where(key...).one(ctx)
+		// The row written, read with no row condition: an interceptor such as
+		// softdelete's must not hide a row the update moved out of its view.
+		q := QueryTable(tx.WithoutPolicy("velox: the row UpdateQuery.One wrote"), t).Where(key...)
+		q.st.unscoped = true
+		out, err = q.one(ctx)
 		return err
 	}
 	var err error

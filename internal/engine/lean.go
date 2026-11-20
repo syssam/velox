@@ -217,6 +217,8 @@ func readFilled(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointe
 		return nil
 	}
 	t := InfoTable(in)
+	// The read adds no row condition (unscoped): the insert was checked, and an
+	// interceptor must not hide the row it wrote.
 	rdb := db.WithoutPolicy("velox: the defaults of the rows an insert wrote")
 	copyIn := func(dst, src unsafe.Pointer) {
 		for _, c := range st.fill {
@@ -231,7 +233,9 @@ func readFilled(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointe
 			v, _ := plain(in.kit.Value(p, k))
 			keys[i], at[v] = v, p
 		}
-		got, err := QueryTable(rdb, t).Where(t.Pred(k, PredIn, keys)).Columns(append([]int{k}, st.fill...)...).AllowUnbounded().All(ctx)
+		q := QueryTable(rdb, t).Where(t.Pred(k, PredIn, keys)).Columns(append([]int{k}, st.fill...)...).AllowUnbounded()
+		q.st.unscoped = true
+		got, err := q.All(ctx)
 		if err != nil {
 			return err
 		}
@@ -250,7 +254,9 @@ func readFilled(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointe
 			v, _ := plain(in.kit.Value(p, k))
 			key[i] = t.Pred(k, PredEQ, v)
 		}
-		src, err := QueryTable(rdb, t).Where(key...).Columns(st.fill...).one(ctx)
+		q := QueryTable(rdb, t).Where(key...).Columns(st.fill...)
+		q.st.unscoped = true
+		src, err := q.one(ctx)
 		if errors.Is(err, ErrNotFound) {
 			continue
 		}

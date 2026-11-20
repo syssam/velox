@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
@@ -99,6 +100,24 @@ func TestSoftDeleteOnRealDatabases(t *testing.T) {
 		var rows int64
 		if err := tg.direct.QueryRow("SELECT COUNT(*) FROM s_docs WHERE id IN (2, 3)").Scan(&rows); err != nil || rows != 1 {
 			t.Errorf("rows 2 and 3 left: %d, %v; want 1", rows, err)
+		}
+	})
+}
+
+// TestSoftDeleteUpdateOneReturnsTheRow: UpdateQuery.One that sets deleted_at
+// returns the row it wrote, although softdelete's interceptor hides it from
+// reads: the read-back adds no row condition.
+func TestSoftDeleteUpdateOneReturnsTheRow(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		softTables(t, tg)
+		D := fixture.SDocs
+		in1 := testmodel.Org.With(context.Background(), int64(1))
+		got, err := tg.pdb.Update[fixture.SDoc]().Where(D.ID.EQ(1)).Set(D.DeletedAt.Set(time.Now())).One(in1)
+		if err != nil || got.ID != 1 || got.DeletedAt == nil {
+			t.Fatalf("One: %+v, %v", got, err)
+		}
+		if n, err := tg.pdb.Query[fixture.SDoc]().Where(D.ID.EQ(1)).Count(in1); err != nil || n != 0 {
+			t.Errorf("the row is still read: %d, %v", n, err)
 		}
 	})
 }

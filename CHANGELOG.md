@@ -989,6 +989,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- `UpdateQuery.One` that moves its row out of an interceptor's view, such as
+  softdelete's when it sets `deleted_at`, returns the row it wrote, not
+  `ErrNotFound`: its read-back adds no row condition. So does the MySQL
+  read-back of the columns an insert left to the database (ADR 0093).
+
 - velox reads `github.com/mattn/go-sqlite3`'s errors, as it reads
   modernc.org/sqlite's: a violated constraint is a `*velox.ConstraintError`,
   `velox.DriverCode` gives SQLite's extended code, and `SQLITE_BUSY` or
