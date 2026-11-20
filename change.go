@@ -17,7 +17,8 @@ import (
 // soft delete, whose Op is OpDelete although the row was updated.
 //
 // The rows before and after the write are read typed, a column's with its
-// handle's Old and New (I.Total.Old(c)) and with Changed, or whole with
+// handle's Old and New (I.Total.Old(c)), a Null handle's OldPtr and NewPtr
+// (nil for NULL), and with Changed, or whole with
 // RowsOf, or for any entity with OldRow, NewRow and Diff. Their values are plain Go values, as
 // Mutation.Value gives them, and real: a Sensitive column's included, as it
 // is the caller's data, as a struct field is. Sensitive keeps its meaning,
@@ -66,6 +67,20 @@ func changeValue[E, V any](ch Change, p unsafe.Pointer, col int32) V {
 	}
 	v, _ = ch.row.Value(int(col), p).(V)
 	return v
+}
+
+// changePtr is changeValue as a fresh *V: nil when p is nil, the column
+// holds NULL, or ch is not of entity E. For the Null handles' OldPtr and
+// NewPtr.
+func changePtr[E, V any](ch Change, p unsafe.Pointer, col int32) *V {
+	if _, ok := ch.row.Row(p).(*E); !ok {
+		return nil
+	}
+	v, ok := ch.row.Value(int(col), p).(V)
+	if !ok {
+		return nil
+	}
+	return &v
 }
 
 // OldRow returns the row before the write, an *E of c's entity; nil for an

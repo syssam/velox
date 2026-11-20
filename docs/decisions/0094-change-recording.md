@@ -57,7 +57,8 @@ rdb.Update[veloxgen.Invoice]().Where(I.TotalCents.LT(10000)).Set(I.TotalCents.Ad
   key. `Soft` marks a soft delete.
 - Typed reads: `I.TotalCents.Old(c)` and `I.TotalCents.New(c)` on every handle kind,
   lazy generic methods as `Set` is. A `Null*` handle gives its element, the
-  zero when NULL. `c.Changed(cols...)` reports whether an update's values
+  zero when NULL; its `OldPtr(c)` and `NewPtr(c)` give a copy, nil for NULL.
+  Recorded times are in UTC. `c.Changed(cols...)` reports whether an update's values
   differ in any of cols. `velox.RowsOf[E](c)` gives both rows as `*E`.
 - Any entity: `c.OldRow()` and `c.NewRow()` give the `*E` (nil for an
   insert's old row and a delete's new row); `c.Diff()` lists an update's
@@ -145,7 +146,8 @@ package. As handle methods they cost a few KB per entity package
    - An update that assigns the key finds its rows by the key assigned. A
      row the database returns with the key in another form (a truncated
      time, a padded `CHAR`) takes the place of the chunk's one row, or fails
-     the write, rolled back.
+     the write, rolled back; on MySQL a re-read that finds fewer rows than
+     the locked read fails it too.
    - Outside a transaction a recorded write runs in a transaction of its
      own (rule 4). More rows than `MaxRows` fail with `ErrTooManyRows`,
      nothing kept.

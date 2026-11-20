@@ -1140,12 +1140,14 @@ through the sink's `tx`.
   write for an insert or an update, before it for a delete, a `[]any` for a
   composite key.
 - `I.TotalCents.Old(c)` and `I.TotalCents.New(c)` read one column, typed. A `Null*`
-  handle gives the element, the zero when NULL. `c.Changed(I.Status)`
+  handle gives the element, the zero when NULL; `I.PaidAt.OldPtr(c)` and
+  `NewPtr(c)` give a copy of it, nil for NULL. `c.Changed(I.Status)`
   reports whether an update changed any of the columns given.
   `velox.RowsOf[veloxgen.Invoice](c)` gives both rows as `*Invoice`.
 - For any entity, `c.OldRow()` and `c.NewRow()` are the rows as `*E`, and
   `c.Diff()` lists an update's columns that differ, as
   `FieldChange{Name, Old, New}`. An insert's and a delete's Diff is nil.
+- Times in the rows are in UTC, read or written, so their JSON compares.
 - An insert's new row holds what velox reads back: the generated key and
   the declared database defaults. A value a trigger or an undeclared
   database default sets is the Go zero there.

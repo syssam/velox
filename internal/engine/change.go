@@ -344,12 +344,32 @@ func (tw *tracker) placeStray(op Op, stray []unsafe.Pointer, news []unsafe.Point
 // reread reads the rows an update wrote by their new keys, at, a chunk at a
 // time, and keeps each in news at its old row's place (a row whose key
 // matches none: placeStray). The read adds no row condition: the update was
-// scoped, and may have moved the rows out of view.
+// scoped, and may have moved the rows out of view. It must find every row
+// the locked read found: one it misses, as when MySQL stores an assigned
+// key in another form, fails the write rather than go unreported.
 func (tw *tracker) reread(ctx context.Context, tx *DB, at [][]any, news []unsafe.Pointer) error {
 	place := make(map[string]int, len(at))
 	for i, k := range at {
 		place[keyString(k)] = i
 	}
+	if err := tw.rereadChunks(ctx, tx, at, place, news); err != nil {
+		return err
+	}
+	found := 0
+	for _, p := range news {
+		if p != nil {
+			found++
+		}
+	}
+	if found != len(news) {
+		return fmt.Errorf("velox: %s: a recorded update found %d of the %d rows it updated when it read them again by their keys (the database may store an assigned key in another form than the value given); the write is rolled back", tw.in.Name, found, len(news))
+	}
+	return nil
+}
+
+// rereadChunks is reread's reads, a chunk at a time; place is the index of
+// each new key in at.
+func (tw *tracker) rereadChunks(ctx context.Context, tx *DB, at [][]any, place map[string]int, news []unsafe.Pointer) error {
 	return byChunks(len(at), max(1, keysPer(tx, tw.in, nil)/len(tw.in.PrimaryKey)), func(lo, hi int) error {
 		q := QueryTable(tx, tw.t).Where(keysIn(tw.t, at[lo:hi])).Columns(tw.read...).AllowUnbounded()
 		q.st.unscoped = true

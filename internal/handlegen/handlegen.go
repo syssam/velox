@@ -65,10 +65,16 @@ var (
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}"},
 	}
 	values = []method{
-		{"Old", "returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.", "(ch Change) V",
+		{"Old", "returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.", "(ch Change) V",
 			"return changeValue[E, V](ch, ch.row.Old, c.I)"},
 		{"New", "returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.", "(ch Change) V",
 			"return changeValue[E, V](ch, ch.row.New, c.I)"},
+	}
+	ptrs = []method{
+		{"OldPtr", "returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.", "(ch Change) *V",
+			"return changePtr[E, V](ch, ch.row.Old, c.I)"},
+		{"NewPtr", "returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.", "(ch Change) *V",
+			"return changePtr[E, V](ch, ch.row.New, c.I)"},
 	}
 	key = []method{
 		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.", "() GroupKey[E, V]",
@@ -138,12 +144,12 @@ var kinds = []kind{
 	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, count, extremes, set, values}},
 	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, count, extremes, sums, set, arith, values}},
 	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, count, extremes, text, set, values}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, set, null, values}},
-	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, set, null, values}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, set, arith, null, values}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, set, null, values}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, set, null, values, ptrs}},
+	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, set, null, values, ptrs}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, set, arith, null, values, ptrs}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, set, null, values, ptrs}},
 	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, jsonPaths, values}},
-	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, jsonPaths, null, values}},
+	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, jsonPaths, null, values, ptrs}},
 }
 
 // Generate returns the source of handles.go.

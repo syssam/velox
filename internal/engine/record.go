@@ -3,7 +3,9 @@ package engine
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
+	"time"
 	"unsafe"
 )
 
@@ -220,8 +222,8 @@ func (f *txFrame) unkeep(n int) {
 
 // emit adds rows, the rows a write through db changed, to the write's batch:
 // each update that changed a column the recording does not ignore, and every
-// other row, in order. The sink gets them when the write's frame ends
-// (flush).
+// other row, in order. Their times are put in UTC first (utcTimes). The sink
+// gets them when the write's frame ends (flush).
 func emit(db *DB, rows []ChangeRow) error {
 	r := db.rec
 	if r == nil {
@@ -233,12 +235,43 @@ func emit(db *DB, rows []ChangeRow) error {
 	}
 	for _, row := range rows {
 		row.rec = r
+		utcTimes(row.In, row.Old)
+		utcTimes(row.In, row.New)
 		if row.Op == OpUpdate && !row.changed() {
 			continue
 		}
 		b.rows = append(b.rows, row)
 	}
 	return nil
+}
+
+var (
+	timeType    = reflect.TypeFor[time.Time]()
+	timePtrType = reflect.TypeFor[*time.Time]()
+)
+
+// utcTimes puts each time.Time and *time.Time column of the row of in at p,
+// a recorded row the engine owns (a read, or ownCopy of an inserted entity),
+// in UTC, its monotonic reading dropped, so that rows read and rows written
+// marshal a time in one form. A *time.Time gets a new pointer: what the old
+// one points to is left as it was. A nil p is left alone.
+func utcTimes(in *EntityInfo, p unsafe.Pointer) {
+	if in == nil || p == nil {
+		return
+	}
+	for i := range in.Columns {
+		c := &in.Columns[i]
+		switch GoType(*c) {
+		case timeType:
+			t := (*time.Time)(unsafe.Add(p, c.off))
+			*t = t.UTC()
+		case timePtrType:
+			if t := (**time.Time)(unsafe.Add(p, c.off)); *t != nil {
+				u := (*t).UTC()
+				*t = &u
+			}
+		}
+	}
 }
 
 // flush hands b's Changes, those of the write whose frame tx is, to tx's

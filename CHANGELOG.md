@@ -70,7 +70,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   record, so audit rows written with `tx.InsertAll` commit with the write.
   A column an `UpdateDefault` fills (`updated_at`) is ignored by default;
   `velox.RecordIgnore(cols...)` and `velox.RecordKeep(cols...)` take typed
-  columns, one call per entity.
+  columns, one call per entity. A `Null*` handle's `OldPtr(c)` and
+  `NewPtr(c)` tell NULL (nil) from an empty value. The times in recorded
+  rows are in UTC, so an insert's new row and a later read marshal alike;
+  the caller's entity keeps its zone. On MySQL an update that assigns the
+  key fails, rolled back, when its read by the new keys finds fewer rows
+  than it locked.
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with
   `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's

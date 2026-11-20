@@ -39,12 +39,12 @@ func TestHandleMethodSets(t *testing.T) {
 		"OrderedCol":     "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Select Set column",
 		"NumberCol":      "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Select Set Sub Sum column",
 		"StringCol":      "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect Key LT LTE Like Max Min NEQ New NotIn NotInSelect Old Select Set column",
-		"NullCol":        "Asc Count CountDistinct Desc EQ In InSelect IsNull Key NEQ New NotIn NotInSelect NotNull Old Select Set SetNull column",
-		"NullOrderedCol": "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NotIn NotInSelect NotNull Old Select Set SetNull column",
-		"NullNumberCol":  "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NotIn NotInSelect NotNull Old Select Set SetNull Sub Sum column",
-		"NullStringCol":  "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ New NotIn NotInSelect NotNull Old Select Set SetNull column",
+		"NullCol":        "Asc Count CountDistinct Desc EQ In InSelect IsNull Key NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull column",
+		"NullOrderedCol": "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull column",
+		"NullNumberCol":  "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull Sub Sum column",
+		"NullStringCol":  "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull column",
 		"JSONCol":        "Bool Has HasEvery HasKey HasSome IsEmpty New Number Old Set Text column",
-		"NullJSONCol":    "Bool Has HasEvery HasKey HasSome IsEmpty IsNull New NotNull Number Old Set SetNull Text column",
+		"NullJSONCol":    "Bool Has HasEvery HasKey HasSome IsEmpty IsNull New NewPtr NotNull Number Old OldPtr Set SetNull Text column",
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(), "handles.go"), nil, parser.SkipObjectResolution)
 	if err != nil {
