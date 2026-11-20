@@ -1300,10 +1300,18 @@ func (l *lowerer) checkDeclared(joins []*join) {
 			}
 		}
 	}
-	// An entity with relations declares XEdges, the struct that holds them.
+	// An entity with relations declares XEdges, the struct that holds them,
+	// and holds it in its field Edges.
 	for _, e := range l.g.Entities {
-		if len(l.state[e.Name].out.Rels) > 0 {
-			add(e.Name+"Edges", "edges type", e.Name, "")
+		o := l.state[e.Name].out
+		if len(o.Rels) == 0 {
+			continue
+		}
+		add(e.Name+"Edges", "edges type", e.Name, "")
+		for _, f := range o.Fields {
+			if f.GoName == "Edges" {
+				l.errs = append(l.errs, &Error{Schema: e.Name, Where: fieldAt(f.Name), Reason: "its Go name Edges is reserved: it holds the entity's relations"})
+			}
 		}
 	}
 	for _, e := range l.g.Entities {
@@ -1322,6 +1330,37 @@ func (l *lowerer) checkDeclared(joins []*join) {
 		if joinOK[i] {
 			add(j.ent.Name+"Handles", "handles type", j.owner, j.where)
 		}
+	}
+	// The unexported names: each entity's meta variable, descriptor
+	// function and the constants of its columns and edges.
+	for _, e := range l.g.Entities {
+		addUnexported(add, l.state[e.Name].out, e.Name, "")
+	}
+	for i, j := range joins {
+		if joinOK[i] {
+			addUnexported(add, j.ent, j.owner, j.where)
+		}
+	}
+}
+
+// addUnexported adds the unexported names renderEntity declares for o.
+func addUnexported(add func(name, kind, schema, where string) bool, o *OutEntity, schema, where string) {
+	id := camel(o.Label)
+	add(id+"Meta", "meta variable", schema, where)
+	add(id+"Descriptor", "descriptor function", schema, where)
+	for i, f := range o.Fields {
+		w := where
+		if w == "" {
+			w = fieldAt(f.Name)
+		}
+		add(colConst(o, i), "column constant", schema, w)
+	}
+	for i, r := range o.Rels {
+		w := where
+		if w == "" {
+			w = edgeAt(r.Name)
+		}
+		add(edgeConst(o, i), "edge constant", schema, w)
 	}
 }
 

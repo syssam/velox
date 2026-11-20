@@ -552,6 +552,29 @@ type ClTagEdges struct{ schema.Schema }
 // ClBoxHandles has the name of the type of ClBox's handles.
 type ClBoxHandles struct{ schema.Schema }
 
+// ClEdgesField has a field whose Go name is that of its relations' struct.
+type ClEdgesField struct{ schema.Schema }
+
+func (ClEdgesField) Fields() []schema.Field { return []schema.Field{field.String("edges")} }
+func (ClEdgesField) Edges() []schema.Edge   { return []schema.Edge{edge.To("boxes", ClBox.Type)} }
+
+// ClAb's column constant for col_x is clAbColColX, as is ClAbCol's for x.
+type ClAb struct{ schema.Schema }
+
+func (ClAb) Fields() []schema.Field { return []schema.Field{field.String("col_x")} }
+
+type ClAbCol struct{ schema.Schema }
+
+func (ClAbCol) Fields() []schema.Field { return []schema.Field{field.String("x")} }
+
+// ClFoo's column constant for meta is clFooColMeta, as is ClFooCol's
+// meta variable.
+type ClFoo struct{ schema.Schema }
+
+func (ClFoo) Fields() []schema.Field { return []schema.Field{field.String("meta")} }
+
+type ClFooCol struct{ schema.Schema }
+
 type ClReserved struct{ schema.Schema }
 
 func (ClReserved) Fields() []schema.Field { return []schema.Field{field.String("string")} }
@@ -577,6 +600,15 @@ func TestLowerCollisions(t *testing.T) {
 		{"reserved", []schema.Interface{ClReserved{}, ClBox{}}, []string{
 			`schema ClReserved: field "string": its Go name String is reserved`,
 			`schema ClReserved: edge "hooks": its Go name Hooks is reserved`,
+		}},
+		{"edges field", []schema.Interface{ClEdgesField{}, ClBox{}}, []string{
+			`schema ClEdgesField: field "edges": its Go name Edges is reserved: it holds the entity's relations`,
+		}},
+		{"column constant", []schema.Interface{ClAb{}, ClAbCol{}}, []string{
+			`schema ClAbCol: field "x": column constant clAbColColX collides with column constant clAbColColX`,
+		}},
+		{"meta variable", []schema.Interface{ClFoo{}, ClFooCol{}}, []string{
+			`schema ClFooCol: meta variable clFooColMeta collides with column constant clFooColMeta`,
 		}},
 		{"imports", []schema.Interface{ClImports{}}, []string{`schema ClImports: field "b": imports math/rand and math/rand/v2 both named rand`}},
 	} {
