@@ -72,9 +72,11 @@ The database's values come back into the entity:
   the defaulted columns are read by key after the insert, without
   policies; inside the caller's transaction when there is one. For several
   rows with a one-column key, this is one `SELECT … WHERE id IN (…)`.
-  - A single-row upsert reads them by its conflict values instead, as
-    `LastInsertId` does not name a row the upsert updated and the entity's
-    key need not be the stored row's. The database compares the values, as
+  - A single-row upsert reads them by its conflict values instead, with
+    the generated key, as `LastInsertId` does not name a row the upsert
+    updated: the entity gets the stored row's key, as RETURNING gives it
+    on PostgreSQL and SQLite. A key the caller set is not read, as
+    RETURNING names none then. The database compares the values, as
     it did for the conflict. The upsert and the read run in one
     transaction, velox's own outside the caller's. A row whose conflict
     values cannot find it (a NULL, a generated key left zero) keeps its Go
@@ -157,8 +159,9 @@ smaller (`compilecost_test.go`).
   of its values, a zero literal and an expression (`now()`) get no warning.
 - `GeneratedCodeIsVersion24`: descriptors carry `DBDefault`.
 - An insert with a declared default sends one statement more on MySQL, and
-  a single-row upsert that leaves a column to one also opens a transaction
-  for it outside the caller's. The other databases send none more.
+  a single-row upsert that leaves a column to one, or whose key is
+  generated, also opens a transaction for it outside the caller's. The
+  other databases send none more.
 - 0064's literal `NULL` stays in the renderer, for an INSERT whose Rewrite
   hook puts back a column every row holds nil in. velox's own inserts no
   longer have such a column.

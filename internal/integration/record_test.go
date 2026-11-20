@@ -791,14 +791,40 @@ func TestRecordInsertStoredRow(t *testing.T) {
 		if err := rdb.Insert(&up).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		id := up.ID
-		if id == 0 {
-			got, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(7), I.Number.EQ("S3")).One(ctx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			id = got.ID
+		got, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(7), I.Number.EQ("S3")).One(ctx)
+		if err != nil {
+			t.Fatal(err)
 		}
-		invoice("upsert", id)
+		if up.ID != got.ID {
+			t.Errorf("upsert: the entity's key %d, stored %d", up.ID, got.ID)
+		}
+		invoice("upsert", got.ID)
+	})
+}
+
+// TestMySQLUpsertStoredKey: a single-row upsert gives the entity the stored
+// row's generated key, whether it inserted the row or updated one, on every
+// database: MySQL reads it by the conflict values, as it has no RETURNING.
+func TestMySQLUpsertStoredKey(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		mk := func() testmodel.Invoice {
+			return testmodel.Invoice{OrgID: 8, Number: "K1", Total: 1, Data: []byte("d"), CreatedAt: t0}
+		}
+		ins := mk()
+		if err := tg.db.Insert(&ins).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		upd := mk()
+		upd.Total = 2
+		if err := tg.db.Insert(&upd).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got, err := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(8), I.Number.EQ("K1")).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ins.ID != got.ID || upd.ID != got.ID || got.Total != 2 {
+			t.Errorf("keys: inserted %d, updated %d, stored %d (total %v)", ins.ID, upd.ID, got.ID, got.Total)
+		}
 	})
 }

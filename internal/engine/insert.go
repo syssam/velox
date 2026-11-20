@@ -387,9 +387,9 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 			return err
 		}
 	}
-	if db.D == MySQL && st.Conflict != nil && len(st.fill) > 0 && !db.InTx {
-		// The upsert and the read of what it left to the database
-		// (readUpserted) see one row, in one transaction.
+	if db.D == MySQL && st.Conflict != nil && (len(st.fill) > 0 || gen >= 0) && !db.InTx {
+		// The upsert and the read of its key and of what it left to the
+		// database (readUpserted) see one row, in one transaction.
 		cp := *st
 		var res Result
 		err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {

@@ -496,11 +496,11 @@ func TestUpsertConflictWhereFillsByKey(t *testing.T) {
 }
 
 // TestMySQLUpsertReadsBackDefaults: MySQL has no RETURNING, so a single-row
-// upsert reads the columns it left to the database by its conflict values,
-// in one transaction with the upsert: the stored row's, whether inserted or
-// updated.
+// upsert reads the stored key and the columns it left to the database by
+// its conflict values, in one transaction with the upsert: the stored
+// row's, whether inserted or updated.
 func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
-	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{{{"done", int64(3), "z"}}}}
+	e := &fakeconn.Exec{Affected: 2, Results: [][][]any{{{int64(8), "done", int64(3), "z"}}}}
 	a := dDef{Name: "a"}
 	if err := openFake(velox.MySQL, e).Insert(&a).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
 		t.Fatal(err)
@@ -508,25 +508,67 @@ func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
 	want := []string{
 		"BEGIN",
 		"INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
-		"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?",
 		"COMMIT",
 	}
 	if !slices.Equal(e.Log, want) {
 		t.Errorf("statements:\n%s\nwant:\n%s", strings.Join(e.Log, "\n"), strings.Join(want, "\n"))
 	}
-	if a.Status != "done" || a.Score != 3 || a.Note == nil || *a.Note != "z" {
+	if a.ID != 8 || a.Status != "done" || a.Score != 3 || a.Note == nil || *a.Note != "z" {
 		t.Errorf("read back %+v", a)
 	}
 
 	// A key the caller set is not where an upsert on another column finds
-	// its row: the read is by the conflict values.
+	// its row: the read is by the conflict values. The key is not generated,
+	// so it is not read, as PostgreSQL's RETURNING then names none.
 	e = &fakeconn.Exec{Affected: 2, Results: [][][]any{{{"done", int64(3), "z"}}}}
 	b := dDef{ID: 5, Name: "a"}
 	if err := openFake(velox.MySQL, e).Insert(&b).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Log) != 4 || e.Log[2] != "SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?" || b.Status != "done" {
+	if len(e.Log) != 4 || e.Log[2] != "SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?" || b.Status != "done" || b.ID != 5 {
 		t.Errorf("caller's key: %q, %+v", e.Log, b)
+	}
+}
+
+// TestMySQLUpsertSetsKey: a single-row upsert on MySQL that leaves no column
+// to the database still reads the stored key by its conflict values, in
+// one transaction with the upsert, as RETURNING gives it on PostgreSQL and
+// SQLite; inside the caller's transaction it opens none.
+func TestMySQLUpsertSetsKey(t *testing.T) {
+	note := "n"
+	row := func() dDef { return dDef{Name: "a", Status: "s", Score: 1, Note: &note} }
+	e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(42)}}}
+	a := row()
+	if err := openFake(velox.MySQL, e).Insert(&a).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"INSERT INTO `ddefs` (`name`, `status`, `score`, `note`) VALUES (?, ?, ?, ?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
+		"SELECT `id` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"COMMIT",
+	})
+	if a.ID != 42 {
+		t.Errorf("the entity's key %d, want 42", a.ID)
+	}
+
+	e = &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(43)}}}
+	b := row()
+	err := openFake(velox.MySQL, e).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Insert(&b).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"INSERT INTO `ddefs` (`name`, `status`, `score`, `note`) VALUES (?, ?, ?, ?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
+		"SELECT `id` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"COMMIT",
+	})
+	if b.ID != 43 {
+		t.Errorf("in a transaction: the entity's key %d, want 43", b.ID)
 	}
 }
 
@@ -538,7 +580,7 @@ func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
 func TestRecordedMySQLUpsertReadsBackDefaults(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1, Results: [][][]any{
 		{}, // the locked read: no conflicting row
-		{{"done", int64(3), "z"}},
+		{{int64(1), "done", int64(3), "z"}},
 		{{int64(1), "a", "done", int64(3), "z", nil}},
 	}}
 	var rec velox.Recorder
@@ -550,11 +592,11 @@ func TestRecordedMySQLUpsertReadsBackDefaults(t *testing.T) {
 		"BEGIN",
 		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?) FOR UPDATE",
 		"INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
-		"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?", // by the conflict values
+		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?", // by the conflict values
 		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?)",
 		"COMMIT",
 	})
-	if a.Status != "done" || a.Score != 3 || a.Note == nil || *a.Note != "z" {
+	if a.ID != 1 || a.Status != "done" || a.Score != 3 || a.Note == nil || *a.Note != "z" {
 		t.Errorf("read back %+v", a)
 	}
 	cs := slices.Collect(rec.All())

@@ -424,18 +424,23 @@ func readFilled(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointe
 	return nil
 }
 
-// readUpserted reads the columns st.fill, which the database's defaults
-// filled, of the row the upsert st of the entity at p (generated key column
-// gen, -1 for none) inserted or updated, by its conflict values, into the
-// entity: MySQL's way, as it has no RETURNING and its LastInsertId does not
-// name an updated row. The database compares the values, as it did for the
-// conflict. InsertRow runs the upsert and the read in one transaction. It
-// reads without the Read policy or the interceptors, as readFilled does; a
-// row whose conflict values cannot find it (a NULL, a generated key left
-// zero) keeps its Go values.
+// readUpserted reads the generated key column gen (-1 for none) and the
+// columns st.fill, which the database's defaults filled, of the row the
+// upsert st of the entity at p inserted or updated, by its conflict values,
+// into the entity: MySQL's way, as it has no RETURNING and its LastInsertId
+// does not name an updated row. The entity so gets the stored row's key,
+// as RETURNING gives it on PostgreSQL and SQLite. The database compares
+// the values, as it did for the conflict. InsertRow runs the upsert and the
+// read in one transaction. It reads without the Read policy or the
+// interceptors, as readFilled does; a row whose conflict values cannot find
+// it (a NULL, a generated key left zero) keeps its Go values.
 func readUpserted(ctx context.Context, db *DB, st *Statement, p unsafe.Pointer, gen int) error {
 	in := st.Entity
-	if len(st.fill) == 0 {
+	cols := st.fill
+	if gen >= 0 {
+		cols = append([]int{gen}, st.fill...)
+	}
+	if len(cols) == 0 {
 		return nil
 	}
 	t := InfoTable(in)
@@ -447,8 +452,8 @@ func readUpserted(ctx context.Context, db *DB, st *Statement, p unsafe.Pointer, 
 		}
 		key[i] = t.Pred(c, PredEQ, v)
 	}
-	rdb := db.WithoutPolicy("velox: the defaults of the row an upsert wrote")
-	q := QueryTable(rdb, t).Where(key...).Columns(st.fill...)
+	rdb := db.WithoutPolicy("velox: the key and defaults of the row an upsert wrote")
+	q := QueryTable(rdb, t).Where(key...).Columns(cols...)
 	q.st.unscoped = true
 	src, err := q.one(ctx)
 	if errors.Is(err, ErrNotFound) {
@@ -457,7 +462,7 @@ func readUpserted(ctx context.Context, db *DB, st *Statement, p unsafe.Pointer, 
 	if err != nil {
 		return err
 	}
-	for _, c := range st.fill {
+	for _, c := range cols {
 		SetElem(fieldAddr(in, p, c), Elem(fieldAddr(in, src, c)))
 	}
 	return nil
