@@ -3,136 +3,14 @@ package engine
 import (
 	"bytes"
 	"context"
-	"errors"
+
 	"fmt"
-	"iter"
+
 	"reflect"
 	"slices"
 	"strings"
 	"unsafe"
 )
-
-// The misuses of Track.
-var (
-	errTrackInsert = errors.New("an insert's Changes need no Track; Track is for updates and deletes")
-	errTrackLate   = errors.New("a Track after next comes too late: velox reads the rows before it writes them")
-)
-
-// trackState is what Track asked for, and what the tracked write changed.
-type trackState struct {
-	all     bool     // Track was called with no names
-	cols    []int    // the columns Track named
-	changes []Change // what the write changed, for Changes
-}
-
-// trackingOf is mu's trackState; nil when no hook called Track.
-func trackingOf(mu *MutationState) *trackState {
-	ts, _ := mu.Trk.(*trackState)
-	return ts
-}
-
-// TrackByName is Mutation.Track's work: it marks the columns of the given
-// names, or with none the columns the update assigns, or every column of a
-// delete, to be read before the write and compared after it. A misuse is
-// recorded, and returned.
-func TrackByName(mu *MutationState, names ...string) error {
-	switch {
-	case mu.St == nil:
-		return mu.fail(errTrackInsert)
-	case mu.Called:
-		return mu.fail(errTrackLate)
-	}
-	cols := make([]int, 0, len(names))
-	for _, name := range names {
-		i := mu.column("Track", name)
-		if i < 0 {
-			return mu.Err
-		}
-		cols = append(cols, i)
-	}
-	ts := trackingOf(mu)
-	if ts == nil {
-		ts = &trackState{}
-		mu.Trk = ts
-	}
-	if len(names) == 0 {
-		ts.all = true
-	}
-	for _, c := range cols {
-		if !slices.Contains(ts.cols, c) {
-			ts.cols = append(ts.cols, c)
-		}
-	}
-	return nil
-}
-
-// trackedCols is the columns a tracked write reads, in column order: those
-// Track named, and with a Track of no names the columns st assigns, its
-// UpdateDefault and Version ones included, or every column of a delete.
-func (ts *trackState) trackedCols(st *Statement) []int {
-	in := st.Entity
-	want := make([]bool, len(in.Columns))
-	for _, c := range ts.cols {
-		want[c] = true
-	}
-	if ts.all {
-		if st.Op == OpDelete {
-			for i := range want {
-				want[i] = true
-			}
-		}
-		for _, a := range st.Set {
-			want[a.Column] = true
-		}
-	}
-	var cols []int
-	for i, w := range want {
-		if w {
-			cols = append(cols, i)
-		}
-	}
-	return cols
-}
-
-// ChangesOf is Mutation.Changes' work: after next, one Change per row the
-// write changed. An update or a delete yields those Track read; an insert
-// yields every row, each column with no old value.
-func ChangesOf(mu *MutationState) iter.Seq[Change] {
-	return func(yield func(Change) bool) {
-		if !mu.Called || mu.Core != nil || mu.Dry {
-			return
-		}
-		if mu.St != nil {
-			ts := trackingOf(mu)
-			if ts == nil {
-				return
-			}
-			for _, c := range ts.changes {
-				if !yield(c) {
-					return
-				}
-			}
-			return
-		}
-		in := mu.entity()
-		for _, p := range mu.Rows {
-			if !yield(insertChange(in, p)) {
-				return
-			}
-		}
-	}
-}
-
-// insertChange is the Change of the inserted row at p: every column, its
-// old value nil.
-func insertChange(in *EntityInfo, p unsafe.Pointer) Change {
-	c := Change{Key: rowKey(in, p), Fields: make([]FieldChange, len(in.Columns))}
-	for i := range in.Columns {
-		v := loadColumn(&in.Columns[i], p)
-		c.Fields[i] = FieldChange{Name: in.Columns[i].Name, New: v, Changed: v != nil}
-	}
-	return c
-}
 
 // rowKey is the primary key of the row at p, a plain value per key column.
 func rowKey(in *EntityInfo, p unsafe.Pointer) []any {
@@ -161,7 +39,7 @@ func DiffRows(in *EntityInfo, before, after unsafe.Pointer) []FieldChange {
 			b = loadColumn(c, after)
 		}
 		if !EqualValues(a, b) {
-			out = append(out, FieldChange{Name: c.Name, Old: a, New: b, Changed: true})
+			out = append(out, FieldChange{Name: c.Name, Old: a, New: b})
 		}
 	}
 	return out
@@ -191,40 +69,39 @@ func EqualValues(a, b any) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// errTrackBidi refuses Track on an update that sets the key of a
-// bidirectional one-to-one edge: velox re-points both partners in
-// statements of its own, which Track does not follow.
-func errTrackBidi(in *EntityInfo) error {
-	return fmt.Errorf("velox: %s: Track on an update that sets the key of a bidirectional one-to-one edge: velox re-points both partners, which Track does not follow", in.Name)
-}
-
-// trackedWrite is writeCore's send for st, an update or a delete whose hook
-// called Track. In one transaction (db's, else one of its own) it reads the
-// key and the tracked columns of the rows st's conditions match, under st's
-// scope (a Writable read), locked where the dialect can, in key order; sends
-// st narrowed to those keys, a chunk at a time; and, for an update, reads
-// the new values: RETURNING on PostgreSQL and SQLite, a SELECT by key on
-// MySQL. It keeps a Change per row in ts.changes and sets mu.Affected.
-func trackedWrite(ctx context.Context, db *DB, mu *MutationState, ts *trackState, st *Statement) error {
+// trackedWrite sends st, an update or a delete, reading the rows it changes.
+// In one transaction (db's, else one of its own) it reads the key and the
+// columns cols of the rows st's conditions match, under st's scope (a
+// Writable read), locked where the dialect can, in key order; sends st
+// narrowed to those keys, a chunk at a time; and, for an update, reads the
+// new values: RETURNING on PostgreSQL and SQLite, a SELECT by key on MySQL.
+// It returns a ChangeRow per row, holding the columns read, and sets
+// mu.Affected.
+func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st *Statement) ([]ChangeRow, error) {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
-		return fmt.Errorf("velox: %s: Track needs a primary key to find the rows again", in.Name)
+		return nil, fmt.Errorf("velox: %s: recording needs a primary key to find the rows again", in.Name)
 	}
 	for _, a := range st.Set {
 		if a.Op != AssignSet && slices.Contains(in.PrimaryKey, a.Column) {
-			return fmt.Errorf("velox: %s: Track cannot follow a row whose key %s the update changes by Add or Sub", in.Name, in.Columns[a.Column].Name)
+			return nil, fmt.Errorf("velox: %s: recording cannot follow a row whose key %s the update changes by Add or Sub", in.Name, in.Columns[a.Column].Name)
 		}
 	}
-	tw := tracker{in: in, t: InfoTable(in), cols: ts.trackedCols(st)}
+	tw := tracker{in: in, t: InfoTable(in), cols: cols}
 	tw.read = keyAnd(in, tw.cols)
+	var out []ChangeRow
 	run := func(ctx context.Context, tx *DB) error {
-		ts.changes, mu.Affected = nil, 0
-		return tw.run(ctx, tx, mu, ts, st)
+		var err error
+		mu.Affected = 0
+		out, err = tw.run(ctx, tx, mu, st)
+		return err
 	}
 	if db.InTx {
-		return run(ctx, db)
+		err := run(ctx, db)
+		return out, err
 	}
-	return db.Tx(ctx, run)
+	err := db.Tx(ctx, run)
+	return out, err
 }
 
 // keyAnd is in's primary-key columns, then those of cols not in it.
@@ -242,12 +119,12 @@ func keyAnd(in *EntityInfo, cols []int) []int {
 type tracker struct {
 	in   *EntityInfo
 	t    Table
-	cols []int // the tracked columns
-	read []int // the columns read: the key, then the tracked ones
+	cols []int // the columns compared
+	read []int // the columns read: the key, then the compared ones
 }
 
 // run is trackedWrite's work on tx.
-func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, ts *trackState, st *Statement) error {
+func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *Statement) ([]ChangeRow, error) {
 	order := make([]OrderTerm, len(tw.in.PrimaryKey))
 	for i, k := range tw.in.PrimaryKey {
 		order[i] = OrderTerm{Column: k}
@@ -258,10 +135,10 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, ts *track
 	}
 	olds, err := q.All(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if olds.n == 0 {
-		return nil // nothing matches: nothing to send
+		return nil, nil // nothing matches: nothing to send
 	}
 	keys := make([][]any, olds.n)
 	for i := range keys {
@@ -289,15 +166,14 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, ts *track
 		return err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if st.Op == OpUpdate && !returning {
 		if err := tw.reread(ctx, tx, at, news); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	ts.changes = tw.changes(st.Op, olds, keys, news)
-	return nil
+	return tw.changes(st.Op, olds, news), nil
 }
 
 // newKeys is each row's key after st, which held keys before it: a key
@@ -421,26 +297,16 @@ func (tw *tracker) reread(ctx context.Context, tx *DB, at [][]any, news []unsafe
 	})
 }
 
-// changes is a Change per old row: its key before the write, and each
-// tracked column's old and new value. A delete's new values are nil, and so
-// are an update's for a row no RETURNING or re-read found.
-func (tw *tracker) changes(op Op, olds TableRows, keys [][]any, news []unsafe.Pointer) []Change {
-	out := make([]Change, 0, olds.n)
+// changes is a ChangeRow per old row: the row before the write and, for an
+// update, the row after it. An update's row that no RETURNING or re-read
+// found is left out.
+func (tw *tracker) changes(op Op, olds TableRows, news []unsafe.Pointer) []ChangeRow {
+	out := make([]ChangeRow, 0, olds.n)
 	for i := range olds.n {
 		if op == OpUpdate && news[i] == nil {
 			continue // a Rewrite or Around hook kept the row from the write
 		}
-		c := Change{Key: keys[i], Fields: make([]FieldChange, len(tw.cols))}
-		for j, col := range tw.cols {
-			ci := &tw.in.Columns[col]
-			f := FieldChange{Name: ci.Name, Old: loadColumn(ci, olds.at(i))}
-			if op == OpUpdate {
-				f.New = loadColumn(ci, news[i])
-			}
-			f.Changed = !EqualValues(f.Old, f.New)
-			c.Fields[j] = f
-		}
-		out = append(out, c)
+		out = append(out, ChangeRow{Op: op, In: tw.in, Old: olds.at(i), New: news[i]})
 	}
 	return out
 }

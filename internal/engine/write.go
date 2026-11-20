@@ -255,9 +255,6 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 					return err
 				}
 				st.InTx = true // Exec sends it in a transaction, bidiUpdate's
-				if mu.Trk != nil && !mu.Dry {
-					return errTrackBidi(in)
-				}
 				if !mu.Dry {
 					return bidiUpdate(ctx, db, mu, keys, k, vs)
 				}
@@ -268,9 +265,6 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 		var err error
 		mu.SQL, mu.Args, err = db.DryRun(ctx, st)
 		return err
-	}
-	if ts := trackingOf(mu); ts != nil {
-		return trackedWrite(ctx, db, mu, ts, st)
 	}
 	res, err := ExecWrite(ctx, db, st)
 	if err != nil {

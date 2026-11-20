@@ -8,7 +8,6 @@ type (
 	AssignOp         = veloxtype.AssignOp
 	Assignment       = veloxtype.Assignment
 	Caller           = veloxtype.Caller
-	Change           = veloxtype.Change
 	ColumnDescriptor = veloxtype.ColumnDescriptor
 	ConstraintError  = veloxtype.ConstraintError
 	ConstraintKind   = veloxtype.ConstraintKind
