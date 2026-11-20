@@ -141,7 +141,7 @@ func (m *Mutation) Fill(name string, v any) error { return m.mu.FillByName(name,
 // name with Set: nil for NULL, and for a nullable column the value, not a
 // pointer to it. Once next has run it also sees the UpdateDefault
 // assignments. It reports false when the update does not assign the
-// column, or assigns it with Add or Sub, and on a delete. On an insert it
+// column, or assigns it with Add, Sub or SetExpr, and on a delete. On an insert it
 // is a misuse: read an insert's values from Rows. A slice or map it returns
 // is shared with the statement, and often with the caller: change the
 // assignment with Set, not in place.

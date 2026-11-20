@@ -36,9 +36,12 @@ func (s Setters) Add(ss []Assignment) Setters {
 func (s Setters) Empty() bool { return len(s.Set) == 0 && len(s.Edges) == 0 }
 
 // CheckInsert refuses a column setter of an insert into in that is not a
-// Set: Add and Sub need a row.
+// Set: Add, Sub and an expression need a row.
 func (s Setters) CheckInsert(in *EntityInfo) error {
 	for _, a := range s.Set {
+		if a.Op == AssignExpr {
+			return fmt.Errorf("velox: %s: an insert's setter of %s: %w", in.Name, in.Columns[a.Column].Field, errSetExprInsert)
+		}
 		if a.Op != AssignSet {
 			return fmt.Errorf("velox: %s: an insert's setter of %s is Add or Sub, which needs a row; use Set", in.Name, in.Columns[a.Column].Field)
 		}
@@ -359,12 +362,12 @@ func writtenKey(t Table, st *Statement, vals []any) ([]Predicate, error) {
 	return keyPreds(t, vals), nil
 }
 
-// checkKeyAssigned refuses an Add or Sub on a primary-key column: One could
+// checkKeyAssigned refuses an Add, Sub or expression on a primary-key column: One could
 // not tell the key of the row it wrote to read it back.
 func checkKeyAssigned(in *EntityInfo, set []Assignment) error {
 	for _, a := range set {
 		if a.Op != AssignSet && slices.Contains(in.PrimaryKey, a.Column) {
-			return fmt.Errorf("velox: %s: One cannot read back a row whose key %s it changes by Add or Sub; use Exec", in.Name, in.Columns[a.Column].Name)
+			return fmt.Errorf("velox: %s: One cannot read back a row whose key %s it changes by Add or Sub, or by an expression; use Exec", in.Name, in.Columns[a.Column].Name)
 		}
 	}
 	return nil

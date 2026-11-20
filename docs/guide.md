@@ -792,6 +792,10 @@ n, err = db.Delete[veloxgen.Line]().Where(veloxgen.Lines.AmountCents.EQ(0)).Exec
 ```
 
 Number handles also have `Add` and `Sub` (`Set(I.TotalCents.Add(500))`).
+`velox.SetExpr` sets a column to an SQL expression over the row's own
+columns, written as `Expr`'s text is, and keeps the policies:
+`Set(velox.SetExpr(I.Customer, "TRIM(?)", I.Customer))`
+([ADR 0095](decisions/0095-set-expr.md)).
 `UpdateQuery.One(ctx)` updates exactly one row and returns it, read back by
 its key ([ADR 0048](decisions/0048-update-one.md)).
 
@@ -1110,6 +1114,10 @@ The filter is an interceptor, so `WithoutPolicy` still hides deleted rows.
 A soft delete does not trigger `ON DELETE CASCADE`.
 
 ## Raw SQL
+
+[sql.md](sql.md) lists every way to write SQL in velox, from a guarded
+condition to a raw statement, and which keep the policies. Reach for raw SQL
+only when `Expr`, `Calc` and `SetExpr` cannot say it.
 
 Raw SQL is the escape hatch for what the builder cannot express. Each call
 takes a reason, because velox applies no policy or scope to raw SQL; filtering

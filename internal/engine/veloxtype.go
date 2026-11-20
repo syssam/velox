@@ -39,9 +39,10 @@ const (
 	AggregateMin = veloxtype.AggregateMin
 	AggregateMax = veloxtype.AggregateMax
 
-	AssignSet = veloxtype.AssignSet
-	AssignAdd = veloxtype.AssignAdd
-	AssignSub = veloxtype.AssignSub
+	AssignSet  = veloxtype.AssignSet
+	AssignAdd  = veloxtype.AssignAdd
+	AssignSub  = veloxtype.AssignSub
+	AssignExpr = veloxtype.AssignExpr
 
 	ConstraintUnique     = veloxtype.ConstraintUnique
 	ConstraintForeignKey = veloxtype.ConstraintForeignKey

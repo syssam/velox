@@ -12,8 +12,8 @@ type Order[E any] struct{ t OrderTerm }
 type Column[E any] interface{ column(*E) int32 }
 
 // Setter is an assignment to a column of entity E, made by a column handle's
-// Set, SetNull, Add or Sub, or an edge setter, made by a relation handle's
-// Add, Remove or Clear.
+// Set, SetNull, Add or Sub or by SetExpr, or an edge setter, made by a
+// relation handle's Add, Remove or Clear.
 type Setter[E any] struct{ a Assignment }
 
 // Input is a value that builds setters of entity E, such as a generated

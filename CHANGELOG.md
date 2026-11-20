@@ -31,7 +31,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Regenerate: `velox.GeneratedCodeIsVersion24` replaces Version23, and
   descriptors carry `ColumnDescriptor.DBDefault`. A nil column now lets a
   `DEFAULT` the schema does not declare apply, where NULL was stored.
-
+- `velox.SetExpr(col, text, args...)` (ADR 0095): an UPDATE sets a column
+  to an SQL expression, `SET views = (views * 2)`, with `Expr`'s guarded
+  text and arguments, and keeps the Write policy, the scope and the
+  interceptors. `AssignExpr` is its `AssignOp`; `untyped.SetExpr` is its
+  untyped form. `docs/sql.md` lists every way to write SQL in velox and
+  which keep the policies.
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with
   `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's

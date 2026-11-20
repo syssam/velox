@@ -292,3 +292,57 @@ func ExampleInsertQuery_OnConflict() {
 	// Output:
 	// 1 25 true
 }
+
+// SetExpr assigns a column an SQL expression over the row's own columns,
+// for what Set, Add and Sub do not say. The update keeps the scope: only
+// the context's organization's rows change.
+func ExampleSetExpr() {
+	db := exampleDB()
+	ctx := testmodel.Org.With(context.Background(), 1)
+	I := testmodel.Invoices
+	inv := testmodel.Invoice{Number: "a-1", Total: 10, Data: []byte{}}
+	if err := db.Insert(&inv).Exec(ctx); err != nil {
+		fmt.Println(err)
+		return
+	}
+	got, err := db.Update[testmodel.Invoice]().
+		Where(I.ID.EQ(inv.ID)).
+		Set(
+			velox.SetExpr(I.Total, "ROUND(? * ?, 2)", I.Total, 1.075),
+			velox.SetExpr(I.Number, "UPPER(?)", I.Number),
+		).
+		One(ctx)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(got.Number, got.Total)
+	text, _, err := velox.Open(velox.Postgres, nil).Update[testmodel.Invoice]().
+		Where(I.ID.EQ(inv.ID)).
+		Set(velox.SetExpr(I.Total, "? * 2", I.Total)).
+		SQL(ctx)
+	fmt.Println(text, err)
+	// Output:
+	// A-1 10.75
+	// UPDATE "invoices" SET "total" = ("total" * 2), "updated_at" = $1 WHERE "id" = $2 AND "org_id" = $3 <nil>
+}
+
+// Calc is an SQL expression as a Term: an ordering with Asc or Desc, a
+// result column of Select, a key of GroupBy. Its ? are the entity's column
+// handles, Terms, or bound values, and the query keeps its policies.
+func ExampleCalc() {
+	db := velox.Open(velox.Postgres, nil)
+	ctx := testmodel.Org.With(context.Background(), 7)
+	I := testmodel.Invoices
+	text, args, err := db.Query[testmodel.Invoice]().
+		Columns(I.ID, I.Number).
+		Where(I.Paid.EQ(false)).
+		OrderBy(velox.Calc[testmodel.Invoice]("similarity(?, ?)", I.Number, "INV-42").Desc()).
+		Limit(5).
+		SQL(ctx)
+	fmt.Println(text)
+	fmt.Println(args, err)
+	// Output:
+	// SELECT "id", "number" FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2 ORDER BY (similarity("number", $3)) DESC LIMIT $4
+	// [false 7 INV-42 5] <nil>
+}

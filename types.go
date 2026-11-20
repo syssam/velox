@@ -166,9 +166,10 @@ type AssignOp = veloxtype.AssignOp
 
 // The assignment operators.
 const (
-	AssignSet = veloxtype.AssignSet // column = value
-	AssignAdd = veloxtype.AssignAdd // column = column + value
-	AssignSub = veloxtype.AssignSub // column = column - value
+	AssignSet  = veloxtype.AssignSet  // column = value
+	AssignAdd  = veloxtype.AssignAdd  // column = column + value
+	AssignSub  = veloxtype.AssignSub  // column = column - value
+	AssignExpr = veloxtype.AssignExpr // column = expression (SetExpr)
 )
 
 // Assignment is one column an UPDATE sets.

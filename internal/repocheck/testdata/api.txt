@@ -98,6 +98,7 @@ const AggregateMax
 const AggregateMin
 const AggregateSum
 const AssignAdd
+const AssignExpr
 const AssignSet
 const AssignSub
 const ConstraintCheck
@@ -515,6 +516,7 @@ func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
 func RowScopeFromContext(ctx context.Context) RowScope
 func SQLConn(db *sql.DB) Conn
+func SetExpr[E any](c Column[E], text string, args ...any) Setter[E]
 func Show[T any](p *T) any
 func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
@@ -671,6 +673,7 @@ const AggregateMax
 const AggregateMin
 const AggregateSum Aggregate
 const AssignAdd
+const AssignExpr
 const AssignSet AssignOp
 const AssignSub
 const ConstraintCheck

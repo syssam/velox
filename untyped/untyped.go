@@ -216,6 +216,13 @@ func termSlots(args []any) ([]engine.ExprSlot, []any) {
 	return slots, vals
 }
 
+// SetExpr assigns column col the SQL expression text, as velox.SetExpr does:
+// each ? is filled by the next argument, a Term written as it is and any
+// other value bound. Add it to an update with TableUpdate.Assign.
+func SetExpr(col int, text string, args ...any) velox.Assignment {
+	return engine.ExprAssignment(col, Calc(text, args...))
+}
+
 // CountAll is COUNT(*) as a Term.
 func CountAll() Term { return engine.AggTerm(engine.TermCountAll, Term{}) }
 
