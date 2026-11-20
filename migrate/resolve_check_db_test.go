@@ -287,3 +287,29 @@ func TestResolveChecksByReplay(t *testing.T) {
 		})
 	}
 }
+
+// TestResolveChecksWhatTheFilesDrop: a claim whose file drops a table is
+// refused while the table is still there, though the schema the claim leads
+// to no longer names it; once the table is gone the claim is accepted.
+func TestResolveChecksWhatTheFilesDrop(t *testing.T) {
+	t.Parallel()
+	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
+		t.Run(d.String(), func(t *testing.T) {
+			first := dirOf(t, d, step{to: withU(d, "integer"), name: "a"})
+			fsys := extend(t, first, d, step{to: oneTable(d), name: "b", opts: migrate.PlanOptions{Allow: []migrate.Allow{{Code: "drop-table"}}}})
+			db, _ := freshDB(t, d)
+			mustUp(t, db, first)
+
+			_, err := resolveNotes(db, fsys, 2, migrate.ResolveApplied)
+			refusedWith(t, err, "drift", "change: drop-table u")
+			if st := mustStatus(t, db, fsys); len(st.Pending) != 1 {
+				t.Errorf("pending %v", st.Pending)
+			}
+
+			mustExec(t, db, "DROP TABLE u")
+			if _, err := resolveNotes(db, fsys, 2, migrate.ResolveApplied); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

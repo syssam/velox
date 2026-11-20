@@ -60,13 +60,21 @@ func (s *session) checkClaim(ctx context.Context, fsys fs.FS, dir *Dir, c claim,
 		return forcedPrefix + o.force + "; unchecked: " + why, nil
 	}
 	refs, enums := refsOf(want)
-	live, notes, err := s.inspectLive(ctx, refs, enums)
+	dropped := s.droppedBy(dir, c.after, refs)
+	live, notes, err := s.inspectLive(ctx, append(refs, dropped...), enums)
 	if err != nil {
 		return "", wrap(ctx, "inspecting the database", err)
 	}
 	r, err := drift(live, notes, want)
 	if err != nil {
 		return "", err
+	}
+	// drift compares only want's tables; a table the files drop is a change
+	// while the database still holds it.
+	for _, ref := range dropped {
+		if t := live.table(ref); t != nil {
+			r.Changes = append(r.Changes, dropTable{Table: *t})
+		}
 	}
 	if len(r.Changes) == 0 {
 		for _, w := range r.Warnings {
@@ -89,6 +97,35 @@ func (s *session) checkClaim(ctx context.Context, fsys fs.FS, dir *Dir, c claim,
 	}
 	s.say(fmt.Sprintf("%s by force (%s), though %s", c.done, o.force, differs))
 	return forcedPrefix + o.force + "; the database differed from " + against + ": " + strings.Join(changes, "; "), nil
+}
+
+// droppedBy is each table that a file of the history after drops and refs
+// does not name: the schema the history leads to leaves it out, so drift
+// does not see one the database still holds.
+func (s *session) droppedBy(dir *Dir, after []Applied, refs []TableRef) []TableRef {
+	held := map[uint64]bool{}
+	for _, a := range after {
+		held[a.Version] = true
+	}
+	named := map[string]bool{}
+	for _, r := range refs {
+		named[foldRef(r)] = true
+	}
+	var out []TableRef
+	for _, f := range dir.Files {
+		if !held[f.Version] {
+			continue
+		}
+		for _, q := range f.Statements {
+			for _, r := range (&fileLinter{d: s.d, ws: lex(s.d, q)}).droppedTables() {
+				if !named[foldRef(r)] {
+					named[foldRef(r)] = true
+					out = append(out, r)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // expected is what the history after says the database holds, and how

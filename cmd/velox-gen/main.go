@@ -263,7 +263,8 @@
 // on SQLite a temporary file; on PostgreSQL and MySQL, without -scratch-db,
 // the claim cannot be checked. As migrate drift does, only the tables and
 // enum types of that schema are read, so a table it does not name is not a
-// difference. A difference is exit 1, listed as migrate drift lists it, with
+// difference, but one a file of the history drops is a difference while the
+// database still holds it. A difference is exit 1, listed as migrate drift lists it, with
 // the ways on. So is a claim that cannot be checked: a dirty version left, a
 // version above the directory's last file, no scratch database, or files
 // that fail there, as one whose rows a hand fix made good may. -force

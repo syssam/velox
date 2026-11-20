@@ -62,7 +62,8 @@ func WithStatements(k int) Option {
 // directory's last file, else the files up to m applied to WithScratch's
 // database and inspected there. As Drift does, only the tables and enum
 // types of that schema are read, so a table it does not name is no
-// difference. A change is an *Error of Code "drift" listing each, as
+// difference; but a table a file of the history drops is a change while
+// the database still holds it. A change is an *Error of Code "drift" listing each, as
 // velox-gen migrate drift prints them. A claim that cannot be checked is
 // one of Code "unverified": a dirty version left, a version above the
 // directory's last file, a file pending below m, no scratch database on

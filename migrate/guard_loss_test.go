@@ -433,3 +433,56 @@ func TestUpRebuildDependentsByReference(t *testing.T) {
 		wantUnmodeled(t, db, fsys, err, "names t")
 	}
 }
+
+// TestUpRebuildReadsWhatTheInsertCopies: a hand-edited rebuild's INSERT copies a
+// column only when its SELECT item reads that column into it. An alias over a
+// literal, columns written into each other's places and a filtered copy are
+// refused with the data untouched; an expression over the column itself, or an
+// ORDER BY, copies it.
+func TestUpRebuildReadsWhatTheInsertCopies(t *testing.T) {
+	t.Parallel()
+	const generated = `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", "s", "o" FROM "t"`
+	edit := func(t *testing.T, insert string) (*sql.DB, fstest.MapFS) {
+		t.Helper()
+		db, fsys := handTable(t, "", nil)
+		f := fsys["0002_rebuild.sql"]
+		if !strings.Contains(string(f.Data), generated) {
+			t.Fatalf("the rebuild has no %s:\n%s", generated, f.Data)
+		}
+		body := strings.Replace(string(f.Data), generated, insert, 1)
+		d := velox.SQLite
+		base := dirOf(t, d, step{to: guardSchema(false), name: "base"})
+		return db, extend(t, base, d, files("0002_rebuild.sql", body))
+	}
+	for _, tc := range []struct{ name, insert, want string }{
+		{"NULL under the column's name", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", NULL AS "s", "o" FROM "t"`, "t.s"},
+		{"a literal with an implicit alias", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", 'x' "s", "o" FROM "t"`, "t.s"},
+		{"two columns swapped", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", "o", "s" FROM "t"`, "t.s"},
+		{"swapped by position", `INSERT INTO "velox_new_t" SELECT "id", "n", "o", "s" FROM "t"`, "t.s"},
+		{"a WHERE", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", "s", "o" FROM "t" WHERE "id" > 1`, "WHERE"},
+		{"a LIMIT", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", "s", "o" FROM "t" LIMIT 0`, "LIMIT"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, fsys := edit(t, tc.insert)
+			_, err := migrate.Up(context.Background(), db, fsys)
+			wantUnmodeled(t, db, fsys, err, tc.want)
+			var s string
+			if err := db.QueryRow("SELECT s FROM t WHERE id = 1").Scan(&s); err != nil || s != "a" {
+				t.Errorf("s = %q, %v", s, err)
+			}
+		})
+	}
+	for _, tc := range []struct{ name, insert string }{
+		{"expressions over the columns", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", COALESCE("n", 0), CAST("s" AS TEXT), "o" FROM "t"`},
+		{"an alias that names the column", `INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", "s" AS "s", "t"."o" FROM "t" ORDER BY "id"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, fsys := edit(t, tc.insert)
+			mustUp(t, db, fsys)
+			var s string
+			if err := db.QueryRow("SELECT s FROM t WHERE id = 1").Scan(&s); err != nil || s != "a" {
+				t.Errorf("s = %q, %v", s, err)
+			}
+		})
+	}
+}

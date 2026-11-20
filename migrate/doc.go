@@ -81,8 +81,9 @@
 //     Resolution needs.
 //   - "unmodeled": Up found that a file would lose what the database holds
 //     and its change list does not say: a SQLite rebuild of a table with a column
-//     its INSERT does not copy, a check, a trigger and the like, or that a view
-//     uses; a SQLite DROP TABLE of a table an unaccounted one references, or that
+//     its INSERT does not copy (an alias over a literal copies nothing), a
+//     column filled from another, an INSERT that filters rows (WHERE, LIMIT,
+//     a join), a check, a trigger and the like, or that a view uses; a SQLite DROP TABLE of a table an unaccounted one references, or that
 //     leaves a view or trigger naming it; a MySQL MODIFY, CHANGE or CONVERT TO, or
 //     a PostgreSQL ALTER COLUMN TYPE, that does not write what the column has, in
 //     the model or not, and the file does not name; a foreign key or index made

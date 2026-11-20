@@ -25,7 +25,8 @@ hold, the database must match what the directory says it holds at M:
   are left applied there, so give a new one each time.
 
 As `migrate drift` does, only the tables and enum types of that schema are read. A
-table that schema does not name is no difference. A difference is refused, listed
+table that schema does not name is no difference, except one a file of the
+history drops: while the database still holds it, that is a difference. A difference is refused, listed
 as `migrate drift` lists it:
 
     version 2 is not marked applied: the database differs from what the files up to 0002_mine.sql make on an empty database; what would bring it there:

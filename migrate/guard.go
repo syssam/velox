@@ -262,6 +262,7 @@ func (g *rebuildGuard) after(ctx context.Context) error {
 			continue // the file dropped it after the rebuild: a change of its own
 		}
 		c := g.copied(seen.tmp)
+		c.byPosition(schema.Tables[0])
 		var lines, targets []string
 		lost := func(object, line string) {
 			lines = append(lines, line)
@@ -332,22 +333,55 @@ func (g *rebuildGuard) brokenUses(ctx context.Context) error {
 		"to keep it, add DROP VIEW to the file; a trigger, which a file cannot hold, is dropped by hand before applying")
 }
 
-// A rowCopy is what a rebuild's INSERT reads of the old table: every name of its
-// SELECT list, in lower case, and each column it copies under another name.
+// A rowCopy is what a rebuild's INSERT reads of the old table: the names each
+// SELECT item reads, in lower case, and each column it copies under another
+// name. An alias is not a name an item reads: NULL AS s copies no s.
 type rowCopy struct {
 	all     bool // SELECT *
 	kept    map[string]bool
 	renamed map[string]string // by the old name, in lower case
+	// items are the SELECT items in order: the column each copies as it is
+	// (a bare name, maybe qualified, maybe aliased), or "" for one that is
+	// an expression. into is the INSERT's column list, if it has one.
+	items []string
+	into  []string
+	// filter is the word after FROM that copies only some rows (WHERE,
+	// LIMIT, a join), or "".
+	filter string
 }
 
 // copied reads the INSERT statements into tmp.
 func (g *rebuildGuard) copied(tmp TableRef) rowCopy {
 	c := rowCopy{kept: map[string]bool{}, renamed: map[string]string{}}
 	for _, q := range g.f.Statements {
-		l := &fileLinter{d: g.s.d, ws: lex(g.s.d, q)}
+		l := &fileLinter{d: g.s.d, ws: lex(g.s.d, q), src: q}
 		l.insertInto(tmp, &c)
 	}
 	return c
+}
+
+// target is the column item i writes: into's, or by position now's.
+func (c *rowCopy) target(i int, now Table) string {
+	switch {
+	case c.into != nil && i < len(c.into):
+		return c.into[i]
+	case c.into == nil && i < len(now.Columns):
+		return now.Columns[i].Name
+	}
+	return ""
+}
+
+// byPosition records the renames of an INSERT with no column list, whose
+// items fill now's columns in order.
+func (c *rowCopy) byPosition(now Table) {
+	if c.into != nil || c.all {
+		return
+	}
+	for i, from := range c.items {
+		if to := c.target(i, now); from != "" && to != "" && !strings.EqualFold(from, to) {
+			c.renamed[strings.ToLower(from)] = to
+		}
+	}
 }
 
 // insertInto adds to c what the statement copies, when it is an INSERT into tmp.
@@ -366,15 +400,15 @@ func (l *fileLinter) insertInto(tmp TableRef, c *rowCopy) {
 	if !ok || foldRef(ref) != foldRef(tmp) {
 		return
 	}
-	var into []string
 	if l.punct(i, "(") {
 		end := l.closes(i)
 		if end < 0 {
 			return
 		}
+		c.into = []string{}
 		for j := i + 1; j < end; j++ {
 			if !l.punct(j, ",") {
-				into = append(into, l.ws[j].text)
+				c.into = append(c.into, l.ws[j].text)
 			}
 		}
 		i = end + 1
@@ -387,35 +421,130 @@ func (l *fileLinter) insertInto(tmp TableRef, c *rowCopy) {
 			depth--
 		}
 	}
-	item, names := 0, []string(nil)
-	flush := func() {
-		for _, n := range names {
-			c.kept[strings.ToLower(n)] = true
-		}
-		if len(names) > 0 && item < len(into) && !strings.EqualFold(names[len(names)-1], into[item]) && len(names) == 1 {
-			c.renamed[strings.ToLower(names[0])] = into[item]
-		}
-		names = nil
-	}
-	for i++; i < len(l.ws); i++ {
+	first := i + 1
+	for i = first; i < len(l.ws); i++ {
 		switch {
 		case l.punct(i, "("):
 			depth++
 		case l.punct(i, ")"):
 			depth--
 		case depth == 0 && l.punct(i, ","):
-			flush()
-			item++
+			l.selectItem(first, i, c)
+			first = i + 1
 		case depth == 0 && l.upper(i) == "FROM":
-			flush()
+			l.selectItem(first, i, c)
+			c.filter = l.fromFilter(i + 1)
 			return
-		case l.punct(i, "*") && depth == 0:
-			c.all = true
-		case l.isName(i) && !l.punct(i+1, "."): // of a.b, b
-			names = append(names, l.ws[i].text)
 		}
 	}
-	flush()
+	l.selectItem(first, i, c)
+}
+
+// selectItem adds to c the SELECT item ws[from:to]: the names it reads, past
+// its alias and its functions' names, and the column it copies as it is.
+func (l *fileLinter) selectItem(from, to int, c *rowCopy) {
+	if from >= to {
+		return
+	}
+	end := to // the item without its alias
+	for j, depth := from, 0; j < to; j++ {
+		switch {
+		case l.punct(j, "("):
+			depth++
+		case l.punct(j, ")"):
+			depth--
+		case depth == 0 && l.upper(j) == "AS":
+			end = j
+		}
+		if end != to {
+			break
+		}
+	}
+	if end == to && l.isName(to-1) && !l.punct(to-2, ".") && (to-from >= 2 && l.aliasable(to-2) || l.between(to-1)) {
+		end = to - 1 // an alias without AS: 'x' s, n m
+	}
+	var names []string
+	for j := from; j < end; j++ {
+		switch {
+		case l.punct(j, "*") && end-from == 1:
+			c.all = true
+		case l.isName(j) && !l.punct(j+1, ".") && !l.punct(j+1, "("): // of a.b, b; of f(x), x
+			names = append(names, l.ws[j].text)
+		}
+	}
+	for _, n := range names {
+		c.kept[strings.ToLower(n)] = true
+	}
+	bare := ""
+	if len(names) == 1 && (end-from == 1 || end-from == 3 && l.punct(from+1, ".")) && !l.hides(from, end) {
+		bare = names[0]
+	}
+	item := len(c.items)
+	c.items = append(c.items, bare)
+	if bare != "" && c.into != nil && item < len(c.into) && !strings.EqualFold(bare, c.into[item]) {
+		c.renamed[strings.ToLower(bare)] = c.into[item]
+	}
+}
+
+// between reports whether text other than space lies before ws[j], after
+// the word before it: a string literal, which lex does not return.
+func (l *fileLinter) between(j int) bool {
+	if j <= 0 || l.src == "" {
+		return false
+	}
+	stop := len(l.src)
+	if j < len(l.ws) {
+		stop = l.ws[j].start
+	}
+	return strings.TrimSpace(l.src[l.ws[j-1].end:stop]) != ""
+}
+
+// hides reports whether a string literal lies among ws[from:to], or right
+// before or after them.
+func (l *fileLinter) hides(from, to int) bool {
+	for j := from; j <= to; j++ {
+		if l.between(j) {
+			return true
+		}
+	}
+	return false
+}
+
+// aliasable reports whether ws[j] can end an expression that a bare alias
+// then follows: a name, a literal or a closing parenthesis.
+func (l *fileLinter) aliasable(j int) bool {
+	w := l.ws[j]
+	return l.punct(j, ")") || l.isName(j) || w.text != "" && (w.text[0] == '\'' || w.text[0] >= '0' && w.text[0] <= '9')
+}
+
+// fromFilter returns the word after the FROM at i that copies only some of
+// the rows: WHERE (but WHERE true or WHERE 1, which an upsert clause needs),
+// LIMIT, OFFSET, a join, GROUP BY, HAVING or a compound SELECT; or "".
+func (l *fileLinter) fromFilter(i int) string {
+	depth := 0
+	for ; i < len(l.ws); i++ {
+		switch u := l.upper(i); {
+		case l.punct(i, "("):
+			depth++
+		case l.punct(i, ")"):
+			depth--
+		case depth != 0:
+		case u == "ON" && l.upper(i+1) == "CONFLICT":
+			return ""
+		case u == "WHERE":
+			if v := l.upper(i + 1); (v == "TRUE" || v == "1") && (i+2 >= len(l.ws) || l.upper(i+2) == "ON" || l.upper(i+2) == "ORDER" || l.punct(i+2, ";")) {
+				i++
+				continue
+			}
+			return "WHERE"
+		case u == "LIMIT", u == "OFFSET", u == "JOIN", u == "GROUP", u == "HAVING",
+			u == "UNION", u == "EXCEPT", u == "INTERSECT":
+			return u
+		case l.punct(i, ","):
+			return "a join"
+		}
+	}
+	return ""
 }
 
 // rebuildLoss calls lost for what the table had and now has not, by its
@@ -425,7 +554,11 @@ func (l *fileLinter) insertInto(tmp TableRef, c *rowCopy) {
 func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost func(object, line string)) error {
 	t := seen.table
 	k := &rebuildCheck{f: g.f, t: t, gone: map[string]bool{}, lost: lost}
+	if c.filter != "" && !lossAllowed(g.f, t.String()) {
+		lost(t.String(), t.String()+": its rebuild's INSERT reads it with "+c.filter+", so it may not copy every row")
+	}
 	k.goneColumns(seen.had, c)
+	k.moved(seen.had, c, now)
 	had := k.kept(seen.had, c, now)
 	if !k.over(had.PrimaryKey) && !slices.Equal(had.PrimaryKey, now.PrimaryKey) && !lossAllowed(g.f, t.String()) {
 		lost(t.String(), t.String()+": the table has "+keyText(had.PrimaryKey)+", and its rebuild writes "+keyText(now.PrimaryKey))
@@ -464,6 +597,21 @@ func (k *rebuildCheck) goneColumns(had Table, c rowCopy) {
 		k.gone[col.Name] = true
 		if !lossAllowed(k.f, colTarget(k.t, col.Name)) {
 			k.lost(colTarget(k.t, col.Name), colTarget(k.t, col.Name)+": the column is in the database, and its rebuild's INSERT does not copy it")
+		}
+	}
+}
+
+// moved calls lost for each column of had that c fills from another of had's
+// columns, as when two are swapped, unless f allows it: the data moves.
+func (k *rebuildCheck) moved(had Table, c rowCopy, now Table) {
+	for i, from := range c.items {
+		to := c.target(i, now)
+		if from == "" || to == "" || strings.EqualFold(from, to) || had.column(to) == nil || had.column(from) == nil {
+			continue
+		}
+		object := colTarget(k.t, had.column(to).Name)
+		if !lossAllowed(k.f, object) {
+			k.lost(object, object+": its rebuild's INSERT writes the column "+had.column(from).Name+" into it")
 		}
 	}
 }
