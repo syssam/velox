@@ -106,7 +106,7 @@ func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st
 		}
 		return emit(ctx, db, rows)
 	}
-	return recordedTx(ctx, db, func(ctx context.Context, tx *DB) error {
+	return versionedTx(ctx, db, &tw.old, func(ctx context.Context, tx *DB) error {
 		mu.Affected = 0
 		rows, err := tw.run(ctx, tx, mu, st)
 		if err != nil {

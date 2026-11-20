@@ -437,7 +437,11 @@ func (t *table) recordMany(ctx context.Context, db *DB, xs TableRows, cols []int
 	old := cf != nil && returnsOld(ctx, db)
 	single := len(ends) == 1 && xs.n <= per && (cf == nil || old && !ConditionedUpsert(ctx, db, t.info, cf, xs.n))
 	var n int64
-	err := recordedInsert(ctx, db, single, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+	var oldp *bool
+	if cf != nil {
+		oldp = &old
+	}
+	err := recordedInsert(ctx, db, single, oldp, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
 		var changes []ChangeRow
 		var err error
 		n, err = t.insertBatches(ctx, tx, xs, cols, per, ends, cf, func(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int) (int64, error) {

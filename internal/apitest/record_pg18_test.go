@@ -112,9 +112,9 @@ func TestRecordPG18UpdateSQL(t *testing.T) {
 	}
 }
 
-// TestRecordPG18UpdateOne: on PostgreSQL 18 UpdateQuery.One, in its own
-// transaction, sends the update once, RETURNING old and new, then reads the
-// row; the sink waits for the COMMIT.
+// TestRecordPG18UpdateOne: on PostgreSQL 18 UpdateQuery.One asks the version
+// before the BEGIN of its own transaction, sends the update once, RETURNING
+// old and new, then reads the row; the sink waits for the COMMIT.
 func TestRecordPG18UpdateOne(t *testing.T) {
 	cur := recNewRow(1, t0.Add(time.Hour))
 	e := &fakeconn.Exec{Results: [][][]any{{pair(invoiceRow(1), cur)}, {cur}}}
@@ -129,8 +129,8 @@ func TestRecordPG18UpdateOne(t *testing.T) {
 		t.Fatalf("One: %+v, %v", got, err)
 	}
 	wantLog(t, e, []string{
-		"BEGIN",
 		showVersion,
+		"BEGIN",
 		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 RETURNING ` + oldNew(allCols),
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2`,
 		"COMMIT",
@@ -144,7 +144,7 @@ func TestRecordPG18UpdateOne(t *testing.T) {
 // row runs in a transaction of velox's own, one statement; the rows it
 // returns, in the order the database found them, are reported in key order,
 // and a row it left as it was is not reported. In the caller's transaction
-// it runs in a savepoint.
+// it runs in a savepoint, which the version is asked in.
 func TestRecordPG18BulkUpdate(t *testing.T) {
 	t1 := t0.Add(time.Hour)
 	upd := `UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "total" < $3 AND "org_id" = $4 RETURNING ` + oldNew(allCols)
@@ -185,7 +185,7 @@ func TestRecordPG18BulkUpdate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		wantLog(t, e, []string{"BEGIN", showVersion, "SAVEPOINT velox_1", upd, "RELEASE SAVEPOINT velox_1", "COMMIT"})
+		wantLog(t, e, []string{"BEGIN", "SAVEPOINT velox_1", showVersion, upd, "RELEASE SAVEPOINT velox_1", "COMMIT"})
 		check(t, &rec)
 	})
 }
@@ -474,8 +474,8 @@ func TestRecordPG18BidiRepoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantLog(t, e, []string{
-		"BEGIN",
 		showVersion,
+		"BEGIN",
 		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 RETURNING ` + oldNew(cols),
 		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2 RETURNING ` + oldNew(cols),
 		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL RETURNING ` + oldNew(cols),
@@ -483,5 +483,103 @@ func TestRecordPG18BidiRepoint(t *testing.T) {
 	})
 	if got, want := spouses(&rec), []string{"update 5 1->2", "update 1 5->0", "update 2 0->5"}; !slices.Equal(got, want) {
 		t.Errorf("Changes %q, want %q", got, want)
+	}
+}
+
+// TestRecordVersionFailsInCallersTx: in the caller's transaction, on a
+// server that aborts a transaction at a failed statement (AbortOnError, as
+// PostgreSQL does), a failed version read happens inside the write's
+// savepoint, which rolls back; the write runs on the locked-read path in a
+// fresh savepoint, and the caller's transaction stays usable: its next
+// statement and its COMMIT succeed.
+func TestRecordVersionFailsInCallersTx(t *testing.T) {
+	t1 := t0.Add(time.Hour)
+	boom := errors.New("boom")
+	e := &fakeconn.Exec{AbortOnError: true, Affected: 1,
+		Errs:    []error{nil, boom}, // SAVEPOINT, SHOW
+		Results: [][][]any{{invoiceRow(1)}, {recNewRow(1, t1)}, {{int64(4)}}},
+	}
+	var rec velox.Recorder
+	err := openFake18(e, 180000).Record(&rec).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if _, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+			return err
+		}
+		n, err := tx.Query[testmodel.Invoice]().Count(ctx)
+		if n != 4 {
+			t.Errorf("Count %d, want 4", n)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SAVEPOINT velox_1",
+		showVersion,
+		"ROLLBACK TO SAVEPOINT velox_1",
+		"RELEASE SAVEPOINT velox_1",
+		"SAVEPOINT velox_2",
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
+		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
+		"RELEASE SAVEPOINT velox_2",
+		`SELECT COUNT(*) FROM "invoices"`,
+		"COMMIT",
+	})
+	if rec.Len() != 1 {
+		t.Errorf("%d Changes, want 1", rec.Len())
+	}
+}
+
+// TestRecordVersionFailsBeforeOwnTx: a write velox runs in a transaction of
+// its own asks the version before its BEGIN, once; a failed read leaves the
+// transaction untouched, and the write takes the locked read.
+func TestRecordVersionFailsBeforeOwnTx(t *testing.T) {
+	t1 := t0.Add(time.Hour)
+	e := &fakeconn.Exec{AbortOnError: true, Affected: 2,
+		Errs:    []error{errors.New("boom")}, // SHOW
+		Results: [][][]any{{invoiceRow(1), invoiceRow(2)}, {recNewRow(1, t1), recNewRow(2, t1)}},
+	}
+	var rec velox.Recorder
+	if _, err := openFake18(e, 180000).Record(&rec).Update[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		showVersion,
+		"BEGIN",
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" FOR UPDATE`,
+		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "org_id" = $3 AND "id" IN ($4, $5) RETURNING ` + allCols,
+		"COMMIT",
+	})
+	if rec.Len() != 2 {
+		t.Errorf("%d Changes, want 2", rec.Len())
+	}
+}
+
+// TestRecordVersionPastHooks: the version read is velox's own statement:
+// an Around hook that refuses raw SQL neither sees it nor stops it, and the
+// write takes the one-statement path.
+func TestRecordVersionPastHooks(t *testing.T) {
+	t1 := t0.Add(time.Hour)
+	e := &fakeconn.Exec{Results: [][][]any{{pair(invoiceRow(1), recNewRow(1, t1))}}}
+	var seen []string
+	refuse := velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		seen = append(seen, st.SQL)
+		if st.Op.Raw() {
+			return errors.New("no raw SQL")
+		}
+		return next(ctx)
+	})
+	var rec velox.Recorder
+	if _, err := openFake18(e, 180000, refuse).Record(&rec).Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	upd := `UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 RETURNING ` + oldNew(allCols)
+	wantLog(t, e, []string{showVersion, upd})
+	if !slices.Equal(seen, []string{upd}) {
+		t.Errorf("the hook saw %q, want the UPDATE alone", seen)
+	}
+	if rec.Len() != 1 {
+		t.Errorf("%d Changes, want 1", rec.Len())
 	}
 }

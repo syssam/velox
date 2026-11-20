@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"unsafe"
 )
@@ -259,12 +260,25 @@ func emit(ctx context.Context, db *DB, rows []ChangeRow) error {
 // when a sink runs, and a sink's error, which ownTx returns, undoes nothing.
 // A recorded write in fn, on db's transaction, runs in a savepoint of its own
 // (recordedTx).
+//
+// Before the BEGIN of a transaction for a recording handle it learns the
+// server version (primeVersion), where a failure to read it cannot abort
+// the transaction: the recorded writes in fn only look at it.
 func ownTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
+	return ownTxPrimed(ctx, db, false, fn)
+}
+
+// ownTxPrimed is ownTx; primed says the caller has asked the server version
+// already, for this write, and ownTx does not ask again.
+func ownTxPrimed(ctx context.Context, db *DB, primed bool, fn func(ctx context.Context, tx *DB) error) error {
 	if db.InTx {
 		return fn(ctx, db)
 	}
 	if db.rec == nil {
 		return db.Tx(ctx, fn)
+	}
+	if !primed && db.recording(ctx) != nil {
+		primeVersion(ctx, db)
 	}
 	p := &pending{}
 	err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
@@ -292,7 +306,40 @@ func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB
 	if db.InTx && db.txRoot.pend == nil {
 		return db.Tx(ctx, fn)
 	}
-	return ownTx(ctx, db, fn)
+	// Its writes asked the server version already, when they needed it.
+	return ownTxPrimed(ctx, db, true, fn)
+}
+
+// versionedTx is recordedTx for a recorded write whose path depends on the
+// server version, *old (returnsOld, which in a transaction only looks at a
+// version already known). In the caller's transaction, with the version not
+// known yet, it asks the server inside the write's savepoint, before fn,
+// and sets *old. A failed read rolls that savepoint back, so the caller's
+// transaction stays usable, and fn runs on the locked-read path in a fresh
+// savepoint. In a transaction velox opened, the version was asked before
+// its BEGIN (primeVersion), and outside one returnsOld asked it.
+func versionedTx(ctx context.Context, db *DB, old *bool, fn func(ctx context.Context, tx *DB) error) error {
+	if *old || !db.InTx || db.txRoot.pend != nil || !versionUnknown(ctx, db) {
+		return recordedTx(ctx, db, fn)
+	}
+	var verr error
+	err := recordedTx(ctx, db, func(ctx context.Context, tx *DB) error {
+		v, err := loadVersion(ctx, tx)
+		switch {
+		case errors.Is(err, errVersionBusy): // nothing sent: the locked read
+		case err != nil:
+			verr = err
+			return err
+		default:
+			*old = v >= returningOld
+		}
+		return fn(ctx, tx)
+	})
+	if verr != nil && errors.Is(err, verr) {
+		*old = false
+		return recordedTx(ctx, db, fn)
+	}
+	return err
 }
 
 // atomically runs fn in a savepoint when db is in a transaction, and else

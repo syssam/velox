@@ -328,9 +328,18 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 			return fmt.Errorf("velox: %s: %w", in.Name, err)
 		}
 	}
+	// The server version, for a recorded write, where a failure to read it
+	// cannot abort a transaction: before the BEGIN, or in a savepoint of its
+	// own in the caller's (primeVersion). newRepoint only looks at it.
+	if db.recording(ctx) != nil {
+		primeVersion(ctx, db)
+	}
 	// db.Tx, but that a recording handle's sink, outside a transaction,
 	// runs after the COMMIT (ownTx).
-	return atomically(ctx, db, fn)
+	if db.InTx {
+		return db.Tx(ctx, fn)
+	}
+	return ownTxPrimed(ctx, db, true, fn)
 }
 
 // repoint is what a recorded bidirectional one-to-one write changed: a

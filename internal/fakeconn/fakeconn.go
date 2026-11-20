@@ -5,6 +5,7 @@ package fakeconn
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -85,6 +86,36 @@ type Exec struct {
 	// RollbackDeadline is the deadline of the last ROLLBACK's or ROLLBACK
 	// TO's context; zero when none.
 	RollbackDeadline time.Time
+	// AbortOnError models PostgreSQL's aborted transaction: after a
+	// statement fails in a transaction, every later one but ROLLBACK and
+	// ROLLBACK TO SAVEPOINT fails with ErrAborted, COMMIT too, until a
+	// ROLLBACK TO SAVEPOINT or the transaction's end.
+	AbortOnError  bool
+	inTx, aborted bool
+}
+
+// ErrAborted is what a statement in a transaction AbortOnError aborted
+// returns, as PostgreSQL's error 25P02.
+var ErrAborted = errors.New("fake: current transaction is aborted, commands ignored until end of transaction block")
+
+// fail is next, under AbortOnError: ErrAborted for a statement other than a
+// ROLLBACK TO in an aborted transaction, and an error in a transaction
+// aborts it. A ROLLBACK TO that succeeds clears the abort.
+func (e *Exec) fail(sql string) error {
+	rollbackTo := strings.HasPrefix(sql, "ROLLBACK TO")
+	if e.AbortOnError && e.aborted && !rollbackTo {
+		return ErrAborted
+	}
+	err := e.next()
+	if e.AbortOnError && e.inTx {
+		switch {
+		case err != nil:
+			e.aborted = true
+		case rollbackTo:
+			e.aborted = false
+		}
+	}
+	return err
 }
 
 // rollbackWait records the deadline of a ROLLBACK's or ROLLBACK TO's ctx and,
@@ -138,7 +169,7 @@ func (e *Exec) Query(ctx context.Context, sql string, args []any) (conn.Rows, er
 	e.Calls++
 	e.Log = append(e.Log, sql)
 	e.ArgLog = append(e.ArgLog, args)
-	if err := e.next(); err != nil {
+	if err := e.fail(sql); err != nil {
 		return nil, err
 	}
 	data := e.Rows
@@ -178,7 +209,7 @@ func (e *Exec) Exec(ctx context.Context, sql string, args []any) (conn.Result, e
 	e.Calls++
 	e.Log = append(e.Log, sql)
 	e.ArgLog = append(e.ArgLog, args)
-	if err := e.next(); err != nil {
+	if err := e.fail(sql); err != nil {
 		return conn.Result{}, err
 	}
 	affected := e.Affected
@@ -198,6 +229,7 @@ func (e *Exec) Begin(_ context.Context, o sql.TxOptions) (conn.Executor, conn.Tx
 		return nil, nil, e.BeginErr
 	}
 	e.Isolation, e.ReadOnly = o.Isolation, o.ReadOnly
+	e.inTx, e.aborted = true, false
 	return e, fakeTx{e}, nil
 }
 
@@ -214,6 +246,11 @@ func (t fakeTx) Commit(ctx context.Context) error {
 	defer t.e.mu.Unlock()
 	t.e.Log = append(t.e.Log, "COMMIT")
 	t.e.ArgLog = append(t.e.ArgLog, nil)
+	aborted := t.e.aborted
+	t.e.inTx, t.e.aborted = false, false
+	if aborted {
+		return ErrAborted
+	}
 	return t.e.CommitErr
 }
 
@@ -229,6 +266,7 @@ func (t fakeTx) Rollback(ctx context.Context) error {
 	}
 	t.e.Log = append(t.e.Log, "ROLLBACK")
 	t.e.ArgLog = append(t.e.ArgLog, nil)
+	t.e.inTx, t.e.aborted = false, false
 	return t.e.RollbackErr
 }
 

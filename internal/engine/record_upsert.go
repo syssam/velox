@@ -23,7 +23,12 @@ type insertSend func(ctx context.Context, tx *DB, st *Statement) (int64, error)
 // transaction of velox's own, whose COMMIT the sink waits for; and, in the
 // caller's transaction, every insert, in a savepoint that holds its
 // statements and the sink.
-func recordedInsert(ctx context.Context, db *DB, single bool, fn func(ctx context.Context, tx *DB) ([]ChangeRow, error)) error {
+//
+// old is nil for a plain insert. For an upsert it says whether it reads its
+// old values in the INSERT (PostgreSQL 18: returnsOld); in the caller's
+// transaction, with the server version not known yet, versionedTx learns it
+// inside the write's savepoint and sets it.
+func recordedInsert(ctx context.Context, db *DB, single bool, old *bool, fn func(ctx context.Context, tx *DB) ([]ChangeRow, error)) error {
 	run := func(ctx context.Context, tx *DB) error {
 		rows, err := fn(ctx, tx)
 		if err != nil {
@@ -33,6 +38,9 @@ func recordedInsert(ctx context.Context, db *DB, single bool, fn func(ctx contex
 	}
 	if single && !db.InTx {
 		return run(ctx, db)
+	}
+	if old != nil {
+		return versionedTx(ctx, db, old, run)
 	}
 	return recordedTx(ctx, db, run)
 }
@@ -67,11 +75,19 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	}
 	var err error
 	if keys, vs := bidiRow(in, p); len(keys) > 0 {
+		if cp.Conflict != nil {
+			primeVersion(ctx, db) // before bidiInsert's transaction
+			cp.returnOld = returnsOld(ctx, db)
+		}
 		setStmtBidi(&cp, &bidiStep{Keys: keys, Vals: vs, Insert: true})
 		err = bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, send)
 	} else {
+		var old *bool
+		if cp.Conflict != nil {
+			old = &cp.returnOld
+		}
 		// On PostgreSQL 18 an upsert is one statement too.
-		err = recordedInsert(ctx, db, cp.Conflict == nil || cp.returnOld, send)
+		err = recordedInsert(ctx, db, cp.Conflict == nil || cp.returnOld, old, send)
 	}
 	out.Affected = n
 	return err

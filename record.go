@@ -133,12 +133,20 @@ func RecordIgnore(columns ...string) RecordOption {
 // Below PostgreSQL 18, and on SQLite and MySQL, a recorded update or delete
 // first reads its rows, locked, then writes them by key. On PostgreSQL 18
 // and later it is one statement, RETURNING the rows before and after it
-// (old and new), and so is an upsert, which reads nothing first; the
-// recording handle asks the server its version (SHOW server_version_num)
-// once per pool, at its first recorded write. There an update or delete
+// (old and new), and so is an upsert, which reads nothing first. The
+// recording handle asks the server its version (SHOW server_version_num,
+// which no hook sees) once per pool, at its first recorded write: before
+// the BEGIN of a transaction of its own, or in the caller's transaction
+// inside a savepoint (the write's), so that a failure to read it rolls back
+// to the savepoint and leaves the transaction usable; such a write then takes
+// the locked read, and a later one asks again. There an update or delete
 // that names one row by its key, or an upsert of one statement, outside a
 // transaction, commits by itself; any other runs in a transaction of its
-// own, which a count of rows over WithMaxRows rolls back.
+// own, which a count of rows over WithMaxRows rolls back. An update's or a
+// delete's Changes come in key order as Go compares the key values: the
+// database's order for numeric and UUID keys, but a text key under a
+// collation other than C may order otherwise. An upsert's Changes come in
+// the order the database returns its rows.
 // The sink's writes are recorded only when made under another context than
 // the one it was given (see Sink).
 //
