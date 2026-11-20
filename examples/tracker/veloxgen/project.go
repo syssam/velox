@@ -47,9 +47,9 @@ type ProjectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Project, time.Time]
+	CreatedAt velox.TimeCol[Project, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Project, time.Time]
+	UpdatedAt velox.TimeCol[Project, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Project, int64]
 	// Name is the column name.
@@ -61,8 +61,8 @@ type ProjectHandles struct {
 // Projects holds the typed handles of Project's columns and relations.
 var Projects = ProjectHandles{
 	ID:        velox.NumberCol[Project, int64]{I: projectColID},
-	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},
-	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: projectColUpdatedAt},
+	CreatedAt: velox.TimeCol[Project, time.Time]{I: projectColCreatedAt},
+	UpdatedAt: velox.TimeCol[Project, time.Time]{I: projectColUpdatedAt},
 	OrgID:     velox.NumberCol[Project, int64]{I: projectColOrgID},
 	Name:      velox.StringCol[Project, string]{I: projectColName},
 	Issues:    velox.Rel[Project, Issue]{I: projectEdgeIssues},

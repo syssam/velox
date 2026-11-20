@@ -318,6 +318,41 @@ func (t *tabler) checkDecimalDefault(at place, f *Field, typ string) {
 	}
 }
 
+// decimalWord reports whether the normalised column type typ of d names an
+// exact-number type, with or without a precision, and returns what follows
+// the type's name: numeric or decimal, and on MySQL also dec and fixed.
+func decimalWord(d velox.Dialect, typ string) (rest string, ok bool) {
+	word := typ
+	if i := strings.IndexAny(typ, "( "); i >= 0 {
+		word, rest = typ[:i], typ[i:]
+	}
+	switch word {
+	case "numeric", "decimal":
+		return rest, true
+	case "dec", "fixed":
+		return rest, d == velox.MySQL
+	}
+	return "", false
+}
+
+// decimalField reports whether f is an Other field held in a decimal column:
+// its SchemaType names an exact-number type, as decimalWord reads it, for
+// every dialect it names. Its handle is a NumberCol, as a Go number's is.
+func decimalField(f *Field) bool {
+	n := 0
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		st := f.SchemaType[d.String()]
+		if st == "" {
+			continue
+		}
+		if _, ok := decimalWord(d, ddl.NormalizeType(d, st)); !ok {
+			return false
+		}
+		n++
+	}
+	return n > 0
+}
+
 // decimalType reads the precision p and scale s of the normalised column type
 // typ of d, when it is an exact-number type with a p that d accepts: on
 // PostgreSQL numeric(p) and numeric(p,s), p up to 1000; on MySQL decimal,
@@ -326,14 +361,8 @@ func (t *tabler) checkDecimalDefault(at place, f *Field, typ string) {
 // true for unsigned and zerofill. A bare numeric on PostgreSQL has no
 // precision; it is not ok.
 func decimalType(d velox.Dialect, typ string) (p, s int, unsigned, ok bool) {
-	word, rest := typ, ""
-	if i := strings.IndexAny(typ, "( "); i >= 0 {
-		word, rest = typ[:i], typ[i:]
-	}
-	switch {
-	case d == velox.Postgres && (word == "numeric" || word == "decimal"):
-	case d == velox.MySQL && (word == "decimal" || word == "numeric" || word == "dec" || word == "fixed"):
-	default:
+	rest, ok := decimalWord(d, typ)
+	if !ok || d == velox.SQLite {
 		return 0, 0, false, false
 	}
 	p = 10 // MySQL's bare decimal is decimal(10,0)

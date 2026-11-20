@@ -70,11 +70,11 @@ var SDocs = struct {
 	OrgID     velox.NumberCol[SDoc, int64]
 	OwnerID   velox.NumberCol[SDoc, int64]
 	Title     velox.StringCol[SDoc, string]
-	DeletedAt velox.NullOrderedCol[SDoc, time.Time]
+	DeletedAt velox.NullTimeCol[SDoc, time.Time]
 	Owner     velox.Rel[SDoc, SOwner]
 }{
 	velox.NumberCol[SDoc, int64]{I: 0}, velox.NumberCol[SDoc, int64]{I: 1}, velox.NumberCol[SDoc, int64]{I: 2},
-	velox.StringCol[SDoc, string]{I: 3}, velox.NullOrderedCol[SDoc, time.Time]{I: 4}, velox.Rel[SDoc, SOwner]{I: 0},
+	velox.StringCol[SDoc, string]{I: 3}, velox.NullTimeCol[SDoc, time.Time]{I: 4}, velox.Rel[SDoc, SOwner]{I: 0},
 }
 
 var sDocMeta velox.MetaOnce[SDoc]

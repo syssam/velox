@@ -55,13 +55,13 @@ type InvoiceHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Invoice, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Invoice, time.Time]
+	CreatedAt velox.TimeCol[Invoice, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Invoice, time.Time]
+	UpdatedAt velox.TimeCol[Invoice, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Invoice, int64]
 	// DeletedAt is the column deleted_at.
-	DeletedAt velox.NullOrderedCol[Invoice, time.Time]
+	DeletedAt velox.NullTimeCol[Invoice, time.Time]
 	// Number is the column number.
 	Number velox.StringCol[Invoice, string]
 	// Customer is the column customer.
@@ -77,10 +77,10 @@ type InvoiceHandles struct {
 // Invoices holds the typed handles of Invoice's columns and relations.
 var Invoices = InvoiceHandles{
 	ID:         velox.NumberCol[Invoice, int64]{I: invoiceColID},
-	CreatedAt:  velox.OrderedCol[Invoice, time.Time]{I: invoiceColCreatedAt},
-	UpdatedAt:  velox.OrderedCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
+	CreatedAt:  velox.TimeCol[Invoice, time.Time]{I: invoiceColCreatedAt},
+	UpdatedAt:  velox.TimeCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
 	OrgID:      velox.NumberCol[Invoice, int64]{I: invoiceColOrgID},
-	DeletedAt:  velox.NullOrderedCol[Invoice, time.Time]{I: invoiceColDeletedAt},
+	DeletedAt:  velox.NullTimeCol[Invoice, time.Time]{I: invoiceColDeletedAt},
 	Number:     velox.StringCol[Invoice, string]{I: invoiceColNumber},
 	Customer:   velox.StringCol[Invoice, string]{I: invoiceColCustomer},
 	Status:     velox.Col[Invoice, InvoiceStatus]{I: invoiceColStatus},

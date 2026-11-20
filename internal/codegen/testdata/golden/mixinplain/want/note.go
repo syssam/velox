@@ -29,7 +29,7 @@ type NoteHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Note, int64]
 	// DeletedAt is the column deleted_at.
-	DeletedAt velox.NullOrderedCol[Note, time.Time]
+	DeletedAt velox.NullTimeCol[Note, time.Time]
 	// Text is the column text.
 	Text velox.StringCol[Note, string]
 }
@@ -37,7 +37,7 @@ type NoteHandles struct {
 // Notes holds the typed handles of Note's columns.
 var Notes = NoteHandles{
 	ID:        velox.NumberCol[Note, int64]{I: noteColID},
-	DeletedAt: velox.NullOrderedCol[Note, time.Time]{I: noteColDeletedAt},
+	DeletedAt: velox.NullTimeCol[Note, time.Time]{I: noteColDeletedAt},
 	Text:      velox.StringCol[Note, string]{I: noteColText},
 }
 

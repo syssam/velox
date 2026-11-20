@@ -26,12 +26,12 @@ var DAuthors = struct {
 	OrgID     velox.NumberCol[DAuthor, int64]
 	Name      velox.StringCol[DAuthor, string]
 	Email     velox.NullStringCol[DAuthor, string]
-	CreatedAt velox.OrderedCol[DAuthor, time.Time]
+	CreatedAt velox.TimeCol[DAuthor, time.Time]
 	Books     velox.Rel[DAuthor, DBook]
 }{
 	velox.NumberCol[DAuthor, int64]{I: 0}, velox.NumberCol[DAuthor, int64]{I: 1},
 	velox.StringCol[DAuthor, string]{I: 2}, velox.NullStringCol[DAuthor, string]{I: 3},
-	velox.OrderedCol[DAuthor, time.Time]{I: 4}, velox.Rel[DAuthor, DBook]{I: 0},
+	velox.TimeCol[DAuthor, time.Time]{I: 4}, velox.Rel[DAuthor, DBook]{I: 0},
 }
 
 var DAuthorMeta velox.MetaOnce[DAuthor]

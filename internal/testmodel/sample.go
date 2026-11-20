@@ -82,9 +82,9 @@ type SampleHandles struct {
 	// MaybeFlag is the column maybe_flag.
 	MaybeFlag velox.NullCol[Sample, bool]
 	// When is the column when.
-	When velox.OrderedCol[Sample, time.Time]
+	When velox.TimeCol[Sample, time.Time]
 	// MaybeWhen is the column maybe_when.
-	MaybeWhen velox.NullOrderedCol[Sample, time.Time]
+	MaybeWhen velox.NullTimeCol[Sample, time.Time]
 	// Blob is the column blob.
 	Blob velox.Col[Sample, []byte]
 	// ParentID is the column parent_id.
@@ -109,8 +109,8 @@ var Samples = SampleHandles{
 	Ratio:     velox.NullNumberCol[Sample, float64]{I: sampleColRatio},
 	Flag:      velox.Col[Sample, bool]{I: sampleColFlag},
 	MaybeFlag: velox.NullCol[Sample, bool]{I: sampleColMaybeFlag},
-	When:      velox.OrderedCol[Sample, time.Time]{I: sampleColWhen},
-	MaybeWhen: velox.NullOrderedCol[Sample, time.Time]{I: sampleColMaybeWhen},
+	When:      velox.TimeCol[Sample, time.Time]{I: sampleColWhen},
+	MaybeWhen: velox.NullTimeCol[Sample, time.Time]{I: sampleColMaybeWhen},
 	Blob:      velox.Col[Sample, []byte]{I: sampleColBlob},
 	ParentID:  velox.NullNumberCol[Sample, int64]{I: sampleColParentID},
 	Score:     velox.NumberCol[Sample, kind.Score]{I: sampleColScore},

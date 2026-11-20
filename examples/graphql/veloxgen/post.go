@@ -74,7 +74,7 @@ type PostHandles struct {
 	// Views is the column views.
 	Views velox.NumberCol[Post, int64]
 	// PublishedAt is the column published_at.
-	PublishedAt velox.NullOrderedCol[Post, time.Time]
+	PublishedAt velox.NullTimeCol[Post, time.Time]
 	// Keywords is the column keywords.
 	Keywords velox.JSONCol[Post, []string]
 	// Author is the edge author, to User: With loads it, Has and HasWith test it.
@@ -91,7 +91,7 @@ var Posts = PostHandles{
 	Title:       velox.StringCol[Post, string]{I: postColTitle},
 	Status:      velox.Col[Post, PostStatus]{I: postColStatus},
 	Views:       velox.NumberCol[Post, int64]{I: postColViews},
-	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: postColPublishedAt},
+	PublishedAt: velox.NullTimeCol[Post, time.Time]{I: postColPublishedAt},
 	Keywords:    velox.JSONCol[Post, []string]{I: postColKeywords},
 	Author:      velox.Rel[Post, User]{I: postEdgeAuthor},
 	Tags:        velox.Rel[Post, Tag]{I: postEdgeTags},

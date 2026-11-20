@@ -380,8 +380,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		// order of JSON differ by dialect, so its handle only sets it.
 		h = "JSONCol"
 	case f.Type == "time" || elem == "time.Time":
-		h = "OrderedCol"
-	case numeric[kind]:
+		h = "TimeCol"
+	case numeric[kind], f.Type == "other" && decimalField(f):
+		// A decimal column holds a number, whatever its Go type (a struct,
+		// or text as here): it sums and adds as one.
 		h = "NumberCol"
 	case f.Type == "enum":
 		// An enum compares by equality and orders, as ent's predicates; it
@@ -390,9 +392,9 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	case kind == "string":
 		h = "StringCol"
 	case f.Type == "other":
-		// Its own SQL type (a decimal, a range): the database compares and
+		// Its own SQL type (a range, a point): the database compares and
 		// orders it, as veloxe's predicates did.
-		h = "OrderedCol"
+		h = "OtherCol"
 	default:
 		h = "Col"
 	}

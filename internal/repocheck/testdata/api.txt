@@ -106,7 +106,7 @@ const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
 const EdgePage
-const GeneratedCodeIsVersion24
+const GeneratedCodeIsVersion25
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -223,33 +223,33 @@ func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sum[_ Lazy[V]]() Term[E]
-func (c NullOrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E]
-func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
-func (c NullOrderedCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
-func (c NullOrderedCol[E, V]) Count[_ Lazy[V]]() Term[E]
-func (c NullOrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E]
-func (c NullOrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
-func (c NullOrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
-func (c NullOrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
-func (c NullOrderedCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
-func (c NullOrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c NullOrderedCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c NullOrderedCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
-func (c NullOrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
-func (c NullOrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
-func (c NullOrderedCol[E, V]) Max[_ Lazy[V]]() Term[E]
-func (c NullOrderedCol[E, V]) Min[_ Lazy[V]]() Term[E]
-func (c NullOrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
-func (c NullOrderedCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V
-func (c NullOrderedCol[E, V]) New[_ Lazy[V]](ch Change) V
-func (c NullOrderedCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
-func (c NullOrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
-func (c NullOrderedCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
-func (c NullOrderedCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
-func (c NullOrderedCol[E, V]) Old[_ Lazy[V]](ch Change) V
-func (c NullOrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
-func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
-func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullOtherCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullOtherCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NullOtherCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
+func (c NullOtherCol[E, V]) Count[_ Lazy[V]]() Term[E]
+func (c NullOtherCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NullOtherCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c NullOtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullOtherCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullOtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
+func (c NullOtherCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) Max[_ Lazy[V]]() Term[E]
+func (c NullOtherCol[E, V]) Min[_ Lazy[V]]() Term[E]
+func (c NullOtherCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V
+func (c NullOtherCol[E, V]) New[_ Lazy[V]](ch Change) V
+func (c NullOtherCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c NullOtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullOtherCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullOtherCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
+func (c NullOtherCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullOtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c NullOtherCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullOtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullStringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E]
@@ -283,6 +283,33 @@ func (c NullStringCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullStringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullTimeCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullTimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NullTimeCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
+func (c NullTimeCol[E, V]) Count[_ Lazy[V]]() Term[E]
+func (c NullTimeCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NullTimeCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c NullTimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullTimeCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullTimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
+func (c NullTimeCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) Max[_ Lazy[V]]() Term[E]
+func (c NullTimeCol[E, V]) Min[_ Lazy[V]]() Term[E]
+func (c NullTimeCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V
+func (c NullTimeCol[E, V]) New[_ Lazy[V]](ch Change) V
+func (c NullTimeCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c NullTimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullTimeCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullTimeCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
+func (c NullTimeCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullTimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c NullTimeCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullTimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NumberCol[E, V]) Avg[_ Lazy[V]]() Term[E]
@@ -309,28 +336,28 @@ func (c NumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sum[_ Lazy[V]]() Term[E]
-func (c OrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E]
-func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
-func (c OrderedCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
-func (c OrderedCol[E, V]) Count[_ Lazy[V]]() Term[E]
-func (c OrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E]
-func (c OrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
-func (c OrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
-func (c OrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
-func (c OrderedCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
-func (c OrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c OrderedCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
-func (c OrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
-func (c OrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
-func (c OrderedCol[E, V]) Max[_ Lazy[V]]() Term[E]
-func (c OrderedCol[E, V]) Min[_ Lazy[V]]() Term[E]
-func (c OrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
-func (c OrderedCol[E, V]) New[_ Lazy[V]](ch Change) V
-func (c OrderedCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
-func (c OrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
-func (c OrderedCol[E, V]) Old[_ Lazy[V]](ch Change) V
-func (c OrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
-func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c OtherCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c OtherCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c OtherCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
+func (c OtherCol[E, V]) Count[_ Lazy[V]]() Term[E]
+func (c OtherCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c OtherCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c OtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c OtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
+func (c OtherCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) Max[_ Lazy[V]]() Term[E]
+func (c OtherCol[E, V]) Min[_ Lazy[V]]() Term[E]
+func (c OtherCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) New[_ Lazy[V]](ch Change) V
+func (c OtherCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c OtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c OtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c OtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c StringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E]
@@ -359,6 +386,28 @@ func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c StringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c TimeCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c TimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c TimeCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
+func (c TimeCol[E, V]) Count[_ Lazy[V]]() Term[E]
+func (c TimeCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c TimeCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c TimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c TimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
+func (c TimeCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) Max[_ Lazy[V]]() Term[E]
+func (c TimeCol[E, V]) Min[_ Lazy[V]]() Term[E]
+func (c TimeCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) New[_ Lazy[V]](ch Change) V
+func (c TimeCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
+func (c TimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c TimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
@@ -650,15 +699,16 @@ type Mutator interface { Mutate(ctx context.Context, m *Mutation) error }
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }
 type NullNumberCol[E, V any] struct { I int32 }
-type NullOrderedCol[E, V any] struct { I int32 }
+type NullOtherCol[E, V any] struct { I int32 }
 type NullStringCol[E any, V ~string] struct { I int32 }
+type NullTimeCol[E, V any] struct { I int32 }
 type NumberCol[E, V any] struct { I int32 }
 type One[T any] struct { }
 type Op = veloxtype.Op
 type Option = engine.Option
 type OrderTerm = veloxtype.OrderTerm
 type Order[E any] struct { }
-type OrderedCol[E, V any] struct { I int32 }
+type OtherCol[E, V any] struct { I int32 }
 type Paged[E, K, O, C any] interface { *E PaginateQuery(ctx context.Context, q Query[E], after *K, first *int, before *K, last *int, opts []O) (C, error) }
 type Policy = engine.Policy
 type PolicyError = veloxtype.PolicyError
@@ -690,6 +740,7 @@ type StringCol[E any, V ~string] struct { I int32 }
 type Subquery[V any] struct { }
 type Tag = veloxtype.Tag
 type Term[E any] struct { }
+type TimeCol[E, V any] struct { I int32 }
 type TxAround = veloxtype.TxAround
 type TxInfo = veloxtype.TxInfo
 type TxOption = engine.TxOption

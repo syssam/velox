@@ -23,3 +23,7 @@ type Score = kind.Score
 
 // Moment is a time type defined on time.Time: a time default converts to it.
 type Moment = kind.Moment
+
+// Dec is a decimal type of its own in a numeric column: its handle is a
+// NumberCol.
+type Dec = kind.Dec

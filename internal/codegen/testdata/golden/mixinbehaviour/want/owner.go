@@ -30,9 +30,9 @@ type OwnerHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Owner, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Owner, time.Time]
+	CreatedAt velox.TimeCol[Owner, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Owner, time.Time]
+	UpdatedAt velox.TimeCol[Owner, time.Time]
 	// Name is the column name.
 	Name velox.StringCol[Owner, string]
 }
@@ -40,8 +40,8 @@ type OwnerHandles struct {
 // Owners holds the typed handles of Owner's columns.
 var Owners = OwnerHandles{
 	ID:        velox.NumberCol[Owner, int64]{I: ownerColID},
-	CreatedAt: velox.OrderedCol[Owner, time.Time]{I: ownerColCreatedAt},
-	UpdatedAt: velox.OrderedCol[Owner, time.Time]{I: ownerColUpdatedAt},
+	CreatedAt: velox.TimeCol[Owner, time.Time]{I: ownerColCreatedAt},
+	UpdatedAt: velox.TimeCol[Owner, time.Time]{I: ownerColUpdatedAt},
 	Name:      velox.StringCol[Owner, string]{I: ownerColName},
 }
 

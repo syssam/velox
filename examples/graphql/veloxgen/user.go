@@ -60,7 +60,7 @@ type UserHandles struct {
 	// Role is the column role.
 	Role velox.Col[User, UserRole]
 	// JoinedAt is the column joined_at.
-	JoinedAt velox.OrderedCol[User, time.Time]
+	JoinedAt velox.TimeCol[User, time.Time]
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
 	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
@@ -73,7 +73,7 @@ var Users = UserHandles{
 	Name:         velox.StringCol[User, string]{I: userColName},
 	Email:        velox.StringCol[User, string]{I: userColEmail},
 	Role:         velox.Col[User, UserRole]{I: userColRole},
-	JoinedAt:     velox.OrderedCol[User, time.Time]{I: userColJoinedAt},
+	JoinedAt:     velox.TimeCol[User, time.Time]{I: userColJoinedAt},
 	PasswordHash: velox.StringCol[User, string]{I: userColPasswordHash},
 	Posts:        velox.Rel[User, Post]{I: userEdgePosts},
 }

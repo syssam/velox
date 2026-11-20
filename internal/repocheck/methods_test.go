@@ -25,11 +25,11 @@ func recvName(rt ast.Expr) string {
 	return ""
 }
 
-// handleKinds are the ten column handle types; each has an ordinary column
+// handleKinds are the twelve column handle types; each has an ordinary column
 // method, which makes it a Column[E].
 var handleKinds = map[string]bool{
-	"Col": true, "OrderedCol": true, "NumberCol": true, "StringCol": true,
-	"NullCol": true, "NullOrderedCol": true, "NullNumberCol": true, "NullStringCol": true,
+	"Col": true, "TimeCol": true, "OtherCol": true, "NumberCol": true, "StringCol": true,
+	"NullCol": true, "NullTimeCol": true, "NullOtherCol": true, "NullNumberCol": true, "NullStringCol": true,
 	"JSONCol": true, "NullJSONCol": true,
 }
 

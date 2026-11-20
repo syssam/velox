@@ -69,9 +69,9 @@ type IssueHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Issue, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Issue, time.Time]
+	CreatedAt velox.TimeCol[Issue, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Issue, time.Time]
+	UpdatedAt velox.TimeCol[Issue, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Issue, int64]
 	// ProjectID is the column project_id.
@@ -101,8 +101,8 @@ type IssueHandles struct {
 // Issues holds the typed handles of Issue's columns and relations.
 var Issues = IssueHandles{
 	ID:         velox.NumberCol[Issue, int64]{I: issueColID},
-	CreatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColCreatedAt},
-	UpdatedAt:  velox.OrderedCol[Issue, time.Time]{I: issueColUpdatedAt},
+	CreatedAt:  velox.TimeCol[Issue, time.Time]{I: issueColCreatedAt},
+	UpdatedAt:  velox.TimeCol[Issue, time.Time]{I: issueColUpdatedAt},
 	OrgID:      velox.NumberCol[Issue, int64]{I: issueColOrgID},
 	ProjectID:  velox.NumberCol[Issue, int64]{I: issueColProjectID},
 	AuthorID:   velox.NumberCol[Issue, int64]{I: issueColAuthorID},

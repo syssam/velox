@@ -225,31 +225,33 @@ var genericObjects = []struct {
 	// the measurement beside it. One ordinary method adds about 20 KiB to a handle,
 	// which exceeds that margin; a velox type reaching reflect.Type adds about 134
 	// KiB, which the cap keeps above the margin of the largest rows.
-	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14208
-	{"OrderedCol", "velox.OrderedCol[E, int64]", "", 19456},         // measured 14820
-	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},           // measured 14756
-	{"StringCol", "velox.StringCol[E, string]", "", 19456},          // measured 14796
-	{"NullCol", "velox.NullCol[E, bool]", "", 19456},                // measured 14554
-	{"NullOrderedCol", "velox.NullOrderedCol[E, int64]", "", 19456}, // measured 15166
-	{"NullNumberCol", "velox.NullNumberCol[E, int64]", "", 19456},   // measured 15084
-	{"NullStringCol", "velox.NullStringCol[E, string]", "", 19456},  // measured 15124
-	{"JSONCol", "velox.JSONCol[E, []string]", "", 19456},            // measured 14710
-	{"NullJSONCol", "velox.NullJSONCol[E, []string]", "", 19456},    // measured 15038
-	{"Pred", "velox.Pred[E]", "", 5120},                             // measured 1136
-	{"Order", "velox.Order[E]", "", 6144},                           // measured 2964
-	{"Setter", "velox.Setter[E]", "", 8192},                         // measured 3194
-	{"Query", "velox.Query[E]", "", 10240},                          // measured 6342
-	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 7822
-	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 6966
-	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 8102
-	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 6848
-	{"One", "velox.One[E]", "", 20480},                              // measured 15856
-	{"Many", "velox.Many[E]", "", 20480},                            // measured 15930
-	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 8074
-	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 4906
-	{"Statement", "velox.Statement", "", 5120},                      // measured 1412
-	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1428
-	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 80
+	{"Col", "velox.Col[E, bool]", "", 18432},                       // measured 14208
+	{"TimeCol", "velox.TimeCol[E, int64]", "", 19456},              // measured 14578 (OrderedCol was 14824)
+	{"OtherCol", "velox.OtherCol[E, int64]", "", 19456},            // measured 14674 (OrderedCol was 14824)
+	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},          // measured 14756
+	{"StringCol", "velox.StringCol[E, string]", "", 19456},         // measured 14796
+	{"NullCol", "velox.NullCol[E, bool]", "", 19456},               // measured 14554
+	{"NullTimeCol", "velox.NullTimeCol[E, int64]", "", 19456},      // measured 14920 (NullOrderedCol was 15166)
+	{"NullOtherCol", "velox.NullOtherCol[E, int64]", "", 19456},    // measured 15002 (NullOrderedCol was 15166)
+	{"NullNumberCol", "velox.NullNumberCol[E, int64]", "", 19456},  // measured 15084
+	{"NullStringCol", "velox.NullStringCol[E, string]", "", 19456}, // measured 15124
+	{"JSONCol", "velox.JSONCol[E, []string]", "", 19456},           // measured 14710
+	{"NullJSONCol", "velox.NullJSONCol[E, []string]", "", 19456},   // measured 15038
+	{"Pred", "velox.Pred[E]", "", 5120},                            // measured 1136
+	{"Order", "velox.Order[E]", "", 6144},                          // measured 2964
+	{"Setter", "velox.Setter[E]", "", 8192},                        // measured 3194
+	{"Query", "velox.Query[E]", "", 10240},                         // measured 6342
+	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},              // measured 7822
+	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},              // measured 6966
+	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},             // measured 8102
+	{"Rel", "velox.Rel[E, E]", "", 9216},                           // measured 6848
+	{"One", "velox.One[E]", "", 20480},                             // measured 15856
+	{"Many", "velox.Many[E]", "", 20480},                           // measured 15930
+	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                   // measured 8074
+	{"Meta", "velox.Meta[E]", "", 7168},                            // measured 4906
+	{"Statement", "velox.Statement", "", 5120},                     // measured 1412
+	{"EntityInfo", "*velox.EntityInfo", "", 5120},                  // measured 1428
+	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                   // measured 80
 	// The entity packages. entityDescriptor is the minimal entity velox-gen writes.
 	// The Descriptor names the value that declares the behaviour in its field
 	// Schema, an any (GeneratedCodeIsVersion17), and velox reads the untyped

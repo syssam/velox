@@ -306,9 +306,9 @@
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Descriptor, ColumnDescriptor, EdgeDescriptor, EdgeTo, EdgeBidi,
 // EdgeThrough, LinkEntity, EntityLink, EntityTable, Meta, MetaOnce, Show, Lazy, Validate,
-// ValidateSet and GeneratedCodeIsVersion24. Each
+// ValidateSet and GeneratedCodeIsVersion25. Each
 // says "For generated code." in its documentation. They are not part of
-// velox's API: they change only when GeneratedCodeIsVersion24 is replaced by
+// velox's API: they change only when GeneratedCodeIsVersion25 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
@@ -320,11 +320,11 @@ package velox
 
 //go:generate go run ./internal/cmd/handlegen
 
-// GeneratedCodeIsVersion24 is referenced by every file velox-gen writes from a
+// GeneratedCodeIsVersion25 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile
 // together when they disagree. For generated code. It is replaced by
-// GeneratedCodeIsVersion24 when generated code must change.
-const GeneratedCodeIsVersion24 = true
+// GeneratedCodeIsVersion26 when generated code must change.
+const GeneratedCodeIsVersion25 = true
 
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A

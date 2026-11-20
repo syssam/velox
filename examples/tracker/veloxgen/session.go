@@ -38,7 +38,7 @@ type SessionHandles struct {
 	// UserID is the column user_id.
 	UserID velox.NumberCol[Session, int64]
 	// ExpiresAt is the column expires_at.
-	ExpiresAt velox.OrderedCol[Session, time.Time]
+	ExpiresAt velox.TimeCol[Session, time.Time]
 }
 
 // Sessions holds the typed handles of Session's columns.
@@ -47,7 +47,7 @@ var Sessions = SessionHandles{
 	TokenHash: velox.StringCol[Session, string]{I: sessionColTokenHash},
 	OrgID:     velox.NumberCol[Session, int64]{I: sessionColOrgID},
 	UserID:    velox.NumberCol[Session, int64]{I: sessionColUserID},
-	ExpiresAt: velox.OrderedCol[Session, time.Time]{I: sessionColExpiresAt},
+	ExpiresAt: velox.TimeCol[Session, time.Time]{I: sessionColExpiresAt},
 }
 
 var sessionMeta velox.MetaOnce[Session]

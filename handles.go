@@ -70,112 +70,211 @@ func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
 func (c Col[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// OrderedCol is the handle of an ordered column: time.Time and types registered as ordered. I is the column's index; velox-gen sets it.
-type OrderedCol[E, V any] struct{ I int32 }
+// TimeCol is the handle of a time column: a time field, of time.Time or a type defined on it. I is the column's index; velox-gen sets it.
+type TimeCol[E, V any] struct{ I int32 }
 
-func (c OrderedCol[E, V]) column(*E) int32 { return c.I }
+func (c TimeCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c OrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+func (c TimeCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
 }
 
 // NEQ is column <> v.
-func (c OrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+func (c TimeCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
 }
 
 // In is column IN (vs...). With no values it is false.
-func (c OrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
+func (c TimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
-func (c OrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
+func (c TimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
-func (c OrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
-	return selectOf[E, V](c.I, ps)
-}
+func (c TimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] { return selectOf[E, V](c.I, ps) }
 
 // InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
-func (c OrderedCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+func (c TimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
 
 // NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
-func (c OrderedCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
-	return Not(inSelect[E](c.I, s))
-}
+func (c TimeCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return Not(inSelect[E](c.I, s)) }
 
 // Asc orders by the column, ascending.
-func (c OrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
+func (c TimeCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
 
 // Desc orders by the column, descending.
-func (c OrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
+func (c TimeCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
 
 // Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
-func (c OrderedCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
+func (c TimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
 
 // GT is column > v.
-func (c OrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+func (c TimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
 }
 
 // GTE is column >= v.
-func (c OrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
+func (c TimeCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
 }
 
 // LT is column < v.
-func (c OrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+func (c TimeCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
 }
 
 // LTE is column <= v.
-func (c OrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
+func (c TimeCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
 }
 
 // Between is column BETWEEN lo AND hi.
-func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
+func (c TimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
-func (c OrderedCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+func (c TimeCol[E, V]) Count[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
 }
 
 // CountDistinct is COUNT(DISTINCT column), as a Term.
-func (c OrderedCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+func (c TimeCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
 }
 
 // Min is MIN of the column, as a Term. NULL when no row has a value.
-func (c OrderedCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+func (c TimeCol[E, V]) Min[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
 }
 
 // Max is MAX of the column, as a Term. NULL when no row has a value.
-func (c OrderedCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+func (c TimeCol[E, V]) Max[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
 }
 
 // Set sets the column to v.
-func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
-func (c OrderedCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
-func (c OrderedCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+func (c TimeCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// NumberCol is the handle of a numeric column. I is the column's index; velox-gen sets it.
+// OtherCol is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database. I is the column's index; velox-gen sets it.
+type OtherCol[E, V any] struct{ I int32 }
+
+func (c OtherCol[E, V]) column(*E) int32 { return c.I }
+
+// EQ is column = v.
+func (c OtherCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
+
+// NEQ is column <> v.
+func (c OtherCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
+}
+
+// In is column IN (vs...). With no values it is false.
+func (c OtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
+}
+
+// NotIn is column NOT IN (vs...). With no values it is true.
+func (c OtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c OtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] { return selectOf[E, V](c.I, ps) }
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c OtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c OtherCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
+}
+
+// Asc orders by the column, ascending.
+func (c OtherCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
+
+// Desc orders by the column, descending.
+func (c OtherCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
+	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
+}
+
+// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
+func (c OtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
+
+// GT is column > v.
+func (c OtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
+}
+
+// GTE is column >= v.
+func (c OtherCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
+}
+
+// LT is column < v.
+func (c OtherCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
+}
+
+// LTE is column <= v.
+func (c OtherCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
+}
+
+// Between is column BETWEEN lo AND hi.
+func (c OtherCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
+}
+
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c OtherCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c OtherCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c OtherCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c OtherCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
+// Set sets the column to v.
+func (c OtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+func (c OtherCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
+// NumberCol is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal. I is the column's index; velox-gen sets it.
 type NumberCol[E, V any] struct{ I int32 }
 
 func (c NumberCol[E, V]) column(*E) int32 { return c.I }
@@ -518,137 +617,267 @@ func (c NullCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](
 // NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](ch, ch.row.New, c.I) }
 
-// NullOrderedCol is OrderedCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
-type NullOrderedCol[E, V any] struct{ I int32 }
+// NullTimeCol is TimeCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+type NullTimeCol[E, V any] struct{ I int32 }
 
-func (c NullOrderedCol[E, V]) column(*E) int32 { return c.I }
+func (c NullTimeCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c NullOrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+func (c NullTimeCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
 }
 
 // NEQ is column <> v.
-func (c NullOrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+func (c NullTimeCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
 }
 
 // In is column IN (vs...). With no values it is false.
-func (c NullOrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
+func (c NullTimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
-func (c NullOrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
+func (c NullTimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
-func (c NullOrderedCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
+func (c NullTimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
 	return selectOf[E, V](c.I, ps)
 }
 
 // InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
-func (c NullOrderedCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+func (c NullTimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
 
 // NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
-func (c NullOrderedCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+func (c NullTimeCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
 	return Not(inSelect[E](c.I, s))
 }
 
 // Asc orders by the column, ascending.
-func (c NullOrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
+func (c NullTimeCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
 
 // Desc orders by the column, descending.
-func (c NullOrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
+func (c NullTimeCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
 
 // Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
-func (c NullOrderedCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
+func (c NullTimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
 
 // GT is column > v.
-func (c NullOrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+func (c NullTimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
 }
 
 // GTE is column >= v.
-func (c NullOrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
+func (c NullTimeCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
 }
 
 // LT is column < v.
-func (c NullOrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+func (c NullTimeCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
 }
 
 // LTE is column <= v.
-func (c NullOrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
+func (c NullTimeCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
 }
 
 // Between is column BETWEEN lo AND hi.
-func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
+func (c NullTimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
-func (c NullOrderedCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+func (c NullTimeCol[E, V]) Count[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
 }
 
 // CountDistinct is COUNT(DISTINCT column), as a Term.
-func (c NullOrderedCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+func (c NullTimeCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
 }
 
 // Min is MIN of the column, as a Term. NULL when no row has a value.
-func (c NullOrderedCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+func (c NullTimeCol[E, V]) Min[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
 }
 
 // Max is MAX of the column, as a Term. NULL when no row has a value.
-func (c NullOrderedCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+func (c NullTimeCol[E, V]) Max[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
 }
 
 // Set sets the column to v.
-func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+func (c NullTimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
 // SetNull sets the column to NULL.
-func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+func (c NullTimeCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
 }
 
 // IsNull is column IS NULL.
-func (c NullOrderedCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
+func (c NullTimeCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
 }
 
 // NotNull is column IS NOT NULL.
-func (c NullOrderedCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
+func (c NullTimeCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
-func (c NullOrderedCol[E, V]) Old[_ Lazy[V]](ch Change) V {
-	return changeValue[E, V](ch, ch.row.Old, c.I)
-}
+func (c NullTimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
-func (c NullOrderedCol[E, V]) New[_ Lazy[V]](ch Change) V {
-	return changeValue[E, V](ch, ch.row.New, c.I)
-}
+func (c NullTimeCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
-func (c NullOrderedCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
+func (c NullTimeCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.Old, c.I)
 }
 
 // NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
-func (c NullOrderedCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
+func (c NullTimeCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
+	return changePtr[E, V](ch, ch.row.New, c.I)
+}
+
+// NullOtherCol is OtherCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+type NullOtherCol[E, V any] struct{ I int32 }
+
+func (c NullOtherCol[E, V]) column(*E) int32 { return c.I }
+
+// EQ is column = v.
+func (c NullOtherCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
+
+// NEQ is column <> v.
+func (c NullOtherCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
+}
+
+// In is column IN (vs...). With no values it is false.
+func (c NullOtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
+}
+
+// NotIn is column NOT IN (vs...). With no values it is true.
+func (c NullOtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
+}
+
+// Select is the subquery of the column's values in the rows that meet every p, for another handle's InSelect or NotInSelect: SELECT column FROM table WHERE ps…. It reads no metadata, so it may be called anywhere, an entity's Policy and Hooks bodies included.
+func (c NullOtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V] {
+	return selectOf[E, V](c.I, ps)
+}
+
+// InSelect is true when the column equals a value of s: column IN (SELECT …). It is written as an EXISTS correlated on the two columns, and the subquery's entity gets its Read policy and interceptors' conditions, as HasWith's target does. NULL is never among the values, and a NULL column is not in them. On MySQL, an UPDATE or DELETE whose subquery reads the table being changed fails with error 1093.
+func (c NullOtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E] { return inSelect[E](c.I, s) }
+
+// NotInSelect is Not(InSelect(s)): true when the column equals no value of s, and for a NULL column. Unlike SQL's NOT IN, a NULL among the subquery's values does not make it false for every row.
+func (c NullOtherCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E] {
+	return Not(inSelect[E](c.I, s))
+}
+
+// Asc orders by the column, ascending.
+func (c NullOtherCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Column: int(c.I)}} }
+
+// Desc orders by the column, descending.
+func (c NullOtherCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
+	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
+}
+
+// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
+func (c NullOtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
+
+// GT is column > v.
+func (c NullOtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
+}
+
+// GTE is column >= v.
+func (c NullOtherCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
+}
+
+// LT is column < v.
+func (c NullOtherCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
+}
+
+// LTE is column <= v.
+func (c NullOtherCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
+}
+
+// Between is column BETWEEN lo AND hi.
+func (c NullOtherCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
+}
+
+// Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
+func (c NullOtherCol[E, V]) Count[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
+}
+
+// CountDistinct is COUNT(DISTINCT column), as a Term.
+func (c NullOtherCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermCountDistinct, engine.ColumnTerm(c.I))}
+}
+
+// Min is MIN of the column, as a Term. NULL when no row has a value.
+func (c NullOtherCol[E, V]) Min[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMin, engine.ColumnTerm(c.I))}
+}
+
+// Max is MAX of the column, as a Term. NULL when no row has a value.
+func (c NullOtherCol[E, V]) Max[_ Lazy[V]]() Term[E] {
+	return Term[E]{engine.AggTerm(engine.TermMax, engine.ColumnTerm(c.I))}
+}
+
+// Set sets the column to v.
+func (c NullOtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// SetNull sets the column to NULL.
+func (c NullOtherCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
+}
+
+// IsNull is column IS NULL.
+func (c NullOtherCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
+}
+
+// NotNull is column IS NOT NULL.
+func (c NullOtherCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
+}
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+func (c NullOtherCol[E, V]) Old[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.Old, c.I)
+}
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+func (c NullOtherCol[E, V]) New[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.New, c.I)
+}
+
+// OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
+func (c NullOtherCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
+	return changePtr[E, V](ch, ch.row.Old, c.I)
+}
+
+// NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
+func (c NullOtherCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
 

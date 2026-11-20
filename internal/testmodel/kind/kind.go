@@ -7,8 +7,36 @@ package kind
 import (
 	"database/sql/driver"
 	"fmt"
+	"strconv"
 	"time"
 )
+
+// Dec is a decimal held as its text, standing in for a decimal library's
+// type such as shopspring's decimal.Decimal: an Other field of it in a
+// numeric column has a NumberCol, which sums and adds.
+type Dec string
+
+// Value writes the decimal as its text, which every database converts to its
+// numeric column.
+func (d Dec) Value() (driver.Value, error) { return string(d), nil }
+
+// Scan reads the text PostgreSQL and MySQL hand over for a numeric, and the
+// number SQLite stores for one.
+func (d *Dec) Scan(src any) error {
+	switch v := src.(type) {
+	case string:
+		*d = Dec(v)
+	case []byte:
+		*d = Dec(v)
+	case int64:
+		*d = Dec(strconv.FormatInt(v, 10))
+	case float64:
+		*d = Dec(strconv.FormatFloat(v, 'f', -1, 64))
+	default:
+		return fmt.Errorf("kind.Dec: cannot scan a %T", src)
+	}
+	return nil
+}
 
 // Status is a named string type: its handle is a StringCol.
 type Status string

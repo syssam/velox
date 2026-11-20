@@ -63,7 +63,7 @@ type PostHandles struct {
 	// Status is the column status.
 	Status velox.Col[Post, PostStatus]
 	// PublishedAt is the column published_at.
-	PublishedAt velox.NullOrderedCol[Post, time.Time]
+	PublishedAt velox.NullTimeCol[Post, time.Time]
 	// Tags is the column tags.
 	Tags velox.JSONCol[Post, []string]
 	// Views is the column views.
@@ -79,7 +79,7 @@ var Posts = PostHandles{
 	Title:       velox.StringCol[Post, string]{I: postColTitle},
 	Slug:        velox.StringCol[Post, string]{I: postColSlug},
 	Status:      velox.Col[Post, PostStatus]{I: postColStatus},
-	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: postColPublishedAt},
+	PublishedAt: velox.NullTimeCol[Post, time.Time]{I: postColPublishedAt},
 	Tags:        velox.JSONCol[Post, []string]{I: postColTags},
 	Views:       velox.NumberCol[Post, int]{I: postColViews},
 	Author:      velox.Rel[Post, User]{I: postEdgeAuthor},

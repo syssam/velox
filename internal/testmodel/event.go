@@ -29,16 +29,16 @@ type EventHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Event, int64]
 	// At is the column at.
-	At velox.OrderedCol[Event, kind.Moment]
+	At velox.TimeCol[Event, kind.Moment]
 	// MaybeAt is the column maybe_at.
-	MaybeAt velox.NullOrderedCol[Event, kind.Moment]
+	MaybeAt velox.NullTimeCol[Event, kind.Moment]
 }
 
 // Events holds the typed handles of Event's columns.
 var Events = EventHandles{
 	ID:      velox.NumberCol[Event, int64]{I: eventColID},
-	At:      velox.OrderedCol[Event, kind.Moment]{I: eventColAt},
-	MaybeAt: velox.NullOrderedCol[Event, kind.Moment]{I: eventColMaybeAt},
+	At:      velox.TimeCol[Event, kind.Moment]{I: eventColAt},
+	MaybeAt: velox.NullTimeCol[Event, kind.Moment]{I: eventColMaybeAt},
 }
 
 var eventMeta velox.MetaOnce[Event]

@@ -77,9 +77,9 @@ type UserHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[User, time.Time]
+	CreatedAt velox.TimeCol[User, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[User, time.Time]
+	UpdatedAt velox.TimeCol[User, time.Time]
 	// CreatedBy is the column created_by.
 	CreatedBy velox.StringCol[User, string]
 	// OrgID is the column org_id.
@@ -115,8 +115,8 @@ type UserHandles struct {
 // Users holds the typed handles of User's columns and relations.
 var Users = UserHandles{
 	ID:           velox.NumberCol[User, int64]{I: userColID},
-	CreatedAt:    velox.OrderedCol[User, time.Time]{I: userColCreatedAt},
-	UpdatedAt:    velox.OrderedCol[User, time.Time]{I: userColUpdatedAt},
+	CreatedAt:    velox.TimeCol[User, time.Time]{I: userColCreatedAt},
+	UpdatedAt:    velox.TimeCol[User, time.Time]{I: userColUpdatedAt},
 	CreatedBy:    velox.StringCol[User, string]{I: userColCreatedBy},
 	OrgID:        velox.NumberCol[User, int64]{I: userColOrgID},
 	Name:         velox.StringCol[User, string]{I: userColName},

@@ -56,9 +56,9 @@ type InvoiceHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Invoice, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Invoice, time.Time]
+	CreatedAt velox.TimeCol[Invoice, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Invoice, time.Time]
+	UpdatedAt velox.TimeCol[Invoice, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Invoice, int64]
 	// Number is the column number.
@@ -68,7 +68,7 @@ type InvoiceHandles struct {
 	// Paid is the column paid.
 	Paid velox.Col[Invoice, bool]
 	// PaidAt is the column paid_at.
-	PaidAt velox.NullOrderedCol[Invoice, time.Time]
+	PaidAt velox.NullTimeCol[Invoice, time.Time]
 	// Note is the column note.
 	Note velox.StringCol[Invoice, string]
 	// Data is the column data.
@@ -80,13 +80,13 @@ type InvoiceHandles struct {
 // Invoices holds the typed handles of Invoice's columns and relations.
 var Invoices = InvoiceHandles{
 	ID:        velox.NumberCol[Invoice, int64]{I: invoiceColID},
-	CreatedAt: velox.OrderedCol[Invoice, time.Time]{I: invoiceColCreatedAt},
-	UpdatedAt: velox.OrderedCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
+	CreatedAt: velox.TimeCol[Invoice, time.Time]{I: invoiceColCreatedAt},
+	UpdatedAt: velox.TimeCol[Invoice, time.Time]{I: invoiceColUpdatedAt},
 	OrgID:     velox.NumberCol[Invoice, int64]{I: invoiceColOrgID},
 	Number:    velox.StringCol[Invoice, string]{I: invoiceColNumber},
 	Total:     velox.NumberCol[Invoice, float64]{I: invoiceColTotal},
 	Paid:      velox.Col[Invoice, bool]{I: invoiceColPaid},
-	PaidAt:    velox.NullOrderedCol[Invoice, time.Time]{I: invoiceColPaidAt},
+	PaidAt:    velox.NullTimeCol[Invoice, time.Time]{I: invoiceColPaidAt},
 	Note:      velox.StringCol[Invoice, string]{I: invoiceColNote},
 	Data:      velox.Col[Invoice, []byte]{I: invoiceColData},
 	Items:     velox.Rel[Invoice, Item]{I: invoiceEdgeItems},

@@ -35,13 +35,13 @@ type ProjectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Project, time.Time]
+	CreatedAt velox.TimeCol[Project, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Project, time.Time]
+	UpdatedAt velox.TimeCol[Project, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Project, int64]
 	// DeletedAt is the column deleted_at.
-	DeletedAt velox.NullOrderedCol[Project, time.Time]
+	DeletedAt velox.NullTimeCol[Project, time.Time]
 	// Name is the column name.
 	Name velox.StringCol[Project, string]
 }
@@ -49,10 +49,10 @@ type ProjectHandles struct {
 // Projects holds the typed handles of Project's columns.
 var Projects = ProjectHandles{
 	ID:        velox.NumberCol[Project, int64]{I: projectColID},
-	CreatedAt: velox.OrderedCol[Project, time.Time]{I: projectColCreatedAt},
-	UpdatedAt: velox.OrderedCol[Project, time.Time]{I: projectColUpdatedAt},
+	CreatedAt: velox.TimeCol[Project, time.Time]{I: projectColCreatedAt},
+	UpdatedAt: velox.TimeCol[Project, time.Time]{I: projectColUpdatedAt},
 	OrgID:     velox.NumberCol[Project, int64]{I: projectColOrgID},
-	DeletedAt: velox.NullOrderedCol[Project, time.Time]{I: projectColDeletedAt},
+	DeletedAt: velox.NullTimeCol[Project, time.Time]{I: projectColDeletedAt},
 	Name:      velox.StringCol[Project, string]{I: projectColName},
 }
 

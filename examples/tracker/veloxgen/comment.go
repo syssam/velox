@@ -54,9 +54,9 @@ type CommentHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Comment, int64]
 	// CreatedAt is the column created_at.
-	CreatedAt velox.OrderedCol[Comment, time.Time]
+	CreatedAt velox.TimeCol[Comment, time.Time]
 	// UpdatedAt is the column updated_at.
-	UpdatedAt velox.OrderedCol[Comment, time.Time]
+	UpdatedAt velox.TimeCol[Comment, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Comment, int64]
 	// IssueID is the column issue_id.
@@ -74,8 +74,8 @@ type CommentHandles struct {
 // Comments holds the typed handles of Comment's columns and relations.
 var Comments = CommentHandles{
 	ID:        velox.NumberCol[Comment, int64]{I: commentColID},
-	CreatedAt: velox.OrderedCol[Comment, time.Time]{I: commentColCreatedAt},
-	UpdatedAt: velox.OrderedCol[Comment, time.Time]{I: commentColUpdatedAt},
+	CreatedAt: velox.TimeCol[Comment, time.Time]{I: commentColCreatedAt},
+	UpdatedAt: velox.TimeCol[Comment, time.Time]{I: commentColUpdatedAt},
 	OrgID:     velox.NumberCol[Comment, int64]{I: commentColOrgID},
 	IssueID:   velox.NumberCol[Comment, int64]{I: commentColIssueID},
 	AuthorID:  velox.NumberCol[Comment, int64]{I: commentColAuthorID},

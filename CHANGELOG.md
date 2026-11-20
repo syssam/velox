@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A `field.Other` field in a decimal column (its `SchemaType` names
+  `numeric` or `decimal`, on MySQL also `dec` or `fixed`, for every dialect
+  it lists), such as a `decimal.Decimal`, has a `NumberCol` (`NullNumberCol`
+  when Nillable) and gains `Sum`, `Avg`, `Add` and `Sub`, and `velox.Sum`,
+  `Avg`, `SumBy`… take it (ADR 0096). The value binds and scans through the
+  type's own `driver.Valuer` and `sql.Scanner`.
 - Lean inserts (ADR 0093): an INSERT leaves out a column that every row
   leaves empty: a nil nullable column, or the zero value in a column whose
   database default the schema declares (`field.SchemaDefault`,
@@ -86,8 +92,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `Policy() privacy.Policy`, and for such a schema writes
   `<out>/privacy/privacy.go`, veloxe's generated privacy package, as aliases
   of velox's.
-- A `field.Other` field's handle is `velox.OrderedCol`: GT, GTE, LT, LTE,
-  Between, Min and Max, compared by its SQL type. velox-graphql's WhereOps
+- A `field.Other` field's handle is `velox.OtherCol` (`NumberCol` in a
+  decimal column, ADR 0096): GT, GTE, LT, LTE, Between, Min and Max,
+  compared by its SQL type. velox-graphql's WhereOps
   gives such a field equality and comparison predicates (ADR 0087).
 - velox-graphql's option `compat=veloxe` makes the API veloxe's generator
   made: names from the schema name (`customerId`, `imageUrl`), foreign keys in
@@ -421,6 +428,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- Handles are named by what the column holds (ADR 0096): a time field's is
+  `velox.TimeCol` (`NullTimeCol`), and an Other field's that is no decimal
+  `velox.OtherCol` (`NullOtherCol`), each with the methods `OrderedCol` had.
+  `OrderedCol` and `NullOrderedCol` are removed. Regenerate:
+  `velox.GeneratedCodeIsVersion25` replaces Version24.
 - An insert that leaves a nullable column nil leaves the column out of the
   INSERT (ADR 0093), as ent and old velox do, where it wrote NULL. A
   `DEFAULT` the table has but the schema does not declare now applies to

@@ -299,7 +299,7 @@ command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion24`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion25`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -428,8 +428,22 @@ The terminal methods:
 | `SQL(ctx)` | the statement and arguments it would send, without sending them |
 
 Conditions passed to one `Where` are ANDed. Combine them with `velox.Or`,
-`velox.And` and `velox.Not`. String handles add `HasPrefix`, `Contains`,
-`EqualFold`, `ContainsFold` and `Like`; ordered handles add `GT`, `Between`, `In` and the rest.
+`velox.And` and `velox.Not`. A field's handle is named by what its column
+holds, and has the methods that make sense for it:
+
+| Field | Handle | Beyond `EQ`, `NEQ`, `In`, `NotIn`, `Asc`, `Desc`, `Set`, `Count`, `Key` |
+|---|---|---|
+| bool, enum, bytes | `Col` | nothing more |
+| time | `TimeCol` | `GT`, `GTE`, `LT`, `LTE`, `Between`, `Min`, `Max` |
+| number, and an Other field in a `numeric` or `decimal` column (a `decimal.Decimal`) | `NumberCol` | those, and `Sum`, `Avg`, `Add`, `Sub` |
+| string | `StringCol` | the comparisons, and `HasPrefix`, `HasSuffix`, `Contains`, `EqualFold`, `ContainsFold`, `Like` |
+| any other Other field (a range, a point) | `OtherCol` | `GT`, `GTE`, `LT`, `LTE`, `Between`, `Min`, `Max`, compared by its SQL type |
+| json | `JSONCol` | none of those but `Set`: `Text`, `Number`, `Bool`, `HasKey`, `Has`… test inside the document |
+
+A nullable field's handle is the `Null` form, `NullTimeCol` and so on, which
+adds `IsNull`, `NotNull` and `SetNull`. An Other field is a number when its
+`SchemaType` names `numeric` or `decimal` (MySQL also `dec` and `fixed`) for
+every dialect it lists.
 
 ### Every read needs a Limit
 

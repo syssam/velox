@@ -115,7 +115,7 @@ type BindHandles struct {
 	// ShortData is the column short_data.
 	ShortData velox.Col[Bind, []byte]
 	// At is the column at.
-	At velox.OrderedCol[Bind, time.Time]
+	At velox.TimeCol[Bind, time.Time]
 	// UID is the column uid.
 	UID velox.Col[Bind, bindtype.UUID]
 	// Tags is the column tags.
@@ -153,7 +153,7 @@ var Binds = BindHandles{
 	Level:     velox.Col[Bind, bindtype.Level]{I: bindColLevel},
 	Data:      velox.Col[Bind, []byte]{I: bindColData},
 	ShortData: velox.Col[Bind, []byte]{I: bindColShortData},
-	At:        velox.OrderedCol[Bind, time.Time]{I: bindColAt},
+	At:        velox.TimeCol[Bind, time.Time]{I: bindColAt},
 	UID:       velox.Col[Bind, bindtype.UUID]{I: bindColUID},
 	Tags:      velox.JSONCol[Bind, []string]{I: bindColTags},
 	Labels:    velox.JSONCol[Bind, []string]{I: bindColLabels},

@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"math/rand"
@@ -119,11 +120,11 @@ func TestLowerTypes(t *testing.T) {
 	for _, c := range []struct{ name, goType, handle string }{
 		{"id", "int64", "velox.NumberCol[LwUser, int64]"},
 		{"name", "string", "velox.StringCol[LwUser, string]"},
-		{"nick", "string", "velox.StringCol[LwUser, string]"},             // Optional alone is a value on a NOT NULL column
-		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // Nillable, with a Default that does not change the type
-		{"role", "LwUserRole", "velox.Col[LwUser, LwUserRole]"},           // an enum: equality and order, no Contains
-		{"seen", "*time.Time", "velox.NullOrderedCol[LwUser, time.Time]"}, //
-		{"tags", "[]string", "velox.JSONCol[LwUser, []string]"},           // a JSON slice is never a pointer
+		{"nick", "string", "velox.StringCol[LwUser, string]"},          // Optional alone is a value on a NOT NULL column
+		{"active", "*bool", "velox.NullCol[LwUser, bool]"},             // Nillable, with a Default that does not change the type
+		{"role", "LwUserRole", "velox.Col[LwUser, LwUserRole]"},        // an enum: equality and order, no Contains
+		{"seen", "*time.Time", "velox.NullTimeCol[LwUser, time.Time]"}, //
+		{"tags", "[]string", "velox.JSONCol[LwUser, []string]"},        // a JSON slice is never a pointer
 	} {
 		f := u.field(c.name)
 		if f == nil || f.GoType != c.goType || f.Handle != c.handle {
@@ -407,7 +408,7 @@ func TestLowerDefaultKeepsType(t *testing.T) {
 		{"i", "*int", "velox.NullNumberCol[LwDefaults, int]"},
 		{"s", "string", "velox.StringCol[LwDefaults, string]"},
 		{"o", "string", "velox.StringCol[LwDefaults, string]"},
-		{"t", "*time.Time", "velox.NullOrderedCol[LwDefaults, time.Time]"},
+		{"t", "*time.Time", "velox.NullTimeCol[LwDefaults, time.Time]"},
 	} {
 		for _, name := range []string{c.name, c.name + "_def"} {
 			if f := e.field(name); f.GoType != c.goType || f.Handle != c.handle {
@@ -454,7 +455,7 @@ func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
 	// An Other field's SQL type compares and orders, as veloxe's did.
-	if f := e.field("pt"); f.Handle != "velox.OrderedCol[LwMixed, codegen.UUIDValue]" {
+	if f := e.field("pt"); f.Handle != "velox.OtherCol[LwMixed, codegen.UUIDValue]" {
 		t.Errorf("pt's handle is %s", f.Handle)
 	}
 	for _, want := range []string{
@@ -923,13 +924,59 @@ func (LwWhen) Fields() []schema.Field {
 	return []schema.Field{field.Time("at").GoType(LwTime{}), field.Time("opt").Nillable().GoType(LwTime{})}
 }
 
-func TestLowerTimeIsOrdered(t *testing.T) {
+func TestLowerTimeIsTimeCol(t *testing.T) {
 	e := mustLower(t, Config{}, LwWhen{}).entity("LwWhen")
-	if f := e.field("at"); f.Handle != "velox.OrderedCol[LwWhen, codegen.LwTime]" {
+	if f := e.field("at"); f.Handle != "velox.TimeCol[LwWhen, codegen.LwTime]" {
 		t.Errorf("at %+v", f)
 	}
-	if f := e.field("opt"); f.Handle != "velox.NullOrderedCol[LwWhen, codegen.LwTime]" || f.GoType != "*codegen.LwTime" {
+	if f := e.field("opt"); f.Handle != "velox.NullTimeCol[LwWhen, codegen.LwTime]" || f.GoType != "*codegen.LwTime" {
 		t.Errorf("opt %+v", f)
+	}
+}
+
+type LwMoney struct{ schema.Schema }
+
+func (LwMoney) Fields() []schema.Field {
+	dec := map[string]string{"postgres": "numeric(19,4)", "mysql": "DECIMAL(19, 4)", "sqlite": "numeric"}
+	return []schema.Field{
+		field.Other("cost", PointValue{}).SchemaType(dec),
+		field.Other("maybe_cost", PointValue{}).SchemaType(dec).Optional().Nillable(),
+		field.Other("bare", PointValue{}).SchemaType(map[string]string{"postgres": "numeric", "mysql": "decimal"}),
+		field.Other("rate", PointValue{}).SchemaType(map[string]string{"mysql": "fixed(5,2) unsigned"}),
+		field.Other("spot", PointValue{}).SchemaType(map[string]string{"postgres": "point"}),
+		field.Other("half", PointValue{}).SchemaType(map[string]string{"postgres": "numeric(5,2)", "mysql": "double"}),
+		field.Other("maybe_spot", PointValue{}).SchemaType(map[string]string{"postgres": "point"}).Optional().Nillable(),
+		field.Other("text_dec", LwDecText("")).SchemaType(dec),
+		field.Other("text_other", LwDecText("")).SchemaType(map[string]string{"postgres": "citext"}),
+	}
+}
+
+// LwDecText is a decimal held as text, as a string kind.
+type LwDecText string
+
+func (d LwDecText) Value() (driver.Value, error) { return string(d), nil }
+
+// An Other field whose SQL type is a decimal on every dialect it names is a
+// number; any other is an OtherCol, which compares and orders but has no
+// arithmetic.
+func TestLowerDecimalIsNumber(t *testing.T) {
+	e := mustLower(t, Config{}, LwMoney{}).entity("LwMoney")
+	for _, c := range []struct{ field, want string }{
+		{"cost", "velox.NumberCol[LwMoney, codegen.PointValue]"},
+		{"maybe_cost", "velox.NullNumberCol[LwMoney, codegen.PointValue]"},
+		{"bare", "velox.NumberCol[LwMoney, codegen.PointValue]"},
+		{"rate", "velox.NumberCol[LwMoney, codegen.PointValue]"},
+		{"spot", "velox.OtherCol[LwMoney, codegen.PointValue]"},
+		{"half", "velox.OtherCol[LwMoney, codegen.PointValue]"},
+		{"maybe_spot", "velox.NullOtherCol[LwMoney, codegen.PointValue]"},
+		// A string kind in a decimal column is a number; in another column
+		// it stays text.
+		{"text_dec", "velox.NumberCol[LwMoney, codegen.LwDecText]"},
+		{"text_other", "velox.StringCol[LwMoney, codegen.LwDecText]"},
+	} {
+		if f := e.field(c.field); f == nil || f.Handle != c.want {
+			t.Errorf("%s: %+v, want %s", c.field, f, c.want)
+		}
 	}
 }
 

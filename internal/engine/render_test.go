@@ -22,7 +22,7 @@ var (
 	hOrg    = velox.NumberCol[inv, int64]{I: 1}
 	hNumber = velox.StringCol[inv, string]{I: 2}
 	hTotal  = velox.NumberCol[inv, float64]{I: 3}
-	hPaidAt = velox.NullOrderedCol[inv, time.Time]{I: 4}
+	hPaidAt = velox.NullTimeCol[inv, time.Time]{I: 4}
 )
 
 const (

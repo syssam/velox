@@ -101,7 +101,7 @@ type OutField struct {
 	ElemType             string // GoType without the pointer
 	Pointer              bool
 	Unset                string // an Optional value field: the condition on x, its value, that means unset, which Check lets pass; "" when none
-	Handle               string // e.g. "velox.NullOrderedCol[User, time.Time]"
+	Handle               string // e.g. "velox.NullTimeCol[User, time.Time]"
 	Tag                  string // the struct tag, including backquotes
 	Comment              string
 	Sensitive, Immutable bool
@@ -147,4 +147,4 @@ const privacyPkg = "github.com/syssam/velox/privacy"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 24
+const GeneratedCodeVersion = 25

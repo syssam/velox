@@ -49,7 +49,8 @@ an enum field the enum's name, shared by every field of that name.
 - In compat mode `WhereOps()` on a string or integer field named as a key
   (`id`, `*_id`, `*ID`) gives equality alone (EQ, NEQ, In, NotIn, and IsNil
   and NotNil when nullable), as veloxe's defaults did.
-- An Other field's handle is `velox.OrderedCol` (GT, GTE, LT, LTE, Between,
+- An Other field's handle is `velox.OrderedCol` (since 0096 `OtherCol`, or
+  `NumberCol` in a decimal column) (GT, GTE, LT, LTE, Between,
   Min, Max), as veloxe's predicates had them: its SQL type, a decimal most
   often, compares in the database. velox-graphql's WhereOps on it gives
   equality and comparison, typed with its `graphql.Type` scalar.
