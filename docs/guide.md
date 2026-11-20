@@ -1453,8 +1453,7 @@ case errors.Is(err, velox.ErrDenied):
 	// 403
 }
 
-var ce *velox.ConstraintError
-if errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
+if ce, ok := errors.AsType[*velox.ConstraintError](err); ok && ce.Kind == velox.ConstraintUnique {
 	// ce.Constraint names the violated constraint
 }
 ```

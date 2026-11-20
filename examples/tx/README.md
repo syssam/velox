@@ -15,8 +15,8 @@ err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { // nil commits
 
 tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { … })  // nested: a savepoint
 
-var ce *velox.ConstraintError                                    // the same on every dialect
-errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique
+ce, ok := errors.AsType[*velox.ConstraintError](err)            // the same on every dialect
+ok && ce.Kind == velox.ConstraintUnique
 
 db.Tx(ctx, fn, velox.TxRetrySerializable(3))                     // re-run on serialization failure or deadlock
 db.Tx(ctx, fn, velox.TxTimeout(10*time.Millisecond))
