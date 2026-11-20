@@ -327,7 +327,23 @@ func checkProject(st *Statement, who string) error {
 			}
 		}
 	}
+	for _, h := range p.Having {
+		if hasSubquery(h.n) {
+			return fmt.Errorf("velox: %s: Having holds a relation or a subquery; it filters the groups, so test relations in Where", name)
+		}
+	}
 	return checkConds(st, who, p.Having)
+}
+
+// hasSubquery reports whether n or a kid at any depth is an EXISTS: a
+// relation, typed or by name, or a column's subquery. Having refuses one: the
+// scope adds a target's Read conditions to the EXISTS of Where only.
+func hasSubquery(n Node) bool {
+	switch n.Op {
+	case OpExists, OpThrough, opNamedEdge, opNamedSub:
+		return true
+	}
+	return slices.ContainsFunc(n.Kids, hasSubquery)
 }
 
 // checkOrderExprs checks the ordering terms of st that are expressions.

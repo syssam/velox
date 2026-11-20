@@ -144,23 +144,9 @@ func valType(ft reflect.Type) any {
 // resolveStatementNames resolves the conditions by name in st's own
 // conditions, against its entity.
 func resolveStatementNames(st *Statement) error {
-	where, err := resolveNamedPreds(st.Entity, st.Where)
-	if err != nil {
-		return err
-	}
-	st.Where = where
-	if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
-		cw, err := resolveNamedPreds(st.Entity, cf.Where)
-		if err != nil {
-			return err
-		}
-		if &cw[0] != &cf.Where[0] {
-			c := *cf // the caller's clause may be shared with other runs
-			c.Where = cw
-			st.Conflict = &c
-		}
-	}
-	return nil
+	return mapConds(st, func(ps []Predicate) ([]Predicate, error) {
+		return resolveNamedPreds(st.Entity, ps)
+	})
 }
 
 // resolveNamedPreds returns ps with every condition by name resolved

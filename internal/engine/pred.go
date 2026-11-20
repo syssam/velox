@@ -255,20 +255,40 @@ func ResolveStatement(st *Statement) error {
 	if err := resolveStatementNames(st); err != nil {
 		return err
 	}
-	where, err := resolvePreds(st.Where)
+	return mapConds(st, resolvePreds)
+}
+
+// mapConds replaces each list of conditions st holds by f's result: its
+// Where, its conflict clause's Where and its projection's Having. It is the
+// one place that lists them, so a step that must see every condition walks
+// them all. A clause f changes is copied first: the caller's may be shared
+// with other runs. f returns its argument when it changes nothing.
+func mapConds(st *Statement, f func([]Predicate) ([]Predicate, error)) error {
+	where, err := f(st.Where)
 	if err != nil {
 		return err
 	}
 	st.Where = where
 	if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
-		cw, err := resolvePreds(cf.Where)
+		cw, err := f(cf.Where)
 		if err != nil {
 			return err
 		}
 		if &cw[0] != &cf.Where[0] {
-			c := *cf // the caller's clause may be shared with other runs
+			c := *cf
 			c.Where = cw
 			st.Conflict = &c
+		}
+	}
+	if p := st.Project; p != nil && len(p.Having) > 0 {
+		h, err := f(p.Having)
+		if err != nil {
+			return err
+		}
+		if &h[0] != &p.Having[0] {
+			c := *p
+			c.Having = h
+			st.Project = &c
 		}
 	}
 	return nil

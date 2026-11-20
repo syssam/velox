@@ -86,7 +86,9 @@ func (q Query[E]) GroupBy[_ Lazy[E]](ts ...Selectable[E]) Query[E] {
 }
 
 // Having returns the query keeping the groups where all of ps hold: an Expr
-// of aggregate terms. It needs Select.
+// of aggregate terms. It needs Select. A relation or a column subquery in
+// ps fails the statement: test those in Where, where the target's policies
+// apply.
 func (q Query[E]) Having[_ Lazy[E]](ps ...Pred[E]) Query[E] {
 	if q = q.needProject("Having"); q.s.St.Project == nil {
 		return q

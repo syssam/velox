@@ -63,6 +63,24 @@ func TestSelectSQL(t *testing.T) {
 	}
 }
 
+// TestSelectHavingByName: a condition by name in Having is resolved against
+// the entity, as one in Where is, and renders as the typed one does.
+func TestSelectHavingByName(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	q := db.Query[inv]().Select(I.OrgID).GroupBy(I.OrgID).Limit(5)
+	byName, _, err := q.Having(velox.Pred[inv](velox.FieldEQ("org_id", int64(1)))).SQL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	typed, _, err := q.Having(I.OrgID.EQ(1)).SQL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if byName != typed || !strings.Contains(byName, `HAVING "org_id" = $1`) {
+		t.Errorf("by name:\n%s\ntyped:\n%s", byName, typed)
+	}
+}
+
 // TestSelectTerms: each kind of term renders, aggregates over expressions
 // and DISTINCT too, and an Expr takes a term in place of a column.
 func TestSelectTerms(t *testing.T) {
@@ -208,6 +226,21 @@ func TestSelectRefused(t *testing.T) {
 		{"Having without Select", func() error {
 			return rowsErr(db.Query[inv]().Having(velox.Expr[inv]("? > 1", I.Total)).Limit(5))
 		}, "Select"},
+		{"a relation in Having", func() error {
+			return rowsErr(base().GroupBy(I.OrgID).Having(I.Items.Has()))
+		}, "Having"},
+		{"a relation by name in Having", func() error {
+			return rowsErr(base().GroupBy(I.OrgID).Having(velox.Pred[inv](velox.HasEdge("items"))))
+		}, "Having"},
+		{"a relation inside Not in Having", func() error {
+			return rowsErr(base().GroupBy(I.OrgID).Having(velox.Not(I.Items.Has())))
+		}, "Having"},
+		{"a column subquery in Having", func() error {
+			return rowsErr(base().GroupBy(I.OrgID).Having(velox.Pred[inv](velox.FieldInSelect("id", "Item", "invoice_id"))))
+		}, "Having"},
+		{"an unknown column by name in Having", func() error {
+			return rowsErr(base().GroupBy(I.OrgID).Having(velox.Pred[inv](velox.FieldEQ("nope", 1))))
+		}, "nope"},
 		{"no Limit", func() error { return rowsErr(db.Query[inv]().Select(I.OrgID)) }, "Limit"},
 		{"aggregate of an aggregate", func() error {
 			return rowsErr(db.Query[inv]().Select(I.Total.Sum().Max()).Limit(5))
