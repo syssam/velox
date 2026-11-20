@@ -1120,6 +1120,9 @@ func (w *writer) updateStmt(st *Statement) {
 		case AssignSub:
 			w.arith(a, " - ")
 			continue
+		case AssignExpr:
+			w.setExpr(a)
+			continue
 		}
 		w.colArg(a.Column, a.Value)
 	}

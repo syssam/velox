@@ -144,6 +144,9 @@ func checkColumns(st *Statement, who string) error {
 	if err := checkOrderExprs(st, who); err != nil {
 		return err
 	}
+	if err := checkSetExprs(st, who); err != nil {
+		return err
+	}
 	if st.Conflict != nil {
 		return checkConds(st, who, st.Conflict.Where)
 	}

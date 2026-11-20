@@ -178,6 +178,9 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	for _, a := range st.Set {
 		k = binary.AppendUvarint(k, uint64(a.Column))
 		k = append(k, byte(a.Op))
+		if a.Op == AssignExpr {
+			k = termKey(k, exprAssigned(a))
+		}
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Rows)))
 	if st.Op == OpInsert {

@@ -82,16 +82,19 @@ type AssignOp uint8
 
 // The assignment operators.
 const (
-	AssignSet AssignOp = iota + 1 // column = value
-	AssignAdd                     // column = column + value
-	AssignSub                     // column = column - value
+	AssignSet  AssignOp = iota + 1 // column = value
+	AssignAdd                      // column = column + value
+	AssignSub                      // column = column - value
+	AssignExpr                     // column = expression, made by velox.SetExpr
 )
 
 // Assignment is one column an UPDATE sets.
 type Assignment struct {
 	Column int      // index into velox.EntityInfo.Columns
 	Op     AssignOp // how the column is assigned
-	Value  any      // the value assigned, added or subtracted
+	// Value is the value assigned, added or subtracted. For AssignExpr it is
+	// the expression, an untyped.Term, which only velox reads.
+	Value any
 }
 
 // OrderTerm is an ordering by one column of a velox.Statement's entity. It is

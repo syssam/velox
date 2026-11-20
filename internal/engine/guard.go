@@ -81,6 +81,9 @@ func (db *DB) guard(st *Statement) error {
 	if err := checkOrderExprs(st, "an ordering names"); err != nil {
 		return err
 	}
+	if err := checkSetExprs(st, "an assigned expression names"); err != nil {
+		return err
+	}
 	if err := guardJoins(st); err != nil {
 		return err
 	}

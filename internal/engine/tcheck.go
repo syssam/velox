@@ -112,10 +112,11 @@ func checkCol(in *EntityInfo, c int) error {
 // type: the type the column's handle takes, or a pointer to it. A nil value
 // is NULL, which the column's nullability decides. An assignment of another
 // entity's column of the same Go type is not told from one of this
-// entity's: an Assignment carries no entity.
+// entity's: an Assignment carries no entity. An expression's value is
+// checked with the statement (checkSetExprs).
 func (t *table) checkAssign(a Assignment) error {
 	want, _ := t.vals[a.Column].(reflect.Type)
-	if a.Value == nil || want == nil {
+	if a.Value == nil || want == nil || a.Op == AssignExpr {
 		return nil
 	}
 	got := reflect.TypeOf(a.Value)
