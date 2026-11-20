@@ -89,8 +89,6 @@ func defDB(t *testing.T, opts ...velox.Option) (*velox.DB, *sql.DB) {
 	return velox.Open(velox.SQLite, raw, opts...), raw
 }
 
-func ptr[T any](v T) *T { return &v }
-
 // TestInsertDatabaseDefaults: a zero value in a column with a declared
 // database default leaves the column to the database, and the stored value
 // is read back into the entity with RETURNING; a value, a non-nil pointer to
@@ -110,7 +108,7 @@ func TestInsertDatabaseDefaults(t *testing.T) {
 		t.Errorf("read back: %+v", a)
 	}
 
-	b := dDef{Name: "b", Status: "done", Score: 3, Note: ptr("")}
+	b := dDef{Name: "b", Status: "done", Score: 3, Note: new("")}
 	got, _, err = db.Insert(&b).SQL(ctx)
 	if want := `INSERT INTO "ddefs" ("name", "status", "score", "note") VALUES (?, ?, ?, ?) RETURNING "id"`; err != nil || got != want {
 		t.Fatalf("SQL with values:\n got %s, %v\nwant %s", got, err, want)
@@ -177,7 +175,7 @@ func TestInsertDatabaseDefaultsMySQL(t *testing.T) {
 	}
 
 	e = &fakeconn.Exec{Affected: 1, LastID: 10, HasLastID: true}
-	b := dDef{Name: "b", Status: "s", Score: 1, Note: ptr("x")}
+	b := dDef{Name: "b", Status: "s", Score: 1, Note: new("x")}
 	if err := openFake(velox.MySQL, e).Insert(&b).Exec(ctx); err != nil || len(e.Log) != 1 {
 		t.Errorf("an insert with every value sends one statement: %v, %q", err, e.Log)
 	}
