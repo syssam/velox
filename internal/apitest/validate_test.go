@@ -17,14 +17,14 @@ func TestInsertValidates(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	tctx := testmodel.Org.With(context.Background(), int64(7))
 	err := db.Insert(&fixture.DAuthor{Name: ""}).Exec(tctx)
-	var ve *velox.ValidationError
-	if !errors.As(err, &ve) || ve.Field != "Name" || !errors.Is(err, fixture.ErrEmptyName) || err.Error() != "velox: fixture.DAuthor: Name: must not be empty" {
+	if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "Name" || !errors.Is(err, fixture.ErrEmptyName) || err.Error() != "velox: fixture.DAuthor: Name: must not be empty" {
 		t.Fatalf("got %v", err)
 	}
 	if e.Calls != 0 {
 		t.Fatal("a refused row sends nothing")
 	}
-	if err := db.InsertAll([]fixture.DAuthor{{Name: "ok"}, {Name: "this name is far too long"}}).Exec(tctx); !errors.As(err, &ve) {
+	err = db.InsertAll([]fixture.DAuthor{{Name: "ok"}, {Name: "this name is far too long"}}).Exec(tctx)
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok {
 		t.Fatalf("InsertAll validates every row: %v", err)
 	}
 	if e.Calls != 0 {
@@ -36,8 +36,7 @@ func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
 	tctx := testmodel.Org.With(context.Background(), int64(7))
 	_, err := db.Update[fixture.DAuthor]().Set(fixture.DAuthors.Name.Set("")).Where(fixture.DAuthors.ID.EQ(1)).Exec(tctx)
-	var ve *velox.ValidationError
-	if !errors.As(err, &ve) {
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok {
 		t.Fatalf("got %v", err)
 	}
 	_, err = db.Update[fixture.DAuthor]().Set(fixture.DAuthors.CreatedAt.Set(time.Now())).Where(fixture.DAuthors.ID.EQ(1)).Exec(tctx)
@@ -49,7 +48,8 @@ func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 	a.Name = ""
-	if err := db.Save(&a, fixture.DAuthors.Name).Exec(tctx); !errors.As(err, &ve) {
+	err = db.Save(&a, fixture.DAuthors.Name).Exec(tctx)
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok {
 		t.Fatalf("Save validates: %v", err)
 	}
 	if err := db.Insert(&fixture.DAuthor{Name: "ada"}).OnConflict(fixture.DAuthors.ID).Update(fixture.DAuthors.CreatedAt).Exec(tctx); !errors.Is(err, velox.ErrImmutable) || err.Error() != "velox: fixture.DAuthor: CreatedAt: column is immutable" {
@@ -62,8 +62,7 @@ func TestInsertValidatesAPointerColumnByItsElement(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	bad := "ada"
 	err := db.Insert(&fixture.DAuthor{Name: "ada", Email: &bad}).Exec(testmodel.Org.With(context.Background(), int64(7)))
-	var ve *velox.ValidationError
-	if !errors.As(err, &ve) || ve.Field != "Email" || err.Error() != "velox: fixture.DAuthor: Email: not an email" || e.Calls != 0 {
+	if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "Email" || err.Error() != "velox: fixture.DAuthor: Email: not an email" || e.Calls != 0 {
 		t.Fatalf("got %v", err)
 	}
 	ok := "ada@example.com"
@@ -93,13 +92,13 @@ func TestUpdateSetNullIsNotValidated(t *testing.T) {
 // Update would, without a DB or a statement: a nil pointer and SetNull are
 // not checked, an unnamed column is not, and an Immutable column is refused.
 func TestValidateBeforeAStatement(t *testing.T) {
-	var ve *velox.ValidationError
 	bad := "ada"
 	err := velox.Validate(&fixture.DAuthor{Name: "", Email: &bad}, fixture.DAuthors.Email)
-	if !errors.As(err, &ve) || ve.Field != "Email" || err.Error() != "velox: fixture.DAuthor: Email: not an email" {
+	if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "Email" || err.Error() != "velox: fixture.DAuthor: Email: not an email" {
 		t.Errorf("Validate(Email): %v", err)
 	}
-	if err := velox.Validate(&fixture.DAuthor{Name: ""}, fixture.DAuthors.Name); !errors.As(err, &ve) || !errors.Is(err, fixture.ErrEmptyName) {
+	err = velox.Validate(&fixture.DAuthor{Name: ""}, fixture.DAuthors.Name)
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok || !errors.Is(err, fixture.ErrEmptyName) {
 		t.Errorf("Validate(Name): %v", err)
 	}
 	// An empty name not named, and a nil Email, are not checked.
@@ -110,7 +109,8 @@ func TestValidateBeforeAStatement(t *testing.T) {
 		t.Errorf("Validate of a valid row: %v", err)
 	}
 
-	if err := velox.ValidateSet(fixture.DAuthors.Name.Set("")); !errors.As(err, &ve) || ve.Field != "Name" {
+	err = velox.ValidateSet(fixture.DAuthors.Name.Set(""))
+	if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "Name" {
 		t.Errorf("ValidateSet(Name): %v", err)
 	}
 	if err := velox.ValidateSet(fixture.DAuthors.Name.Set("ada"), fixture.DAuthors.Email.SetNull()); err != nil {

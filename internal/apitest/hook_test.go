@@ -274,18 +274,17 @@ func (*hPanic) VeloxMeta() *velox.Meta[hPanic] {
 
 func TestHooksAndPolicyRefusals(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	var se *velox.SchemaError
 	err := db.Insert(&hNil{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNil: Hooks()[0] is nil" {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != "velox: apitest.hNil: Hooks()[0] is nil" {
 		t.Fatalf("got %v", err)
 	}
 	// The nil hook's index counts the hooks bound before it, a mixin's.
 	err = db.Insert(&hNilAfter{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.hNilAfter: Hooks()[1] is nil" {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != "velox: apitest.hNilAfter: Hooks()[1] is nil" {
 		t.Fatalf("got %v", err)
 	}
 	err = db.Insert(&hPanic{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: apitest.hPanic: Policy() panicked: ") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.HasPrefix(err.Error(), "velox: apitest.hPanic: Policy() panicked: ") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -417,14 +416,13 @@ func TestValidatorsRunBeforeTheInsertPolicy(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	tctx := testmodel.Org.With(context.Background(), int64(7))
-	var ve *velox.ValidationError
 	bad := "no at sign"
 	err := db.Insert(&fixture.DAuthor{Name: "mallory", Email: &bad}).Exec(tctx)
-	if !errors.As(err, &ve) || errors.Is(err, velox.ErrDenied) || e.Calls != 0 {
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok || errors.Is(err, velox.ErrDenied) || e.Calls != 0 {
 		t.Fatalf("Insert: %v, %d calls", err, e.Calls)
 	}
 	err = db.InsertAll([]fixture.DAuthor{{Name: "ada"}, {Name: "mallory", Email: &bad}}).Exec(tctx)
-	if !errors.As(err, &ve) || errors.Is(err, velox.ErrDenied) || e.Calls != 0 {
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok || errors.Is(err, velox.ErrDenied) || e.Calls != 0 {
 		t.Fatalf("InsertAll: %v, %d calls", err, e.Calls)
 	}
 }
@@ -503,9 +501,8 @@ func TestNilMutatorAndPanickingHooks(t *testing.T) {
 	if err == nil || err.Error() != "velox: apitest.hNilMut: hook: a hook returned a nil Mutator" || e.Calls != 0 {
 		t.Fatalf("%v, %d calls", err, e.Calls)
 	}
-	var se *velox.SchemaError
 	err = db.Insert(&hPanicHooks{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: apitest.hPanicHooks: Hooks() panicked: ") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.HasPrefix(err.Error(), "velox: apitest.hPanicHooks: Hooks() panicked: ") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -620,7 +617,6 @@ func (*wNone) VeloxMeta() *velox.Meta[wNone] {
 // *SchemaError rather than a policy or hook left out; a nil mixin is
 // skipped. A Schema that declares no behaviour is refused too.
 func TestWrongBehaviourIsRefused(t *testing.T) {
-	var se *velox.SchemaError
 	for _, c := range []struct {
 		err  error
 		want string
@@ -630,7 +626,7 @@ func TestWrongBehaviourIsRefused(t *testing.T) {
 		{velox.CheckEntity[wWrongMixin](), "velox: apitest.wWrongMixin: *apitest.wBadMixin's Hooks method is not func() []velox.Hook: velox would not call it"},
 		{velox.CheckEntity[wNone](), "velox: apitest.wNone: Descriptor.Schema, a string, and its mixins declare no Policy, Hooks or Interceptors method; a database schema's name is TableSchema"},
 	} {
-		if !errors.As(c.err, &se) || c.err.Error() != c.want {
+		if _, ok := errors.AsType[*velox.SchemaError](c.err); !ok || c.err.Error() != c.want {
 			t.Errorf("got %v, want %s", c.err, c.want)
 		}
 	}
@@ -641,13 +637,12 @@ func TestWrongBehaviourIsRefused(t *testing.T) {
 func TestUnboundMethodsAreRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	var se *velox.SchemaError
 	err := db.Insert(&uPolicy{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.uPolicy: has a Policy method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)" {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != "velox: apitest.uPolicy: has a Policy method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)" {
 		t.Fatalf("got %v", err)
 	}
 	err = db.Insert(&uHooks{ID: 1}).Exec(ctx)
-	if !errors.As(err, &se) || err.Error() != "velox: apitest.uHooks: has a Hooks method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)" {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != "velox: apitest.uHooks: has a Hooks method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)" {
 		t.Fatalf("got %v", err)
 	}
 	if e.Calls != 0 {
@@ -661,7 +656,7 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 		{velox.CheckEntity[uPolicy](), "velox: apitest.uPolicy: has a Policy method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)"},
 		{velox.CheckEntity[uHooks](), "velox: apitest.uHooks: has a Hooks method, but the metadata does not bind it: velox-gen binds the schema's, and an entity written by hand names itself, Schema: (*E)(nil)"},
 	} {
-		if !errors.As(c.err, &se) || c.err.Error() != c.want {
+		if _, ok := errors.AsType[*velox.SchemaError](c.err); !ok || c.err.Error() != c.want {
 			t.Errorf("CheckEntity: got %v, want %s", c.err, c.want)
 		}
 	}

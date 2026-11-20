@@ -281,8 +281,7 @@ func TestInterceptorErrorIsNotADenial(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	_, err := db.Query[fixture.INote]().Limit(1).All(fixture.WithFilterMode(context.Background(), fixture.FilterFail))
-	var pe *velox.PolicyError
-	if !errors.Is(err, fixture.ErrFilter) || errors.Is(err, velox.ErrDenied) || errors.As(err, &pe) {
+	if _, ok := errors.AsType[*velox.PolicyError](err); !errors.Is(err, fixture.ErrFilter) || errors.Is(err, velox.ErrDenied) || ok {
 		t.Errorf("Filter's error: %v", err)
 	}
 	// Inside an EXISTS, the error names the path.

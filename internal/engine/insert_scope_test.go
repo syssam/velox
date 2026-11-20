@@ -34,8 +34,8 @@ func TestInsertHookCannotMoveTheScope(t *testing.T) {
 func TestUnknownCountFailsClosed(t *testing.T) {
 	st := &velox.Statement{Op: velox.OpInsert, Entity: invInfo, Rows: [][]any{{1}}, Conflict: &velox.ConflictClause{}}
 	engine.SetStmtUpsertPolicy(st, true)
-	var pe *velox.PolicyError
-	if err := engine.CheckUpserted(st, -1); !errors.As(err, &pe) || !errors.Is(err, engine.ErrUnknownAffected) {
+	err := engine.CheckUpserted(st, -1)
+	if _, ok := errors.AsType[*velox.PolicyError](err); !ok || !errors.Is(err, engine.ErrUnknownAffected) {
 		t.Errorf("checkUpserted with -1: %v, want a *PolicyError wrapping errUnknownAffected", err)
 	}
 }

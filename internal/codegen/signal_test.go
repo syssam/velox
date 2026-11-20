@@ -64,8 +64,8 @@ func TestLoadSignalRemovesTempDir(t *testing.T) {
 				t.Fatal(err)
 			}
 			err := cmd.Wait()
-			var ee *exec.ExitError
-			if !errors.As(err, &ee) {
+			ee, ok := errors.AsType[*exec.ExitError](err)
+			if !ok {
 				t.Fatalf("the child exited with %v", err)
 			}
 			ws, ok := ee.Sys().(syscall.WaitStatus)

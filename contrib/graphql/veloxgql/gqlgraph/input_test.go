@@ -104,8 +104,7 @@ func TestCheckedCreate(t *testing.T) {
 	}
 
 	_, err = gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("ok"), items.Code.Set("")})
-	var ve *velox.ValidationError
-	if codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: CreateItemInput.code: invalid value: must not be empty" || !errors.As(err, &ve) {
+	if _, ok := errors.AsType[*velox.ValidationError](err); codeOf(err) != veloxgql.CodeBadUserInput || err.Error() != "veloxgql: CreateItemInput.code: invalid value: must not be empty" || !ok {
 		t.Errorf("an empty code = %v (code %q); want BAD_USER_INPUT naming CreateItemInput.code", err, codeOf(err))
 	}
 	c.CreateInputs = []string{1: "title"}
@@ -115,7 +114,7 @@ func TestCheckedCreate(t *testing.T) {
 	}
 	// A column the input does not name: velox's error, as it is.
 	_, err = gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Age.Set(-1)})
-	if !errors.As(err, &ve) || codeOf(err) != "" {
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok || codeOf(err) != "" {
 		t.Errorf("an unnamed column = %v (code %q); want a *velox.ValidationError, uncoded", err, codeOf(err))
 	}
 }
@@ -153,8 +152,7 @@ func TestCheckedUpdate(t *testing.T) {
 	}
 	set = append(set, items.Name.Set(""))
 	_, err = db.Update[item]().Where(items.ID.EQ(1)).Set(set...).Exec(ctx)
-	var ve *velox.ValidationError
-	if !errors.As(err, &ve) || codeOf(err) != "" {
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok || codeOf(err) != "" {
 		t.Errorf("an invalid setter of the application's = %v (code %q); want a *velox.ValidationError, uncoded", err, codeOf(err))
 	}
 	if got, err := db.Query[item]().Where(items.ID.EQ(1)).One(ctx); err != nil || got.Name != "client" || got.Age != 2 {

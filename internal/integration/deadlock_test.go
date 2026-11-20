@@ -57,8 +57,7 @@ func swallowDeadlock(t *testing.T, tg target) {
 				return ctx.Err()
 			}
 			err := mark(ctx, tx, second, note)
-			var my *mysql.MySQLError
-			if errors.As(err, &my) && my.Number == 1213 {
+			if my, ok := errors.AsType[*mysql.MySQLError](err); ok && my.Number == 1213 {
 				dead = true
 				// Swallowed, and a statement made as though the
 				// transaction were alive.
@@ -91,8 +90,7 @@ func swallowDeadlock(t *testing.T, tg target) {
 	if !victim.dead {
 		t.Fatalf("no deadlock: %v, %v", first.err, second.err)
 	}
-	var my *mysql.MySQLError
-	if !errors.As(victim.err, &my) || my.Number != 1213 {
+	if my, ok := errors.AsType[*mysql.MySQLError](victim.err); !ok || my.Number != 1213 {
 		t.Errorf("the victim's Tx returned %v, want the deadlock", victim.err)
 	}
 	for _, x := range []int64{1, 2} {

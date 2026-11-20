@@ -443,8 +443,7 @@ func TestBidiOneOnRealDatabases(t *testing.T) {
 		}
 		taken := func(step string, err error) {
 			t.Helper()
-			var ce *velox.ConstraintError
-			if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
+			if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintUnique {
 				t.Fatalf("%s: err = %v, want a unique ConstraintError", step, err)
 			}
 		}

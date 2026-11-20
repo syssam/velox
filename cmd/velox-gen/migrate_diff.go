@@ -354,8 +354,7 @@ func relMigrate(dir string, err error) error {
 		}
 		return c
 	}
-	var me *migrate.Error
-	if errors.As(err, &me) && me.Pos != "" {
+	if me, ok := errors.AsType[*migrate.Error](err); ok && me.Pos != "" {
 		e := *me
 		e.Pos = relPos(dir, me.Pos)
 		return &e

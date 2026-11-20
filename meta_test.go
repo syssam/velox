@@ -55,8 +55,7 @@ func TestMetaOnceKeepsBindingPanic(t *testing.T) {
 			FieldPtr: func(x *other, i int) any { return &x.ID }}
 	}
 	m := o.Load(desc)
-	var se *SchemaError
-	if !errors.As(m.d.Err, &se) || !strings.Contains(m.d.Err.Error(), "Policy() panicked: broken") || m.d.Info != nil {
+	if _, ok := errors.AsType[*SchemaError](m.d.Err); !ok || !strings.Contains(m.d.Err.Error(), "Policy() panicked: broken") || m.d.Info != nil {
 		t.Fatalf("the first build: %v, info %v", m.d.Err, m.d.Info)
 	}
 	if again := o.Load(desc); again != m || calls != 1 {

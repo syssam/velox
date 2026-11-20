@@ -528,8 +528,7 @@ func (s *session) failed(ctx context.Context, f File, i int, err error, o option
 		k := s.completed(ctx, f.Version, i)
 		e.applied = &k
 	}
-	var re *retryError
-	e.retry = errors.As(err, &re)
+	_, e.retry = errors.AsType[*retryError](err)
 	if s.d == velox.MySQL && !e.retry {
 		e.guide = mysqlGuide(f, s.completed(ctx, f.Version, i))
 	}

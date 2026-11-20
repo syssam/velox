@@ -525,8 +525,7 @@ func TestParseAllow(t *testing.T) {
 	}
 	for _, s := range []string{"rename-table", ",", " , ", "drop-column=,", ",drop-table", "drop-table,,drop-column", "drop-column=", "nonsense", "widen-type=users.x"} {
 		_, err := migrate.ParseAllow(s)
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "allow" {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "allow" {
 			t.Errorf("ParseAllow(%q) = %v, want an *Error with Code allow", s, err)
 		}
 	}
@@ -747,8 +746,8 @@ func TestLintSQLiteTypeAffinity(t *testing.T) {
 		from := oneTable(d, migrate.Column{Name: "c", Type: c.from, Nullable: true})
 		to := oneTable(d, migrate.Column{Name: "c", Type: c.to, Nullable: true})
 		_, err := migrate.NewPlan(from, to, migrate.PlanOptions{})
-		var blocked *migrate.BlockedError
-		if got := errors.As(err, &blocked); got != c.blocked {
+		blocked, isBlocked := errors.AsType[*migrate.BlockedError](err)
+		if isBlocked != c.blocked {
 			t.Errorf("%s to %s: %v, want blocked %v", c.from, c.to, err, c.blocked)
 		}
 		if blocked != nil && (len(blocked.Findings) != 1 || blocked.Findings[0].Code != "alter-type" || blocked.Findings[0].Target != "t.c") {

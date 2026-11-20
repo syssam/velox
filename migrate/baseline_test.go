@@ -144,8 +144,8 @@ func TestAdoptRefusals(t *testing.T) {
 	if snap != nil || ws != nil {
 		t.Errorf("a refusal gives %v and %v", snap, ws)
 	}
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "baseline" {
+	e, isError := errors.AsType[*migrate.Error](err)
+	if !isError || e.Code != "baseline" {
 		t.Fatalf("AdoptOf: %v", err)
 	}
 	if _, bare := err.(*migrate.Error); bare {

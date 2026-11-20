@@ -82,8 +82,7 @@ func TestConstraintErrors(t *testing.T) {
 		{errors.Join(io.EOF, myErr(1062, "Duplicate entry 'a' for key 'p.p_code_uq'")), ConstraintUnique, "p_code_uq"},
 	} {
 		got := dbErr(invInfo, c.err)
-		var ce *ConstraintError
-		if !errors.As(got, &ce) || ce.Kind != c.kind || ce.Constraint != c.name || ce.Entity != "velox.inv" {
+		if ce, ok := errors.AsType[*ConstraintError](got); !ok || ce.Kind != c.kind || ce.Constraint != c.name || ce.Entity != "velox.inv" {
 			t.Errorf("%v: got %#v", c.err, got)
 			continue
 		}
@@ -103,8 +102,7 @@ func TestOtherErrorsAreLeftAlone(t *testing.T) {
 		// MySQL's 4025, not MariaDB's
 		myErr(4025, "The AUTOEXTEND_SIZE value is out of range")} {
 		got := dbErr(invInfo, err)
-		var ce *ConstraintError
-		if errors.As(got, &ce) || !errors.Is(got, err) || got.Error() != "velox: velox.inv: "+err.Error() {
+		if _, ok := errors.AsType[*ConstraintError](got); ok || !errors.Is(got, err) || got.Error() != "velox: velox.inv: "+err.Error() {
 			t.Errorf("%v became %v", err, got)
 		}
 	}
@@ -120,8 +118,7 @@ func (c coder) Code() int { return c.code }
 func TestLookAlikeErrorsAreLeftAlone(t *testing.T) {
 	for _, c := range []int{2067, 5} {
 		err := coder{c}
-		var ce *ConstraintError
-		if errors.As(dbErr(invInfo, err), &ce) || dberr.Retryable(err) {
+		if _, ok := errors.AsType[*ConstraintError](dbErr(invInfo, err)); ok || dberr.Retryable(err) {
 			t.Errorf("code %d was taken for a driver error", c)
 		}
 	}
@@ -135,9 +132,8 @@ func (*PgError) Error() string { return "look-alike" }
 
 func TestLookAlikeDriverTypeFromAnotherPackage(t *testing.T) {
 	err := &PgError{Code: "23505"}
-	var ce *ConstraintError
 	got := dbErr(invInfo, err)
-	if errors.As(got, &ce) || dberr.Retryable(err) {
+	if _, ok := errors.AsType[*ConstraintError](got); ok || dberr.Retryable(err) {
 		t.Errorf("a look-alike PgError was taken for the driver's: %v", got)
 	}
 	if code, ok := dberr.DriverCode(err); ok || code != "" {
@@ -213,9 +209,9 @@ func TestErrLocked(t *testing.T) {
 		if !errors.Is(got, ErrLocked) {
 			t.Errorf("%v: %v does not match ErrLocked", err, got)
 		}
-		var pg *pgconn.PgError
-		var my *mysql.MySQLError
-		if !errors.As(got, &pg) && !errors.As(got, &my) {
+		_, isPg := errors.AsType[*pgconn.PgError](got)
+		_, isMy := errors.AsType[*mysql.MySQLError](got)
+		if !isPg && !isMy {
 			t.Errorf("%v: the driver's error is not reachable", got)
 		}
 		if want := "velox: velox.inv: lock not available: "; !strings.HasPrefix(got.Error(), want) {

@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -387,7 +388,7 @@ func classify(importPath string, exp map[string]string) ([]string, error) {
 		}
 	}
 	if len(refused) > 0 {
-		sort.SliceStable(refused, func(i, j int) bool { return refused[i].tn.Pos() < refused[j].tn.Pos() })
+		slices.SortStableFunc(refused, func(a, b found) int { return cmp.Compare(a.tn.Pos(), b.tn.Pos()) })
 		errs := make([]error, len(refused))
 		for i, r := range refused {
 			errs[i] = &Error{Pos: posString(fset.Position(r.tn.Pos())), Reason: r.err}

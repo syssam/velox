@@ -505,8 +505,7 @@ func TestHandleMustNameTheFieldsEntity(t *testing.T) {
 	}
 	const want = "velox: apitest.mmA.items: the field is a velox.Many[github.com/syssam/velox/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox/internal/apitest.mmOther; run go tool velox-gen"
 	err := velox.CheckRelation(mmAs.Items)
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || err.Error() != want {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != want {
 		t.Fatalf("CheckRelation: %v, want %s", err, want)
 	}
 	e := &fakeconn.Exec{}

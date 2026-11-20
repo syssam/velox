@@ -1243,8 +1243,7 @@ func TestBuildRules(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
-			var ge *Error
-			if err == nil || !strings.Contains(err.Error(), c.want) || !errors.As(err, &ge) {
+			if _, ok := errors.AsType[*Error](err); err == nil || !strings.Contains(err.Error(), c.want) || !ok {
 				t.Fatalf("got %v, want %q", err, c.want)
 			}
 			// A suggestion is only for a name close to one there is.
@@ -1263,8 +1262,7 @@ func TestLowerRefusesUnexportedGoTypes(t *testing.T) {
 		unexportedElem{}:   `schema unexportedElem: field "m": its Go type map[string][]*codegen.secretCents names codegen.secretCents, which is unexported: the generated package cannot refer to it; export it`,
 	} {
 		_, err := lower(t, Config{}, s)
-		var ge *Error
-		if err == nil || plain(err) != want || !errors.As(err, &ge) || !strings.Contains(ge.Pos, "build_test.go:") {
+		if ge, ok := errors.AsType[*Error](err); err == nil || plain(err) != want || !ok || !strings.Contains(ge.Pos, "build_test.go:") {
 			t.Errorf("%T: got %v, want %q", s, err, want)
 		}
 	}
@@ -1412,8 +1410,7 @@ func TestRuleErrorPos(t *testing.T) {
 	}
 	// An implicit foreign key has no position.
 	_, err = build(t, clashOwner{}, clashPet{})
-	var ge *Error
-	if !errors.As(err, &ge) || ge.Pos != "" || !strings.HasPrefix(ge.Error(), "schema clashPet: ") {
+	if ge, ok := errors.AsType[*Error](err); !ok || ge.Pos != "" || !strings.HasPrefix(ge.Error(), "schema clashPet: ") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -1617,8 +1614,8 @@ schema dupIndexes: index 9: name "dup_indexes_dupindexes_b" is also this schema'
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 	_, err = build(t, mixedDup{})
-	var ge *Error
-	if got := plain(err); got != `schema mixedDup: index 1: repeats index 0` || !errors.As(err, &ge) ||
+	got := plain(err)
+	if ge, ok := errors.AsType[*Error](err); got != `schema mixedDup: index 1: repeats index 0` || !ok ||
 		!strings.HasSuffix(ge.Pos, fmt.Sprintf("/build_test.go:%d", mixedDupLine)) {
 		t.Fatalf("got %v", err)
 	}

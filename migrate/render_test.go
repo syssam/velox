@@ -479,24 +479,25 @@ func TestRenderRefuses(t *testing.T) {
 		{velox.SQLite, migrate.AlterColumn{Table: users, What: migrate.ColumnComment}},
 	} {
 		_, err := migrate.Render(s(tc.d), s(tc.d), []migrate.Change{tc.c}, migrate.RenderOptions{})
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "render" {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" {
 			t.Errorf("%v %s: %v, want a render error", tc.d, tc.c.Kind(), err)
 		}
 	}
-	var e *migrate.Error
 	for _, d := range rendered {
-		if _, err := migrate.Render(s(d), s(d), []migrate.Change{nil}, migrate.RenderOptions{}); !errors.As(err, &e) || e.Code != "render" {
+		_, err := migrate.Render(s(d), s(d), []migrate.Change{nil}, migrate.RenderOptions{})
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" {
 			t.Errorf("%v: a nil change: %v", d, err)
 		}
 		if ss, err := migrate.Render(s(d), s(d), nil, migrate.RenderOptions{LockTimeout: time.Second}); err != nil || len(ss) != 0 {
 			t.Errorf("%v: no changes give %v, %v; want no script", d, ss, err)
 		}
 	}
-	if _, err := migrate.Render(nil, s(velox.MySQL), nil, migrate.RenderOptions{}); !errors.As(err, &e) {
+	_, err := migrate.Render(nil, s(velox.MySQL), nil, migrate.RenderOptions{})
+	if _, ok := errors.AsType[*migrate.Error](err); !ok {
 		t.Errorf("nil from: %v", err)
 	}
-	if _, err := migrate.Render(s(velox.MySQL), s(velox.SQLite), nil, migrate.RenderOptions{}); !errors.As(err, &e) {
+	_, err = migrate.Render(s(velox.MySQL), s(velox.SQLite), nil, migrate.RenderOptions{})
+	if _, ok := errors.AsType[*migrate.Error](err); !ok {
 		t.Errorf("two dialects: %v", err)
 	}
 }
@@ -794,8 +795,7 @@ func TestRenderMySQLRefusesPrimaryKeyRename(t *testing.T) {
 		{s, named, migrate.RenameConstraint{Table: users, From: "users_pkey", To: "users_pk"}},
 	} {
 		_, err := migrate.Render(tc.from, tc.to, []migrate.Change{tc.c}, migrate.RenderOptions{})
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "render" || !strings.Contains(e.Error(), "MySQL's primary key is always named PRIMARY") {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" || !strings.Contains(e.Error(), "MySQL's primary key is always named PRIMARY") {
 			t.Errorf("%s: %v, want the primary key's refusal", tc.c, err)
 		}
 	}

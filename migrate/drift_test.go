@@ -467,8 +467,7 @@ func TestDriftErrors(t *testing.T) {
 		{"inspected twice", twice, pg, "schema"},
 	} {
 		_, err := migrate.DriftOf(c.inspected, c.snapshot)
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != c.code {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != c.code {
 			t.Errorf("%s: %v, want code %q", c.name, err, c.code)
 		}
 	}

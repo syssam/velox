@@ -238,8 +238,7 @@ func TestNilInterceptorRefused(t *testing.T) {
 		}, "cannot have interceptors"},
 	} {
 		err := lBadErr(c.set)
-		var se *velox.SchemaError
-		if !errors.As(err, &se) || !strings.Contains(err.Error(), c.want) {
+		if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: got %v, want %s", c.name, err, c.want)
 		}
 	}
@@ -321,8 +320,7 @@ func (*lUnbound) Interceptors() []velox.Interceptor { return nil }
 // never called.
 func TestUnboundInterceptorsMethodRefused(t *testing.T) {
 	err := velox.CheckEntity[lUnbound]()
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "has an Interceptors method, but the metadata does not bind it") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), "has an Interceptors method, but the metadata does not bind it") {
 		t.Errorf("CheckEntity: %v", err)
 	}
 }

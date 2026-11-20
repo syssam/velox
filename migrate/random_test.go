@@ -502,11 +502,10 @@ func TestMigrateRandom(t *testing.T) {
 func planOptionsAllowing(t *testing.T, from, to *migrate.Schema) migrate.PlanOptions {
 	t.Helper()
 	_, err := migrate.NewPlan(from, to, migrate.PlanOptions{})
-	var blocked *migrate.BlockedError
-	switch {
+	switch blocked, isBlocked := errors.AsType[*migrate.BlockedError](err); {
 	case err == nil:
 		return migrate.PlanOptions{}
-	case errors.As(err, &blocked):
+	case isBlocked:
 		var opts migrate.PlanOptions
 		for _, f := range blocked.Findings {
 			opts.Allow = append(opts.Allow, migrate.Allow{Code: f.Code, Target: f.Target})

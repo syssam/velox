@@ -14,8 +14,8 @@ import (
 // verifyErr is the *Error of Verify's refusal, or fails t.
 func verifyErr(t *testing.T, err error) *migrate.Error {
 	t.Helper()
-	var e *migrate.Error
-	if !errors.As(err, &e) {
+	e, ok := errors.AsType[*migrate.Error](err)
+	if !ok {
 		t.Fatalf("Verify: %v, want an *Error", err)
 	}
 	return e

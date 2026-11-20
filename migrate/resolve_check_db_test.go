@@ -78,8 +78,8 @@ func resolveNotes(db *sql.DB, fsys fstest.MapFS, version uint64, r migrate.Resol
 // refusedWith is err as an *Error of code that says each of says.
 func refusedWith(t *testing.T, err error, code string, says ...string) {
 	t.Helper()
-	var me *migrate.Error
-	if !errors.As(err, &me) || me.Code != code {
+	me, ok := errors.AsType[*migrate.Error](err)
+	if !ok || me.Code != code {
 		t.Fatalf("%v; want an *Error of Code %q", err, code)
 	}
 	for _, s := range says {

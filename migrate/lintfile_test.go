@@ -185,8 +185,7 @@ ALTER TABLE "velox_new_t" RENAME TO "t";
 		{velox.Postgres, "SELECT 1;\nABORT;", "0002_x.sql:2"},
 	} {
 		_, err := lintFile(t, c.d, c.src)
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "file" || e.Pos != c.pos || !strings.HasPrefix(err.Error(), "migrate: "+c.pos+": ") {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "file" || e.Pos != c.pos || !strings.HasPrefix(err.Error(), "migrate: "+c.pos+": ") {
 			t.Errorf("%s %q: %v", c.d, c.src, err)
 		}
 	}
@@ -286,8 +285,7 @@ DROP TABLE t;
 ALTER TABLE "velox_new_t" RENAME TO t;
 `
 	_, err := lintFile(t, velox.SQLite, rebuild)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "file" || !strings.Contains(err.Error(), "foreign-keys off") || !strings.Contains(e.Pos, "0002_x.sql:1") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "file" || !strings.Contains(err.Error(), "foreign-keys off") || !strings.Contains(e.Pos, "0002_x.sql:1") {
 		t.Errorf("no directive: %v", err)
 	}
 	if _, err := lintFile(t, velox.SQLite, "-- velox:foreign-keys off\n"+rebuild); err != nil {

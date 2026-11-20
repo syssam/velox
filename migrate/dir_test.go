@@ -52,8 +52,8 @@ func h1(data string) string {
 
 func asError(t *testing.T, err error, code string) *migrate.Error {
 	t.Helper()
-	var e *migrate.Error
-	if !errors.As(err, &e) {
+	e, ok := errors.AsType[*migrate.Error](err)
+	if !ok {
 		t.Fatalf("got %v (%T), want a *migrate.Error", err, err)
 	}
 	if e.Code != code {
@@ -308,8 +308,8 @@ func TestReadDirStale(t *testing.T) {
 		fsys := cloneFS(good)
 		mutate(fsys)
 		_, err := migrate.ReadDir(fsys)
-		var se *migrate.SumError
-		if !errors.As(err, &se) {
+		se, ok := errors.AsType[*migrate.SumError](err)
+		if !ok {
 			t.Errorf("%s: got %v (%T), want a *SumError", name, err, err)
 			continue
 		}

@@ -49,8 +49,7 @@ func runProgram(ctx context.Context, modDir string, src []byte, env []string, st
 		return interruptedCode
 	}
 	if err != nil {
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() == -1 { // an exit of go's own, not a signal, means go printed why
+		if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() == -1 { // an exit of go's own, not a signal, means go printed why
 			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 			return 1
 		}
@@ -65,8 +64,7 @@ func runProgram(ctx context.Context, modDir string, src []byte, env []string, st
 		return interruptedCode
 	}
 	if err != nil {
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() == -1 { // an exit of the program's own, not a signal, means it printed why
+		if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() == -1 { // an exit of the program's own, not a signal, means it printed why
 			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		}
 		return 1
@@ -98,8 +96,7 @@ func interrupted(ctx context.Context, err error) bool {
 	if ctx.Err() != nil {
 		return true
 	}
-	var exit *exec.ExitError
-	if !errors.As(err, &exit) || exit.ExitCode() != -1 {
+	if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() != -1 {
 		return false
 	}
 	select {

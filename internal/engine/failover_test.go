@@ -74,9 +74,9 @@ func refusedConnectError(t *testing.T, code string) error {
 	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err = pgconn.Connect(cctx, "host="+dir+" user=u dbname=db sslmode=disable")
-	var ce *pgconn.ConnectError
-	var pg *pgconn.PgError
-	if !errors.As(err, &ce) || !errors.As(err, &pg) || pg.Code != code {
+	_, isConnect := errors.AsType[*pgconn.ConnectError](err)
+	pg, isPg := errors.AsType[*pgconn.PgError](err)
+	if !isConnect || !isPg || pg.Code != code {
 		t.Fatalf("connecting to a refusing server returned %T %v, want a *pgconn.ConnectError wrapping PgError %s", err, err, code)
 	}
 	return fmt.Errorf("acquire: %w", err)

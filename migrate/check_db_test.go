@@ -113,8 +113,8 @@ func TestCheckOnRealDatabases(t *testing.T) {
 				{"chk_code_set", 1, 1, "", "new"},
 			} {
 				_, err := vdb.Exec(ctx, "test", q, c.total, c.qty, c.code, c.state)
-				var ce *velox.ConstraintError
-				if !errors.As(err, &ce) {
+				ce, ok := errors.AsType[*velox.ConstraintError](err)
+				if !ok {
 					t.Errorf("%s: %v, not a ConstraintError", c.name, err)
 					continue
 				}

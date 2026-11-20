@@ -20,8 +20,8 @@ import (
 // dirtyOf is err as a *DirtyError, or fails t.
 func dirtyOf(t *testing.T, err error) *migrate.DirtyError {
 	t.Helper()
-	var de *migrate.DirtyError
-	if !errors.As(err, &de) {
+	de, ok := errors.AsType[*migrate.DirtyError](err)
+	if !ok {
 		t.Fatalf("%#v; want *DirtyError", err)
 	}
 	return de
@@ -113,8 +113,8 @@ func TestResolveMySQL(t *testing.T) {
 	_ = dirtyOf(t, func() error { _, err := migrate.Up(ctx, db, fsys); return err }())
 	fsys["0003_e.sql"].Data = []byte("CREATE TABLE e (x int);\n")
 	resum(t, fsys)
-	var ce *migrate.ChecksumError
-	if err := migrate.Resolve(ctx, db, fsys, 3, migrate.ResolveApplied); !errors.As(err, &ce) || ce.Version != 3 {
+	err := migrate.Resolve(ctx, db, fsys, 3, migrate.ResolveApplied)
+	if ce, ok := errors.AsType[*migrate.ChecksumError](err); !ok || ce.Version != 3 {
 		t.Errorf("edited: %#v; want *ChecksumError", err)
 	}
 	if err := migrate.Resolve(ctx, db, fsys, 3, migrate.ResolveUndone); err != nil {
@@ -671,8 +671,7 @@ func TestUpMySQLProgressLost(t *testing.T) {
 		}
 	})
 	_, err := migrate.Up(context.Background(), db, fsys, hook)
-	var de *migrate.DirtyError
-	if err == nil || errors.As(err, &de) || !strings.HasPrefix(err.Error(), "migrate: 0001_ab.sql: statements 1 to 1 ran, but recording them in velox_migrations: ") || mysqlNumber(err) != 1146 {
+	if _, ok := errors.AsType[*migrate.DirtyError](err); err == nil || ok || !strings.HasPrefix(err.Error(), "migrate: 0001_ab.sql: statements 1 to 1 ran, but recording them in velox_migrations: ") || mysqlNumber(err) != 1146 {
 		t.Errorf("%v; want the wrapped error", err)
 	}
 }

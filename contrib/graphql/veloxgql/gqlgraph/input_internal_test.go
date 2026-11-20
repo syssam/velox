@@ -11,8 +11,8 @@ import (
 
 // codeOf is the code of err's *gqlcore.Error, or "".
 func codeOf(err error) string {
-	var e *gqlcore.Error
-	if !errors.As(err, &e) {
+	e, ok := errors.AsType[*gqlcore.Error](err)
+	if !ok {
 		return ""
 	}
 	return e.Code
@@ -37,8 +37,8 @@ func TestWriteError(t *testing.T) {
 	if want := "veloxgql: CreatePostInput.title: invalid value: must not be empty"; err == nil || err.Error() != want {
 		t.Errorf("writeError = %v, want %q", err, want)
 	}
-	var got *velox.ValidationError
-	if !errors.As(err, &got) || got != ve {
+	got, ok := errors.AsType[*velox.ValidationError](err)
+	if !ok || got != ve {
 		t.Error("errors.As does not find the *velox.ValidationError")
 	}
 	if err := writeError(fmt.Errorf("insert: %w", ve), "CreatePostInput", "gen.Post", name); codeOf(err) != gqlcore.CodeBadUserInput {

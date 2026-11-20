@@ -75,8 +75,7 @@ func TestUpRebuildRefusesUnsnapshottedColumn(t *testing.T) {
 	mustExec(t, db, "INSERT INTO t (id, n, x) VALUES (1, 1, 'keep')")
 	stale := extend(t, base, d, files("0003_rebuild.sql", rebuildBody(t)))
 	_, err = migrate.Up(context.Background(), db, stale)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t.x") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t.x") {
 		t.Fatalf("Up: %v", err)
 	}
 }
@@ -274,8 +273,7 @@ func TestUpRebuildWithoutRowidSaysSo(t *testing.T) {
 		return strings.Replace(s, "-- velox:foreign-keys off\n", "-- velox:foreign-keys off\n-- velox:allow unmodeled-loss t\n", 1)
 	})
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "WITHOUT ROWID") || !strings.Contains(err.Error(), "rowid") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "WITHOUT ROWID") || !strings.Contains(err.Error(), "rowid") {
 		t.Fatalf("Up: %v", err)
 	}
 	fsys = rewrite(t, fsys, "0002_rebuild.sql", func(s string) string { return strings.ReplaceAll(s, "rowid, ", "") })

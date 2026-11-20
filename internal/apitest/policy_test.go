@@ -44,8 +44,7 @@ func TestPolicyReadPredicate(t *testing.T) {
 
 	calls := e.Calls
 	_, err := q.All(asUser(""))
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Op != velox.OpSelect || pe.Entity != "testmodel.Ticket" {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpSelect || pe.Entity != "testmodel.Ticket" {
 		t.Fatalf("got %#v", err)
 	}
 	want(t, err, velox.ErrDenied, "velox: testmodel.Ticket: select denied by policy: no user")
@@ -79,8 +78,7 @@ func TestPolicyOnUpdateAndDelete(t *testing.T) {
 	_, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("x")).Where(Tk.ID.EQ(1)).Exec(asUser(""))
 	want(t, err, velox.ErrDenied, "velox: testmodel.Ticket: update denied by policy: no user")
 	_, err = db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(1)).Exec(asUser(""))
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Op != velox.OpDelete {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpDelete {
 		t.Errorf("delete: %v", err)
 	}
 	if e.Calls != calls {
@@ -171,8 +169,7 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 	calls := e.Calls
 	_, err := q.All(pnoteReading(velox.Predicate{}, velox.Deny("hidden")))
 	want(t, err, velox.ErrDenied, "velox: apitest.pbox: in the EXISTS on fixture.Pnote: select denied by policy: hidden")
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Entity != "fixture.Pnote" || pe.Op != velox.OpSelect {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Entity != "fixture.Pnote" || pe.Op != velox.OpSelect {
 		t.Errorf("got %#v", pe)
 	}
 	if e.Calls != calls {
@@ -653,8 +650,7 @@ func TestPolicyWritable(t *testing.T) {
 
 	calls := e.Calls
 	_, err := q.Writable().Count(pnoteWriting(velox.Predicate{}, velox.Deny("read-only")))
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Op != velox.OpSelect || !errors.Is(err, velox.ErrDenied) {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpSelect || !errors.Is(err, velox.ErrDenied) {
 		t.Errorf("a denied Write: %v", err)
 	}
 	if e.Calls != calls {

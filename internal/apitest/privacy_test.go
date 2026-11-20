@@ -182,8 +182,7 @@ func TestPrivacyQueryRules(t *testing.T) {
 	}
 
 	_, err := db.Query[pvDoc]().AllowUnbounded().All(pvAs("banned", "ann"))
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Op != velox.OpSelect || !errors.Is(err, privacy.Deny) || !errors.Is(err, velox.ErrDenied) {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpSelect || !errors.Is(err, privacy.Deny) || !errors.Is(err, velox.ErrDenied) {
 		t.Fatalf("banned: %v", err)
 	}
 	if want := "velox: apitest.pvDoc: select denied by policy: banned: velox/privacy: deny rule"; err.Error() != want {
@@ -247,8 +246,7 @@ func TestPrivacyMutationRules(t *testing.T) {
 	}
 	bad := pvDoc{ID: 10, Owner: "ann", Title: "forbidden"}
 	err := db.Insert(&bad).Exec(pvAs("", "ann"))
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Op != velox.OpInsert || !errors.Is(err, privacy.Deny) {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpInsert || !errors.Is(err, privacy.Deny) {
 		t.Errorf("insert of a forbidden title: %v", err)
 	}
 }

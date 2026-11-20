@@ -44,8 +44,7 @@ func TestMySQLLockWaitLeavesNoDirtyVersion(t *testing.T) {
 		release := holdingLock(t, ctx, db)
 		_, err := migrate.Up(ctx, db, fsys)
 		release()
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "retry" || mysqlNumber(err) != 1205 || !strings.Contains(err.Error(), "changed nothing") {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "retry" || mysqlNumber(err) != 1205 || !strings.Contains(err.Error(), "changed nothing") {
 			t.Fatalf("Up: %v", err)
 		}
 		if rows := historyOf(t, db); len(rows) != 0 {
@@ -77,8 +76,7 @@ func TestMySQLLockWaitLeavesNoDirtyVersion(t *testing.T) {
 		db, _ := freshDB(t, d)
 		bad := dirOf(t, d, files("0001_t.sql", "ALTER TABLE missing ADD COLUMN y int;\nCREATE TABLE u (x int);\n"))
 		_, err := migrate.Up(ctx, db, bad)
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "retry" {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "retry" {
 			t.Fatalf("Up: %v", err)
 		}
 		if rows := historyOf(t, db); len(rows) != 0 {

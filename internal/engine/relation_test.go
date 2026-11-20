@@ -53,16 +53,14 @@ func TestResolveRefusesMismatchedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = engine.InfoRels(info)[0].Resolve(info, targetOf[keyedLine]())
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "the key types differ: engine_test.keyed.ID is string and engine_test.keyedLine.KeyedID is int64") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), "the key types differ: engine_test.keyed.ID is string and engine_test.keyedLine.KeyedID is int64") {
 		t.Errorf("%v", err)
 	}
 }
 
 func wantErr(t *testing.T, err error, want string) {
 	t.Helper()
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), want) {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), want) {
 		t.Errorf("want a *SchemaError containing %q, got %v", want, err)
 	}
 	if err != nil && strings.Contains(err.Error(), "velox: velox:") || err != nil && strings.Contains(err.Error(), ": velox: ") {

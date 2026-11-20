@@ -245,8 +245,8 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 		{"no position", "", "plain", "", "plain"},
 		{"relative", "veloxschema/a.go:2", "plain", "veloxschema/a.go:2", "plain"},
 	} {
-		var got *codegen.Error
-		if !errors.As(relErrors(dir, &codegen.Error{Pos: c.pos, Reason: c.reason}), &got) {
+		got, ok := errors.AsType[*codegen.Error](relErrors(dir, &codegen.Error{Pos: c.pos, Reason: c.reason}))
+		if !ok {
 			t.Fatalf("%s: not a *veloxgen.Error", c.name)
 		}
 		if got.Pos != c.wantPos || got.Reason != c.wantReason {
@@ -260,8 +260,7 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 func TestRelErrorsAtTheRoot(t *testing.T) {
 	root := string(filepath.Separator)
 	reason := "a " + root + " b and " + root + "usr" + root + "lib"
-	var got *codegen.Error
-	if !errors.As(relErrors(root, &codegen.Error{Reason: reason}), &got) || got.Reason != reason {
+	if got, ok := errors.AsType[*codegen.Error](relErrors(root, &codegen.Error{Reason: reason})); !ok || got.Reason != reason {
 		t.Errorf("got %v, want the reason %q as it was", got, reason)
 	}
 }

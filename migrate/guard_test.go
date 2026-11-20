@@ -60,8 +60,8 @@ func createText(t *testing.T, db *sql.DB) string {
 // and saying what to do, and that the file is pending, unapplied.
 func wantUnmodeled(t *testing.T, db *sql.DB, fsys fstest.MapFS, err error, names ...string) {
 	t.Helper()
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" {
+	e, ok := errors.AsType[*migrate.Error](err)
+	if !ok || e.Code != "unmodeled" {
 		t.Fatalf("Up: %v; want an *Error of Code unmodeled\n%s", err, sqlFiles(fsys))
 	}
 	if e.Pos != "0002_rebuild.sql" {

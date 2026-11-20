@@ -38,8 +38,7 @@ ALTER TABLE velox_new_c RENAME TO c;
 
 	db, fsys := setup(t, "-- velox:allow drop-table\n-- velox:drops c.(p)\n")
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "the table c has a foreign key") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "the table c has a foreign key") {
 		t.Fatalf("Up: %v; c has %d rows", err, count(t, db, "c"))
 	}
 	if n := count(t, db, "c"); n != 2 {

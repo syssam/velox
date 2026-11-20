@@ -14,8 +14,7 @@ import (
 // use instead of leaving the policy out.
 func TestWrongPolicySignatureIsRefused(t *testing.T) {
 	err := velox.CheckEntity[gen.Post]()
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "*schema.Post's Policy method is not func() velox.Policy: velox would not call it") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), "*schema.Post's Policy method is not func() velox.Policy: velox would not call it") {
 		t.Fatalf("got %v", err)
 	}
 }

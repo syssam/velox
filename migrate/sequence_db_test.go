@@ -126,8 +126,7 @@ func TestPostgresIdentityToSerialRefused(t *testing.T) {
 	ident := with(migrate.Column{Name: "id", Type: "integer", Identity: true, Sequence: "t_id_seq"})
 	serial := with(migrate.Column{Name: "id", Type: "integer", Default: "nextval('t_id_seq'::regclass)", Sequence: "t_id_seq"})
 	_, err := migrate.NewPlan(ident, serial, migrate.PlanOptions{})
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "render" || err.Error() != identityToSerial {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" || err.Error() != identityToSerial {
 		t.Fatalf("identity to serial: %v", err)
 	}
 	db, _ := freshDB(t, d)

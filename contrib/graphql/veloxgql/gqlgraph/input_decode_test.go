@@ -12,8 +12,11 @@ import (
 
 // codeOf is the code err carries for veloxgql.ErrorPresenter, "" for none.
 func codeOf(err error) string {
-	var c interface{ Extensions() map[string]any }
-	if !errors.As(err, &c) {
+	c, ok := errors.AsType[interface {
+		error
+		Extensions() map[string]any
+	}](err)
+	if !ok {
 		return ""
 	}
 	s, _ := c.Extensions()["code"].(string)

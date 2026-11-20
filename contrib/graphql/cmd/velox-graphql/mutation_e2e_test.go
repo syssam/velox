@@ -714,8 +714,8 @@ func notFound(typ string) error {
 // code is the GraphQL code of err: of the first error in its chain that has
 // one.
 func code(err error) string {
-	var c interface{ Extensions() map[string]any }
-	if !errors.As(err, &c) {
+	c, ok := errors.AsType[interface{ error; Extensions() map[string]any }](err)
+	if !ok {
 		return ""
 	}
 	s, _ := c.Extensions()["code"].(string)
@@ -727,8 +727,7 @@ func code(err error) string {
 // msg.
 func wantEdgeErr(t *testing.T, ctx context.Context, what string, err error, code, msg string) {
 	t.Helper()
-	var ee *velox.EdgeError
-	if !errors.As(err, &ee) {
+	if _, ok := errors.AsType[*velox.EdgeError](err); !ok {
 		t.Errorf("%s: %v, want a *velox.EdgeError", what, err)
 		return
 	}
@@ -1357,8 +1356,7 @@ func TestCreateErrors(t *testing.T) {
 		insert(t, e.ctx, e.db, &gen.Circle{Name: "taken"})
 
 		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "", Password: "x"}, nil)
-		var ve *velox.ValidationError
-		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: CreateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+		if _, ok := errors.AsType[*velox.ValidationError](err); code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: CreateWriterInput.name: invalid value: ") || !ok {
 			t.Errorf("an empty name: %v (code %q)", err, code(err))
 		}
 
@@ -1368,8 +1366,7 @@ func TestCreateErrors(t *testing.T) {
 		}
 
 		_, err = createCircle(e.ctx, gen.CreateCircleInput{Name: "taken"})
-		var ce *velox.ConstraintError
-		if !errors.As(err, &ce) {
+		if _, ok := errors.AsType[*velox.ConstraintError](err); !ok {
 			t.Errorf("a taken name: %v, want a *velox.ConstraintError", err)
 		}
 
@@ -1774,8 +1771,7 @@ func TestUpdateErrors(t *testing.T) {
 		w := &gen.Writer{Name: "w", Password: "x"}
 		insert(t, e.ctx, e.db, w)
 		_, err := updateWriter(e.ctx, w.ID, gen.UpdateWriterInput{Name: ptr("")})
-		var ve *velox.ValidationError
-		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+		if _, ok := errors.AsType[*velox.ValidationError](err); code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !ok {
 			t.Errorf("an empty name: %v (code %q)", err, code(err))
 		}
 		e.reset()
@@ -1812,8 +1808,7 @@ func TestUpdateAppSetters(t *testing.T) {
 		e.reset()
 		other := gen.UpdateWriterInput{Bio: ptr("other")}
 		_, err = update(e.ctx, w.ID, "Writer", gen.Writers.ID, other.Setters, gen.Writers.Name.Set(""))
-		var ve *velox.ValidationError
-		if !errors.As(err, &ve) || code(err) != "" || strings.Contains(err.Error(), "UpdateWriterInput") {
+		if _, ok := errors.AsType[*velox.ValidationError](err); !ok || code(err) != "" || strings.Contains(err.Error(), "UpdateWriterInput") {
 			t.Errorf("an invalid server setter: %v (code %q), want velox's *velox.ValidationError, uncoded", err, code(err))
 		}
 		if s := e.stmts(); len(s) != 0 {
@@ -1945,14 +1940,13 @@ func TestValidateFirst(t *testing.T) {
 		insert(t, e.ctx, e.db, w)
 		e.reset()
 		bogus := int64(999)
-		var ve *velox.ValidationError
 		_, err := createWriter(e.ctx, gen.CreateWriterInput{Name: "", Password: "x", MentorID: &bogus, CircleIDs: []int64{999}}, nil)
-		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: CreateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+		if _, ok := errors.AsType[*velox.ValidationError](err); code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: CreateWriterInput.name: invalid value: ") || !ok {
 			t.Errorf("create, an empty name and a bogus mentor: %v (code %q)", err, code(err))
 		}
 		for _, id := range []int64{w.ID, 998} {
 			_, err = updateWriter(e.ctx, id, gen.UpdateWriterInput{Name: ptr(""), MentorID: &bogus, AddCircleIDs: []int64{999}})
-			if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+			if _, ok := errors.AsType[*velox.ValidationError](err); code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !ok {
 				t.Errorf("update %d, an empty name and a bogus mentor: %v (code %q)", id, err, code(err))
 			}
 		}
@@ -2077,8 +2071,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err = updateFolder(e.ctx, c.ID, gen.UpdateFolderInput{PrevID: ptr(y.ID)})
-		var ce *velox.ConstraintError
-		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
+		if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("UpdateFolder of c, prev y held by z: %v, want a unique ConstraintError", err)
 		}
 		if e.target == "sqlite" && !strings.HasPrefix(err.Error(), "velox: gen.Folder: unique constraint folders.folder_next violated: ") {
@@ -2312,8 +2305,7 @@ func TestBidiPartner(t *testing.T) {
 		}
 		wantPartners(t, e, "a is linked to d", a.ID, d.ID, d.ID, a.ID, c.ID, 0)
 		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(a.ID)})
-		var ce *velox.ConstraintError
-		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
+		if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("c takes a, d's partner: %v, want a unique ConstraintError", err)
 		}
 		ge := veloxgql.ErrorPresenter(nil)(e.ctx, err)
@@ -2342,7 +2334,8 @@ func TestBidiPartner(t *testing.T) {
 		f := &gen.Writer{Name: "frozen", Password: "x"}
 		insert(t, e.ctx, e.db, f)
 		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(f.ID)})
-		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
+		ce, ok := errors.AsType[*velox.ConstraintError](err)
+		if !ok || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("c takes the frozen f: %v, want a unique ConstraintError", err)
 		}
 		if want := fmt.Sprintf("row %d cannot be linked", f.ID); ce.Err == nil || ce.Err.Error() != want {
@@ -2354,8 +2347,7 @@ func TestBidiPartner(t *testing.T) {
 		// on the key's field, presented as BAD_USER_INPUT, and nothing is
 		// written.
 		_, err = updateWriter(e.ctx, c.ID, gen.UpdateWriterInput{PartnerID: ptr(c.ID)})
-		var ve *velox.ValidationError
-		if !errors.As(err, &ve) || ve.Field != "WriterPartner" {
+		if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "WriterPartner" {
 			t.Errorf("c as its own partner: %v, want a *velox.ValidationError of WriterPartner", err)
 		}
 		if ge := veloxgql.ErrorPresenter(nil)(e.ctx, err); ge.Extensions["code"] != veloxgql.CodeBadUserInput || ge.Message != "invalid value: a row cannot be its own partner" {

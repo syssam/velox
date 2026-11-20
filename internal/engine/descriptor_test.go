@@ -158,8 +158,7 @@ func TestDescriptorRefusals(t *testing.T) {
 			// The relations of these cases all target dAuthor, as a use site
 			// of the handle would say.
 			_, err := loadDescriptor(d, targetOf[fixture.DAuthor]())
-			var se *velox.SchemaError
-			if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: engine_test.dRow") || !strings.Contains(err.Error(), c.want) {
+			if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.HasPrefix(err.Error(), "velox: engine_test.dRow") || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("got %v, want a *SchemaError containing %q", err, c.want)
 			}
 		})
@@ -193,8 +192,7 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 			d := rowDescriptor()
 			c.edit(&d)
 			_, err := loadDescriptor(d)
-			var se *velox.SchemaError
-			if !errors.As(err, &se) || err.Error() != c.want {
+			if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != c.want {
 				t.Fatalf("got %v, want a *SchemaError %q", err, c.want)
 			}
 		})
@@ -304,8 +302,7 @@ func TestBidiDescriptorRefused(t *testing.T) {
 			d := bidiDescriptor()
 			c.edit(&d)
 			_, err := loadDescriptor(d)
-			var se *velox.SchemaError
-			if !errors.As(err, &se) || err.Error() != "velox: engine_test.dBidi: "+c.want {
+			if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != "velox: engine_test.dBidi: "+c.want {
 				t.Errorf("err = %v,\nwant a SchemaError: velox: engine_test.dBidi: %s", err, c.want)
 			}
 		})
@@ -383,8 +380,7 @@ func TestBidiOneDescriptorRefused(t *testing.T) {
 			d := spouseDescriptor()
 			c.edit(&d)
 			_, err := loadDescriptor(d)
-			var se *velox.SchemaError
-			if !errors.As(err, &se) || err.Error() != "velox: engine_test.dSpouse."+c.want {
+			if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != "velox: engine_test.dSpouse."+c.want {
 				t.Errorf("err = %v,\nwant a SchemaError: velox: engine_test.dSpouse.%s", err, c.want)
 			}
 		})

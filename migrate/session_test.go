@@ -39,8 +39,7 @@ func TestCheckVersion(t *testing.T) {
 		if (err == nil) != c.ok {
 			t.Errorf("%v %s: %v; want ok %t", c.d, c.v, err, c.ok)
 		}
-		var e *migrate.Error
-		if err != nil && (!errors.As(err, &e) || e.Code != "session") {
+		if e, ok := errors.AsType[*migrate.Error](err); err != nil && (!ok || e.Code != "session") {
 			t.Errorf("%v %s: %#v; want Code session", c.d, c.v, err)
 		}
 	}

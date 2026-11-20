@@ -18,8 +18,7 @@ func TestNewPlan(t *testing.T) {
 		from := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("legacy").Optional().Default("")) })
 		to := mustTables(d, nil)
 		p, err := migrate.NewPlan(from, to, migrate.PlanOptions{LockTimeout: 5 * time.Second})
-		var b *migrate.BlockedError
-		if p != nil || !errors.As(err, &b) || len(b.Findings) != 1 {
+		if b, ok := errors.AsType[*migrate.BlockedError](err); p != nil || !ok || len(b.Findings) != 1 {
 			t.Fatalf("%v: %v, %v; want a *BlockedError with one finding", d, p, err)
 		}
 		want := "migrate: 1 destructive change refused:\n" +
@@ -46,8 +45,8 @@ func TestNewPlan(t *testing.T) {
 	}
 
 	// Diff's errors come through.
-	var e *migrate.Error
-	if _, err := migrate.NewPlan(nil, mustTables(velox.MySQL, nil), migrate.PlanOptions{}); !errors.As(err, &e) || e.Code != "nil" {
+	_, err := migrate.NewPlan(nil, mustTables(velox.MySQL, nil), migrate.PlanOptions{})
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "nil" {
 		t.Errorf("a nil from: %v", err)
 	}
 }

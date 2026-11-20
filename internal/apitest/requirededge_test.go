@@ -72,8 +72,7 @@ func TestRequiredEdge(t *testing.T) {
 	const want = `velox: apitest.rtree: ParentID: missing required edge "rtree.parent"`
 	refused := func(t *testing.T, e *fakeconn.Exec, err error) {
 		t.Helper()
-		var ve *velox.ValidationError
-		if !errors.As(err, &ve) || err.Error() != want || ve.Field != "ParentID" {
+		if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || err.Error() != want || ve.Field != "ParentID" {
 			t.Errorf("got %v, want %s", err, want)
 		}
 		if len(e.Log) != 0 {

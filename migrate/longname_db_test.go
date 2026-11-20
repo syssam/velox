@@ -19,8 +19,7 @@ func TestPostgresLongNameRefused(t *testing.T) {
 	long := strings.Repeat("c", 64)
 	to := oneTable(d, migrate.Column{Name: long, Type: "text", Nullable: true})
 	_, err := migrate.NewPlan(oneTable(d), to, migrate.PlanOptions{})
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "schema" || !strings.Contains(err.Error(), `the column "`+long+`" of 64 bytes, over PostgreSQL's 63`) {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "schema" || !strings.Contains(err.Error(), `the column "`+long+`" of 64 bytes, over PostgreSQL's 63`) {
 		t.Errorf("a 64-byte column: %v", err)
 		db, _ := freshDB(t, d)
 		fsys := dirOf(t, d, step{to: to, name: "long"})
@@ -77,8 +76,7 @@ func TestLongNamesRefused(t *testing.T) {
 				continue
 			}
 			_, err := migrate.Diff(oneTable(c.d), long, migrate.DiffOptions{})
-			var e *migrate.Error
-			if !errors.As(err, &e) || e.Code != "schema" || !strings.Contains(err.Error(), c.want) {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "schema" || !strings.Contains(err.Error(), c.want) {
 				t.Errorf("%s: a %s over the limit: %v", c.d, set.what, err)
 			}
 		}

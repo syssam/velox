@@ -291,7 +291,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 			// Joined errors, each shown: relErrors shows their paths.
 			return fail(relErrors(dir, err))
 		}
-		if fe := (*codegen.FileError)(nil); errors.As(err, &fe) {
+		if fe, ok := errors.AsType[*codegen.FileError](err); ok {
 			c := *fe
 			c.Path = relPath(dir, fe.Path)
 			return fail(&c)

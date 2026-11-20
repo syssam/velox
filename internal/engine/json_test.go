@@ -198,8 +198,7 @@ func TestCodecNeedsBoth(t *testing.T) {
 				return &x.Words
 			},
 		})
-		var se *velox.SchemaError
-		if !errors.As(err, &se) || se.Field != "Words" || !strings.Contains(err.Error(), "words") {
+		if se, ok := errors.AsType[*velox.SchemaError](err); !ok || se.Field != "Words" || !strings.Contains(err.Error(), "words") {
 			t.Errorf("got %v, want a *SchemaError naming the column", err)
 		}
 	}
@@ -297,8 +296,7 @@ func TestEncodedKeyRefused(t *testing.T) {
 		{"relation key", 2, "Parent", "relation Kids"},
 	} {
 		_, err := loadDescriptor(jKeyDescriptor(c.col))
-		var se *velox.SchemaError
-		if !errors.As(err, &se) || se.Field != c.field || !strings.Contains(err.Error(), c.reason) || !strings.Contains(err.Error(), "codec") {
+		if se, ok := errors.AsType[*velox.SchemaError](err); !ok || se.Field != c.field || !strings.Contains(err.Error(), c.reason) || !strings.Contains(err.Error(), "codec") {
 			t.Errorf("%s: got %v, want a *SchemaError naming %s", c.name, err, c.field)
 		}
 	}
@@ -424,8 +422,7 @@ func TestNullableNeedsNil(t *testing.T) {
 			return &x.Words
 		},
 	})
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || se.Field != "ID" || !strings.Contains(err.Error(), "Nullable") {
+	if se, ok := errors.AsType[*velox.SchemaError](err); !ok || se.Field != "ID" || !strings.Contains(err.Error(), "Nullable") {
 		t.Errorf("got %v, want a *SchemaError naming the column", err)
 	}
 }

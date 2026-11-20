@@ -130,8 +130,7 @@ func run(ctx context.Context, w io.Writer) error {
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		acct := veloxgen.Account{Name: "bob", Balance: 5}
 		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&acct).Exec(ctx) })
-		var ce *velox.ConstraintError
-		if errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
+		if ce, ok := errors.AsType[*velox.ConstraintError](err); ok && ce.Kind == velox.ConstraintUnique {
 			say("savepoint: %s constraint on %s; opening bob2 instead", ce.Kind, ce.Constraint)
 			acct.Name = "bob2"
 			err = tx.Insert(&acct).Exec(ctx)

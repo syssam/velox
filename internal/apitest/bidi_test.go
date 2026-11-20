@@ -421,8 +421,7 @@ func TestBidiOne(t *testing.T) {
 			e.Rows = [][]any{{int64(1)}}
 		}
 		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
-		var ce *velox.ConstraintError
-		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique || ce.Constraint != "spouse_id" || err.Error() != want {
+		if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintUnique || ce.Constraint != "spouse_id" || err.Error() != want {
 			t.Fatalf("err = %v,\nwant a unique ConstraintError: %s", err, want)
 		}
 		sent(t, e, append(slices.Clone(linked[:4]), stmt{probe, []any{int64(3), 1}}, stmt{"ROLLBACK", nil})...)
@@ -745,8 +744,7 @@ func TestBidiOne(t *testing.T) {
 		} {
 			// The value of one field is refused: GraphQL maps it to the
 			// input field, as BAD_USER_INPUT.
-			var ve *velox.ValidationError
-			if !errors.As(err, &ve) || ve.Entity != "apitest.bspouse" || ve.Field != "SpouseID" {
+			if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Entity != "apitest.bspouse" || ve.Field != "SpouseID" {
 				t.Errorf("%s: %v, want a ValidationError on SpouseID", name, err)
 			}
 		}
@@ -868,8 +866,8 @@ func TestBidiOneScope(t *testing.T) {
 		return next(ctx)
 	}))
 	err := db.Save(&btspouse{ID: 1, SpouseID: new(int64(3))}, velox.NullNumberCol[btspouse, int64]{I: 2}).Exec(testmodel.Org.With(context.Background(), int64(7)))
-	var ce *velox.ConstraintError
-	if want := "velox: apitest.btspouse: unique constraint spouse_id violated: row 3 cannot be linked"; !errors.As(err, &ce) || err.Error() != want {
+	_, isConstraint := errors.AsType[*velox.ConstraintError](err)
+	if want := "velox: apitest.btspouse: unique constraint spouse_id violated: row 3 cannot be linked"; !isConstraint || err.Error() != want {
 		t.Fatalf("err = %v, want %s", err, want)
 	}
 	want := []seen{{upd, ""}, {unlink, reason}, {link, ""}, {probe, ""}}

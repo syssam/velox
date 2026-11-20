@@ -125,8 +125,7 @@ func TestSplit(t *testing.T) {
 	for _, c := range splitCases {
 		got, err := migrate.Split(c.d, c.src)
 		if c.err != "" {
-			var e *migrate.Error
-			if !errors.As(err, &e) || e.Code != "file" || e.Reason != c.err || e.Pos != strconv.Itoa(c.line) {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "file" || e.Reason != c.err || e.Pos != strconv.Itoa(c.line) {
 				t.Errorf("%v %q: error %v, want %q at line %d", c.d, c.src, err, c.err, c.line)
 			}
 			continue

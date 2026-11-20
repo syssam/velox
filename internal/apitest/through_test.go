@@ -380,8 +380,7 @@ func TestThroughRefusals(t *testing.T) {
 		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.policy_j: its join entity apitest.dPolicyJoin has a Read policy; a join entity is read through its two sides, whose Read policies apply, and cannot have one of its own"},
 	} {
 		_, _, err := db.Query[dBadThrough]().Where(c.p).Limit(1).SQL(ctx)
-		var se *velox.SchemaError
-		if !errors.As(err, &se) || err.Error() != c.want {
+		if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err.Error() != c.want {
 			t.Errorf("got  %v\nwant %s", err, c.want)
 		}
 	}

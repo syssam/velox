@@ -127,8 +127,7 @@ func TestRenderRefusesEnumArray(t *testing.T) {
 		return s
 	}
 	_, err := migrate.NewPlan(schema("a", "b"), schema("b", "a"), allowAll("reorder-enum"))
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "render" || !strings.Contains(err.Error(), "t.moods") || !strings.Contains(err.Error(), "array") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" || !strings.Contains(err.Error(), "t.moods") || !strings.Contains(err.Error(), "array") {
 		t.Errorf("NewPlan: %v", err)
 	}
 	// Adding a value needs no swap.
@@ -149,8 +148,7 @@ func TestRenderRefusesForeignCollation(t *testing.T) {
 		return s
 	}
 	_, err := migrate.NewPlan(schema("utf8mb4_bin"), schema("latin1_bin"), allowAll("convert-collation"))
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "render" || !strings.Contains(err.Error(), "latin1_bin") || !strings.Contains(err.Error(), "utf8mb4") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" || !strings.Contains(err.Error(), "latin1_bin") || !strings.Contains(err.Error(), "utf8mb4") {
 		t.Errorf("NewPlan: %v", err)
 	}
 	if _, err := migrate.NewPlan(schema("utf8mb4_bin"), schema("utf8mb4_general_ci"), allowAll("convert-collation")); err != nil {

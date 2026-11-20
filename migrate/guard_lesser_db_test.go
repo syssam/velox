@@ -36,8 +36,8 @@ func TestMySQLDropColumnPlainIndexIsANote(t *testing.T) {
 		t.Errorf("the notes: %q", n)
 	}
 	up, _ = setup(t, "CREATE UNIQUE INDEX x ON t (a, b)")
-	var e *migrate.Error
-	if err := up(); !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "holds rows to more") {
+	err := up()
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "holds rows to more") {
 		t.Errorf("a UNIQUE one: %v", err)
 	}
 }
@@ -46,8 +46,7 @@ func TestMySQLDropColumnPlainIndexIsANote(t *testing.T) {
 // says, and leaves no row in the history for the file.
 func unsupported(t *testing.T, err error, says string) {
 	t.Helper()
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unsupported" || !strings.Contains(err.Error(), says) {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unsupported" || !strings.Contains(err.Error(), says) {
 		t.Fatalf("Up: %v", err)
 	}
 }

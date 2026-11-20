@@ -504,8 +504,10 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	if c.Connection != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)
 	}
-	var coded interface{ Extensions() map[string]any }
-	if errors.As(err, &coded) {
+	if coded, ok := errors.AsType[interface {
+		error
+		Extensions() map[string]any
+	}](err); ok {
 		t.Errorf("the error is coded: %v", coded.Extensions())
 	}
 	if ran := st.take(); len(ran) != 0 {

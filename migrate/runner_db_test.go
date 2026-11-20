@@ -265,8 +265,8 @@ func TestUpPostgresStandardConformingStrings(t *testing.T) {
 	}
 	mustExec(t, db, `ALTER DATABASE "`+name+`" SET standard_conforming_strings = off`)
 	off := openDB(t, "pgx", dsn) // a new session takes the database's setting
-	var e *migrate.Error
-	if _, err := migrate.Up(context.Background(), off, dirOf(t, velox.Postgres)); !errors.As(err, &e) || e.Code != "session" || !strings.Contains(e.Reason, "standard_conforming_strings") {
+	_, err := migrate.Up(context.Background(), off, dirOf(t, velox.Postgres))
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" || !strings.Contains(e.Reason, "standard_conforming_strings") {
 		t.Fatalf("%#v; want Code session", err)
 	}
 }

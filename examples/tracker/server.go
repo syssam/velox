@@ -368,18 +368,18 @@ func (s *server) addComment(w http.ResponseWriter, r *http.Request) {
 // fail answers err with its HTTP status. What the database said stays in the log:
 // the client gets a message that names no table or constraint.
 func (s *server) fail(w http.ResponseWriter, r *http.Request, err error) {
-	var ve *velox.ValidationError
-	var ce *velox.ConstraintError
+	ve, isValidation := errors.AsType[*velox.ValidationError](err)
+	ce, isConstraint := errors.AsType[*velox.ConstraintError](err)
 	switch {
 	case velox.IsNotFound(err):
 		writeJSON(w, http.StatusNotFound, errorBody{"not found"})
 	case errors.Is(err, velox.ErrDenied):
 		writeJSON(w, http.StatusForbidden, errorBody{"not allowed"})
-	case errors.As(err, &ve):
+	case isValidation:
 		writeJSON(w, http.StatusUnprocessableEntity, errorBody{ve.Field + ": " + ve.Err.Error()})
-	case errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique:
+	case isConstraint && ce.Kind == velox.ConstraintUnique:
 		writeJSON(w, http.StatusConflict, errorBody{"that already exists"})
-	case errors.As(err, &ce) && ce.Kind == velox.ConstraintForeignKey:
+	case isConstraint && ce.Kind == velox.ConstraintForeignKey:
 		writeJSON(w, http.StatusUnprocessableEntity, errorBody{"it refers to something that does not exist"})
 	case errors.Is(err, context.Canceled):
 		// The client went away; nobody reads this.
@@ -412,9 +412,8 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 			err = errors.New("data after the JSON value")
 		}
 	}
-	var tooBig *http.MaxBytesError
-	switch {
-	case errors.As(err, &tooBig):
+	switch _, tooBig := errors.AsType[*http.MaxBytesError](err); {
+	case tooBig:
 		writeJSON(w, http.StatusRequestEntityTooLarge, errorBody{"the body is too large"})
 	case err != nil:
 		writeJSON(w, http.StatusBadRequest, errorBody{"the body is not the JSON expected"})

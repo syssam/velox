@@ -69,8 +69,8 @@ var (
 
 // IsDecision reports whether err is or wraps a Decision.
 func IsDecision(err error) bool {
-	var d *Decision
-	return errors.As(err, &d)
+	_, ok := errors.AsType[*Decision](err)
+	return ok
 }
 
 // Allowf returns Allow wrapped with a formatted message.

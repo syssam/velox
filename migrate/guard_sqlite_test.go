@@ -42,8 +42,7 @@ func TestRebuildDropsNameTheAttribute(t *testing.T) {
 	mustExec(t, db, "DROP TABLE c")
 	mustExec(t, db, "CREATE TABLE c (id integer NOT NULL PRIMARY KEY, p integer, CONSTRAINT c_fk FOREIGN KEY (p) REFERENCES p (id) ON DELETE CASCADE ON UPDATE CASCADE DEFERRABLE)")
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "ON UPDATE CASCADE") || !strings.Contains(err.Error(), "DEFERRABLE") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "ON UPDATE CASCADE") || !strings.Contains(err.Error(), "DEFERRABLE") {
 		t.Fatalf("Up: %v", err)
 	}
 
@@ -65,7 +64,7 @@ func TestRebuildDropsNameTheAttribute(t *testing.T) {
 		return strings.ReplaceAll(s, "-- velox:drops c.c_fk:on-delete\n", "")
 	})
 	_, err = migrate.Up(context.Background(), db, handed)
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "c.c_fk") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "c.c_fk") {
 		t.Fatalf("Up with no drops line: %v", err)
 	}
 }
@@ -81,8 +80,7 @@ func TestRebuildRefusesPrimaryKeyDescriptor(t *testing.T) {
 	} {
 		db, fsys := guarded(t, migrate.PlanOptions{}, "DROP TABLE t", create)
 		_, err := migrate.Up(context.Background(), db, fsys)
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "DESC") {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "DESC") {
 			t.Errorf("%s: Up: %v", create, err)
 		}
 		if got := createText(t, db); !strings.Contains(got, "DESC") {
@@ -124,8 +122,7 @@ func TestDropTableRefusesDependents(t *testing.T) {
 	for name, hand := range map[string]string{"o_ai": trigger, "p_v": view} {
 		db, fsys := droppedUse(t, allow, hand)
 		_, err := migrate.Up(ctx, db, fsys)
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "velox:allow unmodeled-loss "+name) {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "velox:allow unmodeled-loss "+name) {
 			t.Fatalf("%s: Up: %v", name, err)
 		}
 		if !objectOf(t, db, "p") {

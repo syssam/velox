@@ -1875,8 +1875,8 @@ func TestTablesMySQLIndexNameClash(t *testing.T) {
 	_, err := Tables(mustBuild(t, Member{}), velox.MySQL)
 	want := `schema Member: field "members_name": index name "members_name" of the unique index of field "members_name" is also that of index 0, in table members on MySQL, ` +
 		`which names the unique index of field "members_name" after its column; give one a StorageKey`
-	var ge *Error
-	if got := plain(err); got != want || !errors.As(err, &ge) || !strings.HasSuffix(ge.Pos, "/tables_test.go:"+strconv.Itoa(memberLine)) {
+	got := plain(err)
+	if ge, ok := errors.AsType[*Error](err); got != want || !ok || !strings.HasSuffix(ge.Pos, "/tables_test.go:"+strconv.Itoa(memberLine)) {
 		t.Fatalf("got %v, want %q", err, want)
 	}
 	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {

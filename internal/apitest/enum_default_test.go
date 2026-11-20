@@ -67,8 +67,8 @@ func enumDB(t *testing.T) (*velox.DB, *sql.DB) {
 }
 
 func isInvalidStatus(err error) bool {
-	var ve *velox.ValidationError
-	return errors.As(err, &ve) && strings.Contains(err.Error(), "is not one of")
+	_, ok := errors.AsType[*velox.ValidationError](err)
+	return ok && strings.Contains(err.Error(), "is not one of")
 }
 
 // TestEnumSchemaDefaultZero: an enum's zero value in a column with a

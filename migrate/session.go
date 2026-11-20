@@ -65,12 +65,10 @@ func wrap(ctx context.Context, what string, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	var (
-		e  *Error
-		ce *ChecksumError
-		de *DirtyError
-	)
-	if errors.Is(err, ErrLockWait) || errors.As(err, &e) || errors.As(err, &ce) || errors.As(err, &de) {
+	_, isError := errors.AsType[*Error](err)
+	_, isChecksum := errors.AsType[*ChecksumError](err)
+	_, isDirty := errors.AsType[*DirtyError](err)
+	if errors.Is(err, ErrLockWait) || isError || isChecksum || isDirty {
 		return err
 	}
 	return fmt.Errorf("migrate: %s: %w", what, err)

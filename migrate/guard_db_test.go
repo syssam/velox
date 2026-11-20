@@ -46,8 +46,7 @@ func TestMySQLCommentChangeRefused(t *testing.T) {
 	t.Parallel()
 	db, fsys := mysqlGuarded(t, migrate.PlanOptions{})
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" {
 		a, b := mysqlColumn(t, db, "at")
 		t.Fatalf("Up: %v; want an *Error of Code unmodeled; EXTRA %q, collation %q\n%s", err, a, b, sqlFiles(fsys))
 	}
@@ -101,8 +100,7 @@ func TestMySQLModifyAllowed(t *testing.T) {
 
 	db, fsys = mysqlGuarded(t, migrate.PlanOptions{Allow: []migrate.Allow{{Code: "unmodeled-loss", Target: "t.c"}}})
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t.at") || strings.Contains(err.Error(), "t.c:") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t.at") || strings.Contains(err.Error(), "t.c:") {
 		t.Errorf("Up: %v", err)
 	}
 }
@@ -120,8 +118,7 @@ func TestMySQLModifyFollowsRenames(t *testing.T) {
 	mustExec(t, db, "ALTER TABLE t MODIFY COLUMN at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
 	moved := extend(t, fsys, d, files("0002_rebuild.sql", "RENAME TABLE t TO t2;\nALTER TABLE t2 RENAME COLUMN at TO changed;\nALTER TABLE t2 MODIFY COLUMN changed timestamp NOT NULL COMMENT 'x';\n"))
 	_, err := migrate.Up(context.Background(), db, moved)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t2.changed") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t2.changed") {
 		t.Errorf("Up: %v", err)
 	}
 
@@ -245,8 +242,7 @@ func TestMySQLGuardReadsEveryShape(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			db, fsys := setup(t, c.q)
 			_, err := migrate.Up(context.Background(), db, fsys)
-			var e *migrate.Error
-			if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), c.says) {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), c.says) {
 				t.Fatalf("Up: %v", err)
 			}
 			if extra, _ := mysqlColumn(t, db, "at"); !strings.Contains(strings.ToLower(extra), "on update") {
@@ -333,8 +329,7 @@ func TestUpForeignKeyAddedAgain(t *testing.T) {
 			}
 			db, fsys := retypedKey(t, c.d, c.attrs, migrate.PlanOptions{})
 			_, err := migrate.Up(context.Background(), db, fsys)
-			var e *migrate.Error
-			if !errors.As(err, &e) || e.Code != "unmodeled" {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" {
 				t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
 			}
 			for _, want := range c.says {
@@ -409,8 +404,8 @@ func TestPostgresRetypeKeepsCollation(t *testing.T) {
 	}
 	db, fsys := setup(t, migrate.PlanOptions{})
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t.c") || !strings.Contains(err.Error(), "COLLATE") || !strings.Contains(err.Error(), "velox:allow unmodeled-loss t.c") {
+	e, ok := errors.AsType[*migrate.Error](err)
+	if !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "t.c") || !strings.Contains(err.Error(), "COLLATE") || !strings.Contains(err.Error(), "velox:allow unmodeled-loss t.c") {
 		t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
 	}
 	if coll := pgCollation(t, db); coll != "C" {
@@ -455,8 +450,7 @@ func TestPostgresRetypeKeepsCollation(t *testing.T) {
 		mustExec(t, db, `ALTER TABLE t ALTER COLUMN c TYPE varchar(10) COLLATE "C"`)
 		fsys := extend(t, base, d, files("0002_x.sql", c.q+"\n"))
 		_, err := migrate.Up(context.Background(), db, fsys)
-		var e *migrate.Error
-		if c.refuse && (!errors.As(err, &e) || e.Code != "unmodeled") {
+		if e, ok := errors.AsType[*migrate.Error](err); c.refuse && (!ok || e.Code != "unmodeled") {
 			t.Errorf("%s: Up: %v", c.q, err)
 		}
 		if !c.refuse && err != nil {

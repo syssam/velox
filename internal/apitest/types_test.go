@@ -23,8 +23,7 @@ func TestPolicyError(t *testing.T) {
 	if !errors.Is(err, velox.ErrDenied) || !errors.Is(err, own) {
 		t.Errorf("%v: Is(ErrDenied) %v, Is(own) %v", err, errors.Is(err, velox.ErrDenied), errors.Is(err, own))
 	}
-	var pe *velox.PolicyError
-	if !errors.As(errors.Join(errors.New("other"), err), &pe) || pe.Op != velox.OpSelect || pe.Err != own {
+	if pe, ok := errors.AsType[*velox.PolicyError](errors.Join(errors.New("other"), err)); !ok || pe.Op != velox.OpSelect || pe.Err != own {
 		t.Errorf("errors.As: %+v", pe)
 	}
 }

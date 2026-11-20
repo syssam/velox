@@ -26,8 +26,7 @@ func as(user string, org int64) context.Context {
 
 func wantPolicyError(t *testing.T, err error, op velox.Op) {
 	t.Helper()
-	var pe *velox.PolicyError
-	if !errors.As(err, &pe) || pe.Op != op || !errors.Is(err, velox.ErrDenied) {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != op || !errors.Is(err, velox.ErrDenied) {
 		t.Fatalf("got %v, want a *PolicyError for %s", err, op)
 	}
 }

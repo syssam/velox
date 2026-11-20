@@ -59,9 +59,8 @@ func TestSchemaMethodsRefusesAWrongShape(t *testing.T) {
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		_, err := SchemaMethods(dir, []string{"User", "Post"})
-		var fe *FileError
 		line := strings.Count(c.src[:strings.Index(c.src, "func (")], "\n") + 1
-		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != line || fe.Reason != c.want {
+		if fe, ok := errors.AsType[*FileError](err); !ok || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != line || fe.Reason != c.want {
 			t.Errorf("%s: err = %v; want a FileError at mine.go:%d: %s", c.name, err, line, c.want)
 		}
 	}
@@ -84,8 +83,7 @@ func TestSchemaMethodsRefusesTypedShape(t *testing.T) {
 		dir := methodsDir(t, map[string]string{"mine.go": src})
 		_, err := SchemaMethods(dir, []string{"User"})
 		want := "User." + m + " must take nothing and return " + behaviourResult(m) + ": func (User) " + m + "() " + behaviourResult(m)
-		var fe *FileError
-		if !errors.As(err, &fe) || fe.Line != 3 || fe.Reason != want {
+		if fe, ok := errors.AsType[*FileError](err); !ok || fe.Line != 3 || fe.Reason != want {
 			t.Errorf("%s: err = %v; want %s", m, err, want)
 		}
 	}
@@ -101,8 +99,7 @@ func TestCheckUserFilesRefusesBehaviour(t *testing.T) {
 	} {
 		dir := methodsDir(t, map[string]string{"mine.go": c.src})
 		err := CheckUserFiles(dir, []string{"User"})
-		var fe *FileError
-		if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != 3 || fe.Reason != c.want {
+		if fe, ok := errors.AsType[*FileError](err); !ok || fe.Path != filepath.Join(dir, "mine.go") || fe.Line != 3 || fe.Reason != c.want {
 			t.Errorf("%s: err = %v; want a FileError at mine.go:3: %s", c.name, err, c.want)
 		}
 	}
@@ -245,8 +242,7 @@ func TestSchemaMethodsRefusesSystemFiles(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			dir := methodsDir(t, map[string]string{c.file: c.src})
 			_, err := SchemaMethods(dir, []string{"User"})
-			var fe *FileError
-			if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, c.file) || fe.Line != c.line ||
+			if fe, ok := errors.AsType[*FileError](err); !ok || fe.Path != filepath.Join(dir, c.file) || fe.Line != c.line ||
 				!strings.Contains(fe.Reason, "velox-gen reads hooks and policies only from files that every build includes") {
 				t.Fatalf("got %v", err)
 			}
@@ -392,8 +388,7 @@ func TestGenerateRefusesABidiPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = Generate(goldenGraph(t, "blog"), Config{Package: "gen", Bound: bound, GenPath: "m/gen"})
-	var fe *FileError
-	if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "friend.go") || fe.Line != 8 ||
+	if fe, ok := errors.AsType[*FileError](err); !ok || fe.Path != filepath.Join(dir, "friend.go") || fe.Line != 8 ||
 		fe.Reason != "UserFriend.Policy sets Read, Write, Query or Mutation: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link" {
 		t.Fatalf("err = %v; want a FileError at friend.go:8", err)
 	}

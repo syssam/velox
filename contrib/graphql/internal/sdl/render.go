@@ -117,8 +117,7 @@ func (w *writer) dirs(ds []directive) string {
 // explain is err, an error gqlparser found in what w wrote, with the element
 // of the line it is on.
 func (w *writer) explain(err error) error {
-	var ge *gqlerror.Error
-	if errors.As(err, &ge) && len(ge.Locations) > 0 {
+	if ge, ok := errors.AsType[*gqlerror.Error](err); ok && len(ge.Locations) > 0 {
 		if l := ge.Locations[0].Line; l >= 1 && l <= len(w.where) && w.where[l-1] != "" {
 			return fmt.Errorf("%s: not valid GraphQL: %s", w.where[l-1], ge.Message)
 		}

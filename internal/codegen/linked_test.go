@@ -164,8 +164,7 @@ func TestBehaviourRefusesSchemaImportingGen(t *testing.T) {
 			"schema/uses.go":   "package schema\n\nimport \"example.com/tmp/gen\"\n\nvar _ = gen.X\n",
 		})
 		_, err := Behaviour(dir, "./schema", "example.com/tmp/gen", offline(), []string{"User"})
-		var fe *FileError
-		if !errors.As(err, &fe) || filepath.Base(fe.Path) != "uses.go" || fe.Line != 3 ||
+		if fe, ok := errors.AsType[*FileError](err); !ok || filepath.Base(fe.Path) != "uses.go" || fe.Line != 3 ||
 			fe.Reason != "the schema package imports example.com/tmp/gen: "+genImportReason {
 			t.Fatalf("got %v", err)
 		}
@@ -203,8 +202,7 @@ func TestBehaviourRefusesSchemaImportingGen(t *testing.T) {
 			}
 		}
 		err := CheckGenImports(dir, "./schema", "example.com/tmp/gen", offline())
-		var fe *FileError
-		if !errors.As(err, &fe) || filepath.Base(fe.Path) != "uses.go" || fe.Line != 3 {
+		if fe, ok := errors.AsType[*FileError](err); !ok || filepath.Base(fe.Path) != "uses.go" || fe.Line != 3 {
 			t.Fatalf("got %v", err)
 		}
 	})

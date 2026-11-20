@@ -283,8 +283,7 @@ func TestUpChecksum(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = migrate.Up(context.Background(), db, edited)
-	var ce *migrate.ChecksumError
-	if !errors.As(err, &ce) || *ce != (migrate.ChecksumError{Version: 1, Path: "0001_a.sql", Applied: old, Now: nd.Files[0].Sum}) {
+	if ce, ok := errors.AsType[*migrate.ChecksumError](err); !ok || *ce != (migrate.ChecksumError{Version: 1, Path: "0001_a.sql", Applied: old, Now: nd.Files[0].Sum}) {
 		t.Fatalf("edited: %#v", err)
 	}
 	if want := "migrate: 0001_a.sql was applied with checksum " + old + " and is now " + nd.Files[0].Sum + "\n  restore the file; or, if the database holds what this file does, run migrate resolve -version 1 -adopt"; !strings.HasPrefix(err.Error(), want) {
@@ -295,7 +294,7 @@ func TestUpChecksum(t *testing.T) {
 	delete(gone, "0001_a.sql")
 	resum(t, gone)
 	_, err = migrate.Up(context.Background(), db, gone)
-	if !errors.As(err, &ce) || ce.Version != 1 || ce.Now != "" || ce.Applied != old {
+	if ce, ok := errors.AsType[*migrate.ChecksumError](err); !ok || ce.Version != 1 || ce.Now != "" || ce.Applied != old {
 		t.Fatalf("gone: %#v", err)
 	}
 	if want := "migrate: version 1 is applied but the directory has no file for it\n  restore the file; or, "; !strings.HasPrefix(err.Error(), want) || !strings.Contains(err.Error(), "resolve -version 1 -forget") {
@@ -327,8 +326,7 @@ func TestUpPendingBelow(t *testing.T) {
 	a, b, c := "CREATE TABLE a (x integer);", "CREATE TABLE b (x integer);", "CREATE TABLE c (x integer);"
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_a.sql", a, "0003_c.sql", c)))
 	_, err := migrate.Up(context.Background(), db, dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", b, "0003_c.sql", c)))
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "history" {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "history" {
 		t.Fatalf("%#v; want Code history", err)
 	}
 	if want := "migrate: 0002_b.sql is pending below version 3, the highest applied; the history is linear"; err.Error() != want {
@@ -341,8 +339,8 @@ func TestUpStaleSum(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
 	fsys["0001_a.sql"] = &fstest.MapFile{Data: []byte("CREATE TABLE b (x integer);")}
-	var se *migrate.SumError
-	if _, err := migrate.Up(context.Background(), db, fsys); !errors.As(err, &se) {
+	_, err := migrate.Up(context.Background(), db, fsys)
+	if _, ok := errors.AsType[*migrate.SumError](err); !ok {
 		t.Fatalf("%#v; want *SumError", err)
 	}
 	if hasTable(t, db, "velox_migrations") {
@@ -354,8 +352,8 @@ func TestUpNoTransactionOnSQLite(t *testing.T) {
 	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "-- velox:no-transaction\nCREATE TABLE a (x integer);\n"))
-	var e *migrate.Error
-	if _, err := migrate.Up(context.Background(), db, fsys); !errors.As(err, &e) || e.Code != "file" || !strings.Contains(e.Reason, "no-transaction") {
+	_, err := migrate.Up(context.Background(), db, fsys)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "file" || !strings.Contains(e.Reason, "no-transaction") {
 		t.Fatalf("%#v; want ParseFile's refusal", err)
 	}
 }
@@ -364,11 +362,12 @@ func TestUpDialectMismatch(t *testing.T) {
 	t.Parallel()
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.Postgres, files("0001_a.sql", "CREATE TABLE a (x integer);"))
-	var e *migrate.Error
-	if _, err := migrate.Up(context.Background(), db, fsys); !errors.As(err, &e) || e.Code != "session" {
+	_, err := migrate.Up(context.Background(), db, fsys)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" {
 		t.Fatalf("%#v; want Code session", err)
 	}
-	if _, err := migrate.Status(context.Background(), db, fsys); !errors.As(err, &e) || e.Code != "session" {
+	_, err = migrate.Status(context.Background(), db, fsys)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" {
 		t.Fatalf("Status: %#v; want Code session", err)
 	}
 }
@@ -384,8 +383,8 @@ func TestRunnerNilDatabase(t *testing.T) {
 		"Status":  func() error { _, err := migrate.Status(ctx, nil, fsys); return err },
 		"Resolve": func() error { return migrate.Resolve(ctx, nil, fsys, 1, migrate.ResolveUndone) },
 	} {
-		var e *migrate.Error
-		if err := call(); !errors.As(err, &e) || e.Code != "nil" || e.Error() != "migrate: "+name+" needs a database" {
+		err := call()
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "nil" || e.Error() != "migrate: "+name+" needs a database" {
 			t.Errorf("%s: %v; want Code nil", name, err)
 		}
 	}
@@ -618,8 +617,7 @@ func TestRunnerErrorsSayWhat(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := migrate.Up(context.Background(), db, dirOf(t, velox.SQLite))
-	var se *sqlitedriver.Error
-	if err == nil || !strings.HasPrefix(err.Error(), "migrate: creating the history table velox_migrations: ") || !errors.As(err, &se) {
+	if _, ok := errors.AsType[*sqlitedriver.Error](err); err == nil || !strings.HasPrefix(err.Error(), "migrate: creating the history table velox_migrations: ") || !ok {
 		t.Errorf("Up: %#v", err)
 	}
 
@@ -628,7 +626,7 @@ func TestRunnerErrorsSayWhat(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = migrate.Status(context.Background(), db, dirOf(t, velox.SQLite))
-	if err == nil || !strings.HasPrefix(err.Error(), "migrate: reading the history table velox_migrations: ") || !errors.As(err, &se) {
+	if _, ok := errors.AsType[*sqlitedriver.Error](err); err == nil || !strings.HasPrefix(err.Error(), "migrate: reading the history table velox_migrations: ") || !ok {
 		t.Errorf("Status: %#v", err)
 	}
 }
@@ -708,8 +706,7 @@ func TestStatusDirty(t *testing.T) {
 		"ahead":        dirOf(t, velox.SQLite, files("0001_a.sql", a)),
 	} {
 		s, err := migrate.Status(context.Background(), db, dir)
-		var de *migrate.DirtyError
-		if !errors.As(err, &de) || de.Version != 2 || de.Statement != 0 || de.Err == nil || de.Err.Error() != "boom" {
+		if de, ok := errors.AsType[*migrate.DirtyError](err); !ok || de.Version != 2 || de.Statement != 0 || de.Err == nil || de.Err.Error() != "boom" {
 			t.Errorf("%s: %#v; want *DirtyError of version 2", name, err)
 			continue
 		}
@@ -717,7 +714,8 @@ func TestStatusDirty(t *testing.T) {
 			!slices.Equal(versions(s.Applied), []uint64{1}) {
 			t.Errorf("%s: state %+v", name, s)
 		}
-		if _, err := migrate.Up(context.Background(), db, dir); !errors.As(err, &de) {
+		_, err = migrate.Up(context.Background(), db, dir)
+		if _, ok := errors.AsType[*migrate.DirtyError](err); !ok {
 			t.Errorf("%s: Up: %#v; want *DirtyError", name, err)
 		}
 	}
@@ -810,8 +808,7 @@ func TestUpRefusesADatabaseThatIsNotSQLite(t *testing.T) {
 	db := openDB(t, "velox-not-sqlite", "")
 	fsys := dirOf(t, velox.SQLite, files(concurrentFiles...))
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "session" || !errors.Is(err, errNotSQLite) ||
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" || !errors.Is(err, errNotSQLite) ||
 		err.Error() != `migrate: the database does not answer as SQLite, velox.json's dialect: syntax error at or near "PRAGMA"` {
 		t.Errorf("%v", err)
 	}
@@ -885,8 +882,7 @@ var baselineFiles = []string{
 // baselineErr checks that err is an *Error of Code "baseline" with text.
 func baselineErr(t *testing.T, name string, err error, text string) {
 	t.Helper()
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "baseline" || err.Error() != "migrate: "+text {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "baseline" || err.Error() != "migrate: "+text {
 		t.Errorf("%s: %v; want Code baseline, %q", name, err, text)
 	}
 }
@@ -1066,14 +1062,13 @@ func TestUpBaselineConcurrent(t *testing.T) {
 	wg.Wait()
 	won := 0
 	for i, err := range errs {
-		var e *migrate.Error
-		switch {
+		switch e, isError := errors.AsType[*migrate.Error](err); {
 		case err == nil:
 			if !slices.Equal(reports[i].Baselined, []uint64{1}) {
 				t.Errorf("run %d: report %+v", i, reports[i])
 			}
 			won++
-		case errors.As(err, &e) && e.Code == "baseline", errors.Is(err, migrate.ErrLockWait):
+		case isError && e.Code == "baseline", errors.Is(err, migrate.ErrLockWait):
 		default:
 			t.Errorf("run %d: %v", i, err)
 		}

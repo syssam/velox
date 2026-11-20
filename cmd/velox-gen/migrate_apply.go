@@ -396,8 +396,8 @@ func runMigrateStatus(args []string, dir string, env []string, stdout, stderr io
 	ctx, stop := signalContext()
 	defer stop()
 	st, err := migrate.Status(ctx, db, os.DirFS(c.abs(dir)))
-	var dirty *migrate.DirtyError
-	if err != nil && !errors.As(err, &dirty) {
+	dirty, isDirty := errors.AsType[*migrate.DirtyError](err)
+	if err != nil && !isDirty {
 		return c.fail(1, err)
 	}
 
@@ -494,9 +494,8 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 	defer stop()
 	st, err := migrate.Status(ctx, db, os.DirFS(c.abs(dir)))
 	behind := "the database is not at the directory's last version: "
-	var dirty *migrate.DirtyError
-	switch {
-	case errors.As(err, &dirty):
+	switch dirty, isDirty := errors.AsType[*migrate.DirtyError](err); {
+	case isDirty:
 		return c.fail(1, errors.New(behind+dirty.Path+" is dirty"))
 	case err != nil:
 		return c.fail(1, err)

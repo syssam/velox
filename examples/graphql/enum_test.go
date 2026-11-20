@@ -42,8 +42,10 @@ func TestEnumUnknownValue(t *testing.T) {
 		{new(veloxgen.PostOrderField).UnmarshalGQL("NOPE"), "veloxgql: PostOrderField must be TITLE or VIEWS, not NOPE"},
 		{new(veloxgen.PostOrderField).UnmarshalGQL(nil), "veloxgql: PostOrderField must be TITLE or VIEWS, not <nil>"},
 	} {
-		var coded interface{ Extensions() map[string]any }
-		if c.err == nil || c.err.Error() != c.want || !errors.As(c.err, &coded) || coded.Extensions()["code"] != veloxgql.CodeBadUserInput {
+		if coded, ok := errors.AsType[interface {
+			error
+			Extensions() map[string]any
+		}](c.err); c.err == nil || c.err.Error() != c.want || !ok || coded.Extensions()["code"] != veloxgql.CodeBadUserInput {
 			t.Errorf("got %v, want BAD_USER_INPUT %q", c.err, c.want)
 		}
 	}

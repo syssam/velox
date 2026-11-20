@@ -163,16 +163,16 @@ func TestResolveSQLite(t *testing.T) {
 	edited := cloneFS(fsys)
 	edited["0002_b.sql"] = &fstest.MapFile{Data: []byte("CREATE TABLE b (y integer);")}
 	resum(t, edited)
-	var ce *migrate.ChecksumError
-	if err := migrate.Resolve(ctx, db, edited, 2, migrate.ResolveApplied); !errors.As(err, &ce) || ce.Version != 2 {
+	err := migrate.Resolve(ctx, db, edited, 2, migrate.ResolveApplied)
+	if ce, ok := errors.AsType[*migrate.ChecksumError](err); !ok || ce.Version != 2 {
 		t.Errorf("edited: %#v; want *ChecksumError", err)
 	}
 	// An edit not yet hashed: ResolveApplied reads the directory and is
 	// refused; ResolveUndone reads velox.json alone.
 	stale := cloneFS(fsys)
 	stale["0002_b.sql"] = &fstest.MapFile{Data: []byte("CREATE TABLE b (y integer);")}
-	var se *migrate.SumError
-	if err := migrate.Resolve(ctx, db, stale, 2, migrate.ResolveApplied); !errors.As(err, &se) {
+	err = migrate.Resolve(ctx, db, stale, 2, migrate.ResolveApplied)
+	if _, ok := errors.AsType[*migrate.SumError](err); !ok {
 		t.Errorf("stale, applied: %#v; want *SumError", err)
 	}
 	if err := migrate.Resolve(ctx, db, stale, 2, migrate.ResolveUndone); err != nil {
@@ -207,13 +207,13 @@ func TestUpResumeRefused(t *testing.T) {
 	edited := cloneFS(fsys)
 	edited["0002_b.sql"] = &fstest.MapFile{Data: []byte("CREATE TABLE b (y integer);")}
 	resum(t, edited)
-	var ce *migrate.ChecksumError
-	if _, err := migrate.Up(ctx, db, edited, migrate.WithResume()); !errors.As(err, &ce) || ce.Version != 2 || ce.Now == "" {
+	_, err = migrate.Up(ctx, db, edited, migrate.WithResume())
+	if ce, ok := errors.AsType[*migrate.ChecksumError](err); !ok || ce.Version != 2 || ce.Now == "" {
 		t.Errorf("edited: %#v; want *ChecksumError", err)
 	}
 	old := dirOf(t, velox.SQLite, files("0001_a.sql", a))
 	_, err = migrate.Up(ctx, db, old, migrate.WithResume())
-	if !errors.As(err, &ce) || ce.Version != 2 || ce.Now != "" {
+	if ce, ok := errors.AsType[*migrate.ChecksumError](err); !ok || ce.Version != 2 || ce.Now != "" {
 		t.Errorf("above the last file: %#v; want *ChecksumError", err)
 	}
 	if want := "migrate: version 2 is dirty, and the directory has no file for it; resume it with the directory that has its file, or undo its applied statements and run migrate resolve -version 2 -undone"; err == nil || err.Error() != want {

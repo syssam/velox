@@ -38,15 +38,20 @@ func TestPaginateBase(t *testing.T) {
 		{"no order column", q.Columns(int(people.ID.I), int(people.Name.I)), age, "veloxgql: Paginate of Person: q does not select the column of AGE, which orderBy names and the cursors hold"},
 	} {
 		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(c.q), &personConn, gqlgraph.Args{Order: c.order})
-		var coded interface{ Extensions() map[string]any }
-		if err == nil || err.Error() != c.want || errors.As(err, &coded) {
+		if _, ok := errors.AsType[interface {
+			error
+			Extensions() map[string]any
+		}](err); err == nil || err.Error() != c.want || ok {
 			t.Errorf("%s: %v, want the internal error %q", c.name, err, c.want)
 		}
 	}
 	unknown := []gqlgraph.Order{{Field: "HEIGHT"}}
 	_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(q), &personConn, gqlgraph.Args{Order: unknown})
-	var coded interface{ Extensions() map[string]any }
-	if want := `veloxgql: PersonOrder: "HEIGHT" is not a value of PersonOrderField`; err == nil || err.Error() != want || !errors.As(err, &coded) {
+	want := `veloxgql: PersonOrder: "HEIGHT" is not a value of PersonOrderField`
+	if _, ok := errors.AsType[interface {
+		error
+		Extensions() map[string]any
+	}](err); err == nil || err.Error() != want || !ok {
 		t.Errorf("an unknown order field: %v, want the input error %q", err, want)
 	}
 	c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(q), &personConn, gqlgraph.Args{First: new(3), Order: age})

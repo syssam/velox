@@ -147,7 +147,7 @@ func bodyLimit(next http.Handler, most int64) http.Handler {
 			// Of unknown length: a transport that fails to read it answers with
 			// its own text, so it is read here.
 			b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, most))
-			if tooLong := new(http.MaxBytesError); errors.As(err, &tooLong) {
+			if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 				refuseBody(w, most)
 				return
 			} else if err != nil {

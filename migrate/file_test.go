@@ -28,8 +28,7 @@ func parseFile(t *testing.T, d velox.Dialect, path, src string) migrate.File {
 // wantFileError checks err is a "file" *Error at pos with reason.
 func wantFileError(t *testing.T, what string, err error, pos, reason string) {
 	t.Helper()
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "file" || e.Pos != pos || e.Reason != reason {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "file" || e.Pos != pos || e.Reason != reason {
 		t.Errorf("%s: error %v, want %s: %s", what, err, pos, reason)
 	}
 }

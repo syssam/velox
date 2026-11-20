@@ -195,8 +195,7 @@ func TestScopeNeedsOrgAndUser(t *testing.T) {
 			t.Errorf("no org: %v", err)
 		}
 		_, err = tg.pdb.Query[testmodel.Ticket]().AllowUnbounded().All(testmodel.Org.With(context.Background(), int64(1)))
-		var pe *velox.PolicyError
-		if !errors.As(err, &pe) || pe.Op != velox.OpSelect {
+		if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpSelect {
 			t.Errorf("no user: %v", err)
 		}
 	})
@@ -388,8 +387,7 @@ func TestScopeInsert(t *testing.T) {
 		news := []string{"N1", "N2", "N3", "N4", "N5", "N6"}
 		if c.name == "ann" {
 			for _, err := range []error{errOne, errAll} {
-				var pe *velox.PolicyError
-				if !errors.As(err, &pe) || pe.Op != velox.OpInsert {
+				if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpInsert {
 					t.Errorf("bob's ticket: %v", err)
 				}
 			}
@@ -451,8 +449,7 @@ func TestScopeUpsert(t *testing.T) {
 		}
 		err = upsert(&b1)
 		if c.name == "ann" {
-			var pe *velox.PolicyError
-			if !errors.As(err, &pe) || pe.Op != velox.OpUpdate || !errors.Is(err, velox.ErrDenied) {
+			if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpUpdate || !errors.Is(err, velox.ErrDenied) {
 				t.Errorf("bob's row: %v", err)
 			}
 			rows := ticketRows(t, tg)
@@ -542,8 +539,7 @@ func TestUpsertSchemaQualifiedPostgres(t *testing.T) {
 			// B1 is bob's ticket 3: ann's upsert is refused, and nothing changes.
 			b1 := testmodel.Ticket{Owner: "ann", Title: "B1", Done: false, InvoiceID: 1}
 			err := upsert(&b1)
-			var pe *velox.PolicyError
-			if !errors.As(err, &pe) || pe.Op != velox.OpUpdate || !strings.Contains(err.Error(), "the existing row is hidden from this upsert") {
+			if pe, ok := errors.AsType[*velox.PolicyError](err); !ok || pe.Op != velox.OpUpdate || !strings.Contains(err.Error(), "the existing row is hidden from this upsert") {
 				t.Errorf("bob's row: %v", err)
 			}
 			wantIDs(t, done("vx_billing.tickets"), []int64{1, 2, 3, 8})

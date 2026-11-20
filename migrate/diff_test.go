@@ -707,8 +707,7 @@ func TestDiffErrors(t *testing.T) {
 			"migrate: users.org_id: the column is renamed to id, which users already has in from"},
 	} {
 		_, err := migrate.Diff(c.from, c.to, c.opts)
-		var me *migrate.Error
-		if !errors.As(err, &me) || me.Code != c.code || err.Error() != c.text {
+		if me, ok := errors.AsType[*migrate.Error](err); !ok || me.Code != c.code || err.Error() != c.text {
 			t.Errorf("%s: %v (%#v), want code %q and\n%s", c.name, err, me, c.code, c.text)
 		}
 	}
@@ -750,9 +749,8 @@ func TestDiffValidates(t *testing.T) {
 				from, to = ok(), bad
 			}
 			_, err := migrate.Diff(from, to, migrate.DiffOptions{})
-			var me *migrate.Error
 			want := fmt.Sprintf(c.text, side)
-			if !errors.As(err, &me) || me.Code != c.code || err.Error() != want {
+			if me, ok := errors.AsType[*migrate.Error](err); !ok || me.Code != c.code || err.Error() != want {
 				t.Errorf("%s in %s: %v, want code %q and\n%s", c.name, side, err, c.code, want)
 			}
 		}

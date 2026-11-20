@@ -371,8 +371,8 @@ func owners(t *testing.T, raw *sql.DB, table string) []int64 {
 // keys and matching target.
 func edgeErr(t *testing.T, err error, edge string, target error, keys ...any) {
 	t.Helper()
-	var ee *velox.EdgeError
-	if !errors.As(err, &ee) {
+	ee, ok := errors.AsType[*velox.EdgeError](err)
+	if !ok {
 		t.Fatalf("error %v (%T), want an *EdgeError", err, err)
 	}
 	if ee.Edge != edge || !errors.Is(err, target) || !reflect.DeepEqual(ee.Keys, keys) {

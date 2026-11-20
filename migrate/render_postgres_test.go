@@ -234,8 +234,7 @@ func TestRenderIdentity(t *testing.T) {
 	for _, def := range []string{`nextval(42)`, `nextval('a.b.c'::regclass)`, `nextval('"open'::regclass)`} {
 		id.Default = def
 		_, err := migrate.Render(from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})
-		var e *migrate.Error
-		if !errors.As(err, &e) || e.Code != "render" || err.Error() != unnamedSequence {
+		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" || err.Error() != unnamedSequence {
 			t.Errorf("%s: %v", def, err)
 		}
 	}
@@ -310,8 +309,7 @@ func TestRenderSequenceOnly(t *testing.T) {
 	}
 	c.From.Sequence = ""
 	_, err := migrate.Render(s, s, []migrate.Change{c}, migrate.RenderOptions{})
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "render" || err.Error() != unnamedSequence {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" || err.Error() != unnamedSequence {
 		t.Errorf("an unnamed sequence: %v", err)
 	}
 }

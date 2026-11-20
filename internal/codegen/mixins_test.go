@@ -108,8 +108,7 @@ func TestMixinMethodShapeRefused(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := mixinBehaviour(t, g, dir, c.src)
-			var fe *FileError
-			if !errors.As(err, &fe) || !strings.Contains(fe.Reason, c.want) || filepath.Base(fe.Path) != "mixins.go" || fe.Line == 0 {
+			if fe, ok := errors.AsType[*FileError](err); !ok || !strings.Contains(fe.Reason, c.want) || filepath.Base(fe.Path) != "mixins.go" || fe.Line == 0 {
 				t.Fatalf("got %v, want a *FileError in mixins.go: %s", err, c.want)
 			}
 		})
@@ -144,8 +143,7 @@ func (Note) Mixin() []schema.Mixin { return []schema.Mixin{G[int]{}} }
 		t.Fatal(err)
 	}
 	_, err = MixinBehaviour(dir, "./schema", g, offline())
-	var fe *FileError
-	if !errors.As(err, &fe) || !strings.Contains(fe.Reason, "G is a generic type, whose instance velox-gen cannot name") || fe.Line != 11 {
+	if fe, ok := errors.AsType[*FileError](err); !ok || !strings.Contains(fe.Reason, "G is a generic type, whose instance velox-gen cannot name") || fe.Line != 11 {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -433,8 +431,7 @@ func TestMixinResultRefused(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := mixinBehaviour(t, g, dir, c.src)
-			var fe *FileError
-			if !errors.As(err, &fe) || !strings.Contains(fe.Reason, c.want) {
+			if fe, ok := errors.AsType[*FileError](err); !ok || !strings.Contains(fe.Reason, c.want) {
 				t.Fatalf("got %v, want %s", err, c.want)
 			}
 		})
@@ -457,8 +454,7 @@ func TestMixinEmbeddedMethods(t *testing.T) {
 	t.Run("of a wrong shape", func(t *testing.T) {
 		_, err := mixinBehaviourB(t, g, dir, "type B struct {\n\tmixin.Schema\n\tinner\n}",
 			inner+"func (inner) Policy[E any]() velox.Policy[E] { return velox.Policy[E]{} }\n")
-		var fe *FileError
-		if !errors.As(err, &fe) || !strings.Contains(fe.Reason, "inner.Policy: behaviour methods are not generic") {
+		if fe, ok := errors.AsType[*FileError](err); !ok || !strings.Contains(fe.Reason, "inner.Policy: behaviour methods are not generic") {
 			t.Fatalf("got %v", err)
 		}
 	})
@@ -496,8 +492,7 @@ func TestMixinEmbedsOtherPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := MixinBehaviour(dir, "./schema", g, offline())
-	var fe *FileError
-	if !errors.As(err, &fe) || filepath.Base(fe.Path) != "o.go" || fe.Line != 7 || !strings.Contains(fe.Reason, "Base.Hooks: behaviour methods are not generic") {
+	if fe, ok := errors.AsType[*FileError](err); !ok || filepath.Base(fe.Path) != "o.go" || fe.Line != 7 || !strings.Contains(fe.Reason, "Base.Hooks: behaviour methods are not generic") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -536,8 +531,7 @@ func TestMixinPackageErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err := mixinBehaviour(t, g, dir, policy("A"))
-		var fe *FileError
-		if !errors.As(err, &fe) || filepath.Base(fe.Path) != "linux.go" || !strings.Contains(fe.Reason, "go leaves it out of some builds") {
+		if fe, ok := errors.AsType[*FileError](err); !ok || filepath.Base(fe.Path) != "linux.go" || !strings.Contains(fe.Reason, "go leaves it out of some builds") {
 			t.Fatalf("got %v", err)
 		}
 	})

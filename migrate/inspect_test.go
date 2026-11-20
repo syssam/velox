@@ -58,14 +58,16 @@ func TestInspectRefuses(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := openDB(t, "sqlite", ":memory:")
-	var e *migrate.Error
-	if _, err := migrate.Inspect(ctx, db, velox.Dialect(99), nil); !errors.As(err, &e) || e.Code != "dialect" {
+	_, err := migrate.Inspect(ctx, db, velox.Dialect(99), nil)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "dialect" {
 		t.Errorf("unknown dialect: %v", err)
 	}
-	if _, err := migrate.Inspect(ctx, nil, velox.SQLite, nil); !errors.As(err, &e) || e.Code != "nil" {
+	_, err = migrate.Inspect(ctx, nil, velox.SQLite, nil)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "nil" {
 		t.Errorf("no database: %v", err)
 	}
-	if _, err := migrate.Drift(ctx, db, nil); !errors.As(err, &e) || e.Code != "nil" {
+	_, err = migrate.Drift(ctx, db, nil)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "nil" {
 		t.Errorf("Drift of nil: %v", err)
 	}
 	// A database that does not answer as PostgreSQL or MySQL: the

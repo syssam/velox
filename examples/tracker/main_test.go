@@ -256,8 +256,7 @@ func TestOrgNameCountsCharacters(t *testing.T) {
 func TestSlugCheck(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {
 		err := c.db.Insert(&veloxgen.Org{Slug: "Upper", Name: "x"}).Exec(t.Context())
-		var ce *velox.ConstraintError
-		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintCheck {
+		if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintCheck {
 			t.Errorf("Insert = %v, want a check violation", err)
 		}
 	})

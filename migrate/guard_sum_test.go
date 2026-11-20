@@ -24,8 +24,7 @@ func TestAcceptedLinesLeaveTheHistorySum(t *testing.T) {
 	mustUp(t, prod, base)
 	mustExec(t, prod, "CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN SELECT 1; END")
 	_, err := migrate.Up(context.Background(), prod, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" {
 		t.Fatalf("Up on production: %v", err)
 	}
 
@@ -56,7 +55,7 @@ func TestAcceptedLinesLeaveTheHistorySum(t *testing.T) {
 		return s + "CREATE TABLE more (x integer);\n"
 	})
 	_, err = migrate.Up(context.Background(), staging, edited)
-	if ce := (*migrate.ChecksumError)(nil); !errors.As(err, &ce) {
+	if _, ok := errors.AsType[*migrate.ChecksumError](err); !ok {
 		t.Errorf("Up on an edited statement: %v", err)
 	}
 }

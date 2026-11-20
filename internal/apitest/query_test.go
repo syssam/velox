@@ -281,8 +281,7 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 			if panicked {
 				continue
 			}
-			var se *velox.SchemaError
-			if !errors.As(err, &se) || se.Entity != entity || !strings.Contains(se.Reason, reason) || !strings.HasPrefix(err.Error(), "velox: ") {
+			if se, ok := errors.AsType[*velox.SchemaError](err); !ok || se.Entity != entity || !strings.Contains(se.Reason, reason) || !strings.HasPrefix(err.Error(), "velox: ") {
 				t.Errorf("%s, query %d: %v", name, i+1, err)
 			}
 		}

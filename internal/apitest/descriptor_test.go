@@ -74,12 +74,11 @@ func (*panicDescriptor) VeloxMeta() *velox.Meta[panicDescriptor] {
 func TestDescriptorErrors(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	_, err := db.Query[badDescriptor]().Limit(1).All(ctx)
-	var se *velox.SchemaError
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "primary key") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), "primary key") {
 		t.Fatalf("got %v", err)
 	}
 	_, err = db.Query[panicDescriptor]().Limit(1).All(ctx)
-	if !errors.As(err, &se) || !strings.Contains(err.Error(), "panicked: boom") {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok || !strings.Contains(err.Error(), "panicked: boom") {
 		t.Fatalf("got %v", err)
 	}
 	if err := velox.CheckEntity[fixture.DAuthor](); err != nil {
@@ -87,7 +86,7 @@ func TestDescriptorErrors(t *testing.T) {
 	}
 	// CheckEntity reports the same errors, as *SchemaError.
 	for name, err := range map[string]error{"bad Descriptor": velox.CheckEntity[badDescriptor](), "panicking Descriptor": velox.CheckEntity[panicDescriptor]()} {
-		if !errors.As(err, &se) || err == nil {
+		if _, ok := errors.AsType[*velox.SchemaError](err); !ok || err == nil {
 			t.Errorf("CheckEntity of a %s: got %v, want a *SchemaError", name, err)
 		}
 	}

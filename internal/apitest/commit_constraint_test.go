@@ -18,8 +18,8 @@ func TestCommitConstraint(t *testing.T) {
 	pg := &pgconn.PgError{Code: "23503", ConstraintName: "items_invoice_fk"}
 	db := openFake(velox.Postgres, &fakeconn.Exec{CommitErr: pg})
 	err := db.Tx(context.Background(), func(context.Context, *velox.DB) error { return nil })
-	var ce *velox.ConstraintError
-	if !errors.As(err, &ce) {
+	ce, ok := errors.AsType[*velox.ConstraintError](err)
+	if !ok {
 		t.Fatalf("%v: not a *ConstraintError", err)
 	}
 	if ce.Kind != velox.ConstraintForeignKey || ce.Constraint != "items_invoice_fk" || ce.Entity != "" {

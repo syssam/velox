@@ -18,8 +18,7 @@ import (
 func refused(t *testing.T, db *sql.DB, fsys fstest.MapFS, says ...string) {
 	t.Helper()
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" {
 		t.Fatalf("Up: %v; want an *Error of Code unmodeled\n%s", err, sqlFiles(fsys))
 	}
 	for _, s := range says {
@@ -793,8 +792,7 @@ func TestUpTargetKeepsTheGuardsView(t *testing.T) {
 	mustUp(t, db, base)
 	fsys := extend(t, extend(t, base, d, files("0002_drop.sql", key)), d, files("0003_add.sql", "ALTER TABLE c ADD CONSTRAINT c_p FOREIGN KEY (p_id) REFERENCES p (id);\n"))
 	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithTarget(2))
-	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "unmodeled" || !strings.Contains(err.Error(), "ON UPDATE") {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "unmodeled" || !strings.Contains(err.Error(), "ON UPDATE") {
 		t.Fatalf("Up -to 2: %v", err)
 	}
 	if got := oneValue(t, db, "SELECT count(*) FROM information_schema.referential_constraints WHERE constraint_name = 'c_p'"); got != "1" {

@@ -202,8 +202,7 @@ func TestValidators(t *testing.T) {
 			case *gen.Post:
 				err = db.Insert(x).Exec(ctx)
 			}
-			var ve *velox.ValidationError
-			if !errors.As(err, &ve) || ve.Field != c.field {
+			if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != c.field {
 				t.Fatalf("got %v, want a ValidationError for %s", err, c.field)
 			}
 		})
@@ -228,8 +227,7 @@ func TestValidators(t *testing.T) {
 	u := newUser("ada")
 	mustInsert(t, db, &u)
 	_, err := db.Update[gen.User]().Set(gen.Users.Name.Set("")).Where(gen.Users.ID.EQ(u.ID)).Exec(ctx)
-	var ve *velox.ValidationError
-	if !errors.As(err, &ve) || ve.Field != "Name" {
+	if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "Name" {
 		t.Errorf("update: %v", err)
 	}
 }

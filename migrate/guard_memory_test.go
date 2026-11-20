@@ -27,8 +27,7 @@ func TestUpRefusesMemoryDatabase(t *testing.T) {
 			db.SetMaxOpenConns(1)
 			mustExec(t, db, "CREATE TABLE mine (x integer)")
 			_, err = migrate.Up(context.Background(), db, fsys)
-			var e *migrate.Error
-			if !errors.As(err, &e) || e.Code != "session" || !strings.Contains(err.Error(), "in memory") {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" || !strings.Contains(err.Error(), "in memory") {
 				t.Fatalf("Up: %v", err)
 			}
 			if count(t, db, "mine") != 0 {
@@ -44,8 +43,7 @@ func TestUpRefusesMemoryDatabase(t *testing.T) {
 				}
 				return
 			}
-			var e *migrate.Error
-			if !errors.As(err, &e) || e.Code != "session" {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" {
 				t.Fatalf("Up: %+v, %v", r, err)
 			}
 		})

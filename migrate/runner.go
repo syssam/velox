@@ -279,7 +279,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	}
 	st, err := reading(d, rows)
 	var resumed *File
-	if de := (*DirtyError)(nil); errors.As(err, &de) && (o.resume || de.retry) {
+	if de, ok := errors.AsType[*DirtyError](err); ok && (o.resume || de.retry) {
 		resumed, err = s.resuming(d, st)
 	}
 	if err != nil {

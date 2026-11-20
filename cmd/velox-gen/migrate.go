@@ -144,8 +144,7 @@ func (c *migrateCmd) inDir(err error) error {
 	if se, ok := errors.AsType[*migrate.SumError](err); ok {
 		return &migrate.SumError{Path: c.path(se.Path)}
 	}
-	var me *migrate.Error
-	if errors.As(err, &me) && (me.Pos != "" || me.Code == "directory") {
+	if me, ok := errors.AsType[*migrate.Error](err); ok && (me.Pos != "" || me.Code == "directory") {
 		e := *me
 		if e.Pos != "" {
 			e.Pos = c.path(me.Pos)
@@ -202,7 +201,7 @@ func (c *migrateCmd) readDir(dir string, staleCode int) (*migrate.Dir, int, bool
 	d, err := migrate.ReadDir(os.DirFS(c.abs(dir)))
 	if err != nil {
 		code := 1
-		if se := (*migrate.SumError)(nil); errors.As(err, &se) {
+		if _, ok := errors.AsType[*migrate.SumError](err); ok {
 			code = staleCode
 		}
 		return nil, c.fail(code, c.inDir(err)), false
@@ -257,10 +256,10 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	// ReadDir checks velox.sum first, read as migrate reads every file; its
 	// other errors are the directory's, which hash does not hide.
 	_, err = migrate.ReadDir(os.DirFS(abs))
-	switch {
+	switch _, isSum := errors.AsType[*migrate.SumError](err); {
 	case err == nil:
 		return 0
-	case !errors.As(err, new(*migrate.SumError)):
+	case !isSum:
 		return c.fail(1, err)
 	}
 	if *check {
@@ -300,7 +299,7 @@ func runMigrateLint(args []string, dir string, stderr io.Writer) int {
 		findings, err := migrate.LintFile(d.Config.Dialect, f)
 		var lines []string // by statement: errors and findings in file order
 		for _, e := range unjoin(err) {
-			if me := (*migrate.Error)(nil); errors.As(e, &me) {
+			if me, ok := errors.AsType[*migrate.Error](e); ok {
 				lines = append(lines, c.path(me.Pos)+": "+me.Code+": "+me.Reason)
 			} else {
 				lines = append(lines, strings.TrimPrefix(e.Error(), "migrate: "))

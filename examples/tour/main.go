@@ -360,7 +360,7 @@ func (t *tour) transactions() error {
 	err := db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
 		next := veloxgen.Invoice{Number: "INV-003", Customer: "Initech", Status: veloxgen.InvoiceStatusSent, TotalCents: 80000}
 		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&next).Exec(ctx) })
-		if ce := (*velox.ConstraintError)(nil); errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
+		if ce, ok := errors.AsType[*velox.ConstraintError](err); ok && ce.Kind == velox.ConstraintUnique {
 			say("%s is taken (%s constraint on %s); using INV-004", next.Number, ce.Kind, ce.Constraint)
 			next.Number = "INV-004"
 			err = tx.Insert(&next).Exec(ctx)
