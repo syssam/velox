@@ -5,6 +5,8 @@ import (
 	"iter"
 	"slices"
 	"sync"
+
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Sink receives the Changes of the writes made through a recording handle,
@@ -80,4 +82,29 @@ type RecordOption struct {
 // not list them. OldValues and NewValues keep every column.
 func RecordIgnore(columns ...string) RecordOption {
 	return RecordOption{ignore: slices.Clone(columns)}
+}
+
+// Record returns a DB like db whose writes are reported to s, one Change per
+// row, after the write's statements succeed. It records the writes made
+// through it, through the transactions and savepoints it begins, through its
+// WithoutPolicy, and through the Mutation.DB of a hook on one of its writes;
+// raw SQL, dry runs and the writes of db itself are not recorded. Record on a
+// recording DB replaces its sink and its options.
+//
+// The DB it returns shares db's pool and options, and Close on it closes
+// nothing. Record panics when s is nil.
+func (db *DB) Record(s Sink, opts ...RecordOption) *DB {
+	if s == nil {
+		panic("velox: Record: the Sink is nil")
+	}
+	r := &engine.Recording{Sink: func(ctx context.Context, row engine.ChangeRow) error {
+		return s.Record(ctx, changeOf(row))
+	}}
+	for _, o := range opts {
+		r.Ignore = append(r.Ignore, o.ignore...)
+	}
+	if rec, ok := s.(*Recorder); ok {
+		r.Mark, r.Truncate = rec.mark, rec.truncate
+	}
+	return pub(db.e.Record(r))
 }

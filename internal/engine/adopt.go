@@ -42,7 +42,7 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 	if !ok {
 		return nil, errNoSQLTx
 	}
-	f := newTxFrame(context.Background(), DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, bypass: db.bypass}, nil)
+	f := newTxFrame(context.Background(), DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, bypass: db.bypass, rec: db.rec}, nil)
 	return &f.db, nil
 }
 

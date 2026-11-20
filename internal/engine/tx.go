@@ -443,7 +443,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		endTx(info, TxError)
 		return false, endedErr(ctx, "transaction", fmt.Errorf("velox: begin: %w", err))
 	}
-	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard, bypass: db.bypass}, nil)
+	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
 	defer releaseConn(db, holdConn(o.caller, db, f)) // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true)                        // before the note, and after the rollback
 	finished := false
@@ -557,7 +557,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
-	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass}, db.txRoot)
+	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec}, db.txRoot)
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the

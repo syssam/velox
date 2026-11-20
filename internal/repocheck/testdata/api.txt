@@ -341,6 +341,7 @@ func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
 func (db *DB) PolicyBypass() string
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E]
+func (db *DB) Record(s Sink, opts ...RecordOption) *DB
 func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) RawRows
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error

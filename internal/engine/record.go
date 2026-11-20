@@ -31,6 +31,20 @@ type Recording struct {
 	Truncate func(n int)
 }
 
+// Record returns a DB like db whose writes go to r, as do those of the
+// transactions and savepoints it begins and of a hook's Mutation.DB. It
+// replaces the recording db already has. The DB it returns shares db's pool
+// and configuration, and Close on it closes nothing.
+func (db *DB) Record(r *Recording) *DB {
+	c := *db
+	c.rec, c.owned = r, false
+	return &c
+}
+
+// Recording returns what db's writes are recorded to; nil when db does not
+// record.
+func (db *DB) Recording() *Recording { return db.rec }
+
 // Key is the row's primary key: before the write for an update or a delete,
 // after it for an insert. It is the key column's value for a one-column key,
 // a []any of the key columns' values for a composite key, and nil for an

@@ -54,6 +54,8 @@ type DB struct {
 	// bypass is WithoutPolicy's reason: a DB whose statements skip every
 	// entity's policy; "" on any other.
 	bypass string
+	// rec is Record's: a DB whose writes go to its sink; nil on any other.
+	rec *Recording
 }
 
 // Open is velox.Open's DB, opts given as a slice.

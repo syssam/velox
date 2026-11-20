@@ -163,7 +163,7 @@ func TestDiff(t *testing.T) {
 	}
 }
 
-// TestRecorderTruncate:truncate drops what was recorded after a mark.
+// TestRecorderTruncate: truncate drops what was recorded after a mark.
 func TestRecorderTruncate(t *testing.T) {
 	var rec Recorder
 	_ = rec.Record(t.Context(), Change{Key: 1})
