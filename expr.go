@@ -23,7 +23,9 @@ import (
 // Outside a literal, any other quote, a semicolon, a comment, a backslash, a
 // $, an unbalanced parenthesis, and the words SELECT, WITH, TABLE, VALUES,
 // UNION, INTERSECT, EXCEPT, INTO, RETURNING, PRAGMA and ATTACH are refused
-// when the statement runs, before anything is sent. So a condition on another
+// when the statement runs, before anything is sent, as are functions that
+// read a table, a file or server state without a subquery, such as
+// PostgreSQL's pg_ and query_to_xml families and MySQL's LOAD_FILE. So a condition on another
 // table is HasWith or InSelect, which apply that table's policies. The words
 // are matched whatever their case, and FROM is allowed for EXTRACT and TRIM.
 //

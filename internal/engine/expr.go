@@ -53,10 +53,46 @@ func (d *exprData) seal() *exprData {
 // read a table the entity's policies do not guard: a subquery starts with
 // one of them. FROM is not among them, since EXTRACT, TRIM and SUBSTRING
 // use it, and it cannot start a subquery.
+//
+// The functions after them read a table, a file or a server's state, write
+// a sequence, or stall the connection, without a subquery: PostgreSQL's
+// query_to_xml family, MySQL's LOAD_FILE and SLEEP, SQLite's
+// load_extension. The list is a backstop for a developer's mistake, not a
+// sandbox: the text is the program's, never a user's, and a function the
+// database's owner defined can still read what it likes.
 var exprBanned = map[string]bool{
 	"SELECT": true, "WITH": true, "TABLE": true, "VALUES": true,
 	"UNION": true, "INTERSECT": true, "EXCEPT": true,
 	"INTO": true, "RETURNING": true, "PRAGMA": true, "ATTACH": true,
+	// PostgreSQL
+	"CURSOR_TO_XML": true, "CURSOR_TO_XMLSCHEMA": true,
+	"NEXTVAL": true, "SETVAL": true, "CURRVAL": true, "LASTVAL": true,
+	"SET_CONFIG": true, "CURRENT_SETTING": true,
+	// MySQL
+	"LOAD_FILE": true, "SLEEP": true, "BENCHMARK": true,
+	"GET_LOCK": true, "RELEASE_LOCK": true, "RELEASE_ALL_LOCKS": true,
+	// SQLite
+	"LOAD_EXTENSION": true, "READFILE": true, "WRITEFILE": true, "EDIT": true,
+}
+
+// exprBannedPrefix are the starts of the names exprBanned refuses as a
+// family: PostgreSQL's catalog and admin functions (pg_), large objects
+// (lo_), dblink, and the X_to_xml functions that read a query, a table, a
+// schema or a database.
+var exprBannedPrefix = []string{"PG_", "LO_", "DBLINK", "QUERY_TO_", "TABLE_TO_", "SCHEMA_TO_", "DATABASE_TO_"}
+
+// exprWordBanned reports whether the word w may not appear in an Expr.
+func exprWordBanned(w string) bool {
+	u := strings.ToUpper(w)
+	if exprBanned[u] {
+		return true
+	}
+	for _, p := range exprBannedPrefix {
+		if strings.HasPrefix(u, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ExprNode makes the condition text, in which each ? is filled by the next
@@ -67,9 +103,9 @@ var exprBanned = map[string]bool{
 // The text is written as given, in parentheses, and must be what a
 // condition needs and no more (checkExprText): a string literal of plain
 // characters, but no other quote, semicolon, comment, backslash or $, no
-// unbalanced parenthesis, and no word that starts a subquery (exprBanned). A
-// condition on another table is HasWith or InSelect, whose target's policies
-// apply.
+// unbalanced parenthesis, and no word that starts a subquery or names a
+// function that reads past the row (exprWordBanned). A condition on another
+// table is HasWith or InSelect, whose target's policies apply.
 func ExprNode(text string, slots []ExprSlot, args []any) Node {
 	d, err := newExpr(text, slots, args)
 	if err != nil {
@@ -96,7 +132,7 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 // backslash and on a doubled quote), and what is inside it is data: not
 // scanned for words, comments or parentheses. Outside a literal the text may
 // hold no other quote, semicolon, backslash, $ or #, no comment, no
-// unbalanced parenthesis and no exprBanned word.
+// unbalanced parenthesis and no word exprWordBanned refuses.
 func checkExprText(text string) error {
 	bad := func(what string) error {
 		return fmt.Errorf("velox: Expr %q: %s: write a value as an argument, and a condition on another table as HasWith or InSelect", text, what)
@@ -119,7 +155,7 @@ func checkExprText(text string) error {
 			for j < len(text) && (isIdentStart(text[j]) || text[j] >= '0' && text[j] <= '9') {
 				j++
 			}
-			if exprBanned[strings.ToUpper(text[i:j])] {
+			if exprWordBanned(text[i:j]) {
 				return bad(fmt.Sprintf("the word %s is not allowed", text[i:j]))
 			}
 			i = j

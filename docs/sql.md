@@ -38,7 +38,12 @@ The text is written in parentheses. It may hold functions, operators, casts,
 table or end the statement. A semicolon, a comment, a backslash, a `$`, an
 unbalanced parenthesis, a quote that is not a plain literal, and the words
 `SELECT`, `WITH`, `TABLE`, `VALUES`, `UNION`, `INTERSECT`, `EXCEPT`, `INTO`,
-`RETURNING`, `PRAGMA` and `ATTACH` are refused before anything is sent. A
+`RETURNING`, `PRAGMA` and `ATTACH` are refused before anything is sent. So
+are the functions that read a table, a file or server state without a
+subquery: names starting `pg_`, `lo_`, `dblink`, `query_to_`, `table_to_`,
+`schema_to_` or `database_to_`, the sequence functions, `set_config`,
+`current_setting`, MySQL's `LOAD_FILE`, `SLEEP`, `BENCHMARK` and locks, and
+SQLite's `load_extension`, `readfile`, `writefile` and `edit`. A
 wrong number of arguments, another entity's column, and an encoded (JSON)
 column are refused too. Pass values as arguments, never in the text.
 

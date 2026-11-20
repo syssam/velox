@@ -202,10 +202,11 @@ them.
 
 - Joins are for to-one relations only (`Join`, `LeftJoin`); a to-many
   relation is loaded with `With` or tested with `Has`. There is no
-  `DISTINCT`, `UNION` or `HAVING`. Subqueries are the `EXISTS` of `Has`,
+  `SELECT DISTINCT` or `UNION`. Subqueries are the `EXISTS` of `Has`,
   `HasWith` and `Of`, and a column's `Select` tested with `InSelect`; one
-  with an aggregate, a CTE or a window function is raw SQL. `GROUP BY` is one key (`CountBy`, `SumBy` and
-  the like).
+  with an aggregate, a CTE or a window function is raw SQL. A report with
+  `GROUP BY` and `HAVING` reads terms with `Select` ([the
+  guide](docs/guide.md#reports-select-groupby-and-having)).
 - `Raw` scans only into entities. For a report, range over
   `db.Rows(ctx, reason, sql, args...)` and `Scan` each row: it runs on the
   connection the DB uses, a transaction's included. `velox.Pool(db)`, the

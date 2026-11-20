@@ -1040,6 +1040,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- `Having` with a relation (`Has`, `HasWith`, `HasEdge`) or a column
+  subquery no longer panics while rendering: the statement fails with an
+  error that points to `Where`. A condition by name in `Having`
+  (`velox.FieldEQ`) is now resolved, as one in `Where` is.
+- velox-gen refuses a field named `edges` on an entity with relations, and
+  two schemas whose unexported constants share a name (`Ab` with `col_x`
+  and `AbCol` with `x`), instead of writing code that does not compile.
+- An `Expr` refuses the functions that read a table, a file or server
+  state without a subquery, such as PostgreSQL's `table_to_xml`,
+  `query_to_xml` and `pg_read_file`, and MySQL's `LOAD_FILE`.
+
 - A Rewrite hook that replaces the whole statement (`*st =
   velox.Statement{…}`) no longer drops what velox reads back: an insert
   still gets its generated key and declared defaults (RETURNING on
