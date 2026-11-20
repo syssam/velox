@@ -124,7 +124,7 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 	}
 	ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 		HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-		Immutable: c.Immutable, Version: c.Version, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+		Immutable: c.Immutable, Version: c.Version, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, decimal: c.Decimal, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 	ci.val, ci.fast = valType(ft), fastOf(ft)
 	for _, d := range c.DBDefault {
 		if d != Postgres && d != MySQL && d != SQLite {
@@ -137,6 +137,9 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 	}
 	if k := ft.Kind(); c.Nullable && k != reflect.Pointer && k != reflect.Slice && k != reflect.Map {
 		return fail("column %s says Nullable, and its field is a %v, which cannot be nil: make it a pointer", c.Name, ft)
+	}
+	if p, s := c.Decimal[0], c.Decimal[1]; c.Decimal != [2]uint8{} && (p < 1 || p > 65 || s > 30 || s > p) {
+		return fail("column %s has Decimal {%d, %d}; MySQL's decimal takes a precision of 1 to 65 and a scale of 0 to 30, no more than the precision", c.Name, p, s)
 	}
 	if c.RequiredEdge != "" && !ci.Nullable {
 		return fail("column %s has a RequiredEdge, and cannot be NULL: the database refuses it unset", c.Name)

@@ -88,6 +88,10 @@ type ColumnInfo struct {
 	// NULL-able key the column holds, which a write may not leave nil; "" when
 	// none.
 	RequiredEdge string
+	// decimal is ColumnDescriptor.Decimal: the precision and scale of the
+	// column's MySQL decimal type, to which MySQL's Add and Sub cast their
+	// argument; {0, 0} for any other column.
+	decimal [2]uint8
 	// Codec says the column's value is encoded: its ColumnDescriptor gave Encode
 	// and Decode, as velox-gen does for every json field. The package
 	// documentation's JSON fields section says how such a column binds and reads.

@@ -404,6 +404,9 @@ func columnParts(f *OutField) []string {
 	if len(f.DBDefault) > 0 {
 		parts = append(parts, "DBDefault: []velox.Dialect{"+strings.Join(f.DBDefault, ", ")+"}")
 	}
+	if f.Decimal != [2]int{} {
+		parts = append(parts, fmt.Sprintf("Decimal: [2]uint8{%d, %d}", f.Decimal[0], f.Decimal[1]))
+	}
 	if f.JSON {
 		parts = append(parts, "Encode: json.Marshal", "Decode: json.Unmarshal")
 	}

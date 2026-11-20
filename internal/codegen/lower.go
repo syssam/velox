@@ -381,9 +381,13 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		h = "JSONCol"
 	case f.Type == "time" || elem == "time.Time":
 		h = "TimeCol"
-	case numeric[kind], f.Type == "other" && decimalField(f):
+	case f.Type == "other" && decimalField(f):
 		// A decimal column holds a number, whatever its Go type (a struct,
-		// or text as here): it sums and adds as one.
+		// or text): it sums and adds as one, and on MySQL its Add and Sub
+		// cast their argument to the column's type.
+		h = "NumberCol"
+		o.Decimal = mysqlDecimal(f)
+	case numeric[kind]:
 		h = "NumberCol"
 	case f.Type == "enum":
 		// An enum compares by equality and orders, as ent's predicates; it

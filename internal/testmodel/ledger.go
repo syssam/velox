@@ -51,8 +51,8 @@ func ledgerDescriptor() velox.Descriptor[Ledger] {
 		Table: "ledgers",
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
-			{Field: "Amount", Name: "amount"},
-			{Field: "Fee", Name: "fee"},
+			{Field: "Amount", Name: "amount", Decimal: [2]uint8{19, 4}},
+			{Field: "Fee", Name: "fee", Decimal: [2]uint8{19, 4}},
 		},
 		PrimaryKey: []int{ledgerColID},
 		Entities:   veloxEntityTable,

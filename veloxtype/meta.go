@@ -26,6 +26,15 @@ type ColumnDescriptor struct {
 	// driver as it is. A pointer field is nullable without it; on a field of
 	// any other type it is refused.
 	Nullable bool
+	// Decimal is the precision and scale of the column's MySQL type, a
+	// decimal, as velox-gen sets them on an Other field held in a decimal
+	// column ({65, 30} when its MySQL type gives none); {0, 0} on any other
+	// column. On MySQL, Add and Sub write their argument as CAST(? AS
+	// DECIMAL(p,s)): bound as text by a client that interpolates its
+	// arguments (interpolateParams=true), col + '0.0001' would be computed
+	// as a DOUBLE and lose digits. The precision is 1 to 65, the scale 0 to
+	// 30 and no more than the precision.
+	Decimal [2]uint8
 	// RequiredEdge names the Required edge whose foreign key the column holds
 	// when that key is NULL-able, as velox-gen makes the key of an edge to
 	// the entity's own schema, so that the first row can have none. The

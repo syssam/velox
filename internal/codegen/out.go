@@ -115,6 +115,7 @@ type OutField struct {
 	ZeroFillCode         string   // "" or "func() any { … }": the value an unset Optional JSON slice, map or pointer is written as, ColumnDescriptor.DefaultFunc when DefaultFuncCode is ""
 	UpdateDefaultCode    string   // "" or "func() any { … }"
 	DBDefault            []string // the dialects of the field's declared database default, as velox constants ("velox.Postgres"): its ColumnDescriptor's DBDefault
+	Decimal              [2]int   // the precision and scale of an Other field's decimal column on MySQL: its ColumnDescriptor's Decimal; {0, 0} for any other field
 }
 
 // OutRel is a relation of an entity.

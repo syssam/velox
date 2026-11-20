@@ -1205,6 +1205,14 @@ func (w *writer) arith(a Assignment, op string) {
 	x := func() {
 		w.col(int32(a.Column))
 		w.str(op)
+		if dec := w.in.Columns[a.Column].decimal; w.d == MySQL && dec[0] != 0 {
+			// Bound as text and interpolated, '0.0001', the argument would make
+			// the sum a DOUBLE; cast, it stays exact.
+			w.str("CAST(")
+			w.colArg(a.Column, a.Value)
+			w.str(" AS DECIMAL(" + strconv.Itoa(int(dec[0])) + "," + strconv.Itoa(int(dec[1])) + "))")
+			return
+		}
 		w.colArg(a.Column, a.Value)
 	}
 	lo, hi, ok := intRange(w.in.Columns[a.Column].Type)

@@ -353,6 +353,18 @@ func decimalField(f *Field) bool {
 	return n > 0
 }
 
+// mysqlDecimal is the precision and scale of the decimal field f's column on
+// MySQL, as decimalType reads its MySQL SchemaType, or {65, 30}, MySQL's
+// widest, when it names none or one decimalType does not read.
+func mysqlDecimal(f *Field) [2]int {
+	if st := f.SchemaType[velox.MySQL.String()]; st != "" {
+		if p, s, _, ok := decimalType(velox.MySQL, ddl.NormalizeType(velox.MySQL, st)); ok && s <= 30 {
+			return [2]int{p, s}
+		}
+	}
+	return [2]int{65, 30}
+}
+
 // decimalType reads the precision p and scale s of the normalised column type
 // typ of d, when it is an exact-number type with a p that d accepts: on
 // PostgreSQL numeric(p) and numeric(p,s), p up to 1000; on MySQL decimal,

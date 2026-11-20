@@ -31,9 +31,11 @@ func wantDec(t *testing.T, what string, d testmodel.Dec, want string) {
 
 // TestDecimalNumberCol: an Other field of a decimal Go type (Scanner and
 // Valuer over text) in a numeric column has a NumberCol, whose Sum, Avg, Add
-// and Sub run in the database and scan back into the type.
+// and Sub run in the database and scan back into the type. MySQL runs it
+// also through a DSN with interpolateParams=true (eachJSON), where Add's text
+// argument would make the sum a DOUBLE but for its CAST to the column's type.
 func TestDecimalNumberCol(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		tg.exec(t, "DROP TABLE IF EXISTS ledgers")
 		tg.exec(t, ledgerDDL(tg.d))
 		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS ledgers") })
@@ -89,5 +91,24 @@ func TestDecimalNumberCol(t *testing.T) {
 			t.Fatalf("Sum term: %q", out)
 		}
 		wantDec(t, "Sum term", out[0], "4.25")
+
+		// Eighteen digits: exact on PostgreSQL and MySQL, interpolated or
+		// not. SQLite's NUMERIC stores such a value as a REAL, which holds
+		// about sixteen.
+		if tg.d == velox.SQLite {
+			return
+		}
+		wide := testmodel.Ledger{Amount: "12345678901234.5678"}
+		if err := tg.db.Insert(&wide).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tg.db.Update[testmodel.Ledger]().Where(L.ID.EQ(wide.ID)).Set(L.Amount.Add("0.0001")).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got, err = tg.db.Query[testmodel.Ledger]().Where(L.ID.EQ(wide.ID)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantDec(t, "Add of 18 digits", got.Amount, "12345678901234.5679")
 	})
 }

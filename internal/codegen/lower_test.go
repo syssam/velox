@@ -948,6 +948,7 @@ func (LwMoney) Fields() []schema.Field {
 		field.Other("maybe_spot", PointValue{}).SchemaType(map[string]string{"postgres": "point"}).Optional().Nillable(),
 		field.Other("text_dec", LwDecText("")).SchemaType(dec),
 		field.Other("text_other", LwDecText("")).SchemaType(map[string]string{"postgres": "citext"}),
+		field.Other("pg_only", PointValue{}).SchemaType(map[string]string{"postgres": "numeric(30,10)"}),
 	}
 }
 
@@ -961,7 +962,16 @@ func (d LwDecText) Value() (driver.Value, error) { return string(d), nil }
 // arithmetic.
 func TestLowerDecimalIsNumber(t *testing.T) {
 	e := mustLower(t, Config{}, LwMoney{}).entity("LwMoney")
+	// MySQL's Add and Sub cast to the column's decimal type, read from its
+	// MySQL SchemaType (a bare decimal is decimal(10,0)), else DECIMAL(65,30).
+	for name, want := range map[string][2]int{"cost": {19, 4}, "maybe_cost": {19, 4}, "bare": {10, 0}, "rate": {5, 2},
+		"text_dec": {19, 4}, "pg_only": {65, 30}, "spot": {}, "half": {}, "text_other": {}} {
+		if f := e.field(name); f == nil || f.Decimal != want {
+			t.Errorf("%s: Decimal %v, want %v", name, f.Decimal, want)
+		}
+	}
 	for _, c := range []struct{ field, want string }{
+		{"pg_only", "velox.NumberCol[LwMoney, codegen.PointValue]"},
 		{"cost", "velox.NumberCol[LwMoney, codegen.PointValue]"},
 		{"maybe_cost", "velox.NullNumberCol[LwMoney, codegen.PointValue]"},
 		{"bare", "velox.NumberCol[LwMoney, codegen.PointValue]"},

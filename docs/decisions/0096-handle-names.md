@@ -39,6 +39,13 @@ a number, but as an `OrderedCol` it could not be summed or incremented.
   `driver.Valuer`, and `velox.Sum` scans the database's result through its
   `sql.Scanner`; `TestDecimalNumberCol` runs both on a text-backed decimal
   type.
+- On MySQL, `Add` and `Sub` on a decimal column write `CAST(? AS
+  DECIMAL(p,s))`, with p and s from its MySQL SchemaType (DECIMAL(65,30)
+  without one), which velox-gen gives the runtime as
+  `ColumnDescriptor.Decimal`: a driver that interpolates its arguments
+  (interpolateParams=true) writes `a + '0.0001'`, which MySQL computes as a
+  DOUBLE (12345678901234.5678 + 0.0001 gave 12345678901234.568 on MySQL
+  8.4). PostgreSQL and SQLite send the bare `?`.
 - An Other field whose dialects disagree, a decimal on one and a float on
   another, is an `OtherCol`: arithmetic must work on every database the
   schema targets.
