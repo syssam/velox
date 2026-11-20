@@ -398,8 +398,11 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 		return err
 	}
 	ends := t.defaultRuns(db, xs, cols)
+	if db.recording(ctx) != nil {
+		return t.recordMany(ctx, db, xs, cols, per, ends, cf, out)
+	}
 	if len(ends) == 1 && xs.n <= per && !ConditionedUpsert(ctx, db, t.info, cf, xs.n) {
-		n, err := t.insertBatches(ctx, db, xs, cols, per, ends, cf)
+		n, err := t.insertBatches(ctx, db, xs, cols, per, ends, cf, SendBatch)
 		if err == nil {
 			out.Affected = n
 		}
@@ -408,8 +411,34 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	var n int64
 	err = db.Tx(ctx, func(ctx context.Context, db *DB) error {
 		var err error
-		n, err = t.insertBatches(ctx, db, xs, cols, per, ends, cf)
+		n, err = t.insertBatches(ctx, db, xs, cols, per, ends, cf, SendBatch)
 		return err
+	})
+	if err == nil {
+		out.Affected = n
+	}
+	return err
+}
+
+// recordMany is insertMany on a recording handle: the same statements, and
+// a Change per row, in the order of xs, across the statements.
+func (t *table) recordMany(ctx context.Context, db *DB, xs TableRows, cols []int, per int, ends []int, cf *ConflictClause, out *Result) error {
+	single := len(ends) == 1 && xs.n <= per && cf == nil
+	var n int64
+	err := recordedInsert(ctx, db, single, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+		var changes []ChangeRow
+		var err error
+		n, err = t.insertBatches(ctx, tx, xs, cols, per, ends, cf, func(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, gen int) (int64, error) {
+			var k int64
+			cs, err := sendRecorded(ctx, tx, st, rows, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
+				var err error
+				k, err = SendBatch(ctx, tx, st, rows, gen)
+				return k, err
+			})
+			changes = append(changes, cs...)
+			return k, err
+		})
+		return changes, err
 	})
 	if err == nil {
 		out.Affected = n
@@ -451,8 +480,10 @@ func (t *table) defaultRuns(db *DB, xs TableRows, cols []int) []int {
 	return DefaultRuns(t.info, db.D, cols, xs.n, func(i, c int) any { return Elem(t.addr(xs.at(i), c)) })
 }
 
-// insertBatches is the root's insertBatches for xs.
-func (t *table) insertBatches(ctx context.Context, db *DB, xs TableRows, cols []int, per int, ends []int, cf *ConflictClause) (int64, error) {
+// insertBatches sends xs's rows, a statement of at most per rows within
+// each run of ends, each with send (SendBatch, or recordMany's).
+func (t *table) insertBatches(ctx context.Context, db *DB, xs TableRows, cols []int, per int, ends []int, cf *ConflictClause,
+	send func(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointer, gen int) (int64, error)) (int64, error) {
 	gen := t.generatedKey(xs.at(0))
 	var affected int64
 	unknown := false
@@ -468,7 +499,7 @@ func (t *table) insertBatches(ctx context.Context, db *DB, xs TableRows, cols []
 			for i := range rows {
 				rows[i] = xs.at(start + i)
 			}
-			n, err := SendBatch(ctx, db, &st, rows, gen)
+			n, err := send(ctx, db, &st, rows, gen)
 			if err != nil {
 				return 0, err
 			}

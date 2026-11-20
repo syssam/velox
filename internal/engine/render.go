@@ -789,9 +789,38 @@ func (w *writer) pred(n Node) {
 		w.jsonHas(n)
 	case OpJSONEmpty:
 		w.jsonEmpty(n)
+	case opRowIn:
+		w.rowIn(n)
 	default:
 		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
 	}
+}
+
+// rowIn writes the opRowIn node n: (a, b) IN ((?, ?), …).
+func (w *writer) rowIn(n Node) {
+	cols, rows := n.V.([]int), n.W.([][]any)
+	w.str("(")
+	for i, c := range cols {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.predCol(int32(c))
+	}
+	w.str(") IN (")
+	for r, row := range rows {
+		if r > 0 {
+			w.str(", ")
+		}
+		w.str("(")
+		for i, v := range row {
+			if i > 0 {
+				w.str(", ")
+			}
+			w.arg(v)
+		}
+		w.str(")")
+	}
+	w.str(")")
 }
 
 // through writes Of on a many-to-many relation: an EXISTS on the join entity,

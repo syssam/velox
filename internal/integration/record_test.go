@@ -143,3 +143,63 @@ func TestRecordHardDelete(t *testing.T) {
 		wantIDs(t, query(t, tg), []int64{1, 3, 5})
 	})
 }
+
+// TestRecordUpsert: on each database a recorded upsert reports the row that
+// conflicted as an update, with the old values the database held and the
+// new ones it stores (owner and invoice_id, which the update branch leaves
+// alone, keep their stored values, not the ones sent), and the new row as
+// an insert with the key the database gave it. An upsert that changes
+// nothing, and one DoNothing keeps, report nothing.
+func TestRecordUpsert(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		var rec velox.Recorder
+		rdb := tg.db.Record(&rec)
+		zed := testmodel.WithUser(ctx, "zed")
+		xs := []testmodel.Ticket{
+			{OrgID: 1, Owner: "zed", Title: "A1", Done: true, InvoiceID: 9},
+			{OrgID: 1, Owner: "zed", Title: "N1", Done: true, InvoiceID: 2},
+		}
+		if err := rdb.InsertAll(xs).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		cs := slices.Collect(rec.All())
+		if len(cs) != 2 {
+			t.Fatalf("%d Changes, want 2: %+v", len(cs), cs)
+		}
+		up, in := cs[0], cs[1]
+		if up.Op != velox.OpUpdate || up.Key != int64(1) || Tk.Done.Old(up) || !Tk.Done.New(up) {
+			t.Errorf("update: %+v, done %v -> %v", up, Tk.Done.Old(up), Tk.Done.New(up))
+		}
+		if Tk.Owner.New(up) != "ann" || Tk.InvoiceID.New(up) != 1 || Tk.CreatedBy.New(up) != "seed" || len(up.Diff()) != 1 {
+			t.Errorf("update's new row %+v, want the stored one; Diff %+v", up.NewRow(), up.Diff())
+		}
+		var id int64
+		if err := tg.direct.QueryRow("SELECT id FROM tickets WHERE org_id = 1 AND title = 'N1'").Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if in.Op != velox.OpInsert || in.Key != id || in.OldRow() != nil || Tk.Owner.New(in) != "zed" || Tk.CreatedBy.New(in) != "zed" {
+			t.Errorf("insert: %+v, key %v, want %d", in, in.Key, id)
+		}
+
+		rec.Reset()
+		same := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "A1", Done: true}
+		if err := rdb.Insert(&same).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		kept := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "A2", Done: false}
+		if err := rdb.Insert(&kept).OnConflict(Tk.OrgID, Tk.Title).DoNothing().Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		if rec.Len() != 0 {
+			t.Errorf("an unchanged and a kept row were reported: %+v", slices.Collect(rec.All()))
+		}
+		back := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "A1", Done: false}
+		if err := rdb.Insert(&back).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		cs = slices.Collect(rec.All())
+		if len(cs) != 1 || cs[0].Op != velox.OpUpdate || cs[0].Key != int64(1) || !Tk.Done.Old(cs[0]) || Tk.Done.New(cs[0]) {
+			t.Errorf("single upsert: %+v", cs)
+		}
+	})
+}

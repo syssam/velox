@@ -100,8 +100,9 @@ func RecordIgnore(columns ...string) RecordOption {
 // Inside a transaction a recorded write runs under a savepoint that holds
 // its statements and the sink's calls: a failed statement or a sink's error
 // rolls back to it, so a recorded write that returns an error took no
-// effect. Outside one it runs in a transaction of its own, and the sink is
-// called after its COMMIT: a sink's error is returned and undoes nothing.
+// effect. Outside one it runs in a transaction of its own, but for an
+// insert of one statement, which commits by itself, and the sink is called
+// after the COMMIT: a sink's error is returned and undoes nothing.
 // The sink's writes are recorded only when made under another context than
 // the one it was given (see Sink).
 //

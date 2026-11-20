@@ -106,11 +106,11 @@ func everyColumn(in *EntityInfo) []int {
 	return cols
 }
 
-// errRecordBidi refuses recording an update that sets the key of a
-// bidirectional one-to-one edge: velox re-points both partners in
-// statements of its own, which recording does not follow.
-func errRecordBidi(in *EntityInfo) error {
-	return fmt.Errorf("velox: %s: recording an update that sets the key of a bidirectional one-to-one edge: velox re-points both partners, which recording does not follow", in.Name)
+// errRecordBidi refuses recording an op, an update or an insert, that sets
+// the key of a bidirectional one-to-one edge: velox re-points both partners
+// in statements of its own, which recording does not follow.
+func errRecordBidi(in *EntityInfo, op Op) error {
+	return fmt.Errorf("velox: %s: recording an %s that sets the key of a bidirectional one-to-one edge: velox re-points both partners, which recording does not follow", in.Name, op)
 }
 
 // keyAnd is in's primary-key columns, then those of cols not in it.
@@ -214,18 +214,24 @@ func newKeys(in *EntityInfo, st *Statement, keys [][]any) [][]any {
 // keysIn is the condition that a row's primary key is one of keys: key IN
 // (…) for one key column, (a = ? AND b = ?) OR … for several.
 func keysIn(t Table, keys [][]any) Predicate {
-	in := t.Info()
-	if len(in.PrimaryKey) == 1 {
+	return valuesIn(t, t.Info().PrimaryKey, keys)
+}
+
+// valuesIn is the condition that a row's columns cols hold one of keys, a
+// value per column each: col IN (…) for one column, (a = ? AND b = ?) OR …
+// for several.
+func valuesIn(t Table, cols []int, keys [][]any) Predicate {
+	if len(cols) == 1 {
 		vs := make([]any, len(keys))
 		for i, k := range keys {
 			vs[i] = k[0]
 		}
-		return t.Pred(in.PrimaryKey[0], PredIn, vs)
+		return t.Pred(cols[0], PredIn, vs)
 	}
 	ors := make([]Node, len(keys))
 	for i, k := range keys {
 		ands := make([]Node, len(k))
-		for j, col := range in.PrimaryKey {
+		for j, col := range cols {
 			ands[j] = PredNode(t.Pred(col, PredEQ, k[j]))
 		}
 		ors[i] = Group(OpAnd, ands)

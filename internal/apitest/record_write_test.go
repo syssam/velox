@@ -456,6 +456,10 @@ func TestRecordBidiKeyRefused(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "recording an update that sets the key of a bidirectional") || len(e.Log) != 0 {
 		t.Errorf("got %v, sent %q", err, e.Log)
 	}
+	err = rdb.Insert(&bspouse{ID: 2, SpouseID: new(int64(3))}).Exec(ctx)
+	if err == nil || !strings.Contains(err.Error(), "recording an insert that sets the key of a bidirectional") || len(e.Log) != 0 {
+		t.Errorf("Insert: got %v, sent %q", err, e.Log)
+	}
 }
 
 // TestRecordSinkInTx: inside the caller's transaction the sink runs in it,

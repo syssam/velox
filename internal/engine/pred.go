@@ -59,6 +59,10 @@ const (
 	// OpJSONEmpty is true where the column holds an array with no element.
 	// JSONEmptyNode makes it.
 	OpJSONEmpty
+	// opRowIn is (a, b, …) IN ((?, ?, …), …), PostgreSQL's row-value IN: v
+	// is the columns, a []int, and w the rows of values, a [][]any, each
+	// one value per column. rowsIn makes it.
+	opRowIn
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.
