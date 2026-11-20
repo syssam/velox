@@ -104,7 +104,7 @@ type Statement struct {
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
-	Returning    []int           // INSERT, a recorded UPDATE (DB.Record), and a recorded DELETE on PostgreSQL 18: columns read back (PostgreSQL and SQLite); a Rewrite hook may not change it on any recorded write, nor on an UPDATE
+	Returning    []int           // INSERT, a recorded UPDATE (DB.Record), and a recorded DELETE (its key; on PostgreSQL 18 its old row): columns read back (PostgreSQL and SQLite); a Rewrite hook may not change it on any recorded write, nor on an UPDATE
 	AllRows      bool            // UPDATE and DELETE: the statement said All
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent
@@ -144,9 +144,10 @@ type Statement struct {
 	// iter says Iter runs the statement: its rows are open while the caller's
 	// loop body runs.
 	iter bool
-	// recorded says the statement is a recorded insert or upsert, or a
-	// recorded update or delete on PostgreSQL 18 (returnOld), whose Changes
+	// recorded says the statement is a recorded insert or upsert, a recorded
+	// delete, or a recorded update on PostgreSQL 18 (returnOld), whose Changes
 	// come from what its RETURNING reads: a Rewrite hook may not change that.
+	// A delete renders RETURNING only when it is set.
 	recorded bool
 	// returnOld says the statement, a recorded write on PostgreSQL 18 or
 	// later, returns its rows' values before and after it: RETURNING

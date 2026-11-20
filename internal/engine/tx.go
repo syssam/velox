@@ -737,6 +737,10 @@ type txFrame struct {
 	// order: a savepoint that rolls back drops those after its mark, and a
 	// transaction that does not commit drops them all (unkeep).
 	kept []keptRow
+	// adopted is set, on the root, for a transaction the caller began
+	// (UseTx): velox never sees it end, so a Recorder's rows go to it
+	// through Sink, and nothing is kept to drop.
+	adopted bool
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.

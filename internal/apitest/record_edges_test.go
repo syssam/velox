@@ -74,7 +74,7 @@ func TestRecordSoftDelete(t *testing.T) {
 	}
 	t.Run("Skip", func(t *testing.T) {
 		D := fixture.SDocs
-		e := &fakeconn.Exec{Affected: 1, Results: [][][]any{{{int64(2), int64(1), int64(1), "b", nil}}}}
+		e := &fakeconn.Exec{Affected: 1, Results: [][][]any{{{int64(2), int64(1), int64(1), "b", nil}}, {{int64(2)}}}}
 		var rec velox.Recorder
 		if _, err := openFake(velox.Postgres, e).Record(&rec).Delete[fixture.SDoc]().Where(D.ID.EQ(2)).Exec(softdelete.Skip(ctx)); err != nil {
 			t.Fatal(err)
@@ -82,7 +82,7 @@ func TestRecordSoftDelete(t *testing.T) {
 		wantLog(t, e, []string{
 			"BEGIN",
 			`SELECT ` + cols + ` FROM "s_docs" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-			`DELETE FROM "s_docs" WHERE "id" = $1 AND "id" IN ($2)`,
+			`DELETE FROM "s_docs" WHERE "id" = $1 AND "id" IN ($2) RETURNING "id"`,
 			"COMMIT",
 		})
 		cs := slices.Collect(rec.All())
@@ -271,7 +271,7 @@ func TestRecordM2M(t *testing.T) {
 		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
 		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT $2`,
 		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2)) OR ("friend_id" = $3 AND "node_id" IN ($4))) ORDER BY "node_id", "friend_id" FOR UPDATE`,
-		`DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2)) OR ("friend_id" = $3 AND "node_id" IN ($4))) AND (("node_id" = $5 AND "friend_id" = $6) OR ("node_id" = $7 AND "friend_id" = $8))`,
+		`DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2)) OR ("friend_id" = $3 AND "node_id" IN ($4))) AND (("node_id" = $5 AND "friend_id" = $6) OR ("node_id" = $7 AND "friend_id" = $8)) RETURNING ` + fcols,
 		"COMMIT",
 	}}, {velox.SQLite, []string{
 		"BEGIN",
@@ -285,7 +285,7 @@ func TestRecordM2M(t *testing.T) {
 		`SELECT "id" FROM "bnodes" WHERE "id" = ?`,
 		`SELECT "id" FROM "bnodes" WHERE "id" IN (?) LIMIT 1`,
 		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE (("node_id" = ? AND "friend_id" IN (?)) OR ("friend_id" = ? AND "node_id" IN (?))) ORDER BY "node_id", "friend_id"`,
-		`DELETE FROM "bnode_friends" WHERE (("node_id" = ? AND "friend_id" IN (?)) OR ("friend_id" = ? AND "node_id" IN (?))) AND (("node_id" = ? AND "friend_id" = ?) OR ("node_id" = ? AND "friend_id" = ?))`,
+		`DELETE FROM "bnode_friends" WHERE (("node_id" = ? AND "friend_id" IN (?)) OR ("friend_id" = ? AND "node_id" IN (?))) AND (("node_id" = ? AND "friend_id" = ?) OR ("node_id" = ? AND "friend_id" = ?)) RETURNING ` + fcols,
 		"COMMIT",
 	}}, {velox.MySQL, []string{
 		"BEGIN",
@@ -317,7 +317,7 @@ func TestRecordM2M(t *testing.T) {
 				t.Errorf("Add: %q, want %q", got, want)
 			}
 			rec.Reset()
-			e = &fakeconn.Exec{Affected: 2, Results: [][][]any{{{int64(1)}}, {{int64(2)}}, links}}
+			e = &fakeconn.Exec{Affected: 2, Results: [][][]any{{{int64(1)}}, {{int64(2)}}, links, links}} // the locked read, then the keys the DELETE returns (none on MySQL)
 			rdb = openFake(c.d, e).Record(&rec)
 			if _, err := rdb.Update[bnode]().Set(friendsOf.Remove(2)).Where(velox.NumberCol[bnode, int64]{I: 0}.EQ(1)).Exec(ctx); err != nil {
 				t.Fatal(err)

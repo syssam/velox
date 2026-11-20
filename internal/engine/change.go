@@ -76,7 +76,10 @@ func EqualValues(a, b any) bool {
 // rows st's conditions match, under st's scope (a Writable read), locked
 // where the dialect can, in key order; sends st narrowed to those keys, a
 // chunk at a time; and, for an update, reads the new values: RETURNING on
-// PostgreSQL and SQLite, a SELECT by key on MySQL. It sets mu.Affected.
+// PostgreSQL and SQLite, a SELECT by key on MySQL. A delete returns the keys
+// it deleted on PostgreSQL and SQLite, and on MySQL its count of rows must
+// match the chunk's, so that a row a hook or a trigger kept is not reported
+// as deleted. It sets mu.Affected.
 //
 // On PostgreSQL 18 and later (returnsOld) st is sent as it is, once, and
 // returns its rows before and after it (tracker.both). Outside a
@@ -189,8 +192,11 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *State
 	for i := range keys {
 		keys[i] = rowKey(tw.in, olds.at(i))
 	}
-	news := make([]unsafe.Pointer, olds.n) // an update's rows as written, by old row
-	returning := st.Op == OpUpdate && tx.D != MySQL
+	// news holds, by old row, an update's row as written, or a delete's key
+	// as deleted: a row the write left alone (a Rewrite or Around hook, a
+	// trigger) stays nil and is not reported.
+	news := make([]unsafe.Pointer, olds.n)
+	returning := tx.D != MySQL
 	at := newKeys(tw.in, st, keys) // where each row is after the write
 	per := max(1, (keysPer(tx, tw.in, st.Where)-len(st.Set))/len(tw.in.PrimaryKey))
 	err = byChunks(len(keys), per, func(lo, hi int) error {
@@ -203,9 +209,23 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *State
 				return err
 			}
 			mu.Affected += res.Affected
+			if st.Op == OpDelete {
+				// MySQL returns no keys: its count must account for every
+				// row, or recording cannot tell which it deleted.
+				if res.Affected != int64(hi-lo) {
+					return fmt.Errorf("velox: %s: a recorded delete of %d locked rows deleted %d by MySQL's count: a hook or a trigger kept rows from it, and recording cannot tell which; the write is rolled back", tw.in.Name, hi-lo, res.Affected)
+				}
+				for i := lo; i < hi; i++ {
+					news[i] = olds.at(i)
+				}
+			}
 			return nil
 		}
 		cp.Returning = tw.read
+		if st.Op == OpDelete {
+			// The keys of the rows the database deleted, to report those alone.
+			cp.Returning, cp.recorded = tw.in.PrimaryKey, true
+		}
 		n, err := tw.returned(ctx, tx, &cp, at, lo, hi, news)
 		mu.Affected += n
 		return err
@@ -287,11 +307,17 @@ func keyString(k []any) string {
 	return b.String()
 }
 
-// returned sends st, an update with RETURNING of tw.read, and keeps each row
-// it returns in news, at the place of the old row whose new key (at, rows lo
-// to hi) it holds. It returns the rows that came back.
+// returned sends st, an update or a delete with RETURNING (an update's of
+// tw.read, a delete's of the key), and keeps each row it returns in news, at
+// the place of the old row whose new key (at, rows lo to hi) it holds. A row
+// that holds none, as when the database stores an assigned key in another
+// form (a truncated time, a padded CHAR), takes the place of the chunk's one
+// row, or fails the write: an unreported write is the worst failure of a
+// recording. It returns the rows that came back.
 func (tw *tracker) returned(ctx context.Context, tx *DB, st *Statement, at [][]any, lo, hi int, news []unsafe.Pointer) (int64, error) {
-	bumpOnce(st)
+	if st.Op == OpUpdate {
+		bumpOnce(st)
+	}
 	ts := tw.t.state()
 	place := make(map[string]int, hi-lo)
 	for i := lo; i < hi; i++ {
@@ -300,19 +326,23 @@ func (tw *tracker) returned(ctx context.Context, tx *DB, st *Statement, at [][]a
 	var n int64
 	read := func(r Rows) error {
 		n = 0 // anew, should an Around hook retry
-		dst := make([]any, len(tw.read))
+		clear(news[lo:hi])
+		var stray []unsafe.Pointer
+		dst := make([]any, len(st.Returning))
 		for r.Next() {
 			p := ts.newRow()
-			bindTableRow(ts, tw.read, dst, p)
+			bindTableRow(ts, st.Returning, dst, p)
 			if err := r.Scan(dst...); err != nil {
 				return err
 			}
 			n++
 			if i, ok := place[keyString(rowKey(tw.in, p))]; ok {
 				news[i] = p
+			} else {
+				stray = append(stray, p)
 			}
 		}
-		return nil
+		return tw.placeStray(st.Op, stray, news[lo:hi])
 	}
 	var err error
 	if tx.Hooked() {
@@ -323,9 +353,25 @@ func (tw *tracker) returned(ctx context.Context, tx *DB, st *Statement, at [][]a
 	return n, err
 }
 
+// placeStray places stray, the rows a write returned or a re-read found
+// whose key matched no row of the chunk news holds: the chunk's one row
+// takes the one stray, as the write was narrowed to its key; any other
+// stray fails the write.
+func (tw *tracker) placeStray(op Op, stray []unsafe.Pointer, news []unsafe.Pointer) error {
+	switch {
+	case len(stray) == 0:
+		return nil
+	case len(stray) == 1 && len(news) == 1 && news[0] == nil:
+		news[0] = stray[0]
+		return nil
+	}
+	return fmt.Errorf("velox: %s: a recorded %s found %d rows whose key matches none it was sent for (the database may store an assigned key in another form than the value given); the write is rolled back", tw.in.Name, op, len(stray))
+}
+
 // reread reads the rows an update wrote by their new keys, at, a chunk at a
-// time, and keeps each in news at its old row's place. The read adds no row
-// condition: the update was scoped, and may have moved the rows out of view.
+// time, and keeps each in news at its old row's place (a row whose key
+// matches none: placeStray). The read adds no row condition: the update was
+// scoped, and may have moved the rows out of view.
 func (tw *tracker) reread(ctx context.Context, tx *DB, at [][]any, news []unsafe.Pointer) error {
 	place := make(map[string]int, len(at))
 	for i, k := range at {
@@ -338,28 +384,34 @@ func (tw *tracker) reread(ctx context.Context, tx *DB, at [][]any, news []unsafe
 		if err != nil {
 			return err
 		}
+		var stray []unsafe.Pointer
 		for j := range rows.n {
 			p := rows.at(j)
-			if i, ok := place[keyString(rowKey(tw.in, p))]; ok {
+			if i, ok := place[keyString(rowKey(tw.in, p))]; ok && i >= lo && i < hi {
 				news[i] = p
+			} else {
+				stray = append(stray, p)
 			}
 		}
-		return nil
+		return tw.placeStray(OpUpdate, stray, news[lo:hi])
 	})
 }
 
-// changes is a ChangeRow per old row of st: the row before the write and,
-// for an update, the row after it. An update's row that no RETURNING or
-// re-read found is left out. A soft delete's (MarkSoftDelete) rows are
-// deletes, Soft, with both rows.
+// changes is a ChangeRow per old row of st that the write changed (news[i]
+// set): the row before the write and, for an update, the row after it. A
+// row that no RETURNING, re-read or count found is left out. A soft
+// delete's (MarkSoftDelete) rows are deletes, Soft, with both rows.
 func (tw *tracker) changes(st *Statement, olds TableRows, news []unsafe.Pointer) []ChangeRow {
 	op, soft := st.Op, st.Op == OpUpdate && st.softDelete
 	out := make([]ChangeRow, 0, olds.n)
 	for i := range olds.n {
-		if st.Op == OpUpdate && news[i] == nil {
-			continue // a Rewrite or Around hook kept the row from the write
+		if news[i] == nil {
+			continue // a Rewrite or Around hook, or a trigger, kept the row from the write
 		}
-		row := ChangeRow{Op: op, In: tw.in, Old: olds.at(i), New: news[i]}
+		row := ChangeRow{Op: op, In: tw.in, Old: olds.at(i)}
+		if op == OpUpdate {
+			row.New = news[i]
+		}
 		if soft {
 			row.Op, row.Soft = OpDelete, true
 		}

@@ -30,7 +30,8 @@ type ChangeRow struct {
 // caller's transaction emit calls Keep in place of Sink and the
 // transaction notes the id (txFrame.kept): rows are dropped by id, not by
 // position, so a Recorder shared by concurrent transactions loses only the
-// rows of the one that rolls back.
+// rows of the one that rolls back. A transaction the caller began on its own
+// *sql.Tx (UseTx), whose end velox never sees, calls Sink and keeps nothing.
 type Recording struct {
 	Sink   func(ctx context.Context, r ChangeRow) error
 	Ignore []string
@@ -239,7 +240,7 @@ func emit(ctx context.Context, db *DB, rows []ChangeRow) error {
 			pend.rows = append(pend.rows, pendingRow{r: r, row: row})
 			continue
 		}
-		if r.Keep != nil && db.txRoot != nil {
+		if r.Keep != nil && db.txRoot != nil && !db.txRoot.adopted {
 			// A Recorder neither fails nor writes: it needs no sink context.
 			db.txRoot.kept = append(db.txRoot.kept, keptRow{r: r, id: r.Keep(row)})
 			continue

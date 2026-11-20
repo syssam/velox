@@ -13,7 +13,9 @@ import (
 // the DB never begins, commits or rolls back, and it works until the caller
 // ends tx, after which database/sql fails its statements. A Tx on it is a
 // savepoint of tx. It retries nothing, takes no Tx option or deadline, and runs
-// no TxAround hook, which wraps a Tx call that UseTx is not.
+// no TxAround hook, which wraps a Tx call that UseTx is not. As it never
+// sees tx end, a recording's Changes go to its Sink, a Recorder's too, and
+// none is dropped when tx rolls back (txFrame.adopted).
 //
 // It is a function, not a method, as Pool is: a method of DB mentioning *sql.Tx
 // makes every package that uses a Query larger to compile.
@@ -43,6 +45,7 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 		return nil, errNoSQLTx
 	}
 	f := newTxFrame(context.Background(), DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, bypass: db.bypass, rec: db.rec}, nil)
+	f.adopted = true
 	return &f.db, nil
 }
 

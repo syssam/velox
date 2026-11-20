@@ -228,11 +228,11 @@ func TestRecordPG18Delete(t *testing.T) {
 		"BEGIN",
 		`DELETE FROM "invoices" WHERE "org_id" = $1 RETURNING ` + olds(allCols),
 		"COMMIT",
-	}}, {170000, [][][]any{{invoiceRow(1), invoiceRow(2)}}, []string{
+	}}, {170000, [][][]any{{invoiceRow(1), invoiceRow(2)}, {{int64(1)}, {int64(2)}}}, []string{
 		showVersion,
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" FOR UPDATE`,
-		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" IN ($2, $3)`,
+		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" IN ($2, $3) RETURNING "id"`,
 		"COMMIT",
 	}}} {
 		t.Run(strconv.Itoa(c.version), func(t *testing.T) {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"slices"
 	"strings"
@@ -80,5 +81,31 @@ func TestPendingTruncatedBySavepoint(t *testing.T) {
 	}
 	if !slices.Equal(log, []string{"COMMIT", "COMMIT", "COMMIT"}) {
 		t.Errorf("the sink ran after %q, want after COMMIT", log)
+	}
+}
+
+// TestAdoptedTxKeepsNothing: in a transaction the caller began (UseTx),
+// whose end velox never sees, a Recorder's rows go through Sink and the
+// transaction keeps no id to drop: kept stays empty.
+func TestAdoptedTxKeepsNothing(t *testing.T) {
+	ctx := context.Background()
+	pool := sql.OpenDB(nopConnector{})
+	t.Cleanup(func() { _ = pool.Close() })
+	var sunk int
+	rec := &Recording{
+		Sink: func(context.Context, ChangeRow) error { sunk++; return nil },
+		Keep: func(ChangeRow) uint64 { t.Error("Keep in an adopted transaction"); return 0 },
+		Drop: func([]uint64) { t.Error("Drop in an adopted transaction") },
+	}
+	db := Open(SQLite, pool, nil)
+	tx, err := UseTx(db.Record(rec), &sql.Tx{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := emit(ctx, tx, []ChangeRow{{Op: OpDelete}, {Op: OpDelete}}); err != nil {
+		t.Fatal(err)
+	}
+	if sunk != 2 || len(tx.txRoot.kept) != 0 {
+		t.Errorf("sink got %d rows, kept %d; want 2 and none", sunk, len(tx.txRoot.kept))
 	}
 }

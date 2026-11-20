@@ -103,7 +103,8 @@ func TestRecordUpdateSQL(t *testing.T) {
 }
 
 // TestRecordDeleteSQL: a recorded delete reads every column of its rows,
-// locked, then deletes them by key; its Changes have no new values.
+// locked, then deletes them by key, RETURNING the keys it deleted but on
+// MySQL; its Changes have no new values.
 func TestRecordDeleteSQL(t *testing.T) {
 	for _, c := range []struct {
 		d    velox.Dialect
@@ -111,12 +112,12 @@ func TestRecordDeleteSQL(t *testing.T) {
 	}{{velox.Postgres, []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" FOR UPDATE`,
-		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" IN ($2, $3)`,
+		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" IN ($2, $3) RETURNING "id"`,
 		"COMMIT",
 	}}, {velox.SQLite, []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = ? ORDER BY "id"`,
-		`DELETE FROM "invoices" WHERE "org_id" = ? AND "id" IN (?, ?)`,
+		`DELETE FROM "invoices" WHERE "org_id" = ? AND "id" IN (?, ?) RETURNING "id"`,
 		"COMMIT",
 	}}, {velox.MySQL, []string{
 		"BEGIN",
@@ -125,7 +126,7 @@ func TestRecordDeleteSQL(t *testing.T) {
 		"COMMIT",
 	}}} {
 		t.Run(c.d.String(), func(t *testing.T) {
-			e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1), invoiceRow(2)}}, Affected: 2}
+			e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1), invoiceRow(2)}, {{int64(1)}, {int64(2)}}}, Affected: 2}
 			var rec velox.Recorder
 			rdb := openFake(c.d, e).Record(&rec)
 			n, err := rdb.Delete[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Exec(ctx)

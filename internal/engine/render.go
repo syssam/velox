@@ -1215,7 +1215,11 @@ func (w *writer) deleteStmt(st *Statement) {
 	w.str("DELETE FROM ")
 	w.table()
 	w.where(st.Where)
-	w.returning(st)
+	if st.recorded || st.returnOld {
+		// Only a recorded delete reads rows back; any other ignores a
+		// Returning a Rewrite hook set, as it always has.
+		w.returning(st)
+	}
 }
 
 // returning writes the RETURNING clause of a write that reads columns back,
