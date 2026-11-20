@@ -529,3 +529,39 @@ func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
 		t.Errorf("caller's key: %q, %+v", e.Log, b)
 	}
 }
+
+// TestRecordedMySQLUpsertReadsBackDefaults: a recorded single-row upsert on
+// MySQL that leaves columns to their declared defaults reads them back by
+// its conflict values, after the INSERT and before the read that reports
+// the Change, all in one transaction; the entity and the Change's new row
+// hold the stored values.
+func TestRecordedMySQLUpsertReadsBackDefaults(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1, Results: [][][]any{
+		{}, // the locked read: no conflicting row
+		{{"done", int64(3), "z"}},
+		{{int64(1), "a", "done", int64(3), "z", nil}},
+	}}
+	var rec velox.Recorder
+	a := dDef{Name: "a"}
+	if err := openFake(velox.MySQL, e).Record(&rec).Insert(&a).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantLog(t, e, []string{
+		"BEGIN",
+		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?) FOR UPDATE",
+		"INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
+		"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?", // by the conflict values
+		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?)",
+		"COMMIT",
+	})
+	if a.Status != "done" || a.Score != 3 || a.Note == nil || *a.Note != "z" {
+		t.Errorf("read back %+v", a)
+	}
+	cs := slices.Collect(rec.All())
+	if len(cs) != 1 || cs[0].Op != velox.OpInsert {
+		t.Fatalf("Changes %+v, want one insert", cs)
+	}
+	if _, cur, _ := velox.RowsOf[dDef](cs[0]); cur == nil || cur.Status != "done" || cur.Score != 3 {
+		t.Errorf("the Change's new row: %+v", cur)
+	}
+}

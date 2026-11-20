@@ -20,6 +20,9 @@ import (
 // tx is a handle on the write's transaction that does not record: what the
 // sink writes through it, audit rows say, commits or rolls back with the
 // write, and is not itself recorded. It is valid while that transaction is.
+// Write through tx alone: a write through another handle runs outside the
+// write's transaction (and on a pool of one connection waits for it
+// forever), and one through the recording handle is recorded again.
 //
 // An upsert's old rows, and on MySQL its new rows, are read without the
 // scope or the Read policy (see DB.Record), so a sink can see values the
@@ -112,7 +115,8 @@ func (r *Recorder) Reset() {
 	r.mu.Unlock()
 }
 
-// RecordOption configures a recording handle.
+// RecordOption configures a recording handle: RecordIgnore and RecordKeep
+// make one. Its zero value configures nothing, and Record skips it.
 type RecordOption struct {
 	owner func() (*EntityInfo, error)
 	cols  []int
@@ -162,8 +166,9 @@ func RecordKeep[E any](cols ...Column[E]) RecordOption {
 // what it costs; ADR 0094 (docs/decisions/0094-change-recording.md) has
 // the rules.
 //
-// The DB it returns shares db's pool and options, and Close on it closes
-// nothing. Record panics when s is nil.
+// opts are RecordIgnore and RecordKeep options; a zero RecordOption is
+// skipped. The DB it returns shares db's pool and options, and Close on it
+// closes nothing. Record panics when s is nil.
 func (db *DB) Record(s Sink, opts ...RecordOption) *DB {
 	if s == nil {
 		panic("velox: Record: the Sink is nil")
@@ -176,6 +181,9 @@ func (db *DB) Record(s Sink, opts ...RecordOption) *DB {
 		return s.Record(ctx, pub(tx), changes)
 	}}
 	for _, o := range opts {
+		if o.owner == nil {
+			continue // a zero RecordOption
+		}
 		in, err := o.owner()
 		if err != nil {
 			panic("velox: Record: " + err.Error())

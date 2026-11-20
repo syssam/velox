@@ -336,6 +336,30 @@ func TestSweepRemovesGenRuntime(t *testing.T) {
 	}
 }
 
+// A field that is not Nillable whose database default is a non-zero literal
+// generates, with a warning on stderr naming it (ADR 0093, D10).
+func TestGenerateWarnsOfNonZeroDefault(t *testing.T) {
+	dir := genModule(t, map[string]string{"veloxschema/flag.go": `package veloxschema
+
+import (
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+)
+
+type Flag struct{ schema.Schema }
+
+func (Flag) Fields() []schema.Field {
+	return []schema.Field{field.Bool("on").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "true", field.SQLite: "true"})}
+}
+`})
+	code, _, errs := runCLI(t, dir, "./veloxschema")
+	if code != 0 || !strings.Contains(errs, "velox-gen: warning: veloxschema/flag.go:") ||
+		!strings.Contains(errs, `schema Flag: field "on": its database default is not the zero value`) ||
+		!strings.Contains(errs, "the zero value cannot be stored through Insert; make it Nillable to store it\n") {
+		t.Errorf("%d %q", code, errs)
+	}
+}
+
 // A closure default binds in the entity's file, which imports the schema.
 // A schema package that imports gen is refused, with or without behaviour:
 // directly, at the import, and through a helper, with the chain. A first

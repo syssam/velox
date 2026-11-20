@@ -78,7 +78,9 @@ The database's values come back into the entity:
     it did for the conflict. The upsert and the read run in one
     transaction, velox's own outside the caller's. A row whose conflict
     values cannot find it (a NULL, a generated key left zero) keeps its Go
-    values.
+    values. On a table with several unique keys, `ON DUPLICATE KEY UPDATE`
+    fires on a conflict with any of them, so the read by the conflict
+    target's values can then find another row than the one updated, or none.
   - A multi-row upsert does not read its defaulted columns back: its rows
     cannot be told apart by key without a read per row. They keep their Go
     values.

@@ -90,7 +90,10 @@ package. As handle methods they cost a few KB per entity package
    `One`, `Insert`, `InsertAll`, a `Save`, the edge writes of `Rel.Add`,
    `Remove`, `Set`, `Clear`, a soft delete's `Exec`) go to the sink in one
    call, across its chunks, re-point steps, mirror rows and default runs
-   (0093); a write that changed nothing calls no sink.
+   (0093); a write that changed nothing calls no sink. A hook's write
+   through `Mutation.DB()` inside the write's frame joins the outer write's
+   sink call; a hook that writes before the frame opens gets a call of its
+   own.
 3. **Values.** Plain Go values, as `Mutation.Value` gives them; a JSON
    column's decoded value. An insert's new row holds what velox reads back
    (0093): a generated key and the declared database defaults. A value a
@@ -127,9 +130,12 @@ package. As handle methods they cost a few KB per entity package
      caller's `*sql.Tx`, so what it writes through tx rolls back with it.
 6. **No recursion: the sink's tx does not record.** The sink's `tx` is a
    handle on the write's transaction (the caller's transaction or
-   savepoint frame, or the one velox opened), derived as `WithoutPolicy`
-   derives one, with recording off. What the sink writes through it joins
-   the write's transaction and is not recorded. This replaces the first
+   savepoint frame, or the one velox opened): a copy of the frame's handle,
+   its policy unchanged, with recording off. What the sink writes through
+   it joins the write's transaction and is not recorded. A write through
+   any other handle runs outside the write's transaction (and on a pool of
+   one connection waits for it forever); one through the recording handle
+   is recorded again. This replaces the first
    text's mark on the sink's context, which made a sink set up at startup
    capture a transaction variable to write in it.
 7. **Old values match the write.**

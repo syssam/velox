@@ -512,10 +512,10 @@ func (c NullCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
 func (c NullCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// OldPtr returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.
+// OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
 func (c NullCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](ch, ch.row.Old, c.I) }
 
-// NewPtr returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.
+// NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](ch, ch.row.New, c.I) }
 
 // NullOrderedCol is OrderedCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -642,12 +642,12 @@ func (c NullOrderedCol[E, V]) New[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.New, c.I)
 }
 
-// OldPtr returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.
+// OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
 func (c NullOrderedCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.Old, c.I)
 }
 
-// NewPtr returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.
+// NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullOrderedCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
@@ -796,12 +796,12 @@ func (c NullNumberCol[E, V]) New[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.New, c.I)
 }
 
-// OldPtr returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.
+// OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
 func (c NullNumberCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.Old, c.I)
 }
 
-// NewPtr returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.
+// NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullNumberCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
@@ -960,12 +960,12 @@ func (c NullStringCol[E, V]) New[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.New, c.I)
 }
 
-// OldPtr returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.
+// OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
 func (c NullStringCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.Old, c.I)
 }
 
-// NewPtr returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.
+// NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullStringCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
@@ -1077,12 +1077,12 @@ func (c NullJSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
 func (c NullJSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// OldPtr returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.
+// OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
 func (c NullJSONCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.Old, c.I)
 }
 
-// NewPtr returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.
+// NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullJSONCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }

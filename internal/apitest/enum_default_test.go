@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // dEnum is an order whose status is an enum with a declared database
@@ -113,5 +115,36 @@ func TestEnumSchemaDefaultZero(t *testing.T) {
 	}
 	if _, err := db.Update[dEnum]().Set(E.Status.Set("")).Where(E.ID.EQ(a.ID)).Exec(ctx); !isInvalidStatus(err) {
 		t.Errorf("Update to the zero status: %v, want a ValidationError", err)
+	}
+}
+
+// TestEnumSchemaDefaultZeroDefaultCell: in a mixed InsertAll on PostgreSQL
+// and MySQL, a row's zero enum left to its declared default is a DEFAULT
+// cell in the one statement, and passes validation; the other row's value
+// is sent and validated.
+func TestEnumSchemaDefaultZeroDefaultCell(t *testing.T) {
+	for _, c := range []struct {
+		d    velox.Dialect
+		e    *fakeconn.Exec
+		want []string
+	}{
+		{velox.Postgres, &fakeconn.Exec{Rows: [][]any{{int64(1), "new"}, {int64(2), "paid"}}}, []string{
+			`INSERT INTO "denums" ("name", "status") VALUES ($1, DEFAULT), ($2, $3) RETURNING "id", "status"`,
+		}},
+		{velox.MySQL, &fakeconn.Exec{Affected: 2, LastID: 1, HasLastID: true, Rows: [][]any{{int64(1), "new"}, {int64(2), "paid"}}}, []string{
+			"INSERT INTO `denums` (`name`, `status`) VALUES (?, DEFAULT), (?, ?)",
+			"SELECT `id`, `status` FROM `denums` WHERE `id` IN (?, ?)",
+		}},
+	} {
+		xs := []dEnum{{Name: "b"}, {Name: "c", Status: "paid"}}
+		if err := openFake(c.d, c.e).InsertAll(xs).Exec(ctx); err != nil {
+			t.Fatalf("%s: %v", c.d, err)
+		}
+		if !slices.Equal(c.e.Log, c.want) {
+			t.Errorf("%s:\n got %q\nwant %q", c.d, c.e.Log, c.want)
+		}
+		if xs[0].ID != 1 || xs[0].Status != "new" || xs[1].Status != "paid" {
+			t.Errorf("%s: read back %+v", c.d, xs)
+		}
 	}
 }

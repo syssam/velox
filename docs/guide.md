@@ -1141,7 +1141,7 @@ through the sink's `tx`.
   composite key.
 - `I.TotalCents.Old(c)` and `I.TotalCents.New(c)` read one column, typed. A `Null*`
   handle gives the element, the zero when NULL; `I.PaidAt.OldPtr(c)` and
-  `NewPtr(c)` give a copy of it, nil for NULL. `c.Changed(I.Status)`
+  `NewPtr(c)` give a fresh pointer to it, nil for NULL. `c.Changed(I.Status)`
   reports whether an update changed any of the columns given.
   `velox.RowsOf[veloxgen.Invoice](c)` gives both rows as `*Invoice`.
 - For any entity, `c.OldRow()` and `c.NewRow()` are the rows as `*E`, and
@@ -1178,7 +1178,13 @@ error is the write's error, and rolls the write back.
   before its COMMIT.
 - `tx` is a handle on the write's transaction that does not record: what
   the sink writes through it commits or rolls back with the change, and is
-  not recorded itself.
+  not recorded itself. Write through `tx` alone: a write through another
+  handle runs outside the write's transaction (and on a pool of one
+  connection waits for it forever), and one through the recording handle
+  is recorded again, calling the sink from inside itself.
+- A hook's write through `m.DB()` inside the write joins the write's sink
+  call; a hook that writes before the write's transaction opens gets a
+  call of its own.
 - A `RecordFunc` sees each write's changes before the commit, including
   those a later rollback of your transaction undoes. For side effects
   outside the database, use a Recorder and act once `Tx` returns.

@@ -381,6 +381,24 @@ func TestRecordIgnoreTyped(t *testing.T) {
 	}
 }
 
+// TestRecordZeroOption: a zero RecordOption configures nothing and is
+// skipped, beside a real one, rather than panic.
+func TestRecordZeroOption(t *testing.T) {
+	db, _ := recInvoices(t)
+	var rec velox.Recorder
+	rdb := db.Record(&rec, velox.RecordOption{}, velox.RecordIgnore(I.Note), velox.RecordOption{})
+	rc := recEngine(rdb).Recording()
+	if len(rc.Ignore) != 1 || len(rc.Include) != 0 {
+		t.Errorf("zero options beside RecordIgnore: Ignore %v, Include %v", rc.Ignore, rc.Include)
+	}
+	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Len() != 1 {
+		t.Errorf("an update through a handle with zero options: %d Changes, want 1", rec.Len())
+	}
+}
+
 // TestSinkGetsTx: a sink set up once gets the write's transaction: the audit
 // rows it writes with tx.InsertAll commit with the write, outside a
 // transaction and in the caller's, are not recorded themselves, and roll

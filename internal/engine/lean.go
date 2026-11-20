@@ -365,9 +365,8 @@ func placeUpserted(in *EntityInfo, cols []int, got, rows []unsafe.Pointer) ([]un
 
 // readFilled reads the columns st.fill, which the database's defaults
 // filled, of the rows just inserted, by their keys, into rows: MySQL's way,
-// as it has no RETURNING. It reads without the Read policy, as the rows are
-// the caller's own; an Interceptor still filters, and a row it hides keeps
-// its Go values.
+// as it has no RETURNING. It reads without the Read policy or the
+// interceptors, as the rows are the caller's own.
 func readFilled(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointer) error {
 	in := st.Entity
 	if len(st.fill) == 0 || len(in.PrimaryKey) == 0 {
@@ -431,9 +430,9 @@ func readFilled(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointe
 // entity: MySQL's way, as it has no RETURNING and its LastInsertId does not
 // name an updated row. The database compares the values, as it did for the
 // conflict. InsertRow runs the upsert and the read in one transaction. It
-// reads without the Read policy, as readFilled does; a row whose conflict
-// values cannot find it (a NULL, a generated key left zero) keeps its Go
-// values, as does a row an Interceptor hides.
+// reads without the Read policy or the interceptors, as readFilled does; a
+// row whose conflict values cannot find it (a NULL, a generated key left
+// zero) keeps its Go values.
 func readUpserted(ctx context.Context, db *DB, st *Statement, p unsafe.Pointer, gen int) error {
 	in := st.Entity
 	if len(st.fill) == 0 {

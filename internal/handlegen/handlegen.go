@@ -71,9 +71,9 @@ var (
 			"return changeValue[E, V](ch, ch.row.New, c.I)"},
 	}
 	ptrs = []method{
-		{"OldPtr", "returns a copy of the column's value in ch's old row; nil for NULL, an insert, or ch of another entity.", "(ch Change) *V",
+		{"OldPtr", "returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.", "(ch Change) *V",
 			"return changePtr[E, V](ch, ch.row.Old, c.I)"},
-		{"NewPtr", "returns a copy of the column's value in ch's new row; nil for NULL, a delete, or ch of another entity.", "(ch Change) *V",
+		{"NewPtr", "returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.", "(ch Change) *V",
 			"return changePtr[E, V](ch, ch.row.New, c.I)"},
 	}
 	key = []method{

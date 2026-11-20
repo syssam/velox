@@ -254,7 +254,8 @@ var (
 // a recorded row the engine owns (a read, or ownCopy of an inserted entity),
 // in UTC, its monotonic reading dropped, so that rows read and rows written
 // marshal a time in one form. A *time.Time gets a new pointer: what the old
-// one points to is left as it was. A nil p is left alone.
+// one points to is left as it was. A nil p is left alone. A column of a
+// named time type (type T time.Time) is not normalised.
 func utcTimes(in *EntityInfo, p unsafe.Pointer) {
 	if in == nil || p == nil {
 		return
