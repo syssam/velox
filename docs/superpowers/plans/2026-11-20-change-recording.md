@@ -31,7 +31,7 @@
 2. **The outer `db` used with a transaction's ctx** is refused (`ErrOutsideTx`) and records nothing. Test in Task 2: `TestRecordOuterHandleInTxIsRefused`.
 3. **An update that sets a column to its current value**, or changes only `RecordIgnore` columns, reports nothing, including MySQL's "matched but unchanged" rows. Test in Task 3: `TestRecordUnchangedRowsAreSkipped`.
 4. **One `Recorder` shared by goroutines** on a non-transaction handle is race-free under `-race`. Test in Task 1: `TestRecorderConcurrent`.
-5. **An update that assigns the primary key** reports the row under its new key, with the old key in `OldValues`. Test in Task 3: `TestRecordKeyChange`.
+5. **An update that assigns the primary key** reports the row under its new key, with the old key in `T.ID.Old(c)`. Test in Task 3: `TestRecordKeyChange`.
 
 ---
 
@@ -117,10 +117,10 @@
     COMMIT
     ```
     SQLite is the same without `FOR UPDATE`. MySQL adds ``SELECT … WHERE `id` IN (?, ?)`` after the UPDATE.
-  - `TestRecordDeleteSQL`: the locked read, then `DELETE … AND "id" IN (…)`. Changes have `NewValues() == nil`.
+  - `TestRecordDeleteSQL`: the locked read, then `DELETE … AND "id" IN (…)`. Changes have `NewRow() == nil`.
   - `TestRecordPinnedUpdateNoTx`: `Where(I.ID.EQ(1))` outside a transaction sends no BEGIN when the row is pinned by key.
   - `TestRecordUnchangedRowsAreSkipped`: setting `total` to its current value, or changing only `updated_at` under `RecordIgnore("updated_at")`, gives `rec.Len() == 0`.
-  - `TestRecordKeyChange`: `Set(T.ID.Set(9))` on id 1 gives `Key == int64(9)` and `OldValues()["id"] == int64(1)`.
+  - `TestRecordKeyChange`: `Set(T.ID.Set(9))` on id 1 gives `Key == int64(9)` and `T.ID.Old(c) == int64(1)`.
   - `TestRecordSinkWritesAreNotRecorded`: a `RecordFunc` that inserts an audit row through `rdb` produces one audit row per change, and the audit insert is not recorded.
   - `TestRecordSinkErrorInTx`: the sink's error rolls back the user's `Tx`; the row is unchanged afterwards (real SQLite).
   - `TestRecordSinkErrorOutsideTx`: the error is returned and the row stays changed (real SQLite).
@@ -169,7 +169,7 @@
 - Consumes: `emit`.
 
 - [ ] **Step 1: Write the failing tests:**
-  - `TestRecordInsert`: `Insert` and `InsertAll` give one Change per row, in the order given, with `NewValues()["status"] == "new"` filled by a declared DB default (`dDef` from `internal/apitest/dbdefault_test.go`). No statement is added beyond today's goldens.
+  - `TestRecordInsert`: `Insert` and `InsertAll` give one Change per row, in the order given, with `D.Status.New(c) == "new"` filled by a declared DB default (`dDef` from `internal/apitest/dbdefault_test.go`). No statement is added beyond today's goldens.
   - `TestRecordUpsert`: one row conflicts and one is new. Expect an `OpUpdate` Change with the real old value and an `OpInsert` Change.
     - SQL below PostgreSQL 18: `SELECT <cols> FROM "tickets" WHERE ("org_id", "title") IN (…) FOR UPDATE`, then the INSERT. SQLite and MySQL use the OR-of-ANDs form `keysIn` already renders.
   - `TestRecordUpsertDoNothing`: a kept row is not reported.
@@ -190,7 +190,7 @@
 - Test: `internal/integration/record_test.go` (soft delete on 3 databases), `internal/apitest/record_edges_test.go`
 
 - [ ] **Step 1: Write the failing tests:**
-  - `TestRecordSoftDelete`: `rdb.Delete[fixture.SDoc]().Where(D.ID.EQ(2))` gives one Change with `Op == OpDelete`, `Soft == true`, `OldValues()["deleted_at"] == nil`, and `NewValues()["deleted_at"]` set. Under `softdelete.Skip`, it gives `Soft == false` and `NewValues() == nil`.
+  - `TestRecordSoftDelete`: `rdb.Delete[fixture.SDoc]().Where(D.ID.EQ(2))` gives one Change with `Op == OpDelete`, `Soft == true`, the old row's `deleted_at` nil and the new row's set (via `velox.RowsOf`), and `c.Changed(D.DeletedAt) == false` (Op is Delete). Under `softdelete.Skip`, it gives `Soft == false` and `NewRow() == nil`.
   - `TestRecordBidiRepoint`: setting a spouse on a `testmodel` bidi O2O reports each row whose key changed.
   - `TestRecordM2MAdd`: `Rel.Add` reports join-entity `OpInsert` Changes, and `Remove` reports `OpDelete`.
 - [ ] **Step 2: Run** them. Expected: FAIL.
@@ -241,7 +241,7 @@
 **Files:**
 - Rewrite: `docs/decisions/0094-track-changes.md` → `docs/decisions/0094-change-recording.md` (decision, the rules R1–R11, the rejected designs table from the spec), plus its README row
 - Modify: `CHANGELOG.md` (replace the Track line), `docs/guide.md` (replace the Hooks section on Track with a "Recording changes" section showing the audit example and its SQL), `docs/coming-from-ent.md` (`m.OldX(ctx)` → `db.Record`)
-- Create: `example_record_test.go` (`ExampleDB_Record`: a nextapp-like audit batch with `OldValues` / `NewValues` / `ChangedFields`, real SQLite, `// Output:`)
+- Create: `example_record_test.go` (`ExampleDB_Record`: a nextapp-like audit batch with `c.OldRow()` / `c.NewRow()` / `c.Diff()` and `I.Status.Old(c)`, real SQLite, `// Output:`)
 - Update: `internal/repocheck/testdata/api.txt`
 
 - [ ] **Step 1: Write** `ExampleDB_Record` and run `go test -run ExampleDB_Record .`. Expected: PASS, with output of the form `Invoice 1 update total 10 -> 15`.

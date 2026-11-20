@@ -71,14 +71,12 @@ type Change struct {
     Soft   bool   // a soft delete: Op is OpDelete, the row was updated
     // unexported: the entity and the old and new rows
 }
-// Typed, through a column handle (Go 1.27 generic methods); another entity's
-// handle gives the zero value and false.
-func (c Change) Old[E, V any](col Valued[E, V]) V    // zero for an insert
-func (c Change) New[E, V any](col Valued[E, V]) V    // zero for a delete
-func (c Change) Changed[E any](cols ...Column[E]) bool // any of cols differs
-// Valued[E, V] is Column[E] plus the column's Go type: every typed handle
-// (Col, StringCol, NumberCol, Null*, JSONCol, ...) implements it through an
-// unexported marker method; E and V are inferred from the handle.
+// Typed, on every column handle (lazy generic methods, as Set): the value in
+// c's old or new row; zero for an insert's old row, a delete's new row, NULL
+// in a Null* handle (its element type), or a Change of another entity.
+func (h Col[E, V]) Old[_ Lazy[V]](c Change) V   // I.Total.Old(c)
+func (h Col[E, V]) New[_ Lazy[V]](c Change) V   // I.Total.New(c)
+func (c Change) Changed[E any](cols ...Column[E]) bool // updates: any of cols differs
 func RowsOf[E any, PE Entity[E]](c Change) (old, cur *E, ok bool)
 // Any entity:
 func (c Change) OldRow() any  // the old *E; nil for an insert
@@ -118,10 +116,9 @@ The following are removed:
    JSON column holds its decoded field value. `FieldChange.Name` is the
    column name.
    - `Sensitive` keeps ent's meaning, not printable and not serializable:
-     the typed getters and `RowsOf` give real values (it is the caller's
+     the `Old`/`New` and `RowsOf` give real values (it is the caller's
      data, as a struct field is); `OldRow`/`NewRow` marshal without it
-     (`json:"-"`); `Diff` leaves Sensitive columns out. Nothing is masked
-     as `"***"`.
+     (`json:"-"`); `Diff` leaves Sensitive columns out. Nothing is masked.
    - `RecordIgnore` columns are left out of `Diff` and do not make a row
      count as changed; `Old`, `New`, `OldRow` and `NewRow` still give them.
    - The new row of an insert includes what the database filled (ADR 0093).
