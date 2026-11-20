@@ -64,6 +64,12 @@ func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c Col[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
 // OrderedCol is the handle of an ordered column: time.Time and types registered as ordered. I is the column's index; velox-gen sets it.
 type OrderedCol[E, V any] struct{ I int32 }
 
@@ -162,6 +168,12 @@ func (c OrderedCol[E, V]) Max[_ Lazy[V]]() Term[E] {
 func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c OrderedCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c OrderedCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // NumberCol is the handle of a numeric column. I is the column's index; velox-gen sets it.
 type NumberCol[E, V any] struct{ I int32 }
@@ -279,6 +291,12 @@ func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E] {
 func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSub, Value: v}}
 }
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c NumberCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // StringCol is the handle of a text column. I is the column's index; velox-gen sets it.
 type StringCol[E any, V ~string] struct{ I int32 }
@@ -407,6 +425,12 @@ func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c StringCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
 // NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullCol[E, V any] struct{ I int32 }
 
@@ -481,6 +505,12 @@ func (c NullCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
 func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c NullCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c NullCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // NullOrderedCol is OrderedCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullOrderedCol[E, V any] struct{ I int32 }
@@ -594,6 +624,16 @@ func (c NullOrderedCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
 // NotNull is column IS NOT NULL.
 func (c NullOrderedCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
+}
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c NullOrderedCol[E, V]) Old[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.Old, c.I)
+}
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c NullOrderedCol[E, V]) New[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.New, c.I)
 }
 
 // NullNumberCol is NumberCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -728,6 +768,16 @@ func (c NullNumberCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
 // NotNull is column IS NOT NULL.
 func (c NullNumberCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
+}
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c NullNumberCol[E, V]) Old[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.Old, c.I)
+}
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c NullNumberCol[E, V]) New[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.New, c.I)
 }
 
 // NullStringCol is StringCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -874,6 +924,16 @@ func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c NullStringCol[E, V]) Old[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.Old, c.I)
+}
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c NullStringCol[E, V]) New[_ Lazy[V]](ch Change) V {
+	return changeValue[E, V](ch, ch.row.New, c.I)
+}
+
 // JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
 type JSONCol[E, V any] struct{ I int32 }
 
@@ -913,6 +973,12 @@ func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAl
 
 // IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
 func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullJSONCol[E, V any] struct{ I int32 }
@@ -968,3 +1034,9 @@ func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
+
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; Change.OldRow tells NULL apart.
+func (c NullJSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
+
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row includes what the database filled.
+func (c NullJSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }

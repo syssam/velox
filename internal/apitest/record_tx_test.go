@@ -155,7 +155,7 @@ func TestRecordCompositeKey(t *testing.T) {
 	if len(cs) != 2 || !reflect.DeepEqual(cs[0].Key, []any{int64(1), int64(2)}) || !reflect.DeepEqual(cs[1].Key, []any{int64(1), int64(3)}) {
 		t.Fatalf("changes %+v", cs)
 	}
-	if f := cs[1].ChangedFields(); len(f) != 1 || f[0].Name != "price" || f[0].Old != nil || f[0].New != wgCents(9) {
-		t.Errorf("ChangedFields %+v", f)
+	if f := cs[1].Diff(); len(f) != 1 || f[0].Name != "price" || f[0].Old != nil || f[0].New != wgCents(9) {
+		t.Errorf("Diff %+v", f)
 	}
 }

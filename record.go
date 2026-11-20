@@ -84,8 +84,8 @@ type RecordOption struct {
 }
 
 // RecordIgnore names columns an update's comparison leaves out: an update
-// that changes only these columns records no Change, and ChangedFields does
-// not list them. OldValues and NewValues keep every column.
+// that changes only these columns records no Change, and Change.Diff does
+// not list them. Old, New, Changed, OldRow and NewRow still read them.
 func RecordIgnore(columns ...string) RecordOption {
 	return RecordOption{ignore: slices.Clone(columns)}
 }

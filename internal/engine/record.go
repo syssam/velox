@@ -6,9 +6,6 @@ import (
 	"unsafe"
 )
 
-// Masked is what a recorded Change shows for a Sensitive column's value.
-const Masked = "***"
-
 // ChangeRow is one row a recorded write changed, as the engine reports it:
 // the kind of write, the entity, and the row before and after it. Old is nil
 // for an insert and New is nil for a delete. Soft marks a soft delete, an
@@ -18,8 +15,8 @@ type ChangeRow struct {
 	Soft     bool
 	In       *EntityInfo
 	Old, New unsafe.Pointer
-	// ignore is the recording's RecordIgnore columns, which ChangedFields
-	// leaves out; set by emit.
+	// ignore is the recording's RecordIgnore columns, which Diff leaves
+	// out; set by emit.
 	ignore []string
 }
 
@@ -72,50 +69,49 @@ func (r ChangeRow) Key() any {
 	return key
 }
 
-// OldValues is the row before the write by column name; nil for an insert.
-func (r ChangeRow) OldValues() map[string]any { return r.values(r.Old) }
+// Row is the row at p, Old or New, as an *E; nil for a nil p.
+func (r ChangeRow) Row(p unsafe.Pointer) any {
+	if r.In == nil || p == nil {
+		return nil
+	}
+	return r.In.kit.Ptr(p)
+}
 
-// NewValues is the row after the write by column name; nil for a delete.
-func (r ChangeRow) NewValues() map[string]any { return r.values(r.New) }
+// Value is column col of the row at p, Old or New, plain: nil for NULL, a
+// nil p or a col out of range, and a nullable column's value, not its
+// pointer.
+func (r ChangeRow) Value(col int, p unsafe.Pointer) any {
+	if r.In == nil || p == nil || col < 0 || col >= len(r.In.Columns) {
+		return nil
+	}
+	return r.value(col, p)
+}
 
-// ChangedFields is an update's columns whose values differ (EqualValues), in
-// column order, but for those the recording ignores; nil for another kind of
-// write or when none differ.
-func (r ChangeRow) ChangedFields() []FieldChange {
+// Differs reports whether an update's old and new rows differ in column col
+// (EqualValues); false for another kind of write or a col out of range.
+func (r ChangeRow) Differs(col int) bool {
+	if r.Op != OpUpdate || r.In == nil || r.Old == nil || r.New == nil || col < 0 || col >= len(r.In.Columns) {
+		return false
+	}
+	return !EqualValues(r.value(col, r.Old), r.value(col, r.New))
+}
+
+// Diff is an update's columns whose values differ (EqualValues), in column
+// order, but for Sensitive columns and those the recording ignores; nil for
+// another kind of write or when none differ.
+func (r ChangeRow) Diff() []FieldChange {
 	if r.Op != OpUpdate || r.In == nil || r.Old == nil || r.New == nil {
 		return nil
 	}
 	var out []FieldChange
 	for i := range r.In.Columns {
-		if slices.Contains(r.ignore, r.In.Columns[i].Name) {
-			continue
-		}
-		a, b := r.value(i, r.Old), r.value(i, r.New)
-		if EqualValues(a, b) {
-			continue
-		}
-		if r.In.Columns[i].Sensitive {
-			a, b = Masked, Masked
-		}
-		out = append(out, FieldChange{Name: r.In.Columns[i].Name, Old: a, New: b})
-	}
-	return out
-}
-
-// values is the row at p by column name, a Sensitive column Masked; nil for
-// a nil p.
-func (r ChangeRow) values(p unsafe.Pointer) map[string]any {
-	if r.In == nil || p == nil {
-		return nil
-	}
-	out := make(map[string]any, len(r.In.Columns))
-	for i := range r.In.Columns {
 		c := &r.In.Columns[i]
-		if c.Sensitive {
-			out[c.Name] = Masked
+		if c.Sensitive || slices.Contains(r.ignore, c.Name) {
 			continue
 		}
-		out[c.Name] = r.value(i, p)
+		if a, b := r.value(i, r.Old), r.value(i, r.New); !EqualValues(a, b) {
+			out = append(out, FieldChange{Name: c.Name, Old: a, New: b})
+		}
 	}
 	return out
 }

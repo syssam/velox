@@ -83,16 +83,16 @@ func TestRecordUpdateSQL(t *testing.T) {
 				if ch.Entity != "Invoice" || ch.Op != velox.OpUpdate || ch.Key != id || ch.Soft {
 					t.Errorf("change %d: %+v", i, ch)
 				}
-				got := ch.ChangedFields()
+				got := ch.Diff()
 				want := []velox.FieldChange{{Name: "updated_at", Old: t0, New: t1}, {Name: "total", Old: 12.5, New: 13.5}}
 				if !reflect.DeepEqual(got, want) {
-					t.Errorf("change %d: ChangedFields %+v, want %+v", i, got, want)
+					t.Errorf("change %d: Diff %+v, want %+v", i, got, want)
 				}
-				if old := ch.OldValues(); len(old) != 10 || old["number"] != fmt.Sprintf("INV-%d", id) || old["total"] != 12.5 {
-					t.Errorf("change %d: OldValues %v", i, old)
+				if I.Number.Old(ch) != fmt.Sprintf("INV-%d", id) || I.Total.Old(ch) != 12.5 || I.Total.New(ch) != 13.5 {
+					t.Errorf("change %d: number %q, total %v -> %v", i, I.Number.Old(ch), I.Total.Old(ch), I.Total.New(ch))
 				}
-				if cur := ch.NewValues(); len(cur) != 10 || cur["total"] != 13.5 {
-					t.Errorf("change %d: NewValues %v", i, cur)
+				if !ch.Changed(I.Total) || ch.Changed(I.Number) || !ch.Changed(I.Number, I.UpdatedAt) {
+					t.Errorf("change %d: Changed", i)
 				}
 				if old, cur, ok := velox.RowsOf[testmodel.Invoice](ch); !ok || old.ID != id || cur.Total != 13.5 || string(old.Data) != "d" {
 					t.Errorf("change %d: RowsOf %+v %+v %v", i, old, cur, ok)
@@ -139,11 +139,11 @@ func TestRecordDeleteSQL(t *testing.T) {
 			}
 			for i, ch := range cs {
 				id := int64(i + 1)
-				if ch.Op != velox.OpDelete || ch.Key != id || ch.NewValues() != nil || ch.ChangedFields() != nil {
-					t.Errorf("change %d: %+v new %v", i, ch, ch.NewValues())
+				if ch.Op != velox.OpDelete || ch.Key != id || ch.NewRow() != nil || ch.Diff() != nil || I.ID.New(ch) != 0 {
+					t.Errorf("change %d: %+v new %v", i, ch, ch.NewRow())
 				}
-				if old := ch.OldValues(); len(old) != 10 || old["id"] != id || old["note"] != "" {
-					t.Errorf("change %d: OldValues %v", i, old)
+				if old, ok := ch.OldRow().(*testmodel.Invoice); !ok || old.ID != id || I.ID.Old(ch) != id || I.Note.Old(ch) != "" {
+					t.Errorf("change %d: OldRow %+v", i, ch.OldRow())
 				}
 			}
 		})
@@ -251,11 +251,13 @@ func TestRecordJSONValues(t *testing.T) {
 		t.Fatalf("%d Changes", len(cs))
 	}
 	want := []velox.FieldChange{{Name: "tags", Old: []string{"a"}, New: []string{"a", "b"}}}
-	if got := cs[0].ChangedFields(); !reflect.DeepEqual(got, want) {
-		t.Errorf("ChangedFields %#v, want %#v", got, want)
+	if got := cs[0].Diff(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Diff %#v, want %#v", got, want)
 	}
-	if old := cs[0].OldValues(); !reflect.DeepEqual(old["attrs"], map[string]any{"k": "v"}) || old["shape"] != (fixture.JShape{W: 1, H: 2}) || old["nums"] != nil {
-		t.Errorf("OldValues %#v", old)
+	c := cs[0]
+	if !reflect.DeepEqual(J.Attrs.Old(c), map[string]any{"k": "v"}) || J.Shape.Old(c) != (fixture.JShape{W: 1, H: 2}) || J.Nums.Old(c) != nil ||
+		!reflect.DeepEqual(J.Tags.New(c), []string{"a", "b"}) {
+		t.Errorf("values: attrs %#v, shape %#v, nums %#v, tags %#v", J.Attrs.Old(c), J.Shape.Old(c), J.Nums.Old(c), J.Tags.New(c))
 	}
 }
 
@@ -268,7 +270,7 @@ func TestRecordKeyChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	cs := slices.Collect(rec.All())
-	if len(cs) != 1 || cs[0].Key != int64(9) || cs[0].OldValues()["id"] != int64(1) || cs[0].NewValues()["id"] != int64(9) {
+	if len(cs) != 1 || cs[0].Key != int64(9) || I.ID.Old(cs[0]) != 1 || I.ID.New(cs[0]) != 9 {
 		t.Fatalf("changes %+v", cs)
 	}
 }
@@ -303,18 +305,21 @@ func TestRecordUnchangedRowsAreSkipped(t *testing.T) {
 	if len(cs) != 1 {
 		t.Fatalf("%d Changes, want 1", len(cs))
 	}
-	if f := cs[0].ChangedFields(); len(f) != 1 || f[0].Name != "total" {
-		t.Errorf("ChangedFields %+v: updated_at is ignored", f)
+	if f := cs[0].Diff(); len(f) != 1 || f[0].Name != "total" {
+		t.Errorf("Diff %+v: updated_at is ignored", f)
 	}
-	if cs[0].OldValues()["updated_at"] == nil || cs[0].NewValues()["updated_at"] == nil {
-		t.Error("the snapshots lost an ignored column")
+	if I.UpdatedAt.Old(cs[0]).IsZero() || !I.UpdatedAt.New(cs[0]).After(I.UpdatedAt.Old(cs[0])) || !cs[0].Changed(I.UpdatedAt) {
+		t.Error("the getters lost an ignored column")
+	}
+	if cur, ok := cs[0].NewRow().(*testmodel.Invoice); !ok || cur.UpdatedAt.IsZero() {
+		t.Errorf("NewRow lost an ignored column: %+v", cs[0].NewRow())
 	}
 	// Without the ignore, updated_at alone is a change.
 	rec.Reset()
 	if _, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(one.ID)).Set(I.UpdatedAt.Set(one.UpdatedAt.Add(time.Hour))).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if cs := slices.Collect(rec.All()); len(cs) != 1 || len(cs[0].ChangedFields()) != 1 || cs[0].ChangedFields()[0].Name != "updated_at" {
+	if cs := slices.Collect(rec.All()); len(cs) != 1 || len(cs[0].Diff()) != 1 || cs[0].Diff()[0].Name != "updated_at" {
 		t.Errorf("an update of updated_at: %+v", cs)
 	}
 }

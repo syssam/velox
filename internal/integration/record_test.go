@@ -12,9 +12,9 @@ import (
 )
 
 // changed is the FieldChange of the column of the given name in c's
-// ChangedFields, and whether there is one.
+// Diff, and whether there is one.
 func changed(c velox.Change, name string) (velox.FieldChange, bool) {
-	for _, f := range c.ChangedFields() {
+	for _, f := range c.Diff() {
 		if f.Name == name {
 			return f, true
 		}
@@ -52,19 +52,19 @@ func TestRecordBulkUpdate(t *testing.T) {
 			if f, ok := changed(c, "updated_at"); !ok || !f.Old.(time.Time).Equal(t0) {
 				t.Errorf("invoice %d updated_at: %+v", id, f)
 			}
-			if c.OldValues()["number"] == nil || len(c.NewValues()) != len(c.OldValues()) {
-				t.Errorf("invoice %d: snapshots %v %v", id, c.OldValues(), c.NewValues())
+			if I.Number.Old(c) == "" || I.Number.New(c) != I.Number.Old(c) || I.Total.New(c) != float64(10*id+1) {
+				t.Errorf("invoice %d: number %q -> %q, total %v", id, I.Number.Old(c), I.Number.New(c), I.Total.New(c))
 			}
 		}
 		if _, err := tg.db.Record(&ign, velox.RecordIgnore("updated_at")).Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		cs = slices.Collect(ign.All())
-		if len(cs) != 1 || len(cs[0].ChangedFields()) != 1 {
+		if len(cs) != 1 || len(cs[0].Diff()) != 1 {
 			t.Fatalf("ignoring updated_at: %+v", cs)
 		}
-		if _, ok := changed(cs[0], "total"); !ok || cs[0].NewValues()["updated_at"] == nil {
-			t.Errorf("ignoring updated_at: %+v %v", cs[0].ChangedFields(), cs[0].NewValues())
+		if _, ok := changed(cs[0], "total"); !ok || I.UpdatedAt.New(cs[0]).IsZero() {
+			t.Errorf("ignoring updated_at: %+v %v", cs[0].Diff(), I.UpdatedAt.New(cs[0]))
 		}
 	})
 }
@@ -103,7 +103,7 @@ func TestRecordConcurrent(t *testing.T) {
 		for c := range rec.All() {
 			f, ok := changed(c, "total")
 			if !ok || f.New != f.Old.(float64)+1 {
-				t.Fatalf("change %+v", c.ChangedFields())
+				t.Fatalf("change %+v", c.Diff())
 			}
 			olds = append(olds, f.Old.(float64))
 			news[f.New.(float64)] = true
@@ -136,9 +136,8 @@ func TestRecordHardDelete(t *testing.T) {
 			t.Fatalf("changes %+v", cs)
 		}
 		for _, c := range cs {
-			old := c.OldValues()
-			if c.Op != velox.OpDelete || c.NewValues() != nil || old["note"] != "a note" || old["total"] != float64(10*c.Key.(int64)) {
-				t.Errorf("change %v: %+v old %v", c.Key, c, old)
+			if c.Op != velox.OpDelete || c.NewRow() != nil || I.Note.Old(c) != "a note" || I.Total.Old(c) != float64(10*c.Key.(int64)) {
+				t.Errorf("change %v: %+v old %+v", c.Key, c, c.OldRow())
 			}
 		}
 		wantIDs(t, query(t, tg), []int64{1, 3, 5})

@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"encoding/json"
 	"reflect"
 	"slices"
 	"testing"
@@ -14,7 +15,7 @@ import (
 type rinvoice struct {
 	ID     int64
 	Total  float64
-	Secret string
+	Secret string `json:"-"`
 	Note   *string
 }
 
@@ -81,9 +82,20 @@ func changeFor[E any, PE Entity[E]](t *testing.T, op Op, old, cur *E) Change {
 	return changeOf(engine.ChangeRow{Op: op, In: st.Info, Old: unsafe.Pointer(old), New: unsafe.Pointer(cur)})
 }
 
-// TestChangeValues: a Change's snapshots and changed fields, plain, with a
-// Sensitive column masked.
-func TestChangeValues(t *testing.T) {
+// The handles of rinvoice's columns, and one of rticket's.
+var (
+	riID     = NumberCol[rinvoice, int64]{I: 0}
+	riTotal  = NumberCol[rinvoice, float64]{I: 1}
+	riSecret = StringCol[rinvoice, string]{I: 2}
+	riNote   = NullStringCol[rinvoice, string]{I: 3}
+	rtID     = NumberCol[rticket, int64]{I: 0}
+)
+
+// TestChangeTypedGetters: Old and New give a column's values typed through
+// its handle, real for a Sensitive column, the element for a nullable one;
+// Changed tells whether any of the columns differs. Another entity's handle
+// gives the zero value and false.
+func TestChangeTypedGetters(t *testing.T) {
 	note := "n"
 	old := &rinvoice{ID: 7, Total: 10, Secret: "a", Note: &note}
 	cur := &rinvoice{ID: 7, Total: 15, Secret: "b"}
@@ -91,41 +103,86 @@ func TestChangeValues(t *testing.T) {
 	if c.Entity != "rinvoice" || c.Op != OpUpdate || c.Key != int64(7) || c.Soft {
 		t.Errorf("header: %+v", c)
 	}
-	wantOld := map[string]any{"id": int64(7), "total": 10.0, "secret": "***", "note": "n"}
-	wantNew := map[string]any{"id": int64(7), "total": 15.0, "secret": "***", "note": nil}
-	if got := c.OldValues(); !reflect.DeepEqual(got, wantOld) {
-		t.Errorf("OldValues = %v, want %v", got, wantOld)
+	if got := riTotal.Old(c); got != 10.0 {
+		t.Errorf("Old(total) = %v, want 10", got)
 	}
-	if got := c.NewValues(); !reflect.DeepEqual(got, wantNew) {
-		t.Errorf("NewValues = %v, want %v", got, wantNew)
+	if got := riTotal.New(c); got != 15.0 {
+		t.Errorf("New(total) = %v, want 15", got)
 	}
-	wantFields := []FieldChange{{Name: "total", Old: 10.0, New: 15.0}, {Name: "secret", Old: "***", New: "***"},
-		{Name: "note", Old: "n", New: nil}}
-	if got := c.ChangedFields(); !reflect.DeepEqual(got, wantFields) {
-		t.Errorf("ChangedFields = %v, want %v", got, wantFields)
+	if riSecret.Old(c) != "a" || riSecret.New(c) != "b" {
+		t.Errorf("secret: %q -> %q, want real values", riSecret.Old(c), riSecret.New(c))
 	}
-
-	same := changeFor(t, OpUpdate, old, old)
-	if got := same.ChangedFields(); got != nil {
-		t.Errorf("ChangedFields of an unchanged row = %v, want nil", got)
+	if riNote.Old(c) != "n" || riNote.New(c) != "" {
+		t.Errorf("note: %q -> %q, want n -> zero", riNote.Old(c), riNote.New(c))
+	}
+	if !c.Changed(riTotal) || c.Changed(riID) || !c.Changed(riID, riNote) {
+		t.Errorf("Changed: total %v, id %v, id+note %v", c.Changed(riTotal), c.Changed(riID), c.Changed(riID, riNote))
+	}
+	if rtID.Old(c) != 0 || rtID.New(c) != 0 || c.Changed(rtID) {
+		t.Errorf("another entity's handle: %v %v %v", rtID.Old(c), rtID.New(c), c.Changed(rtID))
+	}
+	if (NumberCol[rinvoice, int64]{I: 99}).Old(c) != 0 || c.Changed(NumberCol[rinvoice, int64]{I: 99}) {
+		t.Error("a handle past the columns: want zero and false")
+	}
+	if z := (Change{}); riTotal.Old(z) != 0 || z.Changed(riTotal) || z.OldRow() != nil || z.NewRow() != nil || z.Diff() != nil {
+		t.Error("a zero Change: want zero values")
+	}
+	if c.OldRow() != any(old) || c.NewRow() != any(cur) {
+		t.Errorf("rows: %v %v", c.OldRow(), c.NewRow())
 	}
 
 	ins := changeFor(t, OpInsert, nil, cur)
-	if ins.Key != int64(7) || ins.OldValues() != nil || ins.ChangedFields() != nil {
-		t.Errorf("insert: key %v, old %v, changed %v", ins.Key, ins.OldValues(), ins.ChangedFields())
+	if ins.Key != int64(7) || riTotal.Old(ins) != 0 || riTotal.New(ins) != 15 || ins.OldRow() != nil || ins.NewRow() != any(cur) || ins.Changed(riTotal) {
+		t.Errorf("insert: key %v, old %v, new %v, rows %v %v", ins.Key, riTotal.Old(ins), riTotal.New(ins), ins.OldRow(), ins.NewRow())
 	}
-	if !reflect.DeepEqual(ins.NewValues(), wantNew) {
-		t.Errorf("insert NewValues = %v", ins.NewValues())
-	}
-
 	del := changeFor(t, OpDelete, old, nil)
-	if del.Key != int64(7) || del.NewValues() != nil || del.ChangedFields() != nil || !reflect.DeepEqual(del.OldValues(), wantOld) {
-		t.Errorf("delete: key %v, new %v, changed %v, old %v", del.Key, del.NewValues(), del.ChangedFields(), del.OldValues())
+	if del.Key != int64(7) || riTotal.New(del) != 0 || riTotal.Old(del) != 10 || del.NewRow() != nil || del.OldRow() != any(old) || del.Changed(riTotal) {
+		t.Errorf("delete: key %v, old %v, new %v, rows %v %v", del.Key, riTotal.Old(del), riTotal.New(del), del.OldRow(), del.NewRow())
 	}
 
 	pair := changeFor(t, OpDelete, &rpair{A: 1, B: 2, N: "x"}, nil)
 	if !reflect.DeepEqual(pair.Key, []any{int64(1), int64(2)}) {
 		t.Errorf("composite Key = %#v", pair.Key)
+	}
+}
+
+// TestChangeRowsMarshal: OldRow and NewRow are the entity, whose JSON leaves
+// a Sensitive field out (its generated tag is json:"-").
+func TestChangeRowsMarshal(t *testing.T) {
+	c := changeFor(t, OpInsert, nil, &rinvoice{ID: 7, Total: 15, Secret: "b"})
+	b, err := json.Marshal(c.NewRow())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"ID":7,"Total":15,"Note":null}`; string(b) != want {
+		t.Errorf("NewRow JSON = %s, want %s", b, want)
+	}
+}
+
+// TestChangeDiff: Diff lists an update's changed columns in column order,
+// with real values, but no Sensitive column (RecordIgnore's are
+// in apitest); it is nil for
+// an insert, a delete and an update that changes none.
+func TestChangeDiff(t *testing.T) {
+	note := "n"
+	old := &rinvoice{ID: 7, Total: 10, Secret: "a", Note: &note}
+	cur := &rinvoice{ID: 7, Total: 15, Secret: "b"}
+	c := changeFor(t, OpUpdate, old, cur)
+	want := []FieldChange{{Name: "total", Old: 10.0, New: 15.0}, {Name: "note", Old: "n", New: nil}}
+	if got := c.Diff(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Diff = %v, want %v", got, want)
+	}
+	if riSecret.Old(c) != "a" {
+		t.Errorf("Old(secret) = %q, want the real value", riSecret.Old(c))
+	}
+	if got := changeFor(t, OpUpdate, old, old).Diff(); got != nil {
+		t.Errorf("Diff of an unchanged row = %v, want nil", got)
+	}
+	if got := changeFor(t, OpInsert, nil, cur).Diff(); got != nil {
+		t.Errorf("insert Diff = %v, want nil", got)
+	}
+	if got := changeFor(t, OpDelete, old, nil).Diff(); got != nil {
+		t.Errorf("delete Diff = %v, want nil", got)
 	}
 }
 
