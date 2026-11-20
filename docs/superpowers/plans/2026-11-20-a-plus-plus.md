@@ -87,3 +87,13 @@ D12. **Engine cleanup.** One helper scans RETURNING rows for update, delete, ups
 - [ ] Step 1: no behaviour change — every existing test and golden stays green unchanged; add `TestEqualValuesNaN` and a benchmark showing the cached lookup.
 - [ ] Step 2: refactor; `go test -race` everything touched; compile cost; quick.sh.
 - [ ] Step 3: commit `engine: one RETURNING scan and one recording state on Statement`.
+
+### Task 6: Handle kinds named by what the column holds (D13)
+
+D13 (user-chosen 2026-11-20): `OrderedCol`/`NullOrderedCol` are replaced. `time.Time` → `TimeCol`/`NullTimeCol`. A `field.Other` whose Go type is a registered numeric type (shopspring `decimal.Decimal` registered by default; others via the existing type-registration mechanism) → `NumberCol`/`NullNumberCol`, gaining Sum/Avg/Add/Sub. Any other `field.Other` type → `OtherCol`/`NullOtherCol` (EQ/NEQ/In/GT/GTE/LT/LTE/Between/Min/Max, Set, Old/New). `OrderedCol` is removed (unreleased API). Evidence: nextapp has 2,438+2,350 time and 2,292+14 decimal OrderedCol uses, nothing else.
+
+**Files:** `internal/handlegen/handlegen.go` (+ `go generate .` → `handles.go`), `internal/codegen/lower.go` (kind mapping ~383-400), codegen goldens, every examples/ generated package (regenerate), `docs/guide.md` handle table, CHANGELOG, an ADR (next number) for the naming rule.
+
+- [ ] Step 1: failing tests — codegen maps time→TimeCol, decimal→NumberCol, other→OtherCol (+Null variants); `TestDecimalNumberCol` (real SQLite: `Sum`, `Add` on a decimal column via a registered numeric type).
+- [ ] Step 2–4: run FAIL, implement, regenerate everything (`go generate ./...` where the repo does; examples `velox-gen`), API snapshot, compile cost (TimeCol/OtherCol must cost no more than OrderedCol did), quick.sh.
+- [ ] Step 5: commit `velox: handles are named by what the column holds (TimeCol, OtherCol; decimals are numbers)`.
