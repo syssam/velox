@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -68,8 +69,8 @@ func EqualValues(a, b any) bool {
 }
 
 // trackedWrite sends st, an update or a delete through db, a recording
-// handle, and reports the rows it changes (emit). In one transaction (db's,
-// else one of its own, ownTx) it reads the key and the columns cols of the
+// handle, and reports the rows it changes (emit). In one transaction (a
+// savepoint in db's, else one of its own: recordedTx) it reads the key and the columns cols of the
 // rows st's conditions match, under st's scope (a Writable read), locked
 // where the dialect can, in key order; sends st narrowed to those keys, a
 // chunk at a time; and, for an update, reads the new values: RETURNING on
@@ -86,7 +87,7 @@ func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st
 	}
 	tw := tracker{in: in, t: InfoTable(in), cols: cols}
 	tw.read = keyAnd(in, tw.cols)
-	return ownTx(ctx, db, func(ctx context.Context, tx *DB) error {
+	return recordedTx(ctx, db, func(ctx context.Context, tx *DB) error {
 		mu.Affected = 0
 		rows, err := tw.run(ctx, tx, mu, st)
 		if err != nil {
@@ -142,6 +143,9 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *State
 		q = q.ForUpdate()
 	}
 	olds, err := q.All(ctx)
+	if errors.Is(err, ErrTooManyRows) {
+		return nil, fmt.Errorf("velox: %s: a recorded %s matches more than %d rows, the cap WithMaxRows sets on its read of them: %w", tw.in.Name, st.Op, tx.Cfg.MaxRows, ErrTooManyRows)
+	}
 	if err != nil {
 		return nil, err
 	}

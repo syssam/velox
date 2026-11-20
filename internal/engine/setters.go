@@ -232,7 +232,9 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 	if p.Writes() {
 		err = atomically(ctx, db, run)
 	} else {
-		// One UPDATE, in the caller's transaction: no savepoint, as Exec.
+		// In the caller's transaction, run there with no savepoint of its
+		// own, as Exec (a recorded write takes one, recordedTx); outside one,
+		// in velox's, whose Changes reach their sinks after its COMMIT.
 		err = ownTx(ctx, db, run)
 	}
 	if err != nil {
@@ -280,7 +282,9 @@ func updateByKey(ctx context.Context, db *DB, t Table, st *Statement, vals []any
 		out, err = q.one(ctx)
 		return err
 	}
-	// One UPDATE, in the caller's transaction: no savepoint, as Exec.
+	// In the caller's transaction, run there with no savepoint of its own,
+	// as Exec (a recorded write takes one, recordedTx); outside one, in
+	// velox's, whose Changes reach their sinks after its COMMIT.
 	if err := ownTx(ctx, db, run); err != nil {
 		return nil, err
 	}

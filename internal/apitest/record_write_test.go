@@ -2,8 +2,10 @@ package apitest
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -177,36 +179,54 @@ func TestRecordPinnedUpdateOutsideTx(t *testing.T) {
 // and records one Change, sending the UPDATE once; inside its own
 // transaction the sink waits for the COMMIT.
 func TestRecordUpdateOne(t *testing.T) {
-	cur := recNewRow(1, t0.Add(time.Hour))
-	e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {cur}, {cur}}, Affected: 1}
-	var rec velox.Recorder
-	var at []int
-	sink := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
-		at = append(at, len(e.Log))
-		return rec.Record(ctx, c)
-	})
-	rdb := openFake(velox.Postgres, e).Record(sink)
-	got, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(13.5)).One(ctx)
-	if err != nil || got.Total != 13.5 {
-		t.Fatalf("One: %+v, %v", got, err)
-	}
-	updates := 0
-	for _, s := range e.Log {
-		if strings.HasPrefix(s, "UPDATE") {
-			updates++
-		}
-	}
-	if updates != 1 || e.Log[0] != "BEGIN" || e.Log[len(e.Log)-1] != "COMMIT" {
-		t.Errorf("statements:\n%s", strings.Join(e.Log, "\n"))
-	}
-	if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log)}) {
-		t.Errorf("%d Changes, sink after %v of %d statements", rec.Len(), at, len(e.Log))
+	for _, c := range []struct {
+		d    velox.Dialect
+		want []string
+	}{{velox.Postgres, []string{
+		"BEGIN",
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
+		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2`,
+		"COMMIT",
+	}}, {velox.SQLite, []string{
+		"BEGIN",
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = ? ORDER BY "id"`,
+		`UPDATE "invoices" SET "total" = ?, "updated_at" = ? WHERE "id" = ? AND "id" IN (?) RETURNING ` + allCols,
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = ? LIMIT 2`,
+		"COMMIT",
+	}}, {velox.MySQL, []string{
+		"BEGIN",
+		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` = ? ORDER BY `id` FOR UPDATE",
+		"UPDATE `invoices` SET `total` = ?, `updated_at` = ? WHERE `id` = ? AND `id` IN (?)",
+		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` IN (?)",
+		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` = ? LIMIT ?",
+		"COMMIT",
+	}}} {
+		t.Run(c.d.String(), func(t *testing.T) {
+			cur := recNewRow(1, t0.Add(time.Hour))
+			e := &fakeconn.Exec{Results: [][][]any{{invoiceRow(1)}, {cur}, {cur}}, Affected: 1}
+			var rec velox.Recorder
+			var at []int
+			sink := velox.RecordFunc(func(ctx context.Context, ch velox.Change) error {
+				at = append(at, len(e.Log))
+				return rec.Record(ctx, ch)
+			})
+			rdb := openFake(c.d, e).Record(sink)
+			got, err := rdb.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(13.5)).One(ctx)
+			if err != nil || got.Total != 13.5 {
+				t.Fatalf("One: %+v, %v", got, err)
+			}
+			wantLog(t, e, c.want)
+			if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log)}) {
+				t.Errorf("%d Changes, sink after %v of %d statements", rec.Len(), at, len(e.Log))
+			}
+		})
 	}
 
 	// Not pinned by key: One reads the key, then the recorded update by it.
+	var rec velox.Recorder
 	sdb, _ := recInvoices(t)
-	rec.Reset()
-	got, err = sdb.Record(&rec).Update[testmodel.Invoice]().Where(I.Number.EQ("N2")).Set(I.Total.Set(21)).One(ctx)
+	got, err := sdb.Record(&rec).Update[testmodel.Invoice]().Where(I.Number.EQ("N2")).Set(I.Total.Set(21)).One(ctx)
 	if err != nil || got.ID != 2 || got.Total != 21 {
 		t.Fatalf("One by number: %+v, %v", got, err)
 	}
@@ -366,8 +386,8 @@ func TestRecordTooManyRows(t *testing.T) {
 	var rec velox.Recorder
 	rdb := openFake(velox.Postgres, e, velox.WithMaxRows(2)).Record(&rec)
 	_, err := rdb.Update[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Set(I.Total.Add(1)).Exec(ctx)
-	if !errors.Is(err, velox.ErrTooManyRows) {
-		t.Fatalf("got %v, want ErrTooManyRows", err)
+	if want := "velox: testmodel.Invoice: a recorded update matches more than 2 rows, the cap WithMaxRows sets on its read of them: read more rows than the cap"; !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
+		t.Fatalf("got %v, want %s", err, want)
 	}
 	for _, s := range e.Log {
 		if strings.HasPrefix(s, "UPDATE") || s == "COMMIT" {
@@ -380,20 +400,30 @@ func TestRecordTooManyRows(t *testing.T) {
 }
 
 // recInvoices opens a SQLite database with invoices 1 (total 10) and 2
-// (total 20) of org 1, without the policies.
-func recInvoices(t *testing.T) (*velox.DB, []testmodel.Invoice) {
+// (total 20) of org 1, without the policies, opened with opts (the rows are
+// inserted without them).
+func recInvoices(t *testing.T, opts ...velox.Option) (*velox.DB, []testmodel.Invoice) {
 	t.Helper()
-	db := policyDB(t).WithoutPolicy("record tests")
+	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "record.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = raw.Close() })
+	for _, s := range policyDDL {
+		exec(t, raw, s)
+	}
+	seed := velox.Open(velox.SQLite, raw).WithoutPolicy("record tests: seed")
 	invs := []testmodel.Invoice{
 		{OrgID: 1, Number: "N1", Total: 10, Data: []byte("d")},
 		{OrgID: 1, Number: "N2", Total: 20, Data: []byte("d")},
 	}
 	for i := range invs {
-		if err := db.Insert(&invs[i]).Exec(ctx); err != nil {
+		if err := seed.Insert(&invs[i]).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return db, invs
+	return velox.Open(velox.SQLite, raw, opts...).WithoutPolicy("record tests"), invs
 }
 
 // TestRecordDryRun: SQL(ctx) on a recording handle renders the plain

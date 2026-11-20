@@ -11,11 +11,17 @@ import (
 
 // Sink receives the Changes of the writes made through a recording handle,
 // one call per Change, in order. An error from Record is the write's error.
+//
+// A sink that writes, an audit row say, must write with the ctx it is given,
+// or through a handle that does not record: a write through the recording
+// handle under that ctx is not recorded, but one under another context is,
+// and its Change comes back to the sink.
 type Sink interface {
 	Record(ctx context.Context, c Change) error
 }
 
-// RecordFunc is a function as a Sink.
+// RecordFunc is a function as a Sink. Like any Sink, a RecordFunc that
+// writes must write with the ctx it is given (see Sink).
 type RecordFunc func(ctx context.Context, c Change) error
 
 // Record calls f.
@@ -90,6 +96,14 @@ func RecordIgnore(columns ...string) RecordOption {
 // WithoutPolicy, and through the Mutation.DB of a hook on one of its writes;
 // raw SQL, dry runs and the writes of db itself are not recorded. Record on a
 // recording DB replaces its sink and its options.
+//
+// Inside a transaction a recorded write runs under a savepoint that holds
+// its statements and the sink's calls: a failed statement or a sink's error
+// rolls back to it, so a recorded write that returns an error took no
+// effect. Outside one it runs in a transaction of its own, and the sink is
+// called after its COMMIT: a sink's error is returned and undoes nothing.
+// The sink's writes are recorded only when made under another context than
+// the one it was given (see Sink).
 //
 // The DB it returns shares db's pool and options, and Close on it closes
 // nothing. Record panics when s is nil.

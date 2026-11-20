@@ -184,7 +184,8 @@ func (p *pending) truncate(n int) {
 // each update that changed a column the recording does not ignore, and every
 // other row, in order. In a transaction velox opened for the write (ownTx),
 // they wait for its COMMIT. Otherwise each goes to the sink now: in the
-// caller's transaction, when db is in one, after the write's statements. The
+// caller's transaction, when db is in one, after the write's statements and
+// in the savepoint recordedTx holds them in. The
 // first error a sink returns is emit's, and the rest are not reported.
 func emit(ctx context.Context, db *DB, rows []ChangeRow) error {
 	r := db.rec
@@ -219,6 +220,8 @@ func emit(ctx context.Context, db *DB, rows []ChangeRow) error {
 // it runs fn in a transaction of its own, and, when db records, the Changes
 // emitted in it go to their sinks after its COMMIT: the write is committed
 // when a sink runs, and a sink's error, which ownTx returns, undoes nothing.
+// A recorded write in fn, on db's transaction, runs in a savepoint of its own
+// (recordedTx).
 func ownTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
 	if db.InTx {
 		return fn(ctx, db)
@@ -241,6 +244,18 @@ func ownTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) err
 		}
 	}
 	return nil
+}
+
+// recordedTx runs fn, a recorded write's statements and its emit, so that
+// a write that fails took no effect. In the caller's transaction it runs fn
+// in a savepoint: an error from a statement or from a sink rolls back to it.
+// In a transaction velox opened (ownTx) it runs fn there, as that
+// transaction rolls back on an error. Outside a transaction it is ownTx.
+func recordedTx(ctx context.Context, db *DB, fn func(ctx context.Context, tx *DB) error) error {
+	if db.InTx && db.txRoot.pend == nil {
+		return db.Tx(ctx, fn)
+	}
+	return ownTx(ctx, db, fn)
 }
 
 // atomically runs fn in a savepoint when db is in a transaction, and else
