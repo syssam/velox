@@ -97,7 +97,9 @@ func (c Change) NewRow() any { return c.row.Row(c.row.New) }
 // RecordKeep names them.
 // Values compare by their Equal method when their type has one (time.Time,
 // a decimal), as bytes when they are a byte slice, a float NaN as equal to
-// NaN, and else with reflect.DeepEqual. It is nil for an insert or a delete.
+// NaN, and else with reflect.DeepEqual. A decimal column's values compare
+// by number, read from their Value or String text, so "1.50" and "1.5"
+// are equal. It is nil for an insert or a delete.
 func (c Change) Diff() []FieldChange { return c.row.Diff() }
 
 // RowsOf returns c's rows as entity E: old before the write, nil for an

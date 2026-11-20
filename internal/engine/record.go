@@ -113,15 +113,21 @@ func (r ChangeRow) Value(col int, p unsafe.Pointer) any {
 }
 
 // Differs reports whether an update's old and new rows differ in column col
-// (EqualValues); false for another kind of write or a col out of range.
+// (equalColumn); false for another kind of write or a col out of range.
 func (r ChangeRow) Differs(col int) bool {
 	if r.Op != OpUpdate || r.In == nil || r.Old == nil || r.New == nil || col < 0 || col >= len(r.In.Columns) {
 		return false
 	}
-	return !EqualValues(r.value(col, r.Old), r.value(col, r.New))
+	return r.differs(col)
 }
 
-// Diff is an update's columns whose values differ (EqualValues), in column
+// differs reports whether an update's rows differ in column col
+// (equalColumn).
+func (r ChangeRow) differs(col int) bool {
+	return !equalColumn(&r.In.Columns[col], r.value(col, r.Old), r.value(col, r.New))
+}
+
+// Diff is an update's columns whose values differ (equalColumn), in column
 // order, but for Sensitive columns and those the recording ignores; nil for
 // another kind of write or when none differ.
 func (r ChangeRow) Diff() []FieldChange {
@@ -134,7 +140,7 @@ func (r ChangeRow) Diff() []FieldChange {
 		if c.Sensitive || r.rec.ignores(r.In, i) {
 			continue
 		}
-		if a, b := r.value(i, r.Old), r.value(i, r.New); !EqualValues(a, b) {
+		if a, b := r.value(i, r.Old), r.value(i, r.New); !equalColumn(c, a, b) {
 			out = append(out, FieldChange{Name: c.Name, Old: a, New: b})
 		}
 	}
@@ -152,7 +158,7 @@ func (r ChangeRow) value(col int, p unsafe.Pointer) any {
 // does not ignore: an update that changes none is not reported.
 func (r ChangeRow) changed() bool {
 	for i := range r.In.Columns {
-		if !r.rec.ignores(r.In, i) && !EqualValues(r.value(i, r.Old), r.value(i, r.New)) {
+		if !r.rec.ignores(r.In, i) && r.differs(i) {
 			return true
 		}
 	}

@@ -68,9 +68,44 @@ func TestNonZeroLiteral(t *testing.T) {
 		{"string", "'x'", true}, {"string", "'it''s'", true}, {"string", "'x'::character varying", true},
 		{"string", "''", false}, {"string", "''::text", false}, {"string", "'a' || 'b'", false}, {"string", "upper('x')", false},
 		{"enum", "'new'", false}, {"time", "'2020-01-01'", false}, {"bytes", "'x'", false},
+		{"decimal", "1.00", true}, {"decimal", "'0.5'", true}, {"decimal", "(-2)", true},
+		{"decimal", "0.00", false}, {"decimal", "'0'", false}, {"decimal", "nextval('s')", false},
 	} {
 		if got := nonZeroLiteral(c.typ, c.s); got != c.want {
 			t.Errorf("nonZeroLiteral(%q, %q) = %v, want %v", c.typ, c.s, got, c.want)
+		}
+	}
+}
+
+// ndMoney has decimal Other fields with database defaults: a non-zero
+// literal is warned of, as a number's is; a zero one, a Nillable field and
+// an Other field in no decimal column are not.
+type ndMoney struct{ schema.Schema }
+
+func (ndMoney) Fields() []schema.Field {
+	dec := map[string]string{"postgres": "numeric(10,2)", "mysql": "decimal(10,2)", "sqlite": "numeric"}
+	return []schema.Field{
+		field.Other("fee", LwDecText("")).SchemaType(dec).SchemaDefault(everywhere("1.00")),
+		field.Other("quoted", LwDecText("")).SchemaType(dec).SchemaDefault(everywhere("'2.5'")),
+		// No warning for the fields below.
+		field.Other("nothing", LwDecText("")).SchemaType(dec).SchemaDefault(everywhere("0.00")),
+		field.Other("maybe", LwDecText("")).SchemaType(dec).Optional().Nillable().SchemaDefault(everywhere("1.00")),
+		field.Other("word", LwDecText("")).SchemaType(map[string]string{"postgres": "citext"}).SchemaDefault(map[string]string{"postgres": "'x'"}),
+	}
+}
+
+// TestNonZeroDecimalDefaultWarning: a decimal Other field that is not
+// Nillable and whose database default is a non-zero literal is warned of,
+// as a Go number's.
+func TestNonZeroDecimalDefaultWarning(t *testing.T) {
+	got := DefaultWarnings(mustBuild(t, ndMoney{}))
+	want := []string{`field "fee"`, `field "quoted"`}
+	if len(got) != len(want) {
+		t.Fatalf("got %d warnings, want %d:\n%s", len(got), len(want), strings.Join(got, "\n"))
+	}
+	for i, w := range want {
+		if !strings.Contains(got[i], "schema ndMoney: "+w+": ") {
+			t.Errorf("warning %d: got %q, want it to name %s", i, got[i], w)
 		}
 	}
 }

@@ -3,10 +3,14 @@ package apitest
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"math/big"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/engine"
@@ -605,5 +609,123 @@ func TestRecordedMySQLUpsertReadsBackDefaults(t *testing.T) {
 	}
 	if _, cur, _ := velox.RowsOf[dDef](cs[0]); cur == nil || cur.Status != "done" || cur.Score != 3 {
 		t.Errorf("the Change's new row: %+v", cur)
+	}
+}
+
+// dWhen has a time conflict column and a declared default.
+type dWhen struct {
+	ID     int64
+	At     time.Time
+	Status string
+}
+
+var dWhenMeta velox.MetaOnce[dWhen]
+
+func (*dWhen) VeloxMeta() *velox.Meta[dWhen] {
+	return dWhenMeta.Load(func() velox.Descriptor[dWhen] {
+		return velox.Descriptor[dWhen]{
+			Table: "dwhens",
+			Columns: []velox.ColumnDescriptor{
+				{Field: "ID", Name: "id"}, {Field: "At", Name: "at"},
+				{Field: "Status", Name: "status", DBDefault: allDialects},
+			},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *dWhen, i int) any {
+				return [...]any{&x.ID, &x.At, &x.Status}[i]
+			},
+		}
+	})
+}
+
+// TestUpsertPlacesByTimeInstant: an upsert whose rows are placed by their
+// conflict columns matches a time by its instant: a row held in another
+// zone, or with a monotonic reading, takes the UTC value the database
+// returns.
+func TestUpsertPlacesByTimeInstant(t *testing.T) {
+	rw := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Conflict != nil {
+			st.Conflict.Where = append(st.Conflict.Where, velox.Predicate(velox.Expr[dWhen]("false")))
+		}
+		return nil
+	})
+	zone := time.FixedZone("+08", 8*3600)
+	a := time.Date(2026, 3, 1, 9, 0, 0, 0, zone)
+	b := time.Now().In(zone) // with a monotonic reading
+	e := &fakeconn.Exec{Rows: [][]any{{int64(42), "new", b.UTC().Round(0)}}}
+	xs := []dWhen{{At: a}, {At: b}}
+	at := velox.TimeCol[dWhen, time.Time]{I: 1}
+	if err := openFake(velox.Postgres, e, rw).InsertAll(xs).OnConflict(at).Update(at).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if xs[0].ID != 0 || xs[1].ID != 42 || xs[1].Status != "new" {
+		t.Errorf("placed %+v", xs)
+	}
+}
+
+// bigDec is a decimal as shopspring's is: a *big.Int and an exponent. Its
+// zero value holds a nil pointer; a zero made by a constructor does not.
+type bigDec struct {
+	v   *big.Int
+	exp int32
+}
+
+func (d bigDec) Value() (driver.Value, error) {
+	if d.v == nil {
+		return "0", nil
+	}
+	return d.v.String(), nil
+}
+
+func (d *bigDec) Scan(src any) error {
+	s, _ := src.(string)
+	v, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return fmt.Errorf("bigDec: cannot scan %v", src)
+	}
+	*d = bigDec{v: v}
+	return nil
+}
+
+// dMoney has a decimal column with a declared default.
+type dMoney struct {
+	ID  int64
+	Fee bigDec
+}
+
+var dMoneyMeta velox.MetaOnce[dMoney]
+
+func (*dMoney) VeloxMeta() *velox.Meta[dMoney] {
+	return dMoneyMeta.Load(func() velox.Descriptor[dMoney] {
+		return velox.Descriptor[dMoney]{
+			Table:      "dmoneys",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Fee", Name: "fee", DBDefault: allDialects}},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *dMoney, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Fee
+			},
+		}
+	})
+}
+
+// TestDecimalZeroLeftToDefault: the zero velox leaves to a declared default
+// is the Go zero value (reflect's IsZero): a decimal's zero value is left
+// out, and a decimal zero that holds a non-nil *big.Int is written.
+func TestDecimalZeroLeftToDefault(t *testing.T) {
+	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "1"}}}
+	if err := openFake(velox.Postgres, e).Insert(&dMoney{}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := `INSERT INTO "dmoneys" DEFAULT VALUES RETURNING "id", "fee"`; e.SQL != want {
+		t.Errorf("the zero value: %s, want %s", e.SQL, want)
+	}
+	e = &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
+	if err := openFake(velox.Postgres, e).Insert(&dMoney{Fee: bigDec{v: big.NewInt(0), exp: 1}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := `INSERT INTO "dmoneys" ("fee") VALUES ($1) RETURNING "id"`; e.SQL != want {
+		t.Errorf("a zero with a *big.Int: %s, want %s", e.SQL, want)
 	}
 }

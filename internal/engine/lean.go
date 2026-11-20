@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -321,9 +322,10 @@ func readPlaced(r Rows, st *Statement, rows []unsafe.Pointer) (int64, error) {
 // every row came back they are in the order of rows (ADR 0093). When fewer
 // did, as when the update branch's condition rejected a conflict, each is
 // the one entity whose conflict columns cols hold exactly the values the
-// row holds; a row that matches no entity, more than one, or one another
-// row took, is an error rather than a guess: the database may have stored
-// a value in another form (a collation's, a padded CHAR), and a misplaced
+// row holds (placeKey: a time by its instant); a row that matches no
+// entity, more than one, or one another row took, is an error rather than
+// a guess: the database may have stored a value in another form (a
+// collation's, a padded CHAR, a time cut to microseconds), and a misplaced
 // row would give an entity another row's key.
 func placeUpserted(in *EntityInfo, cols []int, got, rows []unsafe.Pointer) ([]unsafe.Pointer, error) {
 	if len(got) == len(rows) {
@@ -336,6 +338,7 @@ func placeUpserted(in *EntityInfo, cols []int, got, rows []unsafe.Pointer) ([]un
 		var b strings.Builder
 		for _, c := range cols {
 			v, _ := plain(in.kit.Value(p, c))
+			v = placeKey(v)
 			fmt.Fprintf(&b, "%T\x00%v\x00", v, v)
 		}
 		return b.String()
@@ -361,6 +364,17 @@ func placeUpserted(in *EntityInfo, cols []int, got, rows []unsafe.Pointer) ([]un
 		dst[j] = rows[m[0]]
 	}
 	return dst, nil
+}
+
+// placeKey is v, a conflict column's value, as placeUpserted compares it: a
+// time.Time in UTC without its monotonic reading, so that an entity's time
+// in another zone matches the instant the database returns; any other
+// value as it is.
+func placeKey(v any) any {
+	if t, ok := v.(time.Time); ok {
+		return t.UTC().Round(0)
+	}
+	return v
 }
 
 // readFilled reads the columns st.fill, which the database's defaults

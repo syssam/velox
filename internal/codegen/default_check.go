@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"math/big"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,7 +12,7 @@ import (
 // DefaultWarnings returns a warning for each field that is not Nillable
 // and whose SchemaDefault (its own, or a sqlschema default lowered into it)
 // is, on some dialect, a literal of a non-zero value of its Go type: true,
-// a number other than 0, a non-empty string. An insert leaves the Go zero
+// a number other than 0 (a decimal's too), a non-empty string. An insert leaves the Go zero
 // value of such a column to the database (ADR 0093), which stores the
 // default, so no Insert stores the zero, a setter's included (D10). An
 // enum is left alone, as its zero, "", is none of its values; so is a
@@ -36,10 +37,16 @@ func DefaultWarnings(g *Graph) []string {
 }
 
 // nonZeroDefault reports whether f's SchemaDefault is, on some dialect, a
-// literal of a non-zero bool, number or string (DefaultWarnings).
+// literal of a non-zero bool, number or string (DefaultWarnings). An Other
+// field in a decimal column (decimalField) is a number: its handle is a
+// NumberCol, and its default a numeric literal.
 func nonZeroDefault(f *Field) bool {
+	typ := f.Type
+	if typ == "other" && decimalField(f) {
+		typ = "decimal"
+	}
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
-		if s := f.SchemaDefault[d.String()]; s != "" && nonZeroLiteral(f.Type, s) {
+		if s := f.SchemaDefault[d.String()]; s != "" && nonZeroLiteral(typ, s) {
 			return true
 		}
 	}
@@ -47,7 +54,8 @@ func nonZeroDefault(f *Field) bool {
 }
 
 // nonZeroLiteral reports whether s, the SQL text of a default of a field of
-// type typ, is a literal of a value other than the type's zero. Parentheses
+// type typ ("decimal" for an Other field in a decimal column), is a literal
+// of a value other than the type's zero. Parentheses
 // around it (MySQL's form for some types) and a PostgreSQL cast after a
 // quoted literal ('x'::text) are read through; anything else that is not a
 // literal is an expression, and reports false.
@@ -75,6 +83,12 @@ func nonZeroLiteral(typ, s string) bool {
 		}
 		n, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 		return err == nil && n != 0
+	case typ == "decimal":
+		if quoted {
+			s = inner
+		}
+		r, ok := new(big.Rat).SetString(strings.TrimSpace(s))
+		return ok && r.Sign() != 0
 	case typ == "string":
 		return quoted && inner != ""
 	}

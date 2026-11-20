@@ -158,3 +158,46 @@ func TestMySQLKeyNormaliseFailsClosed(t *testing.T) {
 		t.Error("the sink was called")
 	}
 }
+
+// TestDecimalCompareByNumber: a decimal column (its descriptor's Decimal)
+// compares by number, whatever text its Go type holds: "1.50" and "1.5" of
+// kind.Dec are equal in velox.Diff, a recorded update's Diff and Changed,
+// and an update that changes only such text is not reported.
+func TestDecimalCompareByNumber(t *testing.T) {
+	L := testmodel.Ledgers
+	f1, f2 := testmodel.Dec("0.10"), testmodel.Dec("0.1")
+	a := testmodel.Ledger{ID: 1, Amount: "1.50", Fee: &f1}
+	b := testmodel.Ledger{ID: 1, Amount: "1.5", Fee: &f2}
+	if d := velox.Diff(&a, &b); len(d) != 0 {
+		t.Errorf("Diff of equal decimals: %+v", d)
+	}
+	b.Amount = "1.51"
+	if d := velox.Diff(&a, &b); len(d) != 1 || d[0].Name != "amount" {
+		t.Errorf("Diff of 1.50 and 1.51: %+v", d)
+	}
+
+	// The same number in another text: no Change.
+	e := &fakeconn.Exec{Affected: 1, Results: [][][]any{{{int64(1), "1.50", "0.10"}}, {{int64(1), "1.5", "0.10"}}}}
+	var rec velox.Recorder
+	rdb := openFake(velox.Postgres, e).Record(&rec)
+	if _, err := rdb.Update[testmodel.Ledger]().Where(L.ID.EQ(1)).Set(L.Amount.Set("1.5")).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Len() != 0 {
+		t.Errorf("an update to the same number is reported: %+v", slices.Collect(rec.All()))
+	}
+
+	// Another number in fee: only fee changed.
+	e = &fakeconn.Exec{Affected: 1, Results: [][][]any{{{int64(1), "1.50", "0.10"}}, {{int64(1), "1.5", "0.2"}}}}
+	rdb = openFake(velox.Postgres, e).Record(&rec)
+	if _, err := rdb.Update[testmodel.Ledger]().Where(L.ID.EQ(1)).Set(L.Amount.Set("1.5"), L.Fee.Set("0.2")).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cs := slices.Collect(rec.All())
+	if len(cs) != 1 {
+		t.Fatalf("%d Changes, want 1", len(cs))
+	}
+	if d := cs[0].Diff(); len(d) != 1 || d[0].Name != "fee" || cs[0].Changed(L.Amount) || !cs[0].Changed(L.Fee) {
+		t.Errorf("Diff %+v, amount changed %v", d, cs[0].Changed(L.Amount))
+	}
+}

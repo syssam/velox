@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"slices"
 	"strings"
@@ -24,7 +26,7 @@ func rowKey(in *EntityInfo, p unsafe.Pointer) []any {
 }
 
 // DiffRows compares the rows at before and after of entity in, column by
-// column, and returns the columns whose values differ (EqualValues), in
+// column, and returns the columns whose values differ (equalColumn), in
 // column order. A nil row holds NULL in every column.
 func DiffRows(in *EntityInfo, before, after unsafe.Pointer) []FieldChange {
 	if in == nil {
@@ -40,11 +42,69 @@ func DiffRows(in *EntityInfo, before, after unsafe.Pointer) []FieldChange {
 		if after != nil {
 			b = loadColumn(c, after)
 		}
-		if !EqualValues(a, b) {
+		if !equalColumn(c, a, b) {
 			out = append(out, FieldChange{Name: c.Name, Old: a, New: b})
 		}
 	}
 	return out
+}
+
+// equalColumn reports whether a and b, plain values of column c, are equal:
+// by number in a decimal column (ColumnDescriptor.Decimal), so that "1.50"
+// and "1.5" of a decimal type held as text are equal (equalDecimal), and by
+// EqualValues in any other.
+func equalColumn(c *ColumnInfo, a, b any) bool {
+	if c.decimal == [2]uint8{} {
+		return EqualValues(a, b)
+	}
+	return equalDecimal(a, b)
+}
+
+// equalDecimal reports whether a and b, plain values of a decimal column,
+// are the same number: each read as a big.Rat from the text its Value
+// method gives (a string, []byte, int64 or float64), or else its String
+// method's. Two nils are equal, and nil equals no other value. A value
+// that reads as no number is compared by EqualValues.
+func equalDecimal(a, b any) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	x, okx := decimalRat(a)
+	y, oky := decimalRat(b)
+	if okx && oky {
+		return x.Cmp(y) == 0
+	}
+	return EqualValues(a, b)
+}
+
+// decimalRat is v, a decimal's plain value, as a number (equalDecimal).
+func decimalRat(v any) (*big.Rat, bool) {
+	var s string
+	switch t := v.(type) {
+	case driver.Valuer:
+		dv, err := t.Value()
+		if err != nil {
+			return nil, false
+		}
+		switch d := dv.(type) {
+		case string:
+			s = d
+		case []byte:
+			s = string(d)
+		case int64:
+			return new(big.Rat).SetInt64(d), true
+		case float64:
+			r := new(big.Rat).SetFloat64(d)
+			return r, r != nil
+		default:
+			return nil, false
+		}
+	case fmt.Stringer:
+		s = t.String()
+	default:
+		return nil, false
+	}
+	return new(big.Rat).SetString(strings.TrimSpace(s))
 }
 
 // EqualValues reports whether a and b, plain column values, are equal by

@@ -64,7 +64,7 @@ func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -165,7 +165,7 @@ func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -268,7 +268,7 @@ func (c OtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -391,7 +391,7 @@ func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSub, Value: v}}
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -524,7 +524,7 @@ func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -605,7 +605,7 @@ func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the field's element, the zero value for NULL, for an insert, or when ch is of another entity; OldPtr tells NULL apart.
 func (c NullCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -731,7 +731,7 @@ func (c NullTimeCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the field's element, the zero value for NULL, for an insert, or when ch is of another entity; OldPtr tells NULL apart.
 func (c NullTimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -861,7 +861,7 @@ func (c NullOtherCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the field's element, the zero value for NULL, for an insert, or when ch is of another entity; OldPtr tells NULL apart.
 func (c NullOtherCol[E, V]) Old[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.Old, c.I)
 }
@@ -1015,7 +1015,7 @@ func (c NullNumberCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the field's element, the zero value for NULL, for an insert, or when ch is of another entity; OldPtr tells NULL apart.
 func (c NullNumberCol[E, V]) Old[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.Old, c.I)
 }
@@ -1179,7 +1179,7 @@ func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the field's element, the zero value for NULL, for an insert, or when ch is of another entity; OldPtr tells NULL apart.
 func (c NullStringCol[E, V]) Old[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.Old, c.I)
 }
@@ -1239,7 +1239,7 @@ func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAl
 // IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
 func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
@@ -1300,7 +1300,7 @@ func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
-// Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
+// Old returns the column's value in ch's old row: the field's element, the zero value for NULL, for an insert, or when ch is of another entity; OldPtr tells NULL apart.
 func (c NullJSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.

@@ -589,12 +589,12 @@ func (cr *conflictRead) counted(ctx context.Context, tx *DB, rows []unsafe.Point
 }
 
 // same reports whether the rows at a and b hold the same values in every
-// column.
+// column (equalColumn).
 func (cr *conflictRead) same(a, b unsafe.Pointer) bool {
 	for i := range cr.in.Columns {
 		x, _ := plain(cr.in.kit.Value(a, i))
 		y, _ := plain(cr.in.kit.Value(b, i))
-		if !EqualValues(x, y) {
+		if !equalColumn(&cr.in.Columns[i], x, y) {
 			return false
 		}
 	}

@@ -86,7 +86,10 @@ package. As handle methods they cost a few KB per entity package
    reports its rows in key order, an insert in the order given. An update
    reports a row only when a column it does not ignore differs (rule 3).
    Values compare by an `Equal` method, `bytes.Equal` for bytes, else
-   `reflect.DeepEqual`. All the Changes of one write method call (`Exec`,
+   `reflect.DeepEqual`; a float NaN equals NaN, by value and through a
+   pointer. A decimal column's values (its descriptor's `Decimal`) compare
+   by number, read from their `Value` or `String` text, so `"1.50"` equals
+   `"1.5"` in a decimal type held as text. All the Changes of one write method call (`Exec`,
    `One`, `Insert`, `InsertAll`, a `Save`, the edge writes of `Rel.Add`,
    `Remove`, `Set`, `Clear`, a soft delete's `Exec`) go to the sink in one
    call, across its chunks, re-point steps, mirror rows and default runs

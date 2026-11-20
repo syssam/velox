@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"slices"
 	"strings"
@@ -135,5 +136,46 @@ func TestAdoptedTxKeepsNothing(t *testing.T) {
 	}
 	if sunk != 2 || len(tx.txRoot.kept) != 0 {
 		t.Errorf("sink got %d rows, kept %d; want 2 and none", sunk, len(tx.txRoot.kept))
+	}
+}
+
+// decStr, decInt and decStringer are decimals as a driver.Valuer of text,
+// a Valuer of an int64, and a fmt.Stringer.
+type (
+	decStr      string
+	decInt      int64
+	decStringer struct{ s string }
+)
+
+func (d decStr) Value() (driver.Value, error) { return string(d), nil }
+func (d decInt) Value() (driver.Value, error) { return int64(d), nil }
+func (d decStringer) String() string          { return d.s }
+
+// TestEqualDecimal: a decimal column's values are equal when they are the
+// same number, read from a Valuer's text or int64, or a Stringer's text;
+// a value that reads as no number falls back to EqualValues.
+func TestEqualDecimal(t *testing.T) {
+	dec := &ColumnInfo{decimal: [2]uint8{10, 2}}
+	plainCol := &ColumnInfo{}
+	for _, c := range []struct {
+		a, b any
+		want bool
+	}{
+		{decStr("1.50"), decStr("1.5"), true},
+		{decStr("1.50"), decStr("1.51"), false},
+		{decStr(" 2 "), decStr("2.000"), true},
+		{decInt(3), decInt(3), true},
+		{decStringer{"0.10"}, decStringer{"0.1"}, true},
+		{decStringer{"x"}, decStringer{"x"}, true},
+		{decStringer{"x"}, decStringer{"y"}, false},
+		{nil, nil, true},
+		{decStr("0"), nil, false},
+	} {
+		if got := equalColumn(dec, c.a, c.b); got != c.want {
+			t.Errorf("equalColumn(decimal, %v, %v) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+	if equalColumn(plainCol, decStr("1.50"), decStr("1.5")) {
+		t.Error("a column that is no decimal compares text by number")
 	}
 }

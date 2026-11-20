@@ -168,7 +168,13 @@ To store the zero itself in such a column, make the field Nillable and set a
 pointer to the zero: a non-nil value is always written. velox-gen warns of a
 field that is not Nillable whose database default is a non-zero literal,
 such as `field.Bool("active").SchemaDefault(...)` with `true`: no `Insert`
-can store its `false`, a setter's included.
+can store its `false`, a setter's included. A decimal Other field with a
+non-zero default, such as `"1.00"`, is warned of the same way.
+
+The zero is the Go zero value, as `reflect.Value.IsZero` sees it. So
+`decimal.Decimal{}` is left to the default, while a decimal zero that holds
+a non-nil `*big.Int`, such as shopspring's `decimal.Zero`, is not zero to
+velox, and is written as 0.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column
@@ -764,8 +770,11 @@ are not in the builder; use [raw SQL](#raw-sql) for those
 
 ### Insert
 
-`Insert` writes one entity and reads the generated key back into it.
-`InsertAll` writes many in one statement and reads nothing back:
+`Insert` writes one entity and reads the generated key back into it, with
+the columns it left to declared database defaults. `InsertAll` writes
+many, in as few statements as it can, and reads the same back into each
+row; a multi-row upsert on MySQL, which cannot tell its rows apart, reads
+nothing back:
 
 ```go
 inv := veloxgen.Invoice{Number: "INV-001", Customer: "Initech", Status: veloxgen.InvoiceStatusSent}
@@ -779,6 +788,7 @@ lines := []veloxgen.Line{
 	{InvoiceID: inv.ID, Description: "Travel", AmountCents: 30000},
 }
 err := db.InsertAll(lines).Exec(ctx)
+// lines[0].ID and lines[1].ID are set now.
 ```
 
 Both fill defaults and run hooks and policies first.
@@ -1161,6 +1171,8 @@ through the sink's `tx`.
 - For any entity, `c.OldRow()` and `c.NewRow()` are the rows as `*E`, and
   `c.Diff()` lists an update's columns that differ, as
   `FieldChange{Name, Old, New}`. An insert's and a delete's Diff is nil.
+  A decimal column compares by number, so `"1.50"` and `"1.5"` of a
+  decimal type held as text are the same value.
 - An insert's new row is the row as stored. PostgreSQL and SQLite return
   every column with the INSERT; MySQL reads the rows by key after it, in
   the write's transaction. A value the column rounds or pads (a decimal's

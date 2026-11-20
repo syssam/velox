@@ -82,3 +82,41 @@ func TestHandleMethodSets(t *testing.T) {
 		}
 	}
 }
+
+// TestHandleDocsNameOwnMethods: a handle method's doc names another method
+// of the handle (OldPtr, NewPtr) only on a kind that has it: the text the
+// kinds share does not point a non-Null kind at a method it lacks.
+func TestHandleDocsNameOwnMethods(t *testing.T) {
+	t.Parallel()
+	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(), "handles.go"), nil, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := map[string]map[string]bool{}
+	docs := map[string]map[string]string{}
+	for _, d := range f.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Recv == nil {
+			continue
+		}
+		rt := fd.Recv.List[0].Type
+		if s, ok := rt.(*ast.StarExpr); ok {
+			rt = s.X
+		}
+		recv := recvName(rt)
+		if methods[recv] == nil {
+			methods[recv], docs[recv] = map[string]bool{}, map[string]string{}
+		}
+		methods[recv][fd.Name.Name] = true
+		docs[recv][fd.Name.Name] = fd.Doc.Text()
+	}
+	for recv, ds := range docs {
+		for name, doc := range ds {
+			for _, other := range []string{"OldPtr", "NewPtr"} {
+				if other != name && strings.Contains(doc, other) && !methods[recv][other] {
+					t.Errorf("%s.%s's doc names %s, which %s lacks", recv, name, other, recv)
+				}
+			}
+		}
+	}
+}
