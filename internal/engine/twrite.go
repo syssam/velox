@@ -573,6 +573,15 @@ func (u TableUpdate) All() TableUpdate {
 	return u
 }
 
+// MarkSoftDelete returns u marked as a soft delete, the update package
+// softdelete makes of a delete: a recording handle reports each row it
+// changes as a delete, Soft, with the row before and after it. It changes
+// nothing that is sent.
+func MarkSoftDelete(u TableUpdate) TableUpdate {
+	u.st.softDelete = true
+	return u
+}
+
 func (u TableUpdate) statement() (Statement, error) {
 	if u.t.err != nil {
 		return Statement{}, u.t.err

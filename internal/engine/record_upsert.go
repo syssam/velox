@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -37,16 +38,11 @@ func recordedInsert(ctx context.Context, db *DB, single bool, fn func(ctx contex
 
 // recordInsertRow is InsertRow on a recording handle: the insert of the row
 // at p, and its Change. A row that sets the key of a bidirectional
-// one-to-one edge is refused, as velox re-points its partner in a statement
-// recording does not follow, and so is an upsert on MySQL that cannot find
-// its row (refuseUnfindable).
+// one-to-one edge is inserted with the link of its partner (bidiInsert),
+// whose row is reported after the insert's. An upsert on MySQL that cannot
+// find its row is refused (refuseUnfindable).
 func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
 	in := st.Entity
-	if len(infoBidiKeys(in)) > 0 {
-		if keys, _ := bidiRow(in, p); len(keys) > 0 {
-			return errRecordBidi(in, OpInsert)
-		}
-	}
 	if err := refuseUnfindable(db.D, in, st.Conflict, gen, []unsafe.Pointer{p}); err != nil {
 		return err
 	}
@@ -57,7 +53,7 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	cp.recorded = true
 	rows := []unsafe.Pointer{p}
 	var n int64
-	err := recordedInsert(ctx, db, cp.Conflict == nil, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+	send := func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
 		cp.InTx = tx.InTx
 		cs, k, err := sendRecorded(ctx, tx, &cp, rows, gen, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
 			var res Result
@@ -66,7 +62,14 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 		})
 		n = k
 		return cs, err
-	})
+	}
+	var err error
+	if keys, vs := bidiRow(in, p); len(keys) > 0 {
+		setStmtBidi(&cp, &bidiStep{Keys: keys, Vals: vs, Insert: true})
+		err = bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, send)
+	} else {
+		err = recordedInsert(ctx, db, cp.Conflict == nil, send)
+	}
 	out.Affected = n
 	return err
 }
@@ -135,11 +138,32 @@ func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poin
 		return nil, n, nil
 	}
 	in := st.Entity
-	out := make([]ChangeRow, len(rows))
-	for i, p := range rows {
-		out[i] = ChangeRow{Op: OpInsert, In: in, New: ownCopy(in, p)}
+	out := make([]ChangeRow, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, ChangeRow{Op: OpInsert, In: in, New: ownCopy(in, p)})
+		if InfoBidi(in) && !selfLink(Elem(fieldAddr(in, p, 0)), Elem(fieldAddr(in, p, 1))) {
+			// The join entity of a bidirectional edge: the INSERT wrote the
+			// link's mirror row too (MirrorRows).
+			out = append(out, ChangeRow{Op: OpInsert, In: in, New: mirrorCopy(in, p)})
+		}
 	}
 	return out, n, nil
+}
+
+// mirrorCopy is ownCopy of the row of in, the join entity of a
+// bidirectional edge, at p, with its columns 0 and 1 exchanged: the mirror
+// row of the link (MirrorRows).
+func mirrorCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
+	dst := ownCopy(in, p)
+	a, b := &in.Columns[0], &in.Columns[1]
+	typ := GoType(*a)
+	x := reflect.NewAt(typ, unsafe.Add(dst, a.off)).Elem()
+	y := reflect.NewAt(typ, unsafe.Add(dst, b.off)).Elem()
+	tmp := reflect.New(typ).Elem()
+	tmp.Set(x)
+	x.Set(y)
+	y.Set(tmp)
+	return dst
 }
 
 // ownCopy is a copy of the columns of the row of in at p, the engine's own:
@@ -228,17 +252,45 @@ func lockConflicts(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poi
 
 // keys is the distinct conflict keys of rows that can conflict: not a row
 // whose generated key is zero, which the INSERT leaves out, nor one with a
-// NULL in a conflict column.
+// NULL in a conflict column. On the join entity of a bidirectional edge,
+// whose INSERT writes each link's mirror row too (MirrorRows), they include
+// the mirror rows' keys.
 func (cr *conflictRead) keys(rows []unsafe.Pointer) [][]any {
 	var keys [][]any
 	seen := make(map[string]bool, len(rows))
-	for _, p := range rows {
-		if k, ok := cr.key(p, cr.cols); ok && !seen[keyString(k)] {
+	add := func(k []any) {
+		if !seen[keyString(k)] {
 			seen[keyString(k)] = true
 			keys = append(keys, k)
 		}
 	}
+	bidi := InfoBidi(cr.in)
+	for _, p := range rows {
+		k, ok := cr.key(p, cr.cols)
+		if !ok {
+			continue
+		}
+		add(k)
+		if bidi {
+			if m, ok := mirrorKey(cr.cols, k); ok {
+				add(m)
+			}
+		}
+	}
 	return keys
+}
+
+// mirrorKey is k, the values of cols, with the values of columns 0 and 1
+// exchanged: the key of a bidirectional join row's mirror. It reports false
+// when cols does not hold both.
+func mirrorKey(cols []int, k []any) ([]any, bool) {
+	a, b := slices.Index(cols, 0), slices.Index(cols, 1)
+	if a < 0 || b < 0 {
+		return nil, false
+	}
+	m := slices.Clone(k)
+	m[a], m[b] = k[b], k[a]
+	return m, true
 }
 
 // key is the values of cols in the entity at p. It reports false when one

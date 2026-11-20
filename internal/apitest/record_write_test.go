@@ -446,22 +446,6 @@ func TestRecordDryRun(t *testing.T) {
 	}
 }
 
-// TestRecordBidiKeyRefused: recording does not yet follow the re-pointing
-// of a bidirectional one-to-one edge, and refuses it before sending.
-func TestRecordBidiKeyRefused(t *testing.T) {
-	e := &fakeconn.Exec{Affected: 1}
-	var rec velox.Recorder
-	rdb := openFake(velox.Postgres, e).Record(&rec)
-	_, err := rdb.Update[bspouse]().Set(bspouses.SpouseID.Set(3)).Where(bspouses.ID.EQ(1)).Exec(ctx)
-	if err == nil || !strings.Contains(err.Error(), "recording an update that sets the key of a bidirectional") || len(e.Log) != 0 {
-		t.Errorf("got %v, sent %q", err, e.Log)
-	}
-	err = rdb.Insert(&bspouse{ID: 2, SpouseID: new(int64(3))}).Exec(ctx)
-	if err == nil || !strings.Contains(err.Error(), "recording an insert that sets the key of a bidirectional") || len(e.Log) != 0 {
-		t.Errorf("Insert: got %v, sent %q", err, e.Log)
-	}
-}
-
 // TestRecordSinkInTx: inside the caller's transaction the sink runs in it,
 // and the writes it makes through the transaction are sent there and not
 // recorded.

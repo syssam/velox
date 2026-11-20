@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -9,7 +10,9 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/schema/mixin/softdelete"
 )
 
 // changed is the FieldChange of the column of the given name in c's
@@ -325,6 +328,201 @@ func TestRecordUpsertNullConflict(t *testing.T) {
 		cs := slices.Collect(rec.All())
 		if len(cs) != 1 || cs[0].Op != velox.OpInsert || cs[0].Key != id("M") || Tk.Title.New(cs[0]) != "M" {
 			t.Errorf("DoNothing: %+v, want the insert of M (key %d)", cs, id("M"))
+		}
+	})
+}
+
+// TestRecordSoftDelete: on each database a recorded delete of a soft-deleted
+// entity reports one Change, a delete marked Soft, with the row before
+// (deleted_at NULL) and after (deleted_at set); Changed and Diff, which
+// report updates, give nothing. Under softdelete.Skip the delete is hard: not
+// Soft, and no new row.
+func TestRecordSoftDelete(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		softTables(t, tg)
+		D := fixture.SDocs
+		in1 := testmodel.Org.With(context.Background(), int64(1))
+		var rec velox.Recorder
+		rdb := tg.pdb.Record(&rec)
+		if n, err := rdb.Delete[fixture.SDoc]().Where(D.ID.EQ(2)).Exec(in1); err != nil || n != 1 {
+			t.Fatalf("Delete: %d, %v", n, err)
+		}
+		cs := slices.Collect(rec.All())
+		if len(cs) != 1 {
+			t.Fatalf("%d Changes, want 1", len(cs))
+		}
+		c := cs[0]
+		if c.Op != velox.OpDelete || !c.Soft || c.Key != int64(2) || c.Entity != "SDoc" {
+			t.Errorf("soft delete: %+v", c)
+		}
+		old, cur, ok := velox.RowsOf[fixture.SDoc](c)
+		if !ok || old == nil || cur == nil || old.DeletedAt != nil || cur.DeletedAt == nil || old.Title != "b" || cur.Title != "b" {
+			t.Fatalf("RowsOf: %+v %+v %v", old, cur, ok)
+		}
+		if c.Changed(D.DeletedAt) || c.Diff() != nil {
+			t.Errorf("Changed %v, Diff %+v: a soft delete is no update", c.Changed(D.DeletedAt), c.Diff())
+		}
+		if !D.DeletedAt.Old(c).IsZero() || D.DeletedAt.New(c).IsZero() || D.Title.Old(c) != "b" {
+			t.Errorf("handles: deleted_at %v -> %v, title %q", D.DeletedAt.Old(c), D.DeletedAt.New(c), D.Title.Old(c))
+		}
+		rec.Reset()
+		if n, err := rdb.Delete[fixture.SDoc]().Where(D.ID.EQ(2)).Exec(in1); err != nil || n != 0 || rec.Len() != 0 {
+			t.Errorf("re-delete: %d, %v, %d Changes; want none", n, err, rec.Len())
+		}
+		if n, err := rdb.Delete[fixture.SDoc]().Where(D.ID.EQ(1)).Exec(softdelete.Skip(in1)); err != nil || n != 1 {
+			t.Fatalf("hard delete: %d, %v", n, err)
+		}
+		cs = slices.Collect(rec.All())
+		if len(cs) != 1 || cs[0].Op != velox.OpDelete || cs[0].Soft || cs[0].NewRow() != nil || cs[0].Key != int64(1) || D.Title.Old(cs[0]) != "a" {
+			t.Errorf("hard delete: %+v", cs)
+		}
+	})
+}
+
+// personTables creates persons 1 to 4, with no spouse, and their friends'
+// join table, empty.
+func personTables(t *testing.T, tg target) {
+	t.Helper()
+	tg.exec(t, "DROP TABLE IF EXISTS person_friends")
+	tg.exec(t, "DROP TABLE IF EXISTS persons")
+	tg.exec(t, "CREATE TABLE persons (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL, person_spouse BIGINT, UNIQUE (person_spouse))")
+	tg.exec(t, "CREATE TABLE person_friends (node_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, PRIMARY KEY (node_id, friend_id))")
+	for id := range int64(4) {
+		tg.exec(t, "INSERT INTO persons (id, name) VALUES (?, ?)", id+1, "p")
+	}
+}
+
+// spouseChange is a Change of a person: its key, op, and spouse before and
+// after (0 for none).
+type spouseChange struct {
+	key      int64
+	op       velox.Op
+	old, cur int64
+}
+
+// spouseChanges are rec's Changes as spouseChanges; it resets rec.
+func spouseChanges(t *testing.T, rec *velox.Recorder) []spouseChange {
+	t.Helper()
+	var out []spouseChange
+	for c := range rec.All() {
+		if c.Entity != "person" {
+			t.Errorf("a Change of %s", c.Entity)
+		}
+		out = append(out, spouseChange{c.Key.(int64), c.Op, Persons.SpouseID.Old(c), Persons.SpouseID.New(c)})
+	}
+	rec.Reset()
+	return out
+}
+
+// TestRecordBidiRepoint: on each database a recorded write of the key of the
+// bidirectional one-to-one edge Spouse reports every row whose key it
+// changes, once each, in the order of the statements that first touch them:
+// the row written, the old partner it cleared, and the new partner it
+// linked. A write that links the pair already linked touches rows and
+// changes none, and reports nothing; a write that fails reports nothing.
+func TestRecordBidiRepoint(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		personTables(t, tg)
+		P := Persons
+		var rec velox.Recorder
+		rdb := tg.db.Record(&rec)
+		save := func(id int64, spouse *int64) {
+			t.Helper()
+			if err := rdb.Save(&person{ID: id, SpouseID: spouse}, P.SpouseID).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		check := func(step string, want ...spouseChange) {
+			t.Helper()
+			if got := spouseChanges(t, &rec); !slices.Equal(got, want) {
+				t.Errorf("%s: %+v, want %+v", step, got, want)
+			}
+		}
+		if err := rdb.Insert(&person{ID: 5, Name: "p", SpouseID: new(int64(1))}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		check("insert", spouseChange{5, velox.OpInsert, 0, 1}, spouseChange{1, velox.OpUpdate, 0, 5})
+		save(5, new(int64(2)))
+		check("re-point", spouseChange{5, velox.OpUpdate, 1, 2}, spouseChange{1, velox.OpUpdate, 5, 0}, spouseChange{2, velox.OpUpdate, 0, 5})
+		save(5, new(int64(2)))
+		check("same pair")
+		if _, err := rdb.Update[person]().Set(P.SpouseID.SetNull()).Where(P.ID.EQ(2)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		check("clear", spouseChange{2, velox.OpUpdate, 5, 0}, spouseChange{5, velox.OpUpdate, 2, 0})
+		err := rdb.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			return tx.Save(&person{ID: 3, SpouseID: new(int64(4))}, P.SpouseID).Exec(ctx)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		check("in a Tx", spouseChange{3, velox.OpUpdate, 0, 4}, spouseChange{4, velox.OpUpdate, 0, 3})
+		if err := rdb.Save(&person{ID: 1, SpouseID: new(int64(4))}, P.SpouseID).Exec(ctx); err == nil {
+			t.Fatal("linking a taken partner succeeded")
+		}
+		check("a taken partner")
+	})
+}
+
+// friendChanges are rec's Changes, each its op and the join row's node and
+// friend; it resets rec.
+func friendChanges(t *testing.T, rec *velox.Recorder) []string {
+	t.Helper()
+	var out []string
+	for c := range rec.All() {
+		row, _ := c.NewRow().(*personFriend)
+		if c.Op == velox.OpDelete {
+			row, _ = c.OldRow().(*personFriend)
+		}
+		if c.Entity != "personFriend" || row == nil {
+			t.Errorf("a Change %+v", c)
+			continue
+		}
+		out = append(out, fmt.Sprintf("%v %d-%d", c.Op, row.NodeID, row.FriendID))
+	}
+	rec.Reset()
+	return out
+}
+
+// TestRecordM2M: on each database the edge setters of the bidirectional
+// many-to-many edge Friends report each join row they insert or delete, both
+// rows of a link, as both are written: Add an insert per row, and none for a
+// link that exists; Remove a delete per row, and none for a key not linked;
+// Clear and Add in one write the deletes, then the inserts. An insert of
+// the join entity reports both rows too.
+func TestRecordM2M(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		personTables(t, tg)
+		P := Persons
+		var rec velox.Recorder
+		rdb := tg.db.Record(&rec)
+		set := func(step string, s velox.Setter[person], want ...string) {
+			t.Helper()
+			if _, err := rdb.Update[person]().Set(s).Where(P.ID.EQ(1)).Exec(ctx); err != nil {
+				t.Fatalf("%s: %v", step, err)
+			}
+			got := friendChanges(t, &rec)
+			slices.Sort(got)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Errorf("%s: %q, want %q", step, got, want)
+			}
+		}
+		set("add", P.Friends.Add(2, 3), "insert 1-2", "insert 2-1", "insert 1-3", "insert 3-1")
+		set("add again", P.Friends.Add(2))
+		set("remove", P.Friends.Remove(2, 4), "delete 1-2", "delete 2-1")
+		if _, err := rdb.Update[person]().Set(P.Friends.Clear(), P.Friends.Add(4)).Where(P.ID.EQ(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got := friendChanges(t, &rec)
+		if len(got) != 4 || !slices.Equal(got[:2], []string{"delete 1-3", "delete 3-1"}) || !slices.Contains(got, "insert 1-4") || !slices.Contains(got, "insert 4-1") {
+			t.Errorf("clear and add: %q, want the deletes of 1-3 and 3-1, then the inserts of 1-4 and 4-1", got)
+		}
+		if err := rdb.Insert(&personFriend{2, 3}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if got := friendChanges(t, &rec); !slices.Equal(got, []string{"insert 2-3", "insert 3-2"}) {
+			t.Errorf("insert of a join row: %q, want both rows", got)
 		}
 	})
 }

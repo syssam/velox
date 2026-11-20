@@ -328,7 +328,72 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 			return fmt.Errorf("velox: %s: %w", in.Name, err)
 		}
 	}
-	return db.Tx(ctx, fn)
+	// db.Tx, but that a recording handle's sink, outside a transaction,
+	// runs after the COMMIT (ownTx).
+	return atomically(ctx, db, fn)
+}
+
+// repoint is what a recorded bidirectional one-to-one write changed: a
+// ChangeRow per row its statements wrote, in the order each was first
+// written, with the row before the first statement that wrote it and after
+// the last, so that a row two statements write is reported once. nil when
+// the write is not recorded.
+type repoint struct {
+	tw   tracker
+	rows []ChangeRow
+	at   map[string]int // the index in rows of each updated row, by key
+}
+
+// newRepoint is the repoint of a write of in through db under ctx, nil
+// when db does not record it.
+func newRepoint(ctx context.Context, db *DB, in *EntityInfo) *repoint {
+	if db.recording(ctx) == nil {
+		return nil
+	}
+	tw := tracker{in: in, t: InfoTable(in), cols: everyColumn(in)}
+	tw.read = keyAnd(in, tw.cols)
+	return &repoint{tw: tw, at: map[string]int{}}
+}
+
+// exec sends st, an update of the write, on tx, and returns the rows it
+// affected: as it is when the write is not recorded, and else as
+// trackedWrite sends an update, keeping the rows it changed.
+func (r *repoint) exec(ctx context.Context, tx *DB, st *Statement) (int64, error) {
+	if r == nil {
+		res, err := ExecWrite(ctx, tx, st)
+		return res.Affected, err
+	}
+	var mu MutationState
+	rows, err := r.tw.run(ctx, tx, &mu, st)
+	if err != nil {
+		return 0, err
+	}
+	for _, row := range rows {
+		k := keyString(rowKey(r.tw.in, row.New)) // no bidirectional write changes a key
+		if i, ok := r.at[k]; ok {
+			r.rows[i].New = row.New
+			continue
+		}
+		r.at[k] = len(r.rows)
+		r.rows = append(r.rows, row)
+	}
+	return mu.Affected, nil
+}
+
+// report adds rows, those of an insert, to what the write changed.
+func (r *repoint) report(rows []ChangeRow) {
+	if r != nil {
+		r.rows = append(r.rows, rows...)
+	}
+}
+
+// emit reports what the write changed to tx's recording (emit): an updated
+// row whose statements left it as it was is not reported.
+func (r *repoint) emit(ctx context.Context, tx *DB) error {
+	if r == nil {
+		return nil
+	}
+	return emit(ctx, tx, r.rows)
 }
 
 // bidiUpdate sends an update that sets bidirectional keys of row k, and then
@@ -346,19 +411,25 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 //
 // The statements go through the pipeline, so Rewrite and Around hooks see
 // each. mu.affected is step 1's count, the caller's rows.
+//
+// Through a recording handle each statement is sent as trackedWrite sends
+// an update, a locked read of its rows first, and every row the steps
+// change is reported once, an update (repoint).
 func bidiUpdate(ctx context.Context, db *DB, mu *MutationState, keys []bidiKey, k any, vs []any) error {
 	st := mu.St
 	in := st.Entity
 	var n int64
 	err := bidiTx(ctx, db, in, func(ctx context.Context, tx *DB) error {
+		r := newRepoint(ctx, tx, in)
 		st.InTx = true
 		setStmtBidi(st, &bidiStep{Keys: keys, Vals: vs, Pinned: k})
-		res, err := ExecWrite(ctx, tx, st)
+		var err error
+		n, err = r.exec(ctx, tx, st)
 		setStmtBidi(st, nil)
 		if err != nil {
 			return err
 		}
-		switch n = res.Affected; {
+		switch {
 		case n == 0:
 			return nil
 		case n < 0:
@@ -371,18 +442,18 @@ func bidiUpdate(ctx context.Context, db *DB, mu *MutationState, keys []bidiKey, 
 			unlink := Statement{Op: OpUpdate, Entity: in, InTx: true,
 				Set: []Assignment{{Column: bk.Col, Op: AssignSet}}, Where: []Predicate{ColumnEQ(bk.Col, k)}}
 			// Any number of rows, none included, is right: the count is not read.
-			if _, err := ExecWrite(ctx, free, &unlink); err != nil {
+			if _, err := r.exec(ctx, free, &unlink); err != nil {
 				return err
 			}
 		}
 		for i, bk := range keys {
 			if vs[i] != nil {
-				if err := bidiLink(ctx, tx, in, bk, k, vs[i]); err != nil {
+				if err := bidiLink(ctx, tx, r, in, bk, k, vs[i]); err != nil {
 					return err
 				}
 			}
 		}
-		return nil
+		return r.emit(ctx, tx)
 	})
 	if err != nil {
 		return err
@@ -398,19 +469,19 @@ func bidiUpdate(ctx context.Context, db *DB, mu *MutationState, keys []bidiKey, 
 // Exists under the same scope (Writable) on id = v tells a row the caller
 // can see, which already has a partner ("row v already has a <Edge>; clear
 // it first"), from one it cannot, of which the error says nothing more
-// ("row v cannot be linked").
-func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk bidiKey, k, v any) error {
+// ("row v cannot be linked"). r sends the UPDATE (repoint.exec).
+func bidiLink(ctx context.Context, db *DB, r *repoint, in *EntityInfo, bk bidiKey, k, v any) error {
 	pk := in.PrimaryKey[0]
 	st := Statement{Op: OpUpdate, Entity: in, InTx: db.InTx,
 		Set:   []Assignment{{Column: bk.Col, Op: AssignSet, Value: k}},
 		Where: []Predicate{ColumnEQ(pk, v), NewPredicate(Node{Op: OpIsNull, Col: int32(bk.Col)})}}
-	res, err := ExecWrite(ctx, db, &st)
+	n, err := r.exec(ctx, db, &st)
 	switch {
 	case err != nil:
 		return err
-	case res.Affected < 0:
+	case n < 0:
 		return errLinkCount(in)
-	case res.Affected > 0:
+	case n > 0:
 		return nil
 	}
 	probe := Statement{Op: OpSelect, Entity: in, InTx: db.InTx, Exists: true, Limit: 1, Writable: true,
@@ -441,7 +512,10 @@ func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk bidiKey, k, v any)
 // it when the database generated it (generated). A row given its own key as
 // a partner is refused before anything is sent, and so is an upsert, which
 // a hook may have made of the insert after check.
-func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, keys []bidiKey, vs []any, generated, upsert bool, send func(ctx context.Context, tx *DB) error) error {
+//
+// Through a recording handle, send returns the insert's Change, and the
+// partners' rows the links change are reported after it (repoint).
+func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, keys []bidiKey, vs []any, generated, upsert bool, send func(ctx context.Context, tx *DB) ([]ChangeRow, error)) error {
 	if upsert {
 		return refuseBidiInsert(in, p, false)
 	}
@@ -455,9 +529,12 @@ func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, k
 		}
 	}
 	return bidiTx(ctx, db, in, func(ctx context.Context, tx *DB) error {
-		if err := send(ctx, tx); err != nil {
+		r := newRepoint(ctx, tx, in)
+		rows, err := send(ctx, tx)
+		if err != nil {
 			return err
 		}
+		r.report(rows)
 		id := infoKit(in).Value(p, pk)
 		if generated {
 			if reflect.ValueOf(id).IsZero() {
@@ -471,10 +548,10 @@ func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, k
 			}
 		}
 		for i, bk := range keys {
-			if err := bidiLink(ctx, tx, in, bk, id, vs[i]); err != nil {
+			if err := bidiLink(ctx, tx, r, in, bk, id, vs[i]); err != nil {
 				return err
 			}
 		}
-		return nil
+		return r.emit(ctx, tx)
 	})
 }

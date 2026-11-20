@@ -148,6 +148,9 @@ type Statement struct {
 	// Changes come from what its RETURNING reads: a Rewrite hook may not
 	// change that.
 	recorded bool
+	// softDelete says the statement, an update, is a soft delete
+	// (MarkSoftDelete): a recording reports its rows as deletes, Soft.
+	softDelete bool
 	// iterCtx is the context Iter was given: a statement under it while the
 	// loop holds a pool's one connection is refused (iterconn.go).
 	iterCtx context.Context

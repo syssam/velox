@@ -106,13 +106,6 @@ func everyColumn(in *EntityInfo) []int {
 	return cols
 }
 
-// errRecordBidi refuses recording an op, an update or an insert, that sets
-// the key of a bidirectional one-to-one edge: velox re-points both partners
-// in statements of its own, which recording does not follow.
-func errRecordBidi(in *EntityInfo, op Op) error {
-	return fmt.Errorf("velox: %s: recording an %s that sets the key of a bidirectional one-to-one edge: velox re-points both partners, which recording does not follow", in.Name, op)
-}
-
 // keyAnd is in's primary-key columns, then those of cols not in it.
 func keyAnd(in *EntityInfo, cols []int) []int {
 	out := slices.Clone(in.PrimaryKey)
@@ -185,7 +178,7 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *State
 			return nil, err
 		}
 	}
-	return tw.changes(st.Op, olds, news), nil
+	return tw.changes(st, olds, news), nil
 }
 
 // newKeys is each row's key after st, which held keys before it: a key
@@ -315,16 +308,22 @@ func (tw *tracker) reread(ctx context.Context, tx *DB, at [][]any, news []unsafe
 	})
 }
 
-// changes is a ChangeRow per old row: the row before the write and, for an
-// update, the row after it. An update's row that no RETURNING or re-read
-// found is left out.
-func (tw *tracker) changes(op Op, olds TableRows, news []unsafe.Pointer) []ChangeRow {
+// changes is a ChangeRow per old row of st: the row before the write and,
+// for an update, the row after it. An update's row that no RETURNING or
+// re-read found is left out. A soft delete's (MarkSoftDelete) rows are
+// deletes, Soft, with both rows.
+func (tw *tracker) changes(st *Statement, olds TableRows, news []unsafe.Pointer) []ChangeRow {
+	op, soft := st.Op, st.Op == OpUpdate && st.softDelete
 	out := make([]ChangeRow, 0, olds.n)
 	for i := range olds.n {
-		if op == OpUpdate && news[i] == nil {
+		if st.Op == OpUpdate && news[i] == nil {
 			continue // a Rewrite or Around hook kept the row from the write
 		}
-		out = append(out, ChangeRow{Op: op, In: tw.in, Old: olds.at(i), New: news[i]})
+		row := ChangeRow{Op: op, In: tw.in, Old: olds.at(i), New: news[i]}
+		if soft {
+			row.Op, row.Soft = OpDelete, true
+		}
+		out = append(out, row)
 	}
 	return out
 }

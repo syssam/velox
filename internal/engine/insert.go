@@ -378,8 +378,8 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 			cp := *st
 			setStmtBidi(&cp, &bidiStep{Keys: keys, Vals: vs, Insert: true})
 			var res Result
-			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
-				return sendOne(ctx, tx, p, &cp, gen, &res)
+			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+				return nil, sendOne(ctx, tx, p, &cp, gen, &res)
 			})
 			if err == nil {
 				out.Affected = res.Affected

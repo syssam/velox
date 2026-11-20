@@ -257,9 +257,6 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 				}
 				st.InTx = true // Exec sends it in a transaction, bidiUpdate's
 				if !mu.Dry {
-					if db.recording(ctx) != nil {
-						return errRecordBidi(in, OpUpdate)
-					}
 					return bidiUpdate(ctx, db, mu, keys, k, vs)
 				}
 			}

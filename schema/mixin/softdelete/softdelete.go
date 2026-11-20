@@ -32,6 +32,8 @@
 //     DELETE to render.
 //   - ON DELETE CASCADE does not fire. A child row stays; a hook that wants
 //     to cascade soft-deletes the children itself.
+//   - Through a recording handle (velox.DB.Record), each row is reported as
+//     a delete with Soft set, and with the row before and after the update.
 //
 // # Skip
 //
@@ -67,6 +69,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
@@ -142,7 +145,9 @@ func softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	u := untyped.Update(m.DB(), t).Assign(set)
+	// Marked a soft delete, so that a recording handle reports its rows as
+	// deletes, Soft; it sends the same statement.
+	u := engine.MarkSoftDelete(untyped.Update(m.DB(), t)).Assign(set)
 	if cs := m.Predicates(); len(cs) > 0 {
 		u = u.Where(cs...)
 	} else {
