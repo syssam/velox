@@ -37,7 +37,8 @@ func (f RecordFunc) Record(ctx context.Context, c Change) error { return f(ctx, 
 // A Recorder drops the Changes recorded in a transaction or savepoint that
 // rolls back, and in an attempt of TxRetrySerializable before its retry, so
 // after Tx returns it holds what committed. Shared by concurrent
-// transactions, it drops only the Changes of the one that rolls back.
+// transactions, it drops only the Changes of the one that rolls back, and
+// until the others commit or roll back, All and Len include their Changes.
 type Recorder struct {
 	mu      sync.Mutex
 	changes []Change
@@ -121,7 +122,8 @@ func RecordIgnore(columns ...string) RecordOption {
 // through it, through the transactions and savepoints it begins, through its
 // WithoutPolicy, and through the Mutation.DB of a hook on one of its writes;
 // raw SQL, dry runs and the writes of db itself are not recorded. Record on a
-// recording DB replaces its sink and its options.
+// recording DB replaces its sink and its options; on a transaction's handle,
+// for that handle, and a rollback still drops a Recorder's Changes.
 //
 // Inside a transaction a recorded write runs under a savepoint that holds
 // its statements and the sink's calls: a failed statement or a sink's error
@@ -158,7 +160,7 @@ func RecordIgnore(columns ...string) RecordOption {
 // not returned, and not reported); on MySQL a read by the conflict columns
 // follows, and a count of affected rows it does not account for fails the
 // write, as when a row conflicted on another unique key (this needs the
-// clientFoundRows=true that Open asks for). A row with NULL in a conflict
+// clientFoundRows=true that Connect requires). A row with NULL in a conflict
 // column, or a generated key left zero in the conflict columns, cannot be
 // found after the INSERT on MySQL, which returns no keys, so a recorded
 // upsert there refuses it: insert such rows without OnConflict. A Rewrite

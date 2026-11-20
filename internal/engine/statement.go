@@ -104,7 +104,7 @@ type Statement struct {
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
-	Returning    []int           // INSERT, and a recorded UPDATE or DELETE (DB.Record): columns read back (PostgreSQL and SQLite); a Rewrite hook may not change an UPDATE's
+	Returning    []int           // INSERT, a recorded UPDATE (DB.Record), and a recorded DELETE on PostgreSQL 18: columns read back (PostgreSQL and SQLite); a Rewrite hook may not change it on any recorded write, nor on an UPDATE
 	AllRows      bool            // UPDATE and DELETE: the statement said All
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent

@@ -332,3 +332,69 @@ func TestRecorderSharedConcurrentTx(t *testing.T) {
 		t.Errorf("after A's rollback: %+v, want B's one Change", got)
 	}
 }
+
+// TestRecordOnTxHandle: Record on a transaction's handle replaces its sink
+// for that handle. Writes through it go to the new sink, the outer sink
+// keeps the writes made before, and a savepoint or the transaction that
+// rolls back drops the new Recorder's rows, by id.
+func TestRecordOnTxHandle(t *testing.T) {
+	db, _ := recInvoices(t)
+	boom := errors.New("boom")
+	keys := func(r *velox.Recorder) []any {
+		var ks []any
+		for c := range r.All() {
+			ks = append(ks, c.Key)
+		}
+		return ks
+	}
+	var outer, inner velox.Recorder
+	err := db.Record(&outer).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if _, err := tx.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(11)).Exec(ctx); err != nil {
+			return err
+		}
+		itx := tx.Record(&inner)
+		if _, err := itx.Update[testmodel.Invoice]().Where(I.ID.EQ(2)).Set(I.Total.Set(22)).Exec(ctx); err != nil {
+			return err
+		}
+		if err := itx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error {
+			if _, err := sp.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(33)).Exec(ctx); err != nil {
+				return err
+			}
+			return boom
+		}); !errors.Is(err, boom) {
+			t.Errorf("savepoint: %v, want boom", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := keys(&outer); !slices.Equal(got, []any{int64(1)}) {
+		t.Errorf("outer Recorder: keys %v, want [1]", got)
+	}
+	if got := keys(&inner); !slices.Equal(got, []any{int64(2)}) {
+		t.Errorf("inner Recorder: keys %v, want [2]: the savepoint's row is dropped", got)
+	}
+	for c := range inner.All() {
+		if I.Total.Old(c) != 20 || I.Total.New(c) != 22 {
+			t.Errorf("inner Change: total %v -> %v", I.Total.Old(c), I.Total.New(c))
+		}
+	}
+
+	var rolled velox.Recorder
+	err = db.Record(&outer).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if _, err := tx.Record(&rolled).Update[testmodel.Invoice]().Where(I.ID.EQ(2)).Set(I.Total.Set(44)).Exec(ctx); err != nil {
+			return err
+		}
+		if rolled.Len() != 1 {
+			t.Errorf("before the rollback: %d Changes, want 1", rolled.Len())
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("Tx: %v, want boom", err)
+	}
+	if rolled.Len() != 0 {
+		t.Errorf("after the rollback: %d Changes, want 0", rolled.Len())
+	}
+}

@@ -71,7 +71,9 @@ package. As handle methods they cost a few KB per entity package
    its `Tx` and savepoints, its `WithoutPolicy`, and a hook's `Mutation.DB()`
    on one of its writes. `Record` on a recording handle replaces the sink
    and options. Raw SQL, dry runs (`SQL(ctx)`) and a hook that skips next
-   are not recorded. Nothing is read from the context.
+   are not recorded. Nothing is read from the context, except the mark on
+   the sink's own ctx (rule 6). `Record` on a transaction's handle replaces
+   the sink for that handle; a rollback still drops a Recorder's rows.
 2. **One Change per row.** An update or delete reports its rows in key
    order, an insert in the order given. An update reports a row only when a
    column outside `RecordIgnore` differs. Values compare by an `Equal`
@@ -82,7 +84,8 @@ package. As handle methods they cost a few KB per entity package
    - `Sensitive` keeps ent's meaning: not printable and not serializable.
      The getters and `RowsOf` give real values. `OldRow` and `NewRow`
      marshal without the column (`json:"-"`), and `Diff` leaves it out.
-     Nothing is masked.
+     Nothing is masked. An update that changes only a Sensitive column is
+     reported with an empty `Diff`; `c.Changed(col)` tells it changed.
    - `RecordIgnore` columns are left out of `Diff` and do not make a row
      changed. `Old`, `New`, `Changed`, `OldRow` and `NewRow` still read them.
 4. **When the sink runs.** After the write's statements, before the write
@@ -97,8 +100,9 @@ package. As handle methods they cost a few KB per entity package
 5. **Rollback.** A `Recorder` drops what a transaction, a savepoint or a
    `TxRetrySerializable` attempt recorded when it rolls back. It drops by
    id, so a Recorder shared by concurrent transactions loses only the rows
-   of the one that rolled back. A `RecordFunc` sees each Change as it
-   happens, including ones later rolled back.
+   of the one that rolled back. Until the others commit or roll back, its
+   `All` and `Len` also show their rows. A `RecordFunc` sees each Change as
+   it happens, including ones later rolled back.
 6. **No recursion.** A sink's write through the recording handle with the
    ctx it was given is not recorded. A write under another ctx is, and comes
    back to the sink. A sink can also write through a handle that does not
@@ -114,8 +118,10 @@ package. As handle methods they cost a few KB per entity package
    - Outside a transaction a recorded write runs in a transaction of its
      own, but for one statement that commits by itself: an insert of one
      statement, and on PostgreSQL 18 an update or delete that names one row
-     by its key, or an upsert of one statement. More rows than `MaxRows`
-     fail with `ErrTooManyRows`, nothing kept.
+     by its key when the DB has no Rewrite hooks, or an upsert of one
+     statement whose update branch gets no policy or interceptor condition.
+     With a Rewrite hook that update or delete gets BEGIN and COMMIT. More
+     rows than `MaxRows` fail with `ErrTooManyRows`, nothing kept.
    - The PostgreSQL version is read once per pool
      (`SHOW server_version_num`), only by a recording handle, and no hook
      sees it. In a caller's transaction it is read inside the write's

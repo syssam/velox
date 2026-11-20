@@ -1045,7 +1045,8 @@ before and after the write. velox reads the old row in the write's own
 transaction, locked, so it is the row the write replaced.
 
 Here every change in a transaction becomes an audit row in the same
-transaction (`I := veloxgen.Invoices`):
+transaction. `veloxgen.AuditLog` is your own audit entity, not part of the
+tour (`I := veloxgen.Invoices`):
 
 ```go
 var tx *velox.DB
@@ -1064,42 +1065,52 @@ audit := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
 	}
 	return tx.Insert(&veloxgen.AuditLog{
 		Entity: c.Entity, Key: fmt.Sprint(c.Key), Op: c.Op.String(),
-		OldValues: old, NewValues: cur, ChangedFields: changed,
+		Old: old, New: cur, Changed: changed,
 	}).Exec(ctx) // the ctx the sink is given: this insert is not recorded
 })
 rdb := db.Record(audit, velox.RecordIgnore("updated_at"))
 err := rdb.Tx(ctx, func(ctx context.Context, t *velox.DB) error {
 	tx = t
-	_, err := tx.Update[veloxgen.Invoice]().Where(I.Total.LT(100)).Set(I.Total.Add(5)).Exec(ctx)
+	_, err := tx.Update[veloxgen.Invoice]().Where(I.TotalCents.LT(10000)).Set(I.TotalCents.Add(500)).Exec(ctx)
 	return err
 })
 ```
 
-On PostgreSQL below 18 the update sends:
+On PostgreSQL below 18, for two matching invoices, the transaction sends:
 
 ```sql
+BEGIN
 SAVEPOINT velox_1
-SELECT "id", …, "data" FROM "invoices" WHERE "total" < $1 ORDER BY "id" FOR UPDATE
-UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2
-  WHERE "total" < $3 AND "id" IN ($4, $5) RETURNING "id", …, "data"
-INSERT INTO "audit_logs" …   -- the sink, once per row
+SHOW server_version_num  -- once per pool, at the first recorded write
+SELECT "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "customer", "status", "total_cents"
+  FROM "invoices" WHERE "total_cents" < $1 AND "deleted_at" IS NULL AND "org_id" = $2
+  ORDER BY "id" FOR UPDATE
+UPDATE "invoices" SET "total_cents" = "total_cents" + $1, "updated_at" = $2
+  WHERE "total_cents" < $3 AND "id" IN ($4, $5) AND "deleted_at" IS NULL AND "org_id" = $6
+  RETURNING "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "customer", "status", "total_cents"
+INSERT INTO "audit_logs" …  -- the sink, once per row
 INSERT INTO "audit_logs" …
 RELEASE SAVEPOINT velox_1
+COMMIT
 ```
 
-SQLite sends the same without `FOR UPDATE`. MySQL has no RETURNING, so it
-reads the new rows with a `SELECT … WHERE id IN (…)` after the UPDATE. On
-PostgreSQL 18 and later the read and the write are one statement:
+SQLite sends the same without `FOR UPDATE` and the SHOW. MySQL has no
+RETURNING, so after the UPDATE it reads the new rows with
+``SELECT `id`, … FROM `invoices` WHERE `id` IN (?, ?)``. On PostgreSQL 18
+and later the read and the write are one statement:
 
 ```sql
-UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2
-  WHERE "total" < $3 RETURNING old."id", …, new."id", …
+UPDATE "invoices" SET "total_cents" = "total_cents" + $1, "updated_at" = $2
+  WHERE "total_cents" < $3 AND "deleted_at" IS NULL AND "org_id" = $4
+  RETURNING old."id", …, old."total_cents", new."id", …, new."total_cents"
 ```
 
 To act after the commit, collect the changes with a `velox.Recorder`
 instead, and range over `rec.All()` after `Tx` returns. A Recorder drops
-what a transaction, a savepoint or a retried attempt rolled back, so it
-holds what committed. [ExampleDB_Record](../example_record_test.go) builds
+what a transaction, a savepoint or a retried attempt rolled back, so once
+`Tx` returns it holds what committed. A Recorder shared by concurrent
+transactions also holds, in `All` and `Len`, the rows of those still running,
+until they commit or roll back. [ExampleDB_Record](../example_record_test.go) builds
 an audit batch this way.
 
 ### What a Change holds
@@ -1108,7 +1119,7 @@ an audit batch this way.
   `OpUpdate` or `OpDelete`, and `c.Key` is the row's primary key: after the
   write for an insert or an update, before it for a delete, a `[]any` for a
   composite key.
-- `I.Total.Old(c)` and `I.Total.New(c)` read one column, typed. A `Null*`
+- `I.TotalCents.Old(c)` and `I.TotalCents.New(c)` read one column, typed. A `Null*`
   handle gives the element, the zero when NULL. `c.Changed(I.Status)`
   reports whether an update changed any of the columns given.
   `velox.RowsOf[veloxgen.Invoice](c)` gives both rows as `*Invoice`.
@@ -1121,6 +1132,8 @@ an audit batch this way.
 - A `Sensitive` column keeps ent's meaning: it is not printed or
   serialized. The getters and `RowsOf` give its real value, `OldRow` and
   `NewRow` marshal without it, and Diff leaves it out. Nothing is masked.
+  An update that changes only a Sensitive column is reported with an empty
+  Diff; `c.Changed(col)` tells that the secret changed.
 
 ### When the sink runs
 
@@ -1143,6 +1156,8 @@ per Change, in order. Its error is the write's error.
 
 Every write through the recording handle, its transactions and savepoints,
 its `WithoutPolicy`, and a hook's `m.DB()`. Raw SQL and dry runs are not.
+`Record` on a transaction's handle replaces the sink for that handle: its
+writes go to the new sink, and a rollback still drops a Recorder's rows.
 
 - **Upsert.** A row that conflicted is an update with its real old values,
   an inserted row is an insert, and a row `DoNothing` kept is not reported.
@@ -1167,8 +1182,9 @@ adds:
 - below PostgreSQL 18, one locked read per update or delete;
 - outside a transaction, a BEGIN and a COMMIT, unless the write is one
   statement that commits by itself: an insert of one statement, and on
-  PostgreSQL 18 an update or delete of one row by key, or an upsert of one
-  statement;
+  PostgreSQL 18 an update or delete of one row by key when the DB has no
+  Rewrite hooks, or an upsert of one statement whose update branch gets no
+  policy or interceptor condition;
 - in a transaction, a SAVEPOINT and a RELEASE per write;
 - on PostgreSQL, one `SHOW server_version_num` per pool, at the first
   recorded write.

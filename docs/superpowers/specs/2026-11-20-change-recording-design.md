@@ -28,7 +28,7 @@ PostgreSQL 18 returns old and new rows from one statement
 
 | Design | Why not |
 |---|---|
-| `Mutation.Track` / `Changes` in a hook (built) | middleware boilerplate, string names, order-dependent |
+| `Mutation.Track` / `Changes` in a hook (built, then removed) | middleware boilerplate, string names, order-dependent |
 | `.Change(ctx)` / `.Changes(ctx)` on the query builders | widens the SQL API; misses writes in helpers, hooks, GraphQL |
 | `velox.Record(ctx)`: recorder in the context | a context carries policy, user, tenant and middleware values; a new or derived context silently loses or leaks the recording; it is an optional parameter in a context value, which the context package's docs advise against |
 | `TxRecord` option on `Tx` | not every write runs in a transaction |
@@ -110,7 +110,9 @@ The following are removed:
 
    `Record` on a recording handle replaces its sink. Raw SQL (`Exec`, `Raw`,
    `Rows`) and dry runs (`SQL(ctx)`) are not recorded, and neither is a hook
-   that skips next. Nothing about recording is read from the context.
+   that skips next. Nothing about recording is read from the context,
+   except the sink's own ctx (rule 6). `Record` on a transaction's handle
+   replaces the sink for that handle.
 2. **One Change per row.**
    - An update or delete reports its rows in key order.
    - An insert reports its rows in the order given.
@@ -124,6 +126,8 @@ The following are removed:
      the `Old`/`New` and `RowsOf` give real values (it is the caller's
      data, as a struct field is); `OldRow`/`NewRow` marshal without it
      (`json:"-"`); `Diff` leaves Sensitive columns out. Nothing is masked.
+     An update of only a Sensitive column is reported with an empty `Diff`;
+     `c.Changed(col)` tells it changed.
    - `RecordIgnore` columns are left out of `Diff` and do not make a row
      count as changed; `Old`, `New`, `OldRow` and `NewRow` still give them.
    - The new row of an insert includes what the database filled (ADR 0093).
@@ -144,7 +148,8 @@ The following are removed:
    transaction or savepoint began when that transaction or savepoint rolls
    back, and before each retry of `TxRetrySerializable`. It drops them by id,
    so a Recorder shared by concurrent transactions loses only the rows of
-   the one that rolled back. A `RecordFunc`
+   the one that rolled back; until the others end, `All` and `Len` show
+   their rows too. A `RecordFunc`
    sees every Change as it happens. Its writes on the same transaction roll
    back with it; for side effects outside the database, collect with a
    `Recorder` and act after `Tx` returns.
@@ -166,7 +171,8 @@ The following are removed:
    - Outside a transaction a recorded write runs in a transaction of its
      own, but for one statement that commits by itself: an insert of one
      statement, and on PostgreSQL 18 an update or delete that pins one row
-     by key, or an upsert of one statement. Its row count is checked against
+     by key when the DB has no Rewrite hooks, or an upsert of one statement
+     whose update branch gets no policy or interceptor condition. Its row count is checked against
      `MaxRows` (`ErrTooManyRows`, nothing kept).
    - The server version is read once per pool (`SHOW server_version_num`),
      only by recording handles, never seen by hooks, and not cached on
