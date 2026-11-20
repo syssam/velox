@@ -9,13 +9,13 @@
 //   - the fields a selection reads, which Paginate and the edges narrow their
 //     queries to;
 //   - what the inputs' Setters methods call: IDs for the keys a list field
-//     gives, FromJSON for a JSON field, NotZero, and Validate,
+//     gives, FromJSON for a JSON field, and Validate,
 //     which runs the validators of the columns an input sets;
 //   - InputErrorf, the coded error of a client's input.
 //
 // An application does not call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion26, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion27, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

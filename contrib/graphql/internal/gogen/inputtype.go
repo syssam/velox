@@ -7,26 +7,10 @@ import (
 	"go/token"
 	"path"
 	"slices"
-	"strconv"
-	"strings"
 
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/plugin"
 )
-
-// zeroDefault reports whether fd's literal Default is its type's zero value:
-// false, a number equal to 0 or "".
-func zeroDefault(fd *plugin.Field) bool {
-	switch s := strings.TrimSpace(string(fd.Default)); {
-	case s == "false", s == `""`:
-		return true
-	case s == "", s == "true", s[0] == '"':
-		return false
-	default:
-		n, err := strconv.ParseFloat(s, 64)
-		return err == nil && n == 0
-	}
-}
 
 // leftOut are the fields of t's entity that the create input does not set and
 // that an insert would store as their zero value though the schema requires

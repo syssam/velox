@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion26
+const _ = veloxgql.GeneratedCodeIsVersion27
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -325,15 +325,9 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 func (in CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 	var set []velox.Setter[User]
 	if v := in.CreatedAt; v != nil {
-		if err := gqlgraph.NotZero("CreateAccountInput.createdAt", *v); err != nil {
-			return nil, err
-		}
 		set = append(set, Users.CreatedAt.Set(*v))
 	}
 	if v := in.UpdatedAt; v != nil {
-		if err := gqlgraph.NotZero("CreateAccountInput.updatedAt", *v); err != nil {
-			return nil, err
-		}
 		set = append(set, Users.UpdatedAt.Set(*v))
 	}
 	set = append(set, Users.Name.Set(in.DisplayName))
@@ -355,9 +349,6 @@ func (in CreateAccountInput) Setters() ([]velox.Setter[User], error) {
 		set = append(set, Users.Score.Set(*v))
 	}
 	if v := in.ExternalID; v != nil {
-		if err := gqlgraph.NotZero("CreateAccountInput.externalID", *v); err != nil {
-			return nil, err
-		}
 		set = append(set, Users.ExternalID.Set(*v))
 	}
 	if v := in.Avatar; v != nil {

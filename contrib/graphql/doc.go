@@ -186,7 +186,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion26", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion27", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -354,16 +354,12 @@
 // must not choose; where both set a column, the UPDATE fails, so the
 // resolver drops the input's setter of that column first.
 //
-// A field with a Default, or a bool or number with
-// graphql.CreateDefault, is optional in the create input and stays non-null in
-// the type: velox-gen refuses a Default other than false or 0 on a bool or
-// number that is not Nillable, as a Go struct's false could not be told from
-// unset, so CreateDefault(true) gives the create input active: Boolean! = true,
-// which gqlgen fills when the client leaves it out, and the column no Default.
-// A create input that gives a field with a Default its zero value ("" or the
-// zero time) is refused with BAD_USER_INPUT, unless the Default is that zero
-// value, since an insert would store the Default in its place; an update
-// stores it.
+// A field with a Default is optional in the create input and stays non-null
+// in the type. The input sets it only when the client gives it, and an insert
+// fills defaults before the setters, so active: false is stored and a missing
+// active takes the Default (velox decision 0082). graphql.CreateDefault(true)
+// is for a field with no schema Default: it gives the create input
+// active: Boolean! = true, which gqlgen fills when the client leaves it out.
 //
 // An edge's inputs follow its foreign key. A required key that a hook fills,
 // such as a scope column (package scope: Fill), has its create input left out

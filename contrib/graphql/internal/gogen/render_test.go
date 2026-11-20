@@ -739,7 +739,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion26\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion27\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1675,10 +1675,11 @@ func TestNullableOrderTerm(t *testing.T) {
 	}
 }
 
-// TestZeroDefaultNotRefused: a create input that gives a field with a zero
-// Default (false, 0, "") its zero value stores what the Default would, so
-// Setters does not refuse it; a non-zero Default's zero is still refused.
-// A field with graphql.CreateDefault is a value, always set.
+// TestZeroDefaultNotRefused: a create input that gives a field with a
+// Default its zero value stores the zero, since an insert fills defaults
+// before the setters (velox decision 0082), so Setters refuses no zero, for a
+// zero Default or another. A field with graphql.CreateDefault is a value,
+// always set.
 func TestZeroDefaultNotRefused(t *testing.T) {
 	def := func(name, typ, d string) *plugin.Field {
 		return &plugin.Field{Name: name, GoName: plugin.GoName(name), Type: typ, GoType: typ, ElemType: typ, Optional: true, HasDefault: true, Default: json.RawMessage(d)}
@@ -1703,12 +1704,10 @@ func TestZeroDefaultNotRefused(t *testing.T) {
 		},
 	}}}
 	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
-	for _, f := range []string{"Off", "Views", "Score", "S"} {
-		if strings.Contains(got, "gqlgraph.NotZero(\"CreateThingInput."+strings.ToLower(f[:1])+f[1:]+"\"") {
-			t.Errorf("%s: a zero Default's zero refused:\n%s", f, got)
-		}
+	if strings.Contains(got, "NotZero") {
+		t.Errorf("a zero refused:\n%s", got)
 	}
-	for _, want := range []string{`gqlgraph.NotZero("CreateThingInput.handle", *v)`, "Active bool", "set = append(set, Things.Active.Set(in.Active))"} {
+	for _, want := range []string{"set = append(set, Things.Handle.Set(*v))", "Active bool", "set = append(set, Things.Active.Set(in.Active))"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in:\n%s", want, got)
 		}

@@ -40,17 +40,6 @@ func IDs[K comparable](at string, ids []K) ([]any, error) {
 	return out, nil
 }
 
-// NotZero refuses v, what the create input's field at gives a field that has
-// a Default, when it is the field's zero value: an insert would store the
-// Default in its place, as it does for a field left out. For generated
-// code. Its error is BAD_USER_INPUT.
-func NotZero[V any](at string, v V) error {
-	if reflect.ValueOf(&v).Elem().IsZero() {
-		return InputErrorf("%s: invalid value: the empty value cannot be stored on create, where it means the field's default; leave the field out, or set it with an update", at)
-	}
-	return nil
-}
-
 // Validate returns set, the setters an input of c's type gives, once the
 // validators of their columns pass. For generated code: the last step of an
 // input's Setters. input is the input's GraphQL type, "CreatePostInput" or

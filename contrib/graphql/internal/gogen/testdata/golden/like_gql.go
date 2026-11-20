@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion26
+const _ = veloxgql.GeneratedCodeIsVersion27
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the same edge of every row on l's page.
@@ -140,9 +140,6 @@ func (in CreateLikeInput) Setters() ([]velox.Setter[Like], error) {
 		set = append(set, Likes.Weight.Set(*v))
 	}
 	if v := in.CreatedAt; v != nil {
-		if err := gqlgraph.NotZero("CreateLikeInput.createdAt", *v); err != nil {
-			return nil, err
-		}
 		set = append(set, Likes.CreatedAt.Set(*v))
 	}
 	set = append(set, Likes.User.Set(in.UserID))

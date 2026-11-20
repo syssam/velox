@@ -730,23 +730,19 @@ func TestScopeKeyFilled(t *testing.T) {
 	}
 }
 
-// TestExplicitZeroRefused: a create that gives a field with a Default its zero
-// value is refused, not silently given the Default; an update stores it.
-func TestExplicitZeroRefused(t *testing.T) {
+// TestExplicitZeroStored: a create that gives a field with a Default its zero
+// value stores the zero, since an insert fills defaults before the setters
+// (velox decision 0082); one that leaves it out takes the Default.
+func TestExplicitZeroStored(t *testing.T) {
 	s := serve(t)
-	for name, input := range map[string]string{"empty string": 'handle: ""', "zero time": 'joined: "0001-01-01T00:00:00Z"'} {
-		got := s.do("mutation { createAcct(input: {" + input + "}) { handle } }")
-		if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "CreateAcctInput.") {
-			t.Errorf("%s: %s", name, got)
-		}
-	}
-	if n := s.count("accts"); n != 0 {
-		t.Errorf("%d rows after the refusals", n)
-	}
+	s.want("empty string", 'mutation { createAcct(input: {handle: ""}) { handle } }', '{"data":{"createAcct":{"handle":""}}}')
+	s.want("zero time", 'mutation { createAcct(input: {joined: "0001-01-01T00:00:00Z"}) { handle joined } }', '{"data":{"createAcct":{"handle":"anon","joined":"0001-01-01T00:00:00Z"}}}')
 	s.want("left out", "mutation { createAcct(input: {}) { handle } }", '{"data":{"createAcct":{"handle":"anon"}}}')
 	s.want("given", 'mutation { createAcct(input: {handle: "x"}) { handle } }', '{"data":{"createAcct":{"handle":"x"}}}')
-	id := "2"
-	s.want("update", fmt.Sprintf("mutation { updateAcct(id: %q, input: {handle: %q}) { handle } }", id, ""), '{"data":{"updateAcct":{"handle":""}}}')
+	if n := s.count("accts"); n != 4 {
+		t.Errorf("%d rows, want 4", n)
+	}
+	s.want("update", fmt.Sprintf("mutation { updateAcct(id: %q, input: {handle: %q}) { handle } }", "4", ""), '{"data":{"updateAcct":{"handle":""}}}')
 }
 
 // TestSkippedFieldSetByResolver: a required field the create input leaves out
@@ -1289,7 +1285,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullDefault", "TestForeignKeyFilterHidden", "TestUpdateNullKeeps", "TestUpdateNullEdgeKeeps", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestNullableViaServed", "TestSkippedFieldSetByResolver"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestScopeKeyFilled", "TestExplicitZeroStored", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullDefault", "TestForeignKeyFilterHidden", "TestUpdateNullKeeps", "TestUpdateNullEdgeKeeps", "TestNullBytesGoType", "TestForeignKeyFilterOtherScope", "TestListEdgeMaxList", "TestJSONInputExact", "TestUint64HighBit", "TestCreateDefaultServed", "TestJSONListsServed", "TestNullableOrderServed", "TestNullableViaServed", "TestSkippedFieldSetByResolver"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

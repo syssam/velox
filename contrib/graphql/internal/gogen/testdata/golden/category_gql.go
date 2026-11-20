@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion26
+const _ = veloxgql.GeneratedCodeIsVersion27
 
 // Children is the edge children: a connection to the Category nodes it leads
 // to. Its queries batch with the same edge of every row on c's page.

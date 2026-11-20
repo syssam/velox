@@ -343,14 +343,6 @@ func (s *setters) value(i int) error {
 	if conv != "" {
 		v = conv + "(" + src + ")"
 	}
-	// An insert fills the Default into a zero value, so the client's "" or
-	// zero time would not be what it stores. An enum's input is never "",
-	// a zero Default stores the zero, and a list given is never nil.
-	if s.create && fd.HasDefault && !fd.Pointer && fd.Type != "enum" && fd.Type != "json" && !zeroDefault(fd) {
-		f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, f.gqlgraph(), s.at(fi), src)
-		f.p("%s\treturn nil, err", indent)
-		f.p("%s}", indent)
-	}
 	s.add(indent, col+".Set("+v+")")
 	end()
 	return nil

@@ -1047,6 +1047,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox-gen refuses a field named `edges` on an entity with relations, and
   two schemas whose unexported constants share a name (`Ab` with `col_x`
   and `AbCol` with `x`), instead of writing code that does not compile.
+- A GraphQL create input stores a zero value given to a field with a
+  Default (`active: false`, `plan: ""`), as decision 0082 says, instead of
+  refusing it with BAD_USER_INPUT. `gqlgraph.NotZero` is gone, and
+  `veloxgql.GeneratedCodeIsVersion27` replaces Version26: regenerate with
+  the new velox-graphql.
+- `migrate.Up` refuses a hand-edited SQLite rebuild whose INSERT copies a
+  column only by an alias (`NULL AS s`, `'x' s`), fills one column from
+  another (two swapped, by name or by position), or copies only some rows
+  (`WHERE`, `LIMIT`, a join), unless the file allows the loss.
+- `migrate.Resolve` refuses a claim whose file drops a table the database
+  still holds, though the schema the claim leads to does not name it.
 - An `Expr` refuses the functions that read a table, a file or server
   state without a subquery, such as PostgreSQL's `table_to_xml`,
   `query_to_xml` and `pg_read_file`, and MySQL's `LOAD_FILE`.

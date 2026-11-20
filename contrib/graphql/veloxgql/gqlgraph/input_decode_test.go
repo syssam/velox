@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
@@ -64,28 +63,6 @@ func TestIDsRepeats(t *testing.T) {
 	}
 	if k, err := gqlgraph.IDs[string]("x", nil); err != nil || len(k) != 0 {
 		t.Errorf("IDs of none = %v, %v; want none", k, err)
-	}
-}
-
-// TestNotZero: only the field's zero value is refused, with BAD_USER_INPUT
-// naming the input's field.
-func TestNotZero(t *testing.T) {
-	for name, c := range map[string]struct {
-		err  error
-		code string
-	}{
-		`""`:        {gqlgraph.NotZero("In.x", ""), "BAD_USER_INPUT"},
-		"0":         {gqlgraph.NotZero("In.x", 0), "BAD_USER_INPUT"},
-		"zero time": {gqlgraph.NotZero("In.x", time.Time{}), "BAD_USER_INPUT"},
-		`"a"`:       {gqlgraph.NotZero("In.x", "a"), ""},
-		"1":         {gqlgraph.NotZero("In.x", 1), ""},
-	} {
-		if got := codeOf(c.err); got != c.code {
-			t.Errorf("NotZero(%s): code %q, want %q", name, got, c.code)
-		}
-	}
-	if err := gqlgraph.NotZero("In.x", ""); err == nil || !strings.HasPrefix(err.Error(), "veloxgql: In.x: invalid value: ") {
-		t.Errorf("NotZero names %v, want In.x", err)
 	}
 }
 
