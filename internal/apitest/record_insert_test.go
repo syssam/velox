@@ -30,17 +30,26 @@ func recTicket(id int64, owner, title string, done bool) []any {
 }
 
 // TestRecordInsert: Insert and InsertAll on a recording handle report one
-// Change per row, in the order given, whose new row holds what the database
-// filled; they send exactly the statements a handle that does not record
-// sends. The Change holds a copy: the caller's later changes to its entity
-// do not reach it.
+// Change per row, in the order given, whose new row is the row as stored;
+// they send the statements a handle that does not record sends, but read
+// back every column: RETURNING every column on PostgreSQL and SQLite, and
+// on MySQL one read of every column by key in place of the read of the
+// filled columns. The Change holds its own row: the caller's later changes
+// to its entity do not reach it.
 func TestRecordInsert(t *testing.T) {
+	const all = `"id", "name", "status", "score", "note", "tag"`
+	allMy := strings.ReplaceAll(all, `"`, "`")
+	row := func(id int64, name string, score int64) []any { return []any{id, name, "new", score, "n", nil} }
 	for _, c := range []struct {
-		d       velox.Dialect
-		one     func() *fakeconn.Exec // Insert's driver
-		many    func() *fakeconn.Exec // InsertAll's
-		oneLog  []string
-		manyLog []string
+		d        velox.Dialect
+		one      func() *fakeconn.Exec // Insert's driver
+		many     func() *fakeconn.Exec // InsertAll's
+		oneLog   []string
+		manyLog  []string
+		rone     func() *fakeconn.Exec // a recorded Insert's driver
+		rmany    func() *fakeconn.Exec // a recorded InsertAll's
+		roneLog  []string
+		rmanyLog []string
 	}{{
 		d:      velox.Postgres,
 		one:    func() *fakeconn.Exec { return &fakeconn.Exec{Rows: [][]any{{int64(1), "new", int64(7), "n"}}} },
@@ -53,6 +62,14 @@ func TestRecordInsert(t *testing.T) {
 		},
 		manyLog: []string{
 			`INSERT INTO "ddefs" ("name", "score") VALUES ($1, DEFAULT), ($2, $3), ($4, $5), ($6, DEFAULT) RETURNING "id", "status", "score", "note"`,
+		},
+		rone:    func() *fakeconn.Exec { return &fakeconn.Exec{Rows: [][]any{row(1, "a", 7)}} },
+		roneLog: []string{`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING ` + all},
+		rmany: func() *fakeconn.Exec {
+			return &fakeconn.Exec{Rows: [][]any{row(1, "c", 7), row(2, "d", 5), row(3, "e", 6), row(4, "f", 7)}}
+		},
+		rmanyLog: []string{
+			`INSERT INTO "ddefs" ("name", "score") VALUES ($1, DEFAULT), ($2, $3), ($4, $5), ($6, DEFAULT) RETURNING ` + all,
 		},
 	}, {
 		d:      velox.SQLite,
@@ -70,6 +87,18 @@ func TestRecordInsert(t *testing.T) {
 			`INSERT INTO "ddefs" ("name") VALUES (?) RETURNING "id", "status", "score", "note"`,
 			`INSERT INTO "ddefs" ("name", "score") VALUES (?, ?), (?, ?) RETURNING "id", "status", "note"`,
 			`INSERT INTO "ddefs" ("name") VALUES (?) RETURNING "id", "status", "score", "note"`,
+			"COMMIT",
+		},
+		rone:    func() *fakeconn.Exec { return &fakeconn.Exec{Rows: [][]any{row(1, "a", 7)}} },
+		roneLog: []string{`INSERT INTO "ddefs" ("name") VALUES (?) RETURNING ` + all},
+		rmany: func() *fakeconn.Exec {
+			return &fakeconn.Exec{Results: [][][]any{{row(1, "c", 7)}, {row(2, "d", 5), row(3, "e", 6)}, {row(4, "f", 7)}}}
+		},
+		rmanyLog: []string{
+			"BEGIN",
+			`INSERT INTO "ddefs" ("name") VALUES (?) RETURNING ` + all,
+			`INSERT INTO "ddefs" ("name", "score") VALUES (?, ?), (?, ?) RETURNING ` + all,
+			`INSERT INTO "ddefs" ("name") VALUES (?) RETURNING ` + all,
 			"COMMIT",
 		},
 	}, {
@@ -92,6 +121,21 @@ func TestRecordInsert(t *testing.T) {
 			"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, DEFAULT), (?, ?), (?, ?), (?, DEFAULT)",
 			"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
 		},
+		rone: func() *fakeconn.Exec {
+			return &fakeconn.Exec{Affected: 1, LastID: 1, HasLastID: true, Rows: [][]any{row(1, "a", 7)}}
+		},
+		roneLog: []string{
+			"INSERT INTO `ddefs` (`name`) VALUES (?)",
+			"SELECT " + allMy + " FROM `ddefs` WHERE `id` IN (?)",
+		},
+		rmany: func() *fakeconn.Exec {
+			return &fakeconn.Exec{AffectedBy: func(sql string) int64 { return int64(strings.Count(sql, "(?")) }, LastID: 1, HasLastID: true,
+				Rows: [][]any{row(1, "c", 7), row(2, "d", 5), row(3, "e", 6), row(4, "f", 7)}}
+		},
+		rmanyLog: []string{
+			"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, DEFAULT), (?, ?), (?, ?), (?, DEFAULT)",
+			"SELECT " + allMy + " FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
+		},
 	}} {
 		t.Run(c.d.String(), func(t *testing.T) {
 			// Today's statements: a handle that does not record.
@@ -107,12 +151,15 @@ func TestRecordInsert(t *testing.T) {
 
 			var rec velox.Recorder
 			a := dDef{Name: "a"}
-			one, many := c.one(), c.many()
+			one, many := c.rone(), c.rmany()
 			if err := openFake(c.d, one).Record(&rec).Insert(&a).Exec(ctx); err != nil {
 				t.Fatal(err)
 			}
 			// Recorded, in a transaction of its own: the sink runs before COMMIT.
-			wantLog(t, one, append(append([]string{"BEGIN"}, c.oneLog...), "COMMIT"))
+			wantLog(t, one, append(append([]string{"BEGIN"}, c.roneLog...), "COMMIT"))
+			if a.ID != 1 || a.Status != "new" || a.Score != 7 || a.Note == nil || *a.Note != "n" {
+				t.Errorf("Insert: the entity read back %+v", a)
+			}
 			cs := slices.Collect(rec.All())
 			if len(cs) != 1 {
 				t.Fatalf("Insert: %d Changes, want 1", len(cs))
@@ -134,10 +181,10 @@ func TestRecordInsert(t *testing.T) {
 			if err := openFake(c.d, many).Record(&rec).InsertAll(xs).Exec(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if c.manyLog[0] == "BEGIN" {
-				wantLog(t, many, c.manyLog)
+			if c.rmanyLog[0] == "BEGIN" {
+				wantLog(t, many, c.rmanyLog)
 			} else {
-				wantLog(t, many, append(append([]string{"BEGIN"}, c.manyLog...), "COMMIT"))
+				wantLog(t, many, append(append([]string{"BEGIN"}, c.rmanyLog...), "COMMIT"))
 			}
 			cs = slices.Collect(rec.All())
 			if len(cs) != 4 {
@@ -174,7 +221,7 @@ func recDefs() []dDef {
 // TestRecordInsertInTx: inside a transaction a recorded insert and its sink
 // run under a savepoint; the sink runs before it is released.
 func TestRecordInsertInTx(t *testing.T) {
-	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "new", int64(7), "n"}}}
+	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "a", "new", int64(7), "n", nil}}}
 	var at []int
 	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
 		at = append(at, len(e.Log))
@@ -189,7 +236,7 @@ func TestRecordInsertInTx(t *testing.T) {
 	wantLog(t, e, []string{
 		"BEGIN",
 		"SAVEPOINT velox_1",
-		`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`,
+		`INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "name", "status", "score", "note", "tag"`,
 		"RELEASE SAVEPOINT velox_1",
 		"COMMIT",
 	})
@@ -202,7 +249,7 @@ func TestRecordInsertInTx(t *testing.T) {
 // transaction runs in one of velox's own; the sink runs after the INSERT,
 // before COMMIT, and its error rolls the insert back.
 func TestRecordInsertOutsideTx(t *testing.T) {
-	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "new", int64(7), "n"}}}
+	e := &fakeconn.Exec{Rows: [][]any{{int64(1), "a", "new", int64(7), "n", nil}}}
 	errBoom := errors.New("boom")
 	var at []int
 	sink := velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error {
@@ -213,7 +260,7 @@ func TestRecordInsertOutsideTx(t *testing.T) {
 	if err != errBoom {
 		t.Fatalf("got %v, want the sink's error", err)
 	}
-	wantLog(t, e, []string{"BEGIN", `INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "status", "score", "note"`, "ROLLBACK"})
+	wantLog(t, e, []string{"BEGIN", `INSERT INTO "ddefs" ("name") VALUES ($1) RETURNING "id", "name", "status", "score", "note", "tag"`, "ROLLBACK"})
 	if !slices.Equal(at, []int{2}) {
 		t.Errorf("the sink ran after %v statements, want once after the INSERT", at)
 	}
@@ -585,5 +632,90 @@ func TestRecordRewriteDropsReturning(t *testing.T) {
 	e = &fakeconn.Exec{Affected: 1}
 	if err := openFake(velox.Postgres, e, drop).Insert(&dDef{Name: "a"}).Exec(ctx); err != nil || len(e.Log) != 1 || strings.Contains(e.Log[0], "RETURNING") {
 		t.Errorf("without recording: %v, sent %q", err, e.Log)
+	}
+}
+
+// TestRecordInsertStoredRow: a recorded insert's new row is the row as the
+// database stored it, which may differ from the Go value sent (a decimal
+// rounded to its scale, a time to the microsecond): on PostgreSQL and
+// SQLite the INSERT returns every column, on MySQL one read by key follows
+// it, in the write's transaction. The caller's entity gets only the key
+// and the columns the database filled, as without recording.
+func TestRecordInsertStoredRow(t *testing.T) {
+	L := testmodel.Ledgers
+	for _, c := range []struct {
+		d    velox.Dialect
+		e    func() *fakeconn.Exec
+		log  []string
+		many []string
+	}{{
+		d:    velox.Postgres,
+		e:    func() *fakeconn.Exec { return &fakeconn.Exec{Rows: [][]any{{int64(1), "1.56", nil}}} },
+		log:  []string{"BEGIN", `INSERT INTO "ledgers" ("amount") VALUES ($1) RETURNING "id", "amount", "fee"`, "COMMIT"},
+		many: []string{"BEGIN", `INSERT INTO "ledgers" ("amount") VALUES ($1) RETURNING "id", "amount", "fee"`, "COMMIT"},
+	}, {
+		d:    velox.SQLite,
+		e:    func() *fakeconn.Exec { return &fakeconn.Exec{Rows: [][]any{{int64(1), "1.56", nil}}} },
+		log:  []string{"BEGIN", `INSERT INTO "ledgers" ("amount") VALUES (?) RETURNING "id", "amount", "fee"`, "COMMIT"},
+		many: []string{"BEGIN", `INSERT INTO "ledgers" ("amount") VALUES (?) RETURNING "id", "amount", "fee"`, "COMMIT"},
+	}, {
+		d: velox.MySQL,
+		e: func() *fakeconn.Exec {
+			return &fakeconn.Exec{Affected: 1, LastID: 1, HasLastID: true, Rows: [][]any{{int64(1), "1.56", nil}}}
+		},
+		log:  []string{"BEGIN", "INSERT INTO `ledgers` (`amount`) VALUES (?)", "SELECT `id`, `amount`, `fee` FROM `ledgers` WHERE `id` IN (?)", "COMMIT"},
+		many: []string{"BEGIN", "INSERT INTO `ledgers` (`amount`) VALUES (?)", "SELECT `id`, `amount`, `fee` FROM `ledgers` WHERE `id` IN (?)", "COMMIT"},
+	}} {
+		t.Run(c.d.String(), func(t *testing.T) {
+			var rec velox.Recorder
+			e := c.e()
+			x := testmodel.Ledger{Amount: "1.555"}
+			if err := openFake(c.d, e).Record(&rec).Insert(&x).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+			wantLog(t, e, c.log)
+			cs := slices.Collect(rec.All())
+			if len(cs) != 1 || L.Amount.New(cs[0]) != "1.56" || cs[0].Key != int64(1) {
+				t.Fatalf("Insert: Changes %+v, amount %q", cs, L.Amount.New(cs[0]))
+			}
+			if x.ID != 1 || x.Amount != "1.555" {
+				t.Errorf("Insert: the caller's entity %+v", x)
+			}
+
+			rec.Reset()
+			e = c.e()
+			xs := []testmodel.Ledger{{Amount: "1.555"}}
+			if err := openFake(c.d, e).Record(&rec).InsertAll(xs).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+			wantLog(t, e, c.many)
+			cs = slices.Collect(rec.All())
+			if len(cs) != 1 || L.Amount.New(cs[0]) != "1.56" || cs[0].Key != int64(1) {
+				t.Fatalf("InsertAll: Changes %+v", cs)
+			}
+			if xs[0].ID != 1 || xs[0].Amount != "1.555" {
+				t.Errorf("InsertAll: the caller's entity %+v", xs[0])
+			}
+		})
+	}
+}
+
+// TestRecordUpsertEntityOwnsValues: the columns a recorded upsert reads back
+// into the caller's entity are its own: a later change through a pointer
+// field does not reach the Change's new row.
+func TestRecordUpsertEntityOwnsValues(t *testing.T) {
+	e := &fakeconn.Exec{Results: [][][]any{{}, {{int64(1), "a", "new", int64(7), "n", nil}}}}
+	var rec velox.Recorder
+	a := dDef{Name: "a"}
+	if err := openFake(velox.Postgres, e).Record(&rec).Insert(&a).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if a.ID != 1 || a.Note == nil || *a.Note != "n" {
+		t.Fatalf("read back %+v", a)
+	}
+	*a.Note = "changed later"
+	cs := slices.Collect(rec.All())
+	if len(cs) != 1 || dDefNote.New(cs[0]) != "n" {
+		t.Errorf("the Change's note %q, want n", dDefNote.New(cs[0]))
 	}
 }

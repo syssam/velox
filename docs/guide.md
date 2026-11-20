@@ -1161,10 +1161,13 @@ through the sink's `tx`.
 - For any entity, `c.OldRow()` and `c.NewRow()` are the rows as `*E`, and
   `c.Diff()` lists an update's columns that differ, as
   `FieldChange{Name, Old, New}`. An insert's and a delete's Diff is nil.
-- Times in the rows are in UTC, read or written, so their JSON compares.
-- An insert's new row holds what velox reads back: the generated key and
-  the declared database defaults. A value a trigger or an undeclared
-  database default sets is the Go zero there.
+- An insert's new row is the row as stored. PostgreSQL and SQLite return
+  every column with the INSERT; MySQL reads the rows by key after it, in
+  the write's transaction. A value the column rounds or pads (a decimal's
+  scale, a time's microseconds, a `CHAR`) is as the database holds it, so
+  the row equals a later update's old row. Your entity still holds what
+  you sent, with the key and the declared defaults read back.
+- Times in the rows are in UTC, so their JSON compares.
 - An update that changes no column is not reported. A column an
   `UpdateDefault` fills, such as `updated_at`, does not count: every update
   changes it. `velox.RecordIgnore(I.Customer)` names more columns that do
@@ -1239,6 +1242,9 @@ A handle that does not record sends what it always sent. A recording one
 adds:
 
 - below PostgreSQL 18, one locked read per update or delete;
+- for an insert, `RETURNING` of every column on PostgreSQL and SQLite,
+  and on MySQL one read of every column by key per statement, in place of
+  the read of the declared defaults;
 - outside a transaction, a BEGIN and a COMMIT, for a single statement too;
 - in a transaction, a SAVEPOINT and a RELEASE per write;
 - on PostgreSQL, one `SHOW server_version_num` per pool, at the first

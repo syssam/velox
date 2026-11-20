@@ -67,7 +67,7 @@ var (
 	values = []method{
 		{"Old", "returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.", "(ch Change) V",
 			"return changeValue[E, V](ch, ch.row.Old, c.I)"},
-		{"New", "returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.", "(ch Change) V",
+		{"New", "returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.", "(ch Change) V",
 			"return changeValue[E, V](ch, ch.row.New, c.I)"},
 	}
 	ptrs = []method{

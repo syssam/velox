@@ -251,7 +251,7 @@ var (
 )
 
 // utcTimes puts each time.Time and *time.Time column of the row of in at p,
-// a recorded row the engine owns (a read, or ownCopy of an inserted entity),
+// a recorded row the engine owns (a row read back, or ownCopy of an entity),
 // in UTC, its monotonic reading dropped, so that rows read and rows written
 // marshal a time in one form. A *time.Time gets a new pointer: what the old
 // one points to is left as it was. A nil p is left alone. A column of a

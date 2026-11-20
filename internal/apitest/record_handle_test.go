@@ -40,8 +40,9 @@ func ignoresOne(m map[*engine.EntityInfo][]int, entity string) bool {
 	return false
 }
 
-// TestRecordHandleOnly:Record returns a new handle; the one it was called
-// on records nothing and sends what it sent before.
+// TestRecordHandleOnly: Record returns a new handle; the one it was called
+// on records nothing and sends what it sent before. The recording handle's
+// insert returns every column, the row as stored.
 func TestRecordHandleOnly(t *testing.T) {
 	ctx := context.Background()
 	e := &fakeconn.Exec{Affected: 1}
@@ -62,11 +63,12 @@ func TestRecordHandleOnly(t *testing.T) {
 	if !recInto(t, rdb, &rec) {
 		t.Error("the handle Record returns does not record into its sink")
 	}
+	e.Rows = [][]any{{int64(1), "x"}}
 	if err := rdb.Insert(&fixture.Dnote{Owner: "x"}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if e.SQL != plain {
-		t.Errorf("a recording handle sent\n%s\nwant\n%s", e.SQL, plain)
+	if want := `INSERT INTO "dnotes" ("owner") VALUES ($1) RETURNING "id", "owner"`; e.SQL != want {
+		t.Errorf("a recording handle sent\n%s\nwant\n%s", e.SQL, want)
 	}
 	e.Log = nil
 	rec.Reset() // of recInto's Change
@@ -181,7 +183,7 @@ func (*rhook) VeloxMeta() *velox.Meta[rhook] {
 
 func TestRecordHookDBRecords(t *testing.T) {
 	ctx := context.Background()
-	e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1)}}}
+	e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1), "x"}}}
 	var rec velox.Recorder
 	var rhookDB *velox.DB
 	rdb := openFake(velox.Postgres, e, velox.WithHooks[rhook](keepDB(&rhookDB))).Record(&rec)
@@ -254,7 +256,7 @@ func TestRecordHookWriteOwnSinkCall(t *testing.T) {
 				return next.Mutate(ctx, m)
 			})
 		}
-		e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1)}}}
+		e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1), "x"}}}
 		var calls [][]string
 		sink := velox.RecordFunc(func(_ context.Context, _ *velox.DB, cs []velox.Change) error {
 			var names []string

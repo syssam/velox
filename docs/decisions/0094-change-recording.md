@@ -96,9 +96,13 @@ package. As handle methods they cost a few KB per entity package
    (and outside the caller's transaction its own transaction), in the
    order the hook makes the two writes.
 3. **Values.** Plain Go values, as `Mutation.Value` gives them; a JSON
-   column's decoded value. An insert's new row holds what velox reads back
-   (0093): a generated key and the declared database defaults. A value a
-   trigger or an undeclared database default sets is the Go zero there.
+   column's decoded value. An insert's new row is the row as stored:
+   PostgreSQL and SQLite return every column with the INSERT, and MySQL
+   reads the rows by key after it, in the write's transaction. A value the
+   column rounds or pads (a decimal's scale, a time's precision, a `CHAR`),
+   the key and the defaults the database filled are as stored, so the row
+   equals a later update's old row. The caller's entity still gets only the
+   key and the declared defaults (0093), as without recording.
    - `Sensitive` keeps ent's meaning: not printable and not serializable.
      The getters and `RowsOf` give real values. `OldRow` and `NewRow`
      marshal without the column (`json:"-"`), and `Diff` leaves it out.

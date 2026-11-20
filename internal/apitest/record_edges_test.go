@@ -198,14 +198,14 @@ func TestRecordBidiRepoint(t *testing.T) {
 		}
 	})
 	t.Run("insert", func(t *testing.T) {
-		e := &fakeconn.Exec{Affected: 1, Results: [][][]any{{spouse(1, 0)}, {spouse(1, 6)}}}
+		e := &fakeconn.Exec{Affected: 1, Results: [][][]any{{spouse(6, 1)}, {spouse(1, 0)}, {spouse(1, 6)}}}
 		var rec velox.Recorder
 		if err := openFake(velox.Postgres, e).Record(&rec).Insert(&bspouse{ID: 6, SpouseID: new(int64(1))}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		wantLog(t, e, []string{
 			"BEGIN",
-			`INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2)`,
+			`INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2) RETURNING ` + cols,
 			`SELECT ` + cols + ` FROM "bspouses" WHERE "id" = $1 AND "spouse_id" IS NULL ORDER BY "id"` + lock,
 			`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "id" IN ($3) RETURNING ` + cols,
 			"COMMIT",

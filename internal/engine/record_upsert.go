@@ -112,10 +112,10 @@ func refuseUnfindable(d Dialect, in *EntityInfo, cf *ConflictClause, gen int, ro
 
 // sendRecorded sends st, the recorded insert of the entities at rows with
 // the generated key column gen (-1 for none), and returns their ChangeRows
-// and the rows the statement affected. A plain insert is sent with send,
-// and reports each row, in order, as an insert whose new row is a copy of
-// the entity, taken after send read back what the database filled; none
-// when the statement affected no row. An upsert on PostgreSQL 18 or later,
+// and the rows the statement affected. A plain insert reports each row, in
+// order, as an insert whose new row is the row as stored: on PostgreSQL and
+// SQLite it is sent by insertReturning, on MySQL with send and a read by
+// key (insertRead). An upsert on PostgreSQL 18 or later,
 // st.returnOld, is sent by returningBoth; below, it reports as conflictRead
 // says: on PostgreSQL and SQLite it is sent by conflictRead.returning, on
 // MySQL with send.
@@ -147,24 +147,130 @@ func sendRecorded(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Poin
 		return cs, n, err
 	}
 	st.recorded = true
-	n, err := send(ctx, tx, st)
+	if tx.D != MySQL {
+		return insertReturning(ctx, tx, st, rows)
+	}
+	return insertRead(ctx, tx, st, rows, send)
+}
+
+// insertReturning sends st, the recorded plain insert of rows on PostgreSQL
+// or SQLite, with RETURNING every column instead of what PlanInsert set
+// (st.ret), and reports each row that comes back, in its order, as an
+// insert whose new row is the row as stored: a value the database rounds
+// or pads (a decimal's scale, a time's microseconds, a CHAR) is reported as
+// it holds it. The rows come back in the order of the VALUES (ADR 0093): the
+// entities get the columns PlanInsert would have read back, and nothing
+// else, so that they end as a handle that does not record leaves them. On
+// the join entity of a bidirectional edge the rows hold each link and its
+// mirror (MirrorRows), and the entities read nothing back.
+func insertReturning(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer) ([]ChangeRow, int64, error) {
+	in, base := st.Entity, st.ret
+	cols := everyColumn(in)
+	st.Returning, st.ret = cols, cols
+	var news []unsafe.Pointer
+	err := returnedRows(ctx, tx, st, InfoTable(in), cols, false, false, func(got, _ []unsafe.Pointer) error {
+		news = got
+		if InfoBidi(in) || len(base) == 0 {
+			return nil
+		}
+		if len(got) != len(rows) {
+			return fmt.Errorf("velox: %s: a recorded insert of %d rows returned %d; the write is rolled back", in.Name, len(rows), len(got))
+		}
+		for i, p := range got {
+			copyColumns(in, base, rows[i], p)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, 0, err
 	}
-	if n == 0 {
-		return nil, n, nil
+	out := make([]ChangeRow, len(news))
+	for i, p := range news {
+		out[i] = ChangeRow{Op: OpInsert, In: in, New: p}
+	}
+	return out, int64(len(news)), nil
+}
+
+// insertRead sends st, the recorded plain insert of rows on MySQL, with
+// send, and reports each row, in order, as an insert whose new row is the
+// row as stored, read by its key after the INSERT, every column, in the
+// write's transaction: MySQL has no RETURNING. That one read also gives the
+// entities the columns the database's defaults filled (st.fill), which
+// send then does not read (readFilled). A row the read cannot find (an
+// entity without a key, a key the driver did not report) is reported as a
+// copy of the entity. On the join entity of a bidirectional edge each link
+// reports its mirror row after it.
+func insertRead(ctx context.Context, tx *DB, st *Statement, rows []unsafe.Pointer, send insertSend) ([]ChangeRow, int64, error) {
+	fill := st.fill
+	st.fill = nil
+	n, err := send(ctx, tx, st)
+	st.fill = fill
+	if err != nil || n == 0 {
+		return nil, n, err
 	}
 	in := st.Entity
+	bidi := InfoBidi(in)
+	stored, err := readStored(ctx, tx, in, rows, bidi)
+	if err != nil {
+		return nil, 0, err
+	}
+	// row is the stored row of key k, or fallback() when the read did not find it.
+	row := func(k []any, fallback func() unsafe.Pointer) unsafe.Pointer {
+		if p := stored[keyString(k)]; p != nil && len(k) > 0 {
+			return p
+		}
+		return fallback()
+	}
 	out := make([]ChangeRow, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, ChangeRow{Op: OpInsert, In: in, New: ownCopy(in, p)})
-		if InfoBidi(in) && !selfLink(Elem(fieldAddr(in, p, 0)), Elem(fieldAddr(in, p, 1))) {
+		k := rowKey(in, p)
+		cur := row(k, func() unsafe.Pointer { return ownCopy(in, p) })
+		copyColumns(in, fill, p, cur)
+		out = append(out, ChangeRow{Op: OpInsert, In: in, New: cur})
+		if bidi && !selfLink(Elem(fieldAddr(in, p, 0)), Elem(fieldAddr(in, p, 1))) {
 			// The join entity of a bidirectional edge: the INSERT wrote the
 			// link's mirror row too (MirrorRows).
-			out = append(out, ChangeRow{Op: OpInsert, In: in, New: mirrorCopy(in, p)})
+			m := k
+			if mk, ok := mirrorKey(in.PrimaryKey, k); ok {
+				m = mk
+			}
+			out = append(out, ChangeRow{Op: OpInsert, In: in, New: row(m, func() unsafe.Pointer { return mirrorCopy(in, p) })})
 		}
 	}
 	return out, n, nil
+}
+
+// readStored reads the rows of rows, entities of in just inserted, every
+// column, by their primary keys, and returns them by keyString of their
+// keys; with bidi, the keys of their mirror rows too. It reads without the
+// Read policy or the interceptors, as readFilled does. An entity without a
+// key reads nothing.
+func readStored(ctx context.Context, tx *DB, in *EntityInfo, rows []unsafe.Pointer, bidi bool) (map[string]unsafe.Pointer, error) {
+	if len(in.PrimaryKey) == 0 {
+		return nil, nil
+	}
+	keys := make([][]any, 0, len(rows))
+	for _, p := range rows {
+		k := rowKey(in, p)
+		keys = append(keys, k)
+		if m, ok := mirrorKey(in.PrimaryKey, k); bidi && ok {
+			keys = append(keys, m)
+		}
+	}
+	t := InfoTable(in)
+	rdb := tx.WithoutPolicy("velox: the rows a recorded insert wrote")
+	q := QueryTable(rdb, t).Where(keysIn(t, keys)).Columns(everyColumn(in)...).AllowUnbounded()
+	q.st.unscoped = true
+	got, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]unsafe.Pointer, got.n)
+	for i := range got.n {
+		p := got.at(i)
+		out[keyString(rowKey(in, p))] = p
+	}
+	return out, nil
 }
 
 // mirrorCopy is ownCopy of the row of in, the join entity of a
@@ -190,17 +296,33 @@ func mirrorCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 func ownCopy(in *EntityInfo, p unsafe.Pointer) unsafe.Pointer {
 	dst := InfoTable(in).state().newRow()
 	for i := range in.Columns {
-		c := &in.Columns[i]
-		typ := GoType(*c)
-		src := reflect.NewAt(typ, unsafe.Add(p, c.off)).Elem()
-		to := reflect.NewAt(typ, unsafe.Add(dst, c.off)).Elem()
-		if holdsRefs(typ) {
-			to.Set(cloneValue(src))
-		} else {
-			to.Set(src)
-		}
+		copyColumn(in, i, dst, p)
 	}
 	return dst
+}
+
+// copyColumns copies the columns cols of the row of in at src into the row
+// at dst, a deep copy of each field that holds memory, as ownCopy does: a
+// recorded write that reads a row back gives the caller's entity its own
+// values, which share no memory with the Change's row.
+func copyColumns(in *EntityInfo, cols []int, dst, src unsafe.Pointer) {
+	for _, c := range cols {
+		copyColumn(in, c, dst, src)
+	}
+}
+
+// copyColumn copies column col of the row of in at src into the row at
+// dst, deeply when its field holds memory (holdsRefs).
+func copyColumn(in *EntityInfo, col int, dst, src unsafe.Pointer) {
+	c := &in.Columns[col]
+	typ := GoType(*c)
+	from := reflect.NewAt(typ, unsafe.Add(src, c.off)).Elem()
+	to := reflect.NewAt(typ, unsafe.Add(dst, c.off)).Elem()
+	if holdsRefs(typ) {
+		to.Set(cloneValue(from))
+	} else {
+		to.Set(from)
+	}
 }
 
 // conflictRead is a recorded upsert below PostgreSQL 18, or with
@@ -403,9 +525,7 @@ func fillUpserted(in *EntityInfo, st *Statement, base []int, news, rows []unsafe
 		return err
 	}
 	for i, p := range news {
-		for _, c := range base {
-			SetElem(fieldAddr(in, dst[i], c), Elem(fieldAddr(in, p, c)))
-		}
+		copyColumns(in, base, dst[i], p)
 	}
 	return nil
 }

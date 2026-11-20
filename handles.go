@@ -67,7 +67,7 @@ func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c Col[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // TimeCol is the handle of a time column: a time field, of time.Time or a type defined on it. I is the column's index; velox-gen sets it.
@@ -168,7 +168,7 @@ func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c TimeCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // OtherCol is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database. I is the column's index; velox-gen sets it.
@@ -271,7 +271,7 @@ func (c OtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c OtherCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // NumberCol is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal. I is the column's index; velox-gen sets it.
@@ -394,7 +394,7 @@ func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NumberCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // StringCol is the handle of a text column. I is the column's index; velox-gen sets it.
@@ -527,7 +527,7 @@ func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c StringCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -608,7 +608,7 @@ func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c NullCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NullCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
@@ -734,7 +734,7 @@ func (c NullTimeCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c NullTimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NullTimeCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
@@ -866,7 +866,7 @@ func (c NullOtherCol[E, V]) Old[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.Old, c.I)
 }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NullOtherCol[E, V]) New[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.New, c.I)
 }
@@ -1020,7 +1020,7 @@ func (c NullNumberCol[E, V]) Old[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.Old, c.I)
 }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NullNumberCol[E, V]) New[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.New, c.I)
 }
@@ -1184,7 +1184,7 @@ func (c NullStringCol[E, V]) Old[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.Old, c.I)
 }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NullStringCol[E, V]) New[_ Lazy[V]](ch Change) V {
 	return changeValue[E, V](ch, ch.row.New, c.I)
 }
@@ -1242,7 +1242,7 @@ func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I)
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -1303,7 +1303,7 @@ func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity. A Null handle's is the field's element, the zero value for NULL; its OldPtr tells NULL apart.
 func (c NullJSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
 
-// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row holds the generated key and declared defaults velox reads back; a value set by a trigger or an undeclared default is the zero value.
+// New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NullJSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
 // OldPtr returns a fresh pointer to the column's value in ch's old row (slice and map contents are shared with the snapshot); nil for NULL, an insert, or ch of another entity.
