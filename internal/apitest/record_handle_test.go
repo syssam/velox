@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"unsafe"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // recEngine is db's engine DB, for the Recording it holds.
@@ -30,6 +32,8 @@ func recInto(t *testing.T, h *velox.DB, r *velox.Recorder) bool {
 	return r.Len() == before+1
 }
 
+// TestRecordHandleOnly: Record returns a new handle; the one it was called
+// on records nothing and sends what it sent before.
 func TestRecordHandleOnly(t *testing.T) {
 	ctx := context.Background()
 	e := &fakeconn.Exec{Affected: 1}
@@ -37,10 +41,10 @@ func TestRecordHandleOnly(t *testing.T) {
 	if recEngine(db).Recording() != nil {
 		t.Fatal("a DB records before Record")
 	}
-	if err := db.Insert(&fixture.Dnote{Owner: "x"}).Exec(ctx); err != nil {
-		t.Fatal(err)
+	const plain = `INSERT INTO "dnotes" ("owner") VALUES ($1) RETURNING "id"`
+	if err := db.Insert(&fixture.Dnote{Owner: "x"}).Exec(ctx); err != nil || e.SQL != plain {
+		t.Fatalf("a plain handle sent %s, %v; want %s", e.SQL, err, plain)
 	}
-	plain := e.SQL
 
 	var rec velox.Recorder
 	rdb := db.Record(&rec)
@@ -55,6 +59,17 @@ func TestRecordHandleOnly(t *testing.T) {
 	}
 	if e.SQL != plain {
 		t.Errorf("a recording handle sent\n%s\nwant\n%s", e.SQL, plain)
+	}
+	e.Log = nil
+	rec.Reset() // of recInto's Change
+	if _, err := db.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Set(I.Total.Set(2)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3`}; !slices.Equal(e.Log, want) {
+		t.Errorf("the handle Record was called on sent %q, want %q", e.Log, want)
+	}
+	if rec.Len() != 0 {
+		t.Errorf("%d Changes from writes on the plain handle", rec.Len())
 	}
 }
 
@@ -122,21 +137,20 @@ func TestRecordOuterHandleInTxIsRefused(t *testing.T) {
 	}
 }
 
-// rhook is an entity whose hook keeps the DB its write runs on.
+// rhook is an entity for a hook given with WithHooks.
 type rhook struct {
 	ID    int64
 	Owner string
 }
 
-var rhookDB *velox.DB
-
-func (*rhook) Hooks() []velox.Hook {
-	return []velox.Hook{func(next velox.Mutator) velox.Mutator {
+// keepDB is a hook that stores in *db the DB its write runs on.
+func keepDB(db **velox.DB) velox.Hook {
+	return func(next velox.Mutator) velox.Mutator {
 		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
-			rhookDB = m.DB()
+			*db = m.DB()
 			return next.Mutate(ctx, m)
 		})
-	}}
+	}
 }
 
 var rhookMeta velox.MetaOnce[rhook]
@@ -144,7 +158,6 @@ var rhookMeta velox.MetaOnce[rhook]
 func (*rhook) VeloxMeta() *velox.Meta[rhook] {
 	return rhookMeta.Load(func() velox.Descriptor[rhook] {
 		return velox.Descriptor[rhook]{
-			Schema:     (*rhook)(nil),
 			Table:      "rhooks",
 			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
 			PrimaryKey: []int{0},
@@ -162,9 +175,9 @@ func TestRecordHookDBRecords(t *testing.T) {
 	ctx := context.Background()
 	e := &fakeconn.Exec{Affected: 1, Rows: [][]any{{int64(1)}}}
 	var rec velox.Recorder
-	rdb := openFake(velox.Postgres, e).Record(&rec)
+	var rhookDB *velox.DB
+	rdb := openFake(velox.Postgres, e, velox.WithHooks[rhook](keepDB(&rhookDB))).Record(&rec)
 
-	rhookDB = nil
 	if err := rdb.Insert(&rhook{Owner: "x"}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}

@@ -10,9 +10,10 @@ import (
 
 // Change is one row a recorded write changed: an insert, an update or a
 // delete of a row of the entity named Entity, the Go type's name without its
-// package ("Invoice"). Key is the row's primary key,
-// before the write for an update or a delete and after it for an insert: the
-// key column's value, or a []any of values for a composite key. Soft marks a
+// package ("Invoice"). Key is the row's primary key, after the write for an
+// insert or an update (an update that assigns the key reports the new one;
+// OldValues holds the old) and before it for a delete: the key column's
+// value, or a []any of values for a composite key. Soft marks a
 // soft delete, whose Op is OpDelete although the row was updated. The rows
 // before and after the write are read with OldValues and NewValues, or typed
 // with RowsOf.

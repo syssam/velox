@@ -67,39 +67,49 @@ func EqualValues(a, b any) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// trackedWrite sends st, an update or a delete, reading the rows it changes.
-// In one transaction (db's, else one of its own) it reads the key and the
-// columns cols of the rows st's conditions match, under st's scope (a
-// Writable read), locked where the dialect can, in key order; sends st
-// narrowed to those keys, a chunk at a time; and, for an update, reads the
-// new values: RETURNING on PostgreSQL and SQLite, a SELECT by key on MySQL.
-// It returns a ChangeRow per row, holding the columns read, and sets
-// mu.Affected.
-func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st *Statement) ([]ChangeRow, error) {
+// trackedWrite sends st, an update or a delete through db, a recording
+// handle, and reports the rows it changes (emit). In one transaction (db's,
+// else one of its own, ownTx) it reads the key and the columns cols of the
+// rows st's conditions match, under st's scope (a Writable read), locked
+// where the dialect can, in key order; sends st narrowed to those keys, a
+// chunk at a time; and, for an update, reads the new values: RETURNING on
+// PostgreSQL and SQLite, a SELECT by key on MySQL. It sets mu.Affected.
+func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st *Statement) error {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
-		return nil, fmt.Errorf("velox: %s: recording needs a primary key to find the rows again", in.Name)
+		return fmt.Errorf("velox: %s: recording needs a primary key to find the rows again", in.Name)
 	}
 	for _, a := range st.Set {
 		if a.Op != AssignSet && slices.Contains(in.PrimaryKey, a.Column) {
-			return nil, fmt.Errorf("velox: %s: recording cannot follow a row whose key %s the update changes by Add or Sub", in.Name, in.Columns[a.Column].Name)
+			return fmt.Errorf("velox: %s: recording cannot follow a row whose key %s the update changes by Add or Sub", in.Name, in.Columns[a.Column].Name)
 		}
 	}
 	tw := tracker{in: in, t: InfoTable(in), cols: cols}
 	tw.read = keyAnd(in, tw.cols)
-	var out []ChangeRow
-	run := func(ctx context.Context, tx *DB) error {
-		var err error
+	return ownTx(ctx, db, func(ctx context.Context, tx *DB) error {
 		mu.Affected = 0
-		out, err = tw.run(ctx, tx, mu, st)
-		return err
+		rows, err := tw.run(ctx, tx, mu, st)
+		if err != nil {
+			return err
+		}
+		return emit(ctx, tx, rows)
+	})
+}
+
+// everyColumn is the index of each of in's columns, in order.
+func everyColumn(in *EntityInfo) []int {
+	cols := make([]int, len(in.Columns))
+	for i := range cols {
+		cols[i] = i
 	}
-	if db.InTx {
-		err := run(ctx, db)
-		return out, err
-	}
-	err := db.Tx(ctx, run)
-	return out, err
+	return cols
+}
+
+// errRecordBidi refuses recording an update that sets the key of a
+// bidirectional one-to-one edge: velox re-points both partners in
+// statements of its own, which recording does not follow.
+func errRecordBidi(in *EntityInfo) error {
+	return fmt.Errorf("velox: %s: recording an update that sets the key of a bidirectional one-to-one edge: velox re-points both partners, which recording does not follow", in.Name)
 }
 
 // keyAnd is in's primary-key columns, then those of cols not in it.

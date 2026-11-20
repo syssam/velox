@@ -214,8 +214,9 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 // assigned twice or an Immutable one and runs the validators; then it sends
 // the statement through the pipeline, whose guard runs first, or under
 // SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected. A
-// write a hook called Track on is sent by trackedWrite, which reads the
-// rows before and after it; under SQL(ctx) it renders as any other.
+// write through a recording handle is sent by trackedWrite, which reads the
+// rows before and after it and reports them; under SQL(ctx) it renders as
+// any other, and records nothing.
 //
 // An update that sets the key of a bidirectional one-to-one edge (EdgeBidi)
 // must name one row by its primary key, and is sent with the statements that
@@ -256,6 +257,9 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 				}
 				st.InTx = true // Exec sends it in a transaction, bidiUpdate's
 				if !mu.Dry {
+					if db.recording(ctx) != nil {
+						return errRecordBidi(in)
+					}
 					return bidiUpdate(ctx, db, mu, keys, k, vs)
 				}
 			}
@@ -265,6 +269,9 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 		var err error
 		mu.SQL, mu.Args, err = db.DryRun(ctx, st)
 		return err
+	}
+	if db.recording(ctx) != nil {
+		return trackedWrite(ctx, db, mu, everyColumn(st.Entity), st)
 	}
 	res, err := ExecWrite(ctx, db, st)
 	if err != nil {

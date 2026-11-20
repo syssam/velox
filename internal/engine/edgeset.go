@@ -336,7 +336,7 @@ func (p EdgePlan) OwnerCols() []int {
 // transaction on db (a savepoint inside one). insert returns the rows it
 // affected: 0, as when a hook did not call next, writes no edge.
 func InsertEdges(ctx context.Context, db *DB, p EdgePlan, owners []unsafe.Pointer, insert func(ctx context.Context, tx *DB) (int64, error)) error {
-	return db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+	return atomically(ctx, db, func(ctx context.Context, tx *DB) error {
 		if err := p.check(ctx, tx); err != nil {
 			return err
 		}
@@ -361,7 +361,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 	}
 	var n int64
 	if !p.Writes() {
-		err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+		err := atomically(ctx, db, func(ctx context.Context, tx *DB) error {
 			if err := p.check(ctx, tx); err != nil {
 				return err
 			}
@@ -372,7 +372,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 		})
 		return n, err
 	}
-	err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+	err := atomically(ctx, db, func(ctx context.Context, tx *DB) error {
 		if err := p.check(ctx, tx); err != nil {
 			return err
 		}

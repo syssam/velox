@@ -229,11 +229,11 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		return err
 	}
 	var err error
-	if db.InTx && !p.Writes() {
-		// One UPDATE, in the caller's transaction: no savepoint, as Exec.
-		err = run(ctx, db)
+	if p.Writes() {
+		err = atomically(ctx, db, run)
 	} else {
-		err = db.Tx(ctx, run)
+		// One UPDATE, in the caller's transaction: no savepoint, as Exec.
+		err = ownTx(ctx, db, run)
 	}
 	if err != nil {
 		return nil, err
@@ -280,14 +280,8 @@ func updateByKey(ctx context.Context, db *DB, t Table, st *Statement, vals []any
 		out, err = q.one(ctx)
 		return err
 	}
-	var err error
-	if db.InTx {
-		// One UPDATE, in the caller's transaction: no savepoint, as Exec.
-		err = run(ctx, db)
-	} else {
-		err = db.Tx(ctx, run)
-	}
-	if err != nil {
+	// One UPDATE, in the caller's transaction: no savepoint, as Exec.
+	if err := ownTx(ctx, db, run); err != nil {
 		return nil, err
 	}
 	return out, nil

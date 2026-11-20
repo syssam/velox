@@ -558,8 +558,10 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		}
 	}()
 	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec}, db.txRoot)
+	mark := db.txRoot.pend.len()
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
+		db.txRoot.pend.truncate(mark)
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
 		rerr := db.undoSavepoint(ctx, name)
@@ -574,6 +576,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		// The nested Tx fails, so its work must not commit with the
 		// transaction: undo it, or break the transaction when that fails too.
 		err = savepointErr(sctx, "release savepoint", err)
+		db.txRoot.pend.truncate(mark)
 		rerr := db.undoSavepoint(ctx, name)
 		db.breakOn(rerr)
 		if rerr != nil && !ended(rerr) && !db.pastTxDeadline() {
@@ -720,6 +723,9 @@ type txFrame struct {
 	ended      atomic.Bool
 	savepoints atomic.Uint64
 	broken     error
+	// pend is, on the frame of a transaction velox opened for a recorded
+	// write (ownTx), the Changes waiting for its COMMIT; nil on any other.
+	pend *pending
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.
