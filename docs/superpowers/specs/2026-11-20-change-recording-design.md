@@ -42,9 +42,11 @@ var rec velox.Recorder
 rdb := db.Record(&rec, velox.RecordIgnore("updated_at"))
 rdb.Update[Invoice]().Where(I.ID.EQ(id)).Set(I.Status.Set(paid)).Exec(ctx)
 for c := range rec.All() {
-    batch.Add(c.Entity, c.Key, c.Op, c.OldValues(), c.NewValues(), c.ChangedFields())
+    batch.Add(c.Entity, c.Key, c.Op, c.OldRow(), c.NewRow(), c.Diff()) // any entity
+    if c.Changed(I.Status) {                                          // typed
+        log.Printf("status %s -> %s", c.Old(I.Status), c.New(I.Status))
+    }
 }
-if old, cur, ok := velox.RowsOf[Invoice](c); ok && old.Status != cur.Status { … }
 ```
 
 ### API
@@ -69,10 +71,19 @@ type Change struct {
     Soft   bool   // a soft delete: Op is OpDelete, the row was updated
     // unexported: the entity and the old and new rows
 }
-func (c Change) OldValues() map[string]any   // nil for an insert
-func (c Change) NewValues() map[string]any   // nil for a delete
-func (c Change) ChangedFields() []FieldChange // updates only; nil otherwise
+// Typed, through a column handle (Go 1.27 generic methods); another entity's
+// handle gives the zero value and false.
+func (c Change) Old[E, V any](col Valued[E, V]) V    // zero for an insert
+func (c Change) New[E, V any](col Valued[E, V]) V    // zero for a delete
+func (c Change) Changed[E any](cols ...Column[E]) bool // any of cols differs
+// Valued[E, V] is Column[E] plus the column's Go type: every typed handle
+// (Col, StringCol, NumberCol, Null*, JSONCol, ...) implements it through an
+// unexported marker method; E and V are inferred from the handle.
 func RowsOf[E any, PE Entity[E]](c Change) (old, cur *E, ok bool)
+// Any entity:
+func (c Change) OldRow() any  // the old *E; nil for an insert
+func (c Change) NewRow() any  // the new *E; nil for a delete
+func (c Change) Diff() []FieldChange // updates: the columns that differ; nil otherwise
 
 type FieldChange struct{ Name string; Old, New any }
 func Diff[E any, PE Entity[E]](before, after *E) []FieldChange // kept
@@ -83,6 +94,8 @@ The following are removed:
 - `Mutation.Track` and `Mutation.Changes`.
 - The agent's `Change` (`Key []any`, `Fields`, `Changed()`).
 - `FieldChange.Changed`.
+- `OldValues`, `NewValues` and `ChangedFields` (string-keyed maps), replaced
+  by the typed getters and `Diff` (2026-11-20).
 
 ### Rules
 
@@ -101,18 +114,25 @@ The following are removed:
    - An update reports a row only when a column outside `RecordIgnore`
      differs. Values are compared by `Equal(T) bool` if the type has one,
      `bytes.Equal` for bytes, and `reflect.DeepEqual` otherwise.
-3. **Values.** Map keys are column names. Values are plain Go values, as
-   `Mutation.Value` gives them; a JSON column holds its decoded field value.
-   - A `Sensitive` column's value is `"***"` in the three methods. It is
-     real in `RowsOf`.
-   - `RecordIgnore` columns are left out of `ChangedFields` only; the
-     snapshots keep every column.
-   - `NewValues` of an insert includes what the database filled (ADR 0093).
+3. **Values.** Values are plain Go values, as `Mutation.Value` gives them; a
+   JSON column holds its decoded field value. `FieldChange.Name` is the
+   column name.
+   - `Sensitive` keeps ent's meaning, not printable and not serializable:
+     the typed getters and `RowsOf` give real values (it is the caller's
+     data, as a struct field is); `OldRow`/`NewRow` marshal without it
+     (`json:"-"`); `Diff` leaves Sensitive columns out. Nothing is masked
+     as `"***"`.
+   - `RecordIgnore` columns are left out of `Diff` and do not make a row
+     count as changed; `Old`, `New`, `OldRow` and `NewRow` still give them.
+   - The new row of an insert includes what the database filled (ADR 0093).
+   - `Key` of an update is the row's key after the write.
 4. **When the sink runs.** It runs after the write's statements succeed and
    before the write method returns, once per Change, in order. A sink error
    is the write's error.
-   - Inside a transaction, the sink runs in it. An audit row written on the
-     transaction commits or rolls back with the change.
+   - Inside a transaction, the write and the sink run under a savepoint; an
+     error from either rolls back to it, so a write that returns an error
+     took no effect. An audit row written on the transaction commits or
+     rolls back with the change.
    - Outside one, the write is committed when the sink runs, and an error
      undoes nothing. This holds on every database and version.
 5. **Rollback.** For a `*Recorder`, velox drops the Changes recorded since a

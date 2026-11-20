@@ -132,6 +132,32 @@
 - [ ] **Step 4: Run** the tests and `go test -race ./internal/engine ./internal/apitest`. Expected: PASS.
 - [ ] **Step 5: Commit** `velox: a recording handle reports each updated and deleted row`.
 
+### Task 3b: Typed accessors on Change
+
+**Files:**
+- Modify: `change.go` (root `Change`: remove `OldValues`, `NewValues`, `ChangedFields`; add `Old`, `New`, `Changed`, `OldRow`, `NewRow`, `Diff`)
+- Modify: `pred.go` or `handles.go` (`type Valued[E, V any] interface{ Column[E]; valued(V) }`, with an unexported marker method on every typed handle kind: Col, OrderedCol, NumberCol, StringCol, NullCol, NullOrderedCol, NullNumberCol, NullStringCol, JSONCol, NullJSONCol)
+- Modify: `internal/engine/record.go` (drop map building and "***" masking; `Diff` skips Sensitive and RecordIgnore columns)
+- Test: `record_internal_test.go`, `internal/apitest/record_write_test.go`
+
+**Interfaces:**
+- Produces:
+  - `func (c Change) Old[E, V any](col Valued[E, V]) V`
+  - `func (c Change) New[E, V any](col Valued[E, V]) V`
+  - `func (c Change) Changed[E any](cols ...Column[E]) bool`
+  - `func (c Change) OldRow() any` and `func (c Change) NewRow() any` (the `*E`, or nil)
+  - `func (c Change) Diff() []FieldChange`
+
+- [ ] **Step 1: Write the failing tests:**
+  - `TestChangeTypedGetters`: `c.Old(I.Total) == 10.0` (typed `float64`, no assertion needed), `c.New(I.Total) == 15.0`, `c.Changed(I.Total)`, `!c.Changed(I.Number)`. Another entity's handle gives zero and false. An insert gives `Old` zero and `OldRow() == nil`; a delete gives `New` zero and `NewRow() == nil`.
+  - `TestChangeRowsMarshal`: `json.Marshal(c.NewRow())` of an entity with a Sensitive field leaves the field out.
+  - `TestChangeDiff`: `Diff()` lists changed columns in column order, leaves out Sensitive and RecordIgnore columns, and is nil for insert and delete. `c.Old(secretCol)` returns the real value.
+  - `TestChangeAccessorsCompileCost`: run `TestGenericTypesCompileSmall`; every bound holds.
+- [ ] **Step 2: Run** them. Expected: FAIL.
+- [ ] **Step 3: Implement.** Replace the Task 3 tests that used `OldValues`/`NewValues`/`ChangedFields` with the new getters.
+- [ ] **Step 4: Run** `go test -race . ./internal/engine ./internal/apitest`, update the API snapshot and read its diff, then run `scripts/quick.sh`. Expected: PASS and `quick: ok`.
+- [ ] **Step 5: Commit** `velox: a Change gives typed old and new values through column handles`.
+
 ### Task 4: Recording inserts and upserts
 
 **Files:**
