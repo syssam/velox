@@ -1,7 +1,8 @@
 # Change recording: design
 
-Status: proposed, 2026-11-20. Replaces the hook API (`Mutation.Track`,
-`Mutation.Changes`) of ADR 0094 as built on branch `lean-inserts` (not pushed).
+Status: built, 2026-11-20; ADR 0094 records the decision. Replaces the hook
+API (`Mutation.Track`, `Mutation.Changes`) of ADR 0094's first text. This
+file was brought in line with the code after it was built.
 
 ## Problem
 
@@ -44,7 +45,7 @@ rdb.Update[Invoice]().Where(I.ID.EQ(id)).Set(I.Status.Set(paid)).Exec(ctx)
 for c := range rec.All() {
     batch.Add(c.Entity, c.Key, c.Op, c.OldRow(), c.NewRow(), c.Diff()) // any entity
     if c.Changed(I.Status) {                                          // typed
-        log.Printf("status %s -> %s", c.Old(I.Status), c.New(I.Status))
+        log.Printf("status %s -> %s", I.Status.Old(c), I.Status.New(c))
     }
 }
 ```
@@ -60,14 +61,14 @@ func (r *Recorder) All() iter.Seq[Change] // what was recorded when called, in o
 func (r *Recorder) Len() int
 func (r *Recorder) Reset()
 
-func (db *DB) Record(s Sink, opts ...RecordOption) *DB
+func (db *DB) Record(s Sink, opts ...RecordOption) *DB // panics on a nil s
 type RecordOption struct{ /* unexported */ }
 func RecordIgnore(columns ...string) RecordOption
 
 type Change struct {
     Entity string // the entity's name, "Invoice"
     Op     Op     // OpInsert, OpUpdate or OpDelete
-    Key    any    // the primary key's value; []any for a composite key
+    Key    any    // the primary key after the write (before it for a delete); []any for a composite key
     Soft   bool   // a soft delete: Op is OpDelete, the row was updated
     // unexported: the entity and the old and new rows
 }
@@ -86,6 +87,10 @@ func (c Change) Diff() []FieldChange // updates: the columns that differ; nil ot
 type FieldChange struct{ Name string; Old, New any }
 func Diff[E any, PE Entity[E]](before, after *E) []FieldChange // kept
 ```
+
+The getters are handle methods because a generic method on `Change` cannot
+satisfy an interface: a `Valued` marker for `c.Old(col)` cost about 23 KB per
+entity package.
 
 The following are removed:
 
@@ -122,7 +127,8 @@ The following are removed:
    - `RecordIgnore` columns are left out of `Diff` and do not make a row
      count as changed; `Old`, `New`, `OldRow` and `NewRow` still give them.
    - The new row of an insert includes what the database filled (ADR 0093).
-   - `Key` of an update is the row's key after the write.
+   - `Key` of an insert or an update is the row's key after the write; of a
+     delete, before it.
 4. **When the sink runs.** It runs after the write's statements succeed and
    before the write method returns, once per Change, in order. A sink error
    is the write's error.
@@ -130,17 +136,22 @@ The following are removed:
      error from either rolls back to it, so a write that returns an error
      took no effect. An audit row written on the transaction commits or
      rolls back with the change.
+   - In a transaction velox opens for the write, the Changes wait for its
+     COMMIT.
    - Outside one, the write is committed when the sink runs, and an error
      undoes nothing. This holds on every database and version.
 5. **Rollback.** For a `*Recorder`, velox drops the Changes recorded since a
    transaction or savepoint began when that transaction or savepoint rolls
-   back, and before each retry of `TxRetrySerializable`. A `RecordFunc`
+   back, and before each retry of `TxRetrySerializable`. It drops them by id,
+   so a Recorder shared by concurrent transactions loses only the rows of
+   the one that rolled back. A `RecordFunc`
    sees every Change as it happens. Its writes on the same transaction roll
    back with it; for side effects outside the database, collect with a
    `Recorder` and act after `Tx` returns.
-6. **No recursion.** A write a sink makes through the recording handle, while
-   that sink runs, is not recorded. The audit row for a change is not itself
-   audited.
+6. **No recursion.** A write a sink makes through the recording handle with
+   the ctx it is given is not recorded (an unexported context key on that
+   ctx only). The audit row for a change is not itself audited. A write under
+   another context is recorded and comes back to the sink.
 7. **Old values are consistent with the write.**
    - **PostgreSQL ≥ 18:** a single statement,
      `UPDATE … RETURNING old.<cols>, new.<cols>`, and
@@ -152,26 +163,57 @@ The following are removed:
        `FOR UPDATE` on SQLite).
      - The write, narrowed to those keys, a chunk at a time.
      - New values by RETURNING, or by a SELECT by key on MySQL.
-   - An update or delete that does not pin one row by key runs in a
-     transaction of its own when it is outside one. Its row count is checked
-     against `MaxRows` (`ErrTooManyRows`, nothing kept).
-   - The server version is read once per pool (`SHOW server_version_num`).
+   - Outside a transaction a recorded write runs in a transaction of its
+     own, but for one statement that commits by itself: an insert of one
+     statement, and on PostgreSQL 18 an update or delete that pins one row
+     by key, or an upsert of one statement. Its row count is checked against
+     `MaxRows` (`ErrTooManyRows`, nothing kept).
+   - The server version is read once per pool (`SHOW server_version_num`),
+     only by recording handles, never seen by hooks, and not cached on
+     failure. In a caller's transaction it is read inside the write's
+     savepoint; for velox's own transaction, before BEGIN. A failed read
+     never aborts a transaction; that write takes the locked read.
+   - On PostgreSQL 18, Changes come in key order as Go compares keys (a text
+     key under a collation other than C may differ), and an upsert's in
+     RETURNING order.
 8. **Upsert.** A row that conflicted and was updated is an update with its
    real old values. A row that was inserted is an insert. A row kept by
    `DoNothing` is not reported. Below PostgreSQL 18, the conflicting rows
-   are read first, locked, by the conflict columns.
+   are read first, locked, by the conflict columns, without the scope or the
+   Read policy.
+   - PostgreSQL and SQLite: `RETURNING` every column; the rows returned are
+     the rows touched.
+   - MySQL: a read by the conflict values, checked against `RowsAffected`
+     (`clientFoundRows=true`, which Connect requires). A row with NULL in a
+     conflict column or a generated key left zero in the target is refused;
+     a conflict on another unique key, or two rows of one InsertAll on one
+     key, fails the write.
+   - Below PostgreSQL 18 a concurrent insert of a new key can be reported as
+     an insert (phantom); PostgreSQL 18 closes it. MySQL's gap locks can
+     deadlock two recorded upserts of new keys (retryable).
 9. **Soft delete.** softdelete's update reports `Op: OpDelete, Soft: true`,
-   with old and new rows.
+   with old and new rows; `Changed` is false and `Diff` nil. The mark is
+   engine-internal, so another soft-delete mixin's update is an update.
 10. **Edges.**
     - A bidirectional one-to-one re-point reports each row it changes.
     - A many-to-many `Add` or `Remove` reports the join entity's inserts and
-      deletes.
+      deletes, both rows of a bidirectional link: a plain insert reports a
+      link's row then its mirror, a `DoNothing` upsert in RETURNING order.
     - Rolling these up into owner-level edge changes is phase 2.
-11. **Cost.**
-    - A handle that does not record sends exactly what it sends today.
-    - `Change` is not generic, and the recording code lives in the engine,
-      so no entity package grows.
-    - `RowsOf[E]` is instantiated only where it is called.
+11. **Fail closed.** A recorded write that cannot account for every row it
+    touched returns an error and is rolled back. A Rewrite hook may not
+    change a recorded write's `RETURNING`.
+
+### Cost
+
+- A handle that does not record sends exactly what it sends today.
+- Below PostgreSQL 18, one locked read per recorded update or delete (BEGIN
+  and COMMIT for a pinned update outside a transaction); a SAVEPOINT and
+  RELEASE per recorded write in a caller's transaction; a read per step of a
+  bidirectional re-point.
+- `Change` is not generic, and the recording code lives in the engine. The
+  handles' `Old` and `New` add about 4 KB to each entity package.
+- `RowsOf[E]` is instantiated only where it is called.
 
 ## Phase 2 (a separate plan)
 

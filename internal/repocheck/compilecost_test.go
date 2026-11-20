@@ -342,11 +342,15 @@ var genericObjects = []struct {
 	// InsertAll is the untyped API's batch insert (engine.InsertAllRows, ADR
 	// 0093): no entity compiles a batch insert of its own. entityDescUse took
 	// 766788 bytes, down from 811916, entityDescHooks 851846, down from 895406,
-	// and entityDescMixin 897136, down from 940492. Mutation.Track and
-	// Mutation.Changes (ADR 0094) add about 1 KB to each package with a hook:
-	// each describes Mutation's methods.
-	{"entityDescUse", "", entityDescUseSrc, 776192},       // measured 766864
-	{"entityDescHooks", "", entityDescHooksBound, 863232}, // measured 852834
+	// and entityDescMixin 897136, down from 940492.
+	//
+	// Change recording (ADR 0094) took Track and Changes off Mutation, and
+	// gave every handle kind Old and New, whose declarations describe Change
+	// in each entity's package: entityDescUse went from 766864 to 771862
+	// bytes, entityDescHooks from 852834 to 856880 and entityDescMixin from
+	// 898106 to 902170, about 4 KB each.
+	{"entityDescUse", "", entityDescUseSrc, 776192},       // measured 771862
+	{"entityDescHooks", "", entityDescHooksBound, 863232}, // measured 856880
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -354,7 +358,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 909312}, // measured 898106
+	{"entityDescMixin", "", entityDescMixinSrc, 909312}, // measured 902170
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

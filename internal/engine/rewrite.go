@@ -125,7 +125,7 @@ func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the RETURNING of a recorded write; recording reports the rows it reads back", name)
 	}
 	if s.op == OpUpdate && !slices.Equal(st.Returning, s.ret) {
-		// A tracked update reads the new values by position (ADR 0094).
+		// A recorded update reads the new values by position (ADR 0094).
 		return changed("Returning")
 	}
 	if st.Lock != s.lock || st.LockWait != s.wait {

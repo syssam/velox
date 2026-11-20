@@ -37,10 +37,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   interceptors. `AssignExpr` is its `AssignOp`; `untyped.SetExpr` is its
   untyped form. `docs/sql.md` lists every way to write SQL in velox and
   which keep the policies.
-- Change tracking (ADR 0094): a hook calls `Mutation.Track` before next, and
-  `Mutation.Changes` yields each row's key and its tracked columns' old and
-  new values after it, for bulk updates and deletes, read in the write's
-  transaction under a lock; `Change.Changed` lists what differs, and
+- Change recording (ADR 0094): `rdb := db.Record(sink)` returns a handle
+  whose writes report each row they change, bulk updates and deletes,
+  upserts, soft deletes and join rows included, as a `velox.Change` with the
+  row before and after the write. `velox.Recorder` collects them and drops
+  what a rolled-back transaction recorded. Read a column typed with
+  `I.Total.Old(c)` and `I.Total.New(c)`, or any entity's rows with
+  `c.OldRow()`, `c.NewRow()` and `c.Diff()`. Old values are read locked in
+  the write's transaction, or on PostgreSQL 18 returned by the write itself.
   `velox.Diff` compares two rows of an entity.
 - veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
   `Mutation` rule lists, and package `privacy` has veloxe's names, with

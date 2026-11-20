@@ -223,9 +223,11 @@ lift it. A hook that must use the typed API of `veloxgen` (another entity, say)
 is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
 
 ent's `m.OldTitle(ctx)` reads one row's old value, on a one-row update,
-with a query outside the update's lock. velox's hook calls `m.Track()`
-before next and reads `m.Changes()` after it: every row of a bulk update or
-delete, old and new values, read locked in the write's transaction.
+with a query outside the update's lock. In velox the writes through a
+recording handle, `db.Record(sink)`, report every row they change, bulk
+updates and deletes included, with the row before and after the write, read
+locked in the write's transaction. `T.Title.Old(c)` is ent's `OldTitle` for
+a recorded `Change` (see the guide's "Recording changes").
 
 A mixin declares behaviour as ent's does, with the same plain methods.
 velox reads them for every entity that lists the mixin, mixins first,

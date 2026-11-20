@@ -26,6 +26,7 @@ app with organizations. You can run it with `cd examples && go run ./tour`.
 - [Writing](#writing)
 - [Transactions](#transactions)
 - [Hooks, policies and interceptors](#hooks-policies-and-interceptors)
+- [Recording changes](#recording-changes)
 - [Multi-tenancy with a scope](#multi-tenancy-with-a-scope)
 - [Soft delete](#soft-delete)
 - [Raw SQL](#raw-sql)
@@ -952,34 +953,9 @@ the DB. Inside it, `m.DB()` is the DB the write runs on, so inside `db.Tx`
 the audit row commits or rolls back with the write. See the
 [hooks example](../examples/hooks).
 
-A change log needs the values a write replaced. A hook calls `m.Track()`
-before next, and ranges over `m.Changes()` after it: one `velox.Change` per
-row, bulk writes included, with the row's key and each tracked column's
-old and new value. `Change.Changed()` lists the columns that differ:
-
-```go
-func audit(next velox.Mutator) velox.Mutator {
-	return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
-		if err := m.Track(); err != nil { // the columns the update assigns
-			return err
-		}
-		if err := next.Mutate(ctx, m); err != nil {
-			return err
-		}
-		for c := range m.Changes() {
-			for _, f := range c.Changed() {
-				log.Printf("%v %s: %v -> %v", c.Key, f.Name, f.Old, f.New)
-			}
-		}
-		return nil
-	})
-}
-```
-
-velox reads the rows, locked, in the write's transaction, then sends the
-write narrowed to their keys, so the old values are the ones it replaced.
-Nothing is read unless a hook calls Track. `velox.Diff(before, after)`
-compares two rows you already hold.
+A change log does not need a hook: a recording handle reports every row a
+write changes, with its old and new values. See
+[Recording changes](#recording-changes).
 
 ### Policies
 
@@ -1059,6 +1035,152 @@ like a `Read` policy, but `WithoutPolicy` does not lift it. It is meant for
 application rules that even admin code should respect, such as hiding
 soft-deleted rows. Declare `Interceptors() []velox.Interceptor` on a schema
 or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`.
+
+## Recording changes
+
+An audit log needs the values a write replaced. `db.Record(sink)` returns a
+handle like `db` whose writes report each row they change to the sink: one
+`velox.Change` per row, bulk updates and deletes included, with the row
+before and after the write. velox reads the old row in the write's own
+transaction, locked, so it is the row the write replaced.
+
+Here every change in a transaction becomes an audit row in the same
+transaction (`I := veloxgen.Invoices`):
+
+```go
+var tx *velox.DB
+audit := velox.RecordFunc(func(ctx context.Context, c velox.Change) error {
+	old, err := json.Marshal(c.OldRow()) // null for an insert
+	if err != nil {
+		return err
+	}
+	cur, err := json.Marshal(c.NewRow()) // null for a delete
+	if err != nil {
+		return err
+	}
+	var changed []string
+	for _, f := range c.Diff() {
+		changed = append(changed, f.Name)
+	}
+	return tx.Insert(&veloxgen.AuditLog{
+		Entity: c.Entity, Key: fmt.Sprint(c.Key), Op: c.Op.String(),
+		OldValues: old, NewValues: cur, ChangedFields: changed,
+	}).Exec(ctx) // the ctx the sink is given: this insert is not recorded
+})
+rdb := db.Record(audit, velox.RecordIgnore("updated_at"))
+err := rdb.Tx(ctx, func(ctx context.Context, t *velox.DB) error {
+	tx = t
+	_, err := tx.Update[veloxgen.Invoice]().Where(I.Total.LT(100)).Set(I.Total.Add(5)).Exec(ctx)
+	return err
+})
+```
+
+On PostgreSQL below 18 the update sends:
+
+```sql
+SAVEPOINT velox_1
+SELECT "id", …, "data" FROM "invoices" WHERE "total" < $1 ORDER BY "id" FOR UPDATE
+UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2
+  WHERE "total" < $3 AND "id" IN ($4, $5) RETURNING "id", …, "data"
+INSERT INTO "audit_logs" …   -- the sink, once per row
+INSERT INTO "audit_logs" …
+RELEASE SAVEPOINT velox_1
+```
+
+SQLite sends the same without `FOR UPDATE`. MySQL has no RETURNING, so it
+reads the new rows with a `SELECT … WHERE id IN (…)` after the UPDATE. On
+PostgreSQL 18 and later the read and the write are one statement:
+
+```sql
+UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2
+  WHERE "total" < $3 RETURNING old."id", …, new."id", …
+```
+
+To act after the commit, collect the changes with a `velox.Recorder`
+instead, and range over `rec.All()` after `Tx` returns. A Recorder drops
+what a transaction, a savepoint or a retried attempt rolled back, so it
+holds what committed. [ExampleDB_Record](../example_record_test.go) builds
+an audit batch this way.
+
+### What a Change holds
+
+- `c.Entity` is the entity's name ("Invoice"), `c.Op` is `OpInsert`,
+  `OpUpdate` or `OpDelete`, and `c.Key` is the row's primary key: after the
+  write for an insert or an update, before it for a delete, a `[]any` for a
+  composite key.
+- `I.Total.Old(c)` and `I.Total.New(c)` read one column, typed. A `Null*`
+  handle gives the element, the zero when NULL. `c.Changed(I.Status)`
+  reports whether an update changed any of the columns given.
+  `velox.RowsOf[veloxgen.Invoice](c)` gives both rows as `*Invoice`.
+- For any entity, `c.OldRow()` and `c.NewRow()` are the rows as `*E`, and
+  `c.Diff()` lists an update's columns that differ, as
+  `FieldChange{Name, Old, New}`. An insert's and a delete's Diff is nil.
+- An update that changes no column is not reported. `RecordIgnore` names
+  columns that do not count, such as `updated_at`; Diff leaves them out,
+  but the getters and the rows still hold them.
+- A `Sensitive` column keeps ent's meaning: it is not printed or
+  serialized. The getters and `RowsOf` give its real value, `OldRow` and
+  `NewRow` marshal without it, and Diff leaves it out. Nothing is masked.
+
+### When the sink runs
+
+The sink runs after the write's statements, before the write returns, once
+per Change, in order. Its error is the write's error.
+
+- In a transaction, the write and the sink run under a savepoint. An error
+  from either rolls back to it, so a recorded write that returns an error
+  took no effect, and an audit row written on the transaction commits or
+  rolls back with the change.
+- Outside a transaction, the write commits first. A sink error undoes
+  nothing.
+- A `RecordFunc` sees each change as it happens, including one a later
+  rollback undoes. For side effects outside the database, use a Recorder.
+- A sink writes with the `ctx` it is given, or through a handle that does
+  not record. A write through the recording handle under another context is
+  recorded, and comes back to the sink.
+
+### Which writes are recorded
+
+Every write through the recording handle, its transactions and savepoints,
+its `WithoutPolicy`, and a hook's `m.DB()`. Raw SQL and dry runs are not.
+
+- **Upsert.** A row that conflicted is an update with its real old values,
+  an inserted row is an insert, and a row `DoNothing` kept is not reported.
+  On MySQL a recorded upsert refuses a row with NULL in a conflict column or
+  a generated key left zero in the conflict target, and fails when a row
+  conflicts on another unique key, or two rows of one InsertAll share a
+  key. Insert such rows without `OnConflict`.
+- **Soft delete.** softdelete's update is reported as `OpDelete` with
+  `c.Soft` true and both rows. `Changed` is false and Diff nil. Another
+  soft-delete mixin's update is reported as an update.
+- **Edges.** Re-pointing a bidirectional one-to-one edge reports each row it
+  changes. A many-to-many `Add` or `Remove` reports the join rows, both rows
+  of a bidirectional link.
+- A recorded write that cannot account for every row it touched fails and
+  is rolled back. A Rewrite hook may not change its `RETURNING`.
+
+### What it costs
+
+A handle that does not record sends what it always sent. A recording one
+adds:
+
+- below PostgreSQL 18, one locked read per update or delete;
+- outside a transaction, a BEGIN and a COMMIT, unless the write is one
+  statement that commits by itself: an insert of one statement, and on
+  PostgreSQL 18 an update or delete of one row by key, or an upsert of one
+  statement;
+- in a transaction, a SAVEPOINT and a RELEASE per write;
+- on PostgreSQL, one `SHOW server_version_num` per pool, at the first
+  recorded write.
+
+Below PostgreSQL 18 an upsert's first read cannot lock a row that is not
+there yet: a row another session inserts under the same key at that moment
+is reported as an insert. On MySQL two recorded upserts of new keys can
+deadlock; `TxRetrySerializable` retries them. An upsert's old rows are read
+without the scope or the Read policy, so a sink can see values the caller
+cannot. [ADR 0094](decisions/0094-change-recording.md) has the details.
+
+`velox.Diff(before, after)` compares two rows you already hold.
 
 ## Multi-tenancy with a scope
 
