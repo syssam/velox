@@ -53,7 +53,9 @@ code does not change.
     key, and its values as the current order's, whatever order it was
     taken under.
   - A nil `v` with no `vs` is the values of an order of no terms, or of one
-    term whose value is NULL, as veloxe wrote both.
+    term whose value is NULL, as veloxe wrote both. A term on the key's own
+    column (`orderBy: ID`) whose value is nil takes the key: veloxe wrote
+    `Cursor{ID}` alone for it.
   - A cursor whose number of values is not the order's number of terms is
     refused as "taken under another order", the existing bad-cursor error.
     So is any legacy cursor on a type whose key has more than one column,
@@ -72,8 +74,9 @@ code does not change.
   Relay allows either answer.
 - **Foreign keys.** With `Veloxe`, `EdgeIDField`'s predicates (`xID`,
   `xIDNEQ`, `xIDIn`, …, `xIDIsNil`, `xIDNotNil`) are the column's alone:
-  no `Table.ScopedKey`, so no EXISTS. 0088's compat rules still apply (a
-  false IsNil adds nothing).
+  no `Table.ScopedKey`, so no EXISTS. The generated code's path,
+  `gqlgraph.Predicate`'s `WhereEdgeID`, shares the helper. 0088's compat
+  rules still apply (a false IsNil adds nothing).
 
 ## Why
 
@@ -133,9 +136,12 @@ code does not change.
 - `contrib/graphql/veloxgql/cursor_test.go`: `TestCursorLegacy`.
 - `contrib/graphql/veloxgql/gqlgraph/compat_test.go`:
   `TestVeloxeLegacyCursor` (VP:P2, P4, P11b, P12 replayed on the probe's
-  rows), `TestVeloxeTieOrder` (VP-ties T1, T2), `TestVeloxePageFlags` and
-  `TestVeloxeForeignKeyPlain`, each against the same case without compat.
+  rows, and `orderBy: ID` both ways), `TestVeloxeTieOrder` (VP-ties T1,
+  T2), `TestVeloxePageFlags`, `TestVeloxeForeignKeyPlain` and
+  `TestVeloxeForeignKeyGenerated` (through `gqlgraph.Predicate`), each
+  against the same case without compat.
 - `contrib/graphql/veloxgql/graphqlgo/parity_test.go`: "a veloxe cursor",
   without compat, equal through gqlgenx and graphqlgo.
 - `contrib/graphql/cmd/velox-graphql/veloxe_e2e_test.go`: generated code
-  under compat=veloxe pages from the probe's cursors through gqlgen.
+  under compat=veloxe pages from the probe's cursors through gqlgen, and
+  filters by a customer a `WithFilter` filter hides.

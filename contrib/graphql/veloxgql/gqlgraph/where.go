@@ -532,7 +532,14 @@ func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
 // compat shows the foreign key in the type, so the scoping would hide
 // nothing, and would only change results and add an EXISTS (ADR 0110).
 func EdgeIDField[V any](f *Filter, field string, col, edge int, target *Type, o Ops[V]) {
-	fk := fkScope{edge: edge, target: target.table(), on: !f.veloxe}
+	edgeIDs(f, field, col, edge, target.table(), o)
+}
+
+// edgeIDs is EdgeIDField with the target's Table, which Predicate's
+// WhereEdgeID calls too: the IDs predicates and IsNil and NotNil of a
+// foreign key, scoped to the relation edge, unless under Type.Veloxe.
+func edgeIDs[V any](f *Filter, field string, col, edge int, target untyped.Table, o Ops[V]) {
+	fk := fkScope{edge: edge, target: target, on: !f.veloxe}
 	ids(f, field, col, o, fk)
 	f.fkNull(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil, fk)
 	f.fkNull(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil, fk)

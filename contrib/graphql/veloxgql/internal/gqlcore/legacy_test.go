@@ -13,6 +13,29 @@ import (
 // parity probe's responses (veloxe's examples/fullgql, compact integers);
 // the others from veloxe's Cursor encoded by msgpack v5.4.1 with veloxe's
 // cursor-time extension, as its MarshalGQL does.
+//
+// To regenerate the others: copy veloxe's gqlrelay Cursor (fields ID, Value
+// and Values, tagged i, v and vs,omitempty) and cursorTime (MarshalMsgpack
+// of []any{t.MarshalBinary(), zone name}, registered with
+// msgpack.RegisterExt(1, (*cursorTime)(nil))) from
+// contrib/graphql/gqlrelay/types.go at veloxe cfd8da5. Encode each with
+// github.com/vmihailenco/msgpack/v5 v5.4.1 (msgpack.GetEncoder, Encode), and
+// write base64.RawStdEncoding of the bytes. The Go values, in order:
+//
+//	Cursor{ID: int64(1)}
+//	Cursor{ID: int64(2), Value: "User-4"}
+//	Cursor{ID: int64(7), Value: &cursorTime{time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)}}
+//	Cursor{ID: int64(8), Value: &cursorTime{time.Date(2026, 1, 1, 0, 0, 0, 0, time.FixedZone("EST", -5*3600))}}
+//	Cursor{ID: int64(9), Value: []any{"b", int64(30)}}
+//	Cursor{ID: int64(10), Value: []any{&cursorTime{time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}, nil}}
+//	Cursor{ID: int64(11), Value: 2.5}
+//	Cursor{ID: int64(12), Value: true}
+//	Cursor{ID: int64(-3), Value: int64(-200)}
+//	Cursor{ID: int64(300), Value: int64(1) << 40}
+//	Cursor{ID: int64(13), Values: []any{"x", int64(1)}}
+//	Cursor{ID: uuid.MustParse("0b9e4f2a-1c3d-4e5f-8a9b-0c1d2e3f4a5b"), Value: "n"}
+//	Cursor{ID: int64(14), Value: int64(0)}
+//	Cursor{ID: int64(15), Value: float32(1.5)}
 var legacyVectors = []struct {
 	s      string
 	key    any

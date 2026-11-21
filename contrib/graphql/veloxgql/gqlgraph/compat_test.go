@@ -62,6 +62,10 @@ func userAge(dir veloxgql.OrderDirection) gqlgraph.OrderTerm[user] {
 	return gqlgraph.TermOf[user]("AGE", dir, int(users.Age.I))
 }
 
+func userID(dir veloxgql.OrderDirection) gqlgraph.OrderTerm[user] {
+	return gqlgraph.TermOf[user]("ID", dir, int(users.ID.I))
+}
+
 func userKey() []gqlgraph.OrderTerm[user] {
 	return []gqlgraph.OrderTerm[user]{gqlgraph.TermOf[user]("id", veloxgql.OrderDirectionAsc, int(users.ID.I))}
 }
@@ -132,6 +136,11 @@ func TestVeloxeLegacyCursor(t *testing.T) {
 		// follow, as on veloxe; the NULLs, which velox puts last (ADR
 		// 0032), come after them.
 		{"age ASC after age 20", "gqFpA6F2FA", false, []gqlgraph.OrderTerm[user]{userAge(asc)}, []int64{1, 5}, true, true},
+		// orderBy ID: veloxe wrote the key alone, Cursor{ID}, as for the
+		// default order; the ID term's value is the key.
+		{"ID ASC after id 2", "gqFpAqF2wA", false, []gqlgraph.OrderTerm[user]{userID(asc)}, []int64{3, 4}, true, true},
+		{"ID DESC after id 4", "gqFpBKF2wA", false, []gqlgraph.OrderTerm[user]{userID(desc)}, []int64{3, 2}, true, true},
+		{"ID DESC last 2 before id 2", "gqFpAqF2wA", true, []gqlgraph.OrderTerm[user]{userID(desc)}, []int64{4, 3}, true, true},
 		// The probe's last cursor in the default order: nothing after it.
 		{"first 2 after id 5", "gqFpBaF2wA", false, nil, []int64{}, false, true},
 	} {
@@ -373,6 +382,62 @@ func TestVeloxeForeignKeyPlain(t *testing.T) {
 			}
 			if ran := l.take("children"); len(ran) != 1 || strings.Contains(ran[0], "EXISTS") {
 				t.Errorf("%s: %q, want one statement with no EXISTS", c.name, ran)
+			}
+		}
+	}
+}
+
+// TestVeloxeForeignKeyGenerated: through gqlgraph.Predicate, the path
+// velox-gen's generated where inputs take, a foreign key's predicates under
+// compat=veloxe are the column's alone, with no EXISTS, when a WithFilter
+// filter hides the owner; without compat they read the hidden owner as null.
+func TestVeloxeForeignKeyGenerated(t *testing.T) {
+	_, raw, _ := edgeDB(t)
+	l := &edgeLog{sql: map[string][]string{}}
+	db := velox.Open(velox.SQLite, raw, velox.WithFilter(hideOwnerFilter), velox.WithAround(l.around))
+	tru := new(true)
+	one := int64(1)
+	typ := func(veloxe bool) *gqlgraph.Type {
+		c := gqlgraph.TableType[child]("Child")
+		c.WhereFields = childInType.WhereFields
+		c.Veloxe = veloxe
+		return c
+	}
+	tbl := untyped.TableOf[child]()
+	for _, c := range []struct {
+		name        string
+		w           *childIn
+		veloxe, def []int64
+	}{
+		{"ownerID 1", &childIn{OwnerID: &one}, []int64{1, 2, 3, 4}, []int64{}},
+		{"ownerIDIn 1", &childIn{OwnerIDIn: []int64{1}}, []int64{1, 2, 3, 4}, []int64{}},
+		{"ownerIDIsNil", &childIn{OwnerIDIsNil: tru}, []int64{7}, []int64{1, 2, 3, 4, 7}},
+		{"ownerIDNotNil", &childIn{OwnerIDNotNil: tru}, []int64{1, 2, 3, 4, 5, 6}, []int64{5, 6}},
+	} {
+		for _, veloxe := range []bool{true, false} {
+			p, err := gqlgraph.Predicate(context.Background(), typ(veloxe), c.w)
+			if err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			l.take("children")
+			rows, err := untyped.Query(db, tbl).Where(p).OrderBy(velox.OrderTerm{Column: 0}).AllowUnbounded().All(hideOwner())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := []int64{}
+			for i := range rows.Len() {
+				got = append(got, *tbl.Field(rows.At(i), 0).(*int64))
+			}
+			want := c.def
+			if veloxe {
+				want = c.veloxe
+			}
+			if !slices.Equal(got, want) {
+				t.Errorf("%s, veloxe %v: %v, want %v", c.name, veloxe, got, want)
+			}
+			ran := l.take("children")
+			if len(ran) != 1 || strings.Contains(ran[0], "EXISTS") != !veloxe {
+				t.Errorf("%s, veloxe %v: %q, want EXISTS only without compat", c.name, veloxe, ran)
 			}
 		}
 	}

@@ -219,6 +219,7 @@ type queryResolver struct{ *Resolver }
 const e2eVeloxeRun = `package app_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http/httptest"
@@ -318,6 +319,30 @@ func TestVeloxeNames(t *testing.T) {
 	got = query("{\"query\":\"query($c: Cursor) { customers(first: 2, after: $c, orderBy: {field: VIP, direction: DESC}) { edges { node { name } } } }\",\"variables\":{\"c\":\"" + page.Data.Customers.PageInfo.EndCursor + "\"}}")
 	if want := "{\"data\":{\"customers\":{\"edges\":[{\"node\":{\"name\":\"bob\"}}]}}}"; got != want {
 		t.Errorf("the next page by vip:\n got %s\nwant %s", got, want)
+	}
+	// A WithFilter filter hides bob, as soft delete would. A foreign key's
+	// predicates are the column's, as veloxe's were (ADR 0110): bob's orders
+	// still match customerId 2 and customerIdIn [2].
+	hideBob := func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+		if entity != "Customer" || op != velox.OpSelect {
+			return velox.NoFilter(), nil
+		}
+		return velox.FieldNEQ("id", 2), nil
+	}
+	hidden := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	hidden.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db, velox.WithFilter(hideBob)), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})))
+	hidden.AddTransport(transport.POST{})
+	for q, want := range map[string]string{
+		"{\"query\":\"{ salesOrders(first: 5, where: {customerId: \\\"2\\\"}) { edges { node { id } } } }\"}":    "{\"data\":{\"salesOrders\":{\"edges\":[{\"node\":{\"id\":\"11\"}},{\"node\":{\"id\":\"12\"}}]}}}",
+		"{\"query\":\"{ salesOrders(first: 5, where: {customerIdIn: [\\\"2\\\"]}) { edges { node { id } } } }\"}": "{\"data\":{\"salesOrders\":{\"edges\":[{\"node\":{\"id\":\"11\"}},{\"node\":{\"id\":\"12\"}}]}}}",
+	} {
+		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		hidden.ServeHTTP(w, req)
+		if got := w.Body.String(); got != want {
+			t.Errorf("bob hidden, %s:\n got %s\nwant %s", q, got, want)
+		}
 	}
 }
 `

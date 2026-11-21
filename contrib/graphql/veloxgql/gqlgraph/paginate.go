@@ -754,15 +754,21 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 // are the order's, whatever order it was taken under. A cursor whose number
 // of values is not the order's number of terms, or a connection whose key
 // has more than one column, which veloxe's cursors never had, is refused as
-// a cursor taken under another order.
+// a cursor taken under another order. A term on the key's own column, as
+// orderBy ID, whose value is nil takes the key: veloxe wrote the key alone
+// for it.
 func (c *Connection) legacy(l *gqlcore.LegacyCursor) (veloxgql.Cursor, error) {
 	last := len(c.terms) - 1
 	vs, ok := l.Values(c.key)
 	if !ok || c.key != last {
 		return veloxgql.Cursor{}, errOtherOrder(c.typ)
 	}
+	key := c.terms[last]
 	terms := make([]veloxgql.CursorTerm, len(vs))
 	for i, v := range vs {
+		if t := c.terms[i]; v == nil && t.edge == 0 && t.col == key.col {
+			v = l.Key
+		}
 		terms[i] = veloxgql.CursorTerm{Field: c.field(i), Direction: c.terms[i].dir, Value: v}
 	}
 	return veloxgql.Cursor{Type: c.typ, Terms: terms, Key: l.Key}, nil
