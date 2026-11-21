@@ -1,4 +1,4 @@
-// Package cost is the cost model veloxgql.Cost documents: what an operation
+// Package cost is the cost model gqlgenx.Cost documents: what an operation
 // reads and sends, counted from its document before any statement runs.
 package cost
 
@@ -37,7 +37,7 @@ const stringUnit = 128
 // Limits is what the cost reads of veloxgql.Limits.
 type Limits struct{ MaxPage, MaxList, MaxIntrospectionCost int }
 
-// Total is veloxgql.Cost: what op costs under l, with vars its variables.
+// Total is gqlgenx.Cost: what op costs under l, with vars its variables.
 func Total(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int {
 	data, meta, _ := Of(schema, op, vars, l)
 	// On a platform whose int is 32 bits a cost over math.MaxInt is

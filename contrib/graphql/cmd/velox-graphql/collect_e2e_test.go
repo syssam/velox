@@ -493,7 +493,7 @@ func starsOfBook(b int64) []int64 {
 
 // newEnv opens the target, makes and seeds the tables, and serves the schema
 // on them, with opts.
-func newEnv(t *testing.T, tg target, opts ...veloxgql.Option) *env {
+func newEnv(t *testing.T, tg target, opts ...gqlgenx.Option) *env {
 	t.Helper()
 	e := &env{target: tg}
 	raw, db := tg.open(t, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
@@ -549,7 +549,7 @@ func newEnv(t *testing.T, tg target, opts ...veloxgql.Option) *env {
 }
 
 // each runs fn on each target, with a fresh database and a server of opts.
-func each(t *testing.T, fn func(t *testing.T, e *env), opts ...veloxgql.Option) {
+func each(t *testing.T, fn func(t *testing.T, e *env), opts ...gqlgenx.Option) {
 	for _, tg := range targets(t) {
 		t.Run(tg.name, func(t *testing.T) { fn(t, newEnv(t, tg, opts...)) })
 	}
@@ -957,7 +957,7 @@ func TestPolicyHidden(t *testing.T) {
 		if len(stmts) != 2 {
 			t.Errorf("%d statements, want 2 (the books, their reviews):\n%s", len(stmts), strings.Join(stmts, "\n"))
 		}
-	}, veloxgql.WithLimits(veloxgql.Limits{MaxList: 10}))
+	}, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10}))
 }
 
 // TestCostRefused: three levels of full pages cost more than the default
@@ -1009,7 +1009,7 @@ func TestListEdgeCap(t *testing.T) {
 		if !strings.Contains(logged, "Book.reviews") || !strings.Contains(logged, "more than 2") {
 			t.Errorf("the error logged does not name Book.reviews and the cap:\n%s", logged)
 		}
-	}, veloxgql.WithLimits(veloxgql.Limits{MaxList: 2}))
+	}, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 2}))
 }
 `
 

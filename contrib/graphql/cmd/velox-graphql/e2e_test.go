@@ -708,7 +708,7 @@ func TestConnections(t *testing.T) {
 	}
 	// A list edge reads at most MaxList rows, the DB's cap being none: more
 	// fail with ErrTooManyRows, and the error names the edge.
-	one := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
+	one := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
 	_, err = ann.Groups(one)
 	if gs, err2 := bob.Groups(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)

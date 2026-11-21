@@ -32,7 +32,7 @@ import (
 // to the edge function), the read of the target that velox would send under
 // that context (its SQL and arguments, after the Read policy, the
 // interceptors and the Rewrite hooks), and the value of
-// veloxgql.WithBatchScope's function, if the extension has one. A row whose resolver's context a field middleware or a
+// gqlgenx.WithBatchScope's function, if the extension has one. A row whose resolver's context a field middleware or a
 // directive scopes otherwise is in a batch of its own scope; a key that cannot
 // be compared (reflect.Value.Comparable) reads alone. A connection's batch
 // keeps its first caller's arguments, those its paginate passed to Paginate,
@@ -296,7 +296,7 @@ type batchKey struct {
 	db         *velox.DB         // veloxgql.DBFromContext's
 	most       int               // EdgeList's MaxList; 0 for the others
 	scope      velox.RowScope
-	app        any // veloxgql.WithBatchScope's value
+	app        any // gqlgenx.WithBatchScope's value
 	// read is the SQL, with its arguments, of a read of target under the
 	// caller's context: two callers whose Read policies, interceptors,
 	// Rewrite hooks or policy bypass make different reads share no batch,

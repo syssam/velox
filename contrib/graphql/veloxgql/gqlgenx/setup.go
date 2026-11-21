@@ -59,7 +59,7 @@ type Server interface {
 // Call SetErrorPresenter again, after it, to give another presenter. Without
 // Setup, the Extension still enforces the limits of the document, the variables and the
 // response, and no body or websocket limit holds, nor one of validation's errors.
-func Setup(srv Server, db *velox.DB, opts ...veloxgql.Option) http.Handler {
+func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler {
 	e := NewExtension(db, opts...)
 	srv.Use(e)
 	srv.SetErrorPresenter(ErrorPresenter(nil))

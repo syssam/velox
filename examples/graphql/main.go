@@ -105,7 +105,7 @@ func serve(ctx context.Context, ln net.Listener) error {
 // the driver's and velox's, which name tables, entities and constraints. It logs
 // the rest with slog, and says "internal error". The directive @admin is the
 // function admin.
-func server(db *velox.DB, opts ...veloxgql.Option) http.Handler {
+func server(db *velox.DB, opts ...gqlgenx.Option) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{
 		Resolvers:  &graph.Resolver{},
 		Directives: graph.DirectiveRoot{Admin: admin},

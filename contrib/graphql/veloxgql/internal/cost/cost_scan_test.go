@@ -10,6 +10,7 @@ import (
 	"github.com/vektah/gqlparser/v2/validator"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // TestCostScans: a where predicate no index serves, Contains, HasPrefix and
@@ -43,7 +44,7 @@ extend type Query { filtered(first: Int, where: UserWhereInput): UserConnection!
 				t.Fatal(err)
 			}
 		}
-		return veloxgql.Cost(schema, doc.Operations[0], vars, l)
+		return gqlgenx.Cost(schema, doc.Operations[0], vars, l)
 	}
 	const count = stmt + 1 + 1 + stmt // filtered(first: 0) { totalCount }
 	for _, c := range []struct {

@@ -36,7 +36,7 @@ var (
 	// ErrFilterTooLarge: a where argument over its budget of the
 	// MaxFilterNodes of LimitsFromContext(ctx) inputs, predicates and values.
 	ErrFilterTooLarge = errors.New("filter is too large")
-	// ErrTooCostly: a request whose Cost is over the MaxCost of the
+	// ErrTooCostly: a request whose gqlgenx.Cost is over the MaxCost of the
 	// adapter's limits. It is returned with the code CodeTooCostly, before
 	// any statement runs.
 	ErrTooCostly = errors.New("request is too costly")

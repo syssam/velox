@@ -8,9 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/vektah/gqlparser/v2/ast"
-
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // parityCase is a request both servers answer.
@@ -48,7 +47,7 @@ var parityCases = []parityCase{
 		// A cursor veloxe wrote, on a type without compat=veloxe: the
 		// connection refuses it with velox's decoding error, gqlgen's
 		// response as before. graphql-go refused the variable before,
-		// when it decoded it (ADR 0110).
+		// when it decoded it (ADR 0108).
 		name:  "a veloxe cursor",
 		query: `query($after: Cursor) { authors(first: 1, after: $after) { edges { node { name } } } }`,
 		vars:  map[string]any{"after": "gqFpAaF2wA"},
@@ -130,14 +129,14 @@ func TestParity(t *testing.T) {
 }
 
 // TestParityMutation: a mutation outside a transaction, gqlgenx's with
-// veloxgql.WithTxFilter leaving it out and graphqlgo's, sends the same
+// gqlgenx.WithTxFilter leaving it out and graphqlgo's, sends the same
 // statements; one whose resolver fails after its insert keeps the row on
 // both, with the same data and error.
 func TestParityMutation(t *testing.T) {
 	ctx := context.Background()
 	gdb, glog := modelDB(t)
 	qdb, qlog := modelDB(t)
-	noTx := veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false })
+	noTx := gqlgenx.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false })
 	servers := []struct {
 		name string
 		srv  server

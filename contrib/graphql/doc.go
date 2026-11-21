@@ -202,7 +202,7 @@
 // edge may set under the limit, lowers that and what the edge costs, and a request
 // refused for a list edge's cost names the edge and these two ways out: it or a connection. The limits are
 // veloxgql.LimitsFromContext(ctx): the ones given to gqlgenx.NewExtension with
-// veloxgql.WithLimits, or veloxgql.DefaultLimits(), which graphqlgo always uses;
+// gqlgenx.WithLimits, or veloxgql.DefaultLimits(), which graphqlgo always uses;
 // under graphqlgo velox's cost is not applied, and the server bounds a
 // request with graphql.WithQueryCost and graphql-go's other limits.
 //
@@ -482,7 +482,7 @@
 // DB and a list edge's MaxList, so callers that differ in them never share a
 // read. Any other context value a Read policy or a Rewrite or Around hook
 // reads, such as the viewer or a role, must be the same for every row of a
-// field, or be returned by veloxgql.WithBatchScope, whose value joins the key:
+// field, or be returned by gqlgenx.WithBatchScope, whose value joins the key:
 // a directive or a field middleware that gives an edge field's resolver another
 // context for some parent rows needs it. Batches belong to one response: a
 // subscription's event starts new ones, and outside a gqlgen field there is no
@@ -535,7 +535,7 @@
 // The limits above each bound one argument. Connections nested in
 // connections multiply, and aliases repeat a field, so a server also limits
 // the cost of the whole request: veloxgql.Limits.MaxCost, 150000 by default.
-// veloxgql.Cost computes it, and gqlgenx.Extension refuses a request over it,
+// gqlgenx.Cost computes it, and gqlgenx.Extension refuses a request over it,
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement. Under
 // graphqlgo velox's cost is not applied: the server sets graphql-go's own,
@@ -736,9 +736,10 @@
 // A field gqlgen reads through a <Field>GQL getter, a JSON field or a field
 // of the application's own Go type, carries @goField(forceResolver: true):
 // gqlc puts it on the Resolver, gqlc -check lists it, and its method is one
-// line that returns the getter's value (obj.SettingsGQL()) or, when the
-// application's gqlc model of the scalar is exactly the field's Go type,
-// the field itself.
+// line. It returns the getter's value (obj.SettingsGQL()). Or it returns
+// the field itself, when the resolver's return type holds the field's Go
+// type: under compat that return type is the application's gqlc model of
+// the scalar, such as any for JSON.
 //
 // gqlc does not read @goField(name:) yet, so velox-gen refuses, naming the
 // schema, the field and the reason, a field or edge that graphql.FieldName

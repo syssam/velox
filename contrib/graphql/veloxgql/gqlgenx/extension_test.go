@@ -256,7 +256,7 @@ func TestZeroOptionPanics(t *testing.T) {
 		return false
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	if !panics(func() { gqlgenx.NewExtension(db, veloxgql.Option{}) }) {
+	if !panics(func() { gqlgenx.NewExtension(db, gqlgenx.Option{}) }) {
 		t.Error("NewExtension(db, Option{}) did not panic")
 	}
 	if !panics(func() { velox.Open(velox.SQLite, sqlDB, velox.Option{}) }) {
@@ -352,12 +352,12 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 
 // serve serves testSchema with resolvers through
 // gqlgenx.NewExtension(db, opts...).
-func serve(db *velox.DB, resolvers map[string]resolver, opts ...veloxgql.Option) *handler.Server {
+func serve(db *velox.DB, resolvers map[string]resolver, opts ...gqlgenx.Option) *handler.Server {
 	return serveSchema(testSchema(resolvers), db, opts...)
 }
 
 // serveSchema serves es through gqlgenx.NewExtension(db, opts...).
-func serveSchema(es graphql.ExecutableSchema, db *velox.DB, opts ...veloxgql.Option) *handler.Server {
+func serveSchema(es graphql.ExecutableSchema, db *velox.DB, opts ...gqlgenx.Option) *handler.Server {
 	srv := handler.New(es)
 	srv.AddTransport(transport.SSE{})
 	srv.AddTransport(transport.POST{})
@@ -438,7 +438,7 @@ func TestExtensionGivesMutationsItsTx(t *testing.T) {
 	}
 	srv := serve(db, map[string]resolver{"add": read, "count": func(ctx context.Context, _ map[string]any) (any, error) {
 		return read(ctx, map[string]any{"id": 0})
-	}}, veloxgql.WithTxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name != "Plain" }))
+	}}, gqlgenx.WithTxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name != "Plain" }))
 
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
 	if got == nil || got == db {
@@ -488,7 +488,7 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 	if err := gqlgenx.NewExtension(db).Validate(nil); err != nil {
 		t.Fatalf("the defaults: %v", err)
 	}
-	if err := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{})).Validate(nil); err != nil {
+	if err := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{})).Validate(nil); err != nil {
 		t.Fatalf("zero limits: %v", err)
 	}
 	for name, set := range map[string]func(*veloxgql.Limits){
@@ -506,7 +506,7 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 	} {
 		var l veloxgql.Limits
 		set(&l)
-		ext := gqlgenx.NewExtension(db, veloxgql.WithLimits(l))
+		ext := gqlgenx.NewExtension(db, gqlgenx.WithLimits(l))
 		want := "gqlgenx.NewExtension: Limits." + name + " is -1, and a limit must not be negative (zero is the default)"
 		if err := ext.Validate(nil); err == nil || err.Error() != want {
 			t.Errorf("%s -1: Validate: %v, want %q", name, err, want)
@@ -538,8 +538,8 @@ func TestTwoServersDiffer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	two := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2}))
-	three := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxPage: 3}))
+	two := serve(db, handlerResolvers(db, nil), gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 2}))
+	three := serve(db, handlerResolvers(db, nil), gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 3}))
 	const tooLarge = `"message":"veloxgql: Person connection: page is over the maximum: first is 3, and the most is 2","path":["page"]`
 	var wg sync.WaitGroup
 	for range 8 {
@@ -560,7 +560,7 @@ func TestTwoServersDiffer(t *testing.T) {
 	}
 	wg.Wait()
 	// The error is ErrPageTooLarge.
-	ctx := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
+	ctx := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
 	if _, err := handlerResolvers(db, nil)["page"](ctx, map[string]any{"first": int64(3)}); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 3 under MaxPage 2: %v, want ErrPageTooLarge", err)
 	}
@@ -855,8 +855,8 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 // gqlgen makes the response once and the operation cannot run again.
 func TestTxOptionsRefuseRetry(t *testing.T) {
 	db, _ := handlerDB(t)
-	err := gqlgenx.NewExtension(db, veloxgql.WithTxOptions(velox.TxTimeout(time.Second), velox.TxRetrySerializable(3))).Validate(nil)
-	want := "veloxgql.WithTxOptions: TxRetrySerializable(3) would run the mutation again, and gqlgen makes its response once"
+	err := gqlgenx.NewExtension(db, gqlgenx.WithTxOptions(velox.TxTimeout(time.Second), velox.TxRetrySerializable(3))).Validate(nil)
+	want := "gqlgenx.WithTxOptions: TxRetrySerializable(3) would run the mutation again, and gqlgen makes its response once"
 	if err == nil || err.Error() != want {
 		t.Errorf("Validate = %v, want %q", err, want)
 	}
@@ -864,12 +864,12 @@ func TestTxOptionsRefuseRetry(t *testing.T) {
 		"the last retry asks for none": {velox.TxRetrySerializable(3), velox.TxRetrySerializable(0)},
 		"isolation":                    {velox.TxIsolation(sql.LevelSerializable)},
 	} {
-		if err := gqlgenx.NewExtension(db, veloxgql.WithTxOptions(opts...)).Validate(nil); err != nil {
+		if err := gqlgenx.NewExtension(db, gqlgenx.WithTxOptions(opts...)).Validate(nil); err != nil {
 			t.Errorf("%s: Validate = %v, want nil", name, err)
 		}
 	}
 	// Given twice, the last wins.
-	e := gqlgenx.NewExtension(db, veloxgql.WithTxOptions(velox.TxRetrySerializable(3)), veloxgql.WithTxOptions(velox.TxReadOnly()))
+	e := gqlgenx.NewExtension(db, gqlgenx.WithTxOptions(velox.TxRetrySerializable(3)), gqlgenx.WithTxOptions(velox.TxReadOnly()))
 	if err := e.Validate(nil); err != nil {
 		t.Errorf("the last WithTxOptions should win: %v", err)
 	}
@@ -905,14 +905,14 @@ func TestTxOptionsApply(t *testing.T) {
 			return args["id"], nil
 		},
 	}
-	srv := serve(db, resolvers, veloxgql.WithTxOptions(velox.TxIsolation(sql.LevelSerializable)))
+	srv := serve(db, resolvers, gqlgenx.WithTxOptions(velox.TxIsolation(sql.LevelSerializable)))
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
 	mu.Lock()
 	defer mu.Unlock()
 	if iso != sql.LevelSerializable {
 		t.Errorf("isolation %v, want serializable", iso)
 	}
-	srv = serve(db, resolvers, veloxgql.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
+	srv = serve(db, resolvers, gqlgenx.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
 	mu.Unlock()
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
 	mu.Lock()
@@ -925,7 +925,7 @@ func TestTxOptionsApply(t *testing.T) {
 func TestTxFilter(t *testing.T) {
 	db, l := handlerDB(t)
 	var names []string
-	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithTxFilter(func(ctx context.Context, op *ast.OperationDefinition) bool {
+	srv := serve(db, handlerResolvers(db, nil), gqlgenx.WithTxFilter(func(ctx context.Context, op *ast.OperationDefinition) bool {
 		names = append(names, op.Name)
 		return op.Name != "Login"
 	}))
@@ -945,7 +945,7 @@ func TestTxFilter(t *testing.T) {
 		t.Errorf("the filter saw %q, want each operation once", names)
 	}
 	// A nil filter means every mutation runs in a transaction.
-	srv = serve(db, handlerResolvers(db, nil), veloxgql.WithTxFilter(nil))
+	srv = serve(db, handlerResolvers(db, nil), gqlgenx.WithTxFilter(nil))
 	_ = post(t, context.Background(), srv, `mutation Login { add(id: 3) }`)
 	if _, txs = l.take(); len(txs) != 1 {
 		t.Errorf("nil filter: transactions %q, want one", txs)
@@ -975,7 +975,7 @@ func TestTxFilterReadsItsOwnWrites(t *testing.T) {
 	}
 	srv := serve(db, map[string]resolver{
 		"add": addCount,
-	}, veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
+	}, gqlgenx.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
 	if got, want := post(t, context.Background(), srv, `mutation { add(id: 1) }`), `{"data":{"add":1}}`; got != want {
 		t.Errorf("got %s, want %s: the read after the write did not go to the primary", got, want)
 	}
@@ -998,7 +998,7 @@ func TestTxFilterSkipsTheFieldLock(t *testing.T) {
 		"pair":   func(context.Context, map[string]any) (any, error) { return struct{}{}, nil },
 		"Pair.a": side,
 		"Pair.b": side,
-	}, veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
+	}, gqlgenx.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
 	if got, want := post(t, context.Background(), srv, `mutation { pair { a b } }`), `{"data":{"pair":{"a":2,"b":2}}}`; got != want {
 		t.Errorf("got %s, want %s: both resolvers should be in flight together", got, want)
 	}
@@ -1010,7 +1010,7 @@ func TestTxFilterSkipsTheFieldLock(t *testing.T) {
 // TestTooCostlyPresented for ErrorPresenter); one at the limit runs (Review Focus 4).
 func TestTooCostlyRunsNothing(t *testing.T) {
 	db, l := handlerDB(t)
-	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxCost: 202}))
+	srv := serve(db, handlerResolvers(db, nil), gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 202}))
 
 	// people(first: 30) { totalCount } costs 2 fields and 2 statements, 202; a
 	// __typename more is over.
@@ -1047,17 +1047,17 @@ func TestTooCostlyRunsNothing(t *testing.T) {
 func TestIntrospectionLimit(t *testing.T) {
 	db, l := handlerDB(t)
 	const meta = `{ __type(name: "Query") { name } }` // 2
-	over := veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: 1})
+	over := gqlgenx.WithLimits(veloxgql.Limits{MaxIntrospectionCost: 1})
 	got := post(t, context.Background(), serve(db, handlerResolvers(db, nil), over), meta)
 	const want = `{"errors":[{"message":"veloxgql: request is too costly: its introspection costs 2, and the most is 1","extensions":{"code":"COST_LIMIT_EXCEEDED"}}],"data":null}`
 	if got != want {
 		t.Errorf("over MaxIntrospectionCost:\n got %s\nwant %s", got, want)
 	}
-	tiny := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 1})
+	tiny := gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 1})
 	if got := post(t, context.Background(), serve(db, handlerResolvers(db, nil), tiny), meta); strings.Contains(got, "COST_LIMIT_EXCEEDED") {
 		t.Errorf("a MaxCost of 1 limits introspection: %s", got)
 	}
-	big := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 202, MaxIntrospectionCost: 1 << 40})
+	big := gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 202, MaxIntrospectionCost: 1 << 40})
 	got = post(t, context.Background(), serve(db, handlerResolvers(db, nil), big), `{ people(first: 30) { totalCount __typename } }`)
 	if !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
 		t.Errorf("a large MaxIntrospectionCost loosened MaxCost: %s", got)
@@ -1085,7 +1085,7 @@ func TestDocumentRefused(t *testing.T) {
 		{"over MaxTokens", veloxgql.Limits{MaxTokens: 3}, `{ a b c d }`, `"code":"GRAPHQL_PARSE_FAILED"`},
 		{"a syntax error", veloxgql.Limits{}, `{`, `"code":"GRAPHQL_PARSE_FAILED"`},
 	} {
-		srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(c.lim))
+		srv := serve(db, handlerResolvers(db, nil), gqlgenx.WithLimits(c.lim))
 		if got := post(t, context.Background(), srv, c.query); !strings.Contains(got, c.want) {
 			t.Errorf("%s: %s, want %s", c.name, got, c.want)
 		}
@@ -1099,7 +1099,7 @@ func TestDocumentRefused(t *testing.T) {
 // however they merge: at MaxFields 30, 60 pairs.
 func TestDocumentMergePairs(t *testing.T) {
 	db, _ := handlerDB(t)
-	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 30}))
+	srv := serve(db, handlerResolvers(db, nil), gqlgenx.WithLimits(veloxgql.Limits{MaxFields: 30}))
 	next := 0
 	a := func(n int) string {
 		return spell(n, func(int) string {
@@ -1128,7 +1128,7 @@ func TestDocumentMergePairs(t *testing.T) {
 	for i := range 40 {
 		fmt.Fprintf(&dag, "fragment F%d on Query { x: __schema { ...F%d } y: __schema { ...F%d } } ", i, i+1, i+1)
 	}
-	srv = serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxTokens: 10000}))
+	srv = serve(db, handlerResolvers(db, nil), gqlgenx.WithLimits(veloxgql.Limits{MaxTokens: 10000}))
 	if got := post(t, context.Background(), srv, `{ ...F0 } `+dag.String()+`fragment F40 on Query { a: count }`); !strings.Contains(got, "its fragments spread to over 200000 fields") {
 		t.Errorf("a DAG of fragments: %.300s", got)
 	}
@@ -1140,7 +1140,7 @@ func TestDocumentAndAPQ(t *testing.T) {
 	db, _ := handlerDB(t)
 	es := testSchema(handlerResolvers(db, nil))
 	srv := handler.New(es)
-	srv.Use(gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxFields: 2})))
+	srv.Use(gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxFields: 2})))
 	srv.Use(extension.AutomaticPersistedQuery{Cache: lru.New[string](10)})
 	srv.AddTransport(transport.POST{})
 	const query = `{ a: count b: count c: count }`
@@ -1170,7 +1170,7 @@ func TestDocumentAndAPQ(t *testing.T) {
 func TestSetup(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchema(handlerResolvers(db, nil)))
-	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: 100, MaxFields: 2, MaxTokens: 1000}))
+	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{MaxBodyBytes: 100, MaxFields: 2, MaxTokens: 1000}))
 	srv.AddTransport(transport.POST{})
 	do := func(body io.Reader, length int64) (int, string) {
 		req := httptest.NewRequest(http.MethodPost, "/", body)
@@ -1209,14 +1209,14 @@ func TestSetup(t *testing.T) {
 // the refusal says what can: the schema's annotation, or a connection.
 func TestListCostNamesTheFix(t *testing.T) {
 	db, _ := handlerDB(t)
-	srv := serveSchema(testSchemaOf(`type Query { items: [Item!]! one: Int } type Item { id: ID! }`, nil), db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 500}))
+	srv := serveSchema(testSchemaOf(`type Query { items: [Item!]! one: Int } type Item { id: ID! }`, nil), db, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 500}))
 	got := post(t, context.Background(), srv, `{ items { id } }`)
 	for _, want := range []string{"COST_LIMIT_EXCEEDED", "Query.items", "graphql.MaxList", "a Connection"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in %s", want, got)
 		}
 	}
-	srv = serveSchema(testSchemaOf(`type Query { one: Int }`, nil), db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	srv = serveSchema(testSchemaOf(`type Query { one: Int }`, nil), db, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 2}))
 	if got := post(t, context.Background(), srv, `{ a: one b: one c: one }`); strings.Contains(got, "MaxList") {
 		t.Errorf("no list in the request: %s", got)
 	}
@@ -1227,7 +1227,7 @@ func TestListCostNamesTheFix(t *testing.T) {
 func TestValidationErrorsBounded(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchema(handlerResolvers(db, nil)))
-	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxErrors: 3}))
+	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{MaxErrors: 3}))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) string {
 		body, err := json.Marshal(map[string]string{"query": query})

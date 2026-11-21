@@ -185,6 +185,4 @@ func TestBatchWaits(t *testing.T) {
 	if _, _ = b.Rows(ctx, nil); src.waits.Load() != 1 {
 		t.Errorf("%d waits, want the one of the caller that found the read started", src.waits.Load())
 	}
-	// Without a source, a wait does nothing.
-	wait(context.Background())()
 }

@@ -549,7 +549,7 @@ the branch gets one `bash scripts/ci-local.sh` before merge (CLAUDE.md
    `GeneratedCodeIsVersion28` with a CHANGELOG line. Goldens for both
    engines. ADR 0107.
 5. **split=entity.** 3.3, both engines, the definitions-equal test, the
-   `graphqlgen.Plugin` identity test. ADR 0108.
+   `graphqlgen.Plugin` identity test. ADR: the next free number.
 6. **examples/graphqlgo.** 6.1, with gqlc, its CI lane in ci-local.sh and
    ci.yml, coverage floor lines. Depends on 3-5.
 7. **Measure and document.** bench/scale `500-graphqlgo` with thresholds
@@ -557,12 +557,13 @@ the branch gets one `bash scripts/ci-local.sh` before merge (CLAUDE.md
    `docs/coming-from-ent.md` and the gap analysis rows #115-#117, #133
    updated; UF N-V1/N-V2/N-V3 answered.
 8. **Default engine (if Q4 says so).** Flip the default to graphql-go;
-   examples/graphql passes `engine=gqlgen`. ADR 0109.
+   examples/graphql passes `engine=gqlgen`. ADR: the next free number.
 
 ADRs: 0103 FK predicates and run-time filters; 0104 the veloxgql core and
 its adapters; 0105 the selection source, fail closed; 0106 the graphqlgo
 adapter (limits, opt-in tx and cost); 0107 engine=graphql-go output for
-gqlc; 0108 split=entity; 0109 the default engine (task 8 only).
+gqlc; 0108 veloxe compat paging and FK filters (task 3b). split=entity
+and the default engine (tasks 5 and 8, parked) take the next free numbers.
 
 ### Asks of graphql-go (the user's repository; not velox work)
 
@@ -575,6 +576,9 @@ gqlc; 0108 split=entity; 0109 the default engine (task 8 only).
 - GA4. Serial execution of an operation from an OperationInterceptor
   (`oc.SetSerial()`), so `WithMutationTx` needs no FieldInterceptor.
 - GA5. A tag before velox 1.0 (N-G1).
+- GA6. Keep `Err` on subscription source errors: subscribe's
+  `Errorf("%v", serr)` drops the source's error, so a presenter shows its
+  text and cannot mask it (0106).
 - (GA3, input-field directives, is not needed: see 0.4.)
 
 nextapp must move its pin past 3e0050b to 5d906e7 for the binding-flip

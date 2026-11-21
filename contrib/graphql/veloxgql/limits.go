@@ -1,7 +1,6 @@
 package veloxgql
 
 import (
-	"cmp"
 	"context"
 	"time"
 
@@ -11,9 +10,10 @@ import (
 // Limits caps what a client may ask for. Each bounds one argument or one
 // edge. A zero field means the default.
 //
-// The limits of an operation are its adapter's (WithLimits), which it puts in
-// the operation's context, where LimitsFromContext reads them: two servers in
-// one process can have different limits.
+// The limits of an operation are its adapter's, which it puts in the
+// operation's context, where LimitsFromContext reads them: gqlgenx's those
+// gqlgenx.WithLimits gives, so two servers in one process can have
+// different limits, and graphqlgo's always DefaultLimits().
 type Limits struct {
 	// MaxPage is the largest first or last a connection takes, and the page
 	// size when neither is given. More is ErrPageTooLarge, not a shorter
@@ -50,7 +50,7 @@ type Limits struct {
 	// before any query runs.
 	MaxOrderTerms int
 
-	// MaxCost is the most a request may cost (Cost): the bound on a whole
+	// MaxCost is the most a request may cost (gqlgenx.Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
 	// is ErrTooCostly, before any statement runs. It cannot see a value's size,
 	// which is MaxResponseBytes, or how long a statement takes, which is Timeout. It bounds the statements too,
@@ -128,7 +128,7 @@ type Limits struct {
 	MaxBodyBytes int
 
 	// MaxResponseBytes is the most bytes the strings, the bytes and the JSON of a
-	// response may write, counted as its fields resolve, a string as it is escaped. Cost
+	// response may write, counted as its fields resolve, a string as it is escaped. gqlgenx.Cost
 	// cannot see the size of a value: one stored string of 900 KB under 300 aliases
 	// answered with 270 MB. More is ErrResponseTooLarge, with data null, and the fields
 	// not yet resolved do not run. A subscription's event has its own count.
@@ -167,31 +167,4 @@ func LimitsFromContext(ctx context.Context) Limits {
 		return *l
 	}
 	return DefaultLimits()
-}
-
-// orDefault is l with each zero field taken from DefaultLimits().
-func (l Limits) orDefault() Limits {
-	d := DefaultLimits()
-	return Limits{
-		MaxPage:        cmp.Or(l.MaxPage, d.MaxPage),
-		MaxList:        cmp.Or(l.MaxList, d.MaxList),
-		MaxFilterDepth: cmp.Or(l.MaxFilterDepth, d.MaxFilterDepth),
-		MaxFilterWidth: cmp.Or(l.MaxFilterWidth, d.MaxFilterWidth),
-		MaxFilterNodes: cmp.Or(l.MaxFilterNodes, d.MaxFilterNodes),
-		MaxOrderTerms:  cmp.Or(l.MaxOrderTerms, d.MaxOrderTerms),
-		MaxCost:        cmp.Or(l.MaxCost, d.MaxCost),
-
-		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
-		MaxTokens:            cmp.Or(l.MaxTokens, d.MaxTokens),
-		MaxFields:            cmp.Or(l.MaxFields, d.MaxFields),
-		MaxFragments:         cmp.Or(l.MaxFragments, d.MaxFragments),
-		MaxDepth:             cmp.Or(l.MaxDepth, d.MaxDepth),
-		MaxNameBytes:         cmp.Or(l.MaxNameBytes, d.MaxNameBytes),
-		MaxLiteralBytes:      cmp.Or(l.MaxLiteralBytes, d.MaxLiteralBytes),
-		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
-		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
-		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
-		MaxResponseBytes:     cmp.Or(l.MaxResponseBytes, d.MaxResponseBytes),
-		Timeout:              cmp.Or(l.Timeout, d.Timeout),
-	}
 }

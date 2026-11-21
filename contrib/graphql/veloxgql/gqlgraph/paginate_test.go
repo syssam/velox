@@ -255,7 +255,7 @@ func TestPaginate(t *testing.T) {
 func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
-	ctx = gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
+	ctx = gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
 	p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)

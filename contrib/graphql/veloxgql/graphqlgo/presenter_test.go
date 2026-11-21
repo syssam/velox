@@ -302,3 +302,44 @@ func decodeMoney(v any) (int64, error) {
 	}
 	return 0, errors.New("not a Money")
 }
+
+// TestSubscribeSourceError pins what a client sees of a subscription
+// source function's error under ErrorPresenter: its text, with no code, as
+// graphql-go drops the error before the presenter sees it (ADR 0106; ask
+// GA6). If graphql-go keeps the error, this test fails, and the presenter
+// shows "internal error" instead.
+func TestSubscribeSourceError(t *testing.T) {
+	quiet(t)
+	db, _ := modelDB(t)
+	s, err := graphql.NewSchema(graphql.SDL(`type Query { n: Int } type Subscription { tick: Int }`),
+		graphql.Query(graphql.Field("n", func(graphql.Root) int { return 1 })),
+		graphql.Subscription(graphql.Subscribe("tick", func(context.Context) (<-chan int, error) {
+			return nil, errors.New(`pq: relation "secret" does not exist`)
+		})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logged []error
+	e := newExecutor(s, graphqlgo.With(db), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(func(_ context.Context, err error) { logged = append(logged, err) })))
+	_, err = e.Subscribe(context.Background(), &graphql.Request{Query: `subscription { tick }`})
+	var se *graphql.SubscribeError
+	if !errors.As(err, &se) || len(se.Response.Errors) != 1 {
+		t.Fatalf("Subscribe = %v, want one *SubscribeError", err)
+	}
+	got := se.Response.Errors[0]
+	if got.Message != `pq: relation "secret" does not exist` || got.Extensions["code"] != nil || len(logged) != 0 {
+		t.Errorf("%q %v, logged %v; want the source's text verbatim, no code, nothing logged", got.Message, got.Extensions, logged)
+	}
+}
+
+// TestCodedErrorDefaultPresenter: a velox coded error gives its code to
+// graphql.DefaultErrorPresenter too, through GraphQLExtensions, so a server
+// without ErrorPresenter still sends the code.
+func TestCodedErrorDefaultPresenter(t *testing.T) {
+	for _, err := range []error{gqlgraph.InputErrorf("bad %d", 1), fmt.Errorf("wrapped: %w", gqlgraph.InputErrorf("bad"))} {
+		got := graphql.DefaultErrorPresenter(context.Background(), err)
+		if got.Extensions["code"] != "BAD_USER_INPUT" {
+			t.Errorf("DefaultErrorPresenter(%v) extensions = %v, want code BAD_USER_INPUT", err, got.Extensions)
+		}
+	}
+}

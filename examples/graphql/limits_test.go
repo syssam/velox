@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/examples/graphql/graph"
 	"github.com/vektah/gqlparser/v2"
 )
@@ -240,7 +241,7 @@ func TestMutationStatementsCounted(t *testing.T) {
 		s.mu.Lock()
 		sent := len(s.stmts)
 		s.mu.Unlock()
-		cost := veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
+		cost := gqlgenx.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
 		t.Logf("%-70s sent %3d, cost %d", in, sent, cost)
 		if cost < 100*sent {
 			t.Errorf("%s: sent %d statements, and cost %d", in, sent, cost)
@@ -264,7 +265,7 @@ func TestMutationStatementsCounted(t *testing.T) {
 		s.mu.Lock()
 		sent := len(s.stmts)
 		s.mu.Unlock()
-		cost := veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
+		cost := gqlgenx.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
 		t.Logf("%-70s sent %3d, cost %d", name, sent, cost)
 		if cost < 100*sent || sent < 2 {
 			t.Errorf("%s: sent %d statements, and cost %d", name, sent, cost)

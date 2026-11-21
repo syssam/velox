@@ -47,7 +47,7 @@
 // column's alone. A connection takes the cursors veloxe wrote, as well as
 // its own, and reads their values as the current order's. An order of one
 // term breaks ties by the key in its direction. A page after a cursor has
-// a previous page, and a page before one a next page (docs/decisions/0110).
+// a previous page, and a page before one a next page (docs/decisions/0108).
 //
 // An application whose filters were opt-in field by field, as a veloxe
 // codegen hook made them, asks for where=whitelist: a field other than the

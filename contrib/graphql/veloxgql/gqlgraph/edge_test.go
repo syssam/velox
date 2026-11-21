@@ -267,13 +267,13 @@ func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
 // operation returns ctx inside the operation query, parsed against
 // edgeSchema, with the extension's state for db and a response's table of
 // rows: the context gqlgen gives the operation's resolvers.
-func operation(t *testing.T, db *velox.DB, query string, opts ...veloxgql.Option) context.Context {
+func operation(t *testing.T, db *velox.DB, query string, opts ...gqlgenx.Option) context.Context {
 	t.Helper()
 	return operationIn(t, db, query, edgeSchema, opts...)
 }
 
 // operationIn is operation with schema, which may be nil, as the server's.
-func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, opts ...veloxgql.Option) context.Context {
+func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, opts ...gqlgenx.Option) context.Context {
 	t.Helper()
 	doc, errs := gqlparser.LoadQueryWithRules(edgeSchema, query, nil)
 	if errs != nil {
@@ -836,7 +836,7 @@ func TestEdgeOneBatches(t *testing.T) {
 func TestEdgeListCap(t *testing.T) {
 	db, _, log := edgeDB(t)
 	const query = `{ owners { edges { node { tags { name } } } } }`
-	list := func(t *testing.T, opts ...veloxgql.Option) (map[int64][]int64, map[int64]error) {
+	list := func(t *testing.T, opts ...gqlgenx.Option) (map[int64][]int64, map[int64]error) {
 		t.Helper()
 		ctx := operation(t, db, query, opts...)
 		xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
@@ -861,7 +861,7 @@ func TestEdgeListCap(t *testing.T) {
 	if want := map[int64][]int64{1: {1, 2}, 2: {2}, 3: {}}; !reflect.DeepEqual(got, want) || len(errs) > 0 {
 		t.Errorf("tags %v, %v; want %v", got, errs, want)
 	}
-	got, errs = list(t, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1}))
+	got, errs = list(t, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 1}))
 	if want := map[int64][]int64{2: {2}, 3: {}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("tags under MaxList 1: %v, want %v", got, want)
 	}

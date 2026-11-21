@@ -8,7 +8,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/request"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx/internal/request"
 )
 
 // spell is f(0) to f(n-1), joined by a space.
@@ -31,7 +31,7 @@ func nest(depth int, open, inner, shut string) string {
 // does not allocate what it would through validation.
 func refusal(t *testing.T, l veloxgql.Limits, p *graphql.RawParams) string {
 	t.Helper()
-	b := request.NewBounds(veloxgql.NewConfig(veloxgql.WithLimits(l)).Limits, nil)
+	b := request.NewBounds(request.OrDefault(l), nil)
 	if err := request.Check(p.OperationName, p.Query, p.Variables, b); err != nil {
 		return err.Message
 	}

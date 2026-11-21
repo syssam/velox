@@ -66,7 +66,7 @@ func costOf(t *testing.T, query string, vars map[string]any, l veloxgql.Limits) 
 			t.Fatal(err)
 		}
 	}
-	return veloxgql.Cost(schema, op, vars, l)
+	return gqlgenx.Cost(schema, op, vars, l)
 }
 
 func TestCostConnections(t *testing.T) {
@@ -225,7 +225,7 @@ func TestCostSkipInclude(t *testing.T) {
 		t.Fatal(errs)
 	}
 	for name, v := range map[string]any{"a string": "yes", "null": nil} {
-		if got := veloxgql.Cost(schema, doc.Operations[0], map[string]any{"s": v}, l); got != one {
+		if got := gqlgenx.Cost(schema, doc.Operations[0], map[string]any{"s": v}, l); got != one {
 			t.Errorf("skip by %s variable: cost %d, want %d", name, got, one)
 		}
 	}
@@ -268,7 +268,7 @@ type Mutation { create(input: PostInput!): Post! createMany(input: [PostInput!]!
 		if len(errs) > 0 {
 			t.Fatalf("%s: %v", query, errs)
 		}
-		return veloxgql.Cost(schema, doc.Operations[0], vars, l)
+		return gqlgenx.Cost(schema, doc.Operations[0], vars, l)
 	}
 	// The field and id, its size, its statement, and the writes.
 	cost := func(size, statements int) int { return 2 + size + 100*(1+statements) }
@@ -360,7 +360,7 @@ func TestCostListMaxList(t *testing.T) {
 		if len(errs) > 0 {
 			t.Fatal(errs)
 		}
-		return veloxgql.Cost(schema, doc.Operations[0], nil, l)
+		return gqlgenx.Cost(schema, doc.Operations[0], nil, l)
 	}
 	l := veloxgql.DefaultLimits()
 	nested := `{ members { id groups { id members { id } } } }`
@@ -429,7 +429,7 @@ extend type Query { filtered(first: Int, where: Where, names: [String!]): UserCo
 				t.Fatal(err)
 			}
 		}
-		return veloxgql.Cost(schema, doc.Operations[0], vars, l)
+		return gqlgenx.Cost(schema, doc.Operations[0], vars, l)
 	}
 	const base = stmt + 1 + 1 // filtered(first: 0) { totalCount } without its COUNT
 	count := base + stmt
@@ -572,7 +572,7 @@ func TestCostIntrospection(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatal(errs)
 	}
-	if got := veloxgql.Cost(bigSchema, doc.Operations[0], nil, l); got <= l.MaxCost {
+	if got := gqlgenx.Cost(bigSchema, doc.Operations[0], nil, l); got <= l.MaxCost {
 		t.Errorf("the aliased request: cost %d, within MaxCost %d", got, l.MaxCost)
 	}
 	// Fragments that spread twice over cost each spread, and walk once.
@@ -650,7 +650,7 @@ func TestCostConnectionWithoutArguments(t *testing.T) {
 		t.Fatal(errs)
 	}
 	l := veloxgql.DefaultLimits()
-	if got, want := veloxgql.Cost(schema, doc.Operations[0], nil, l), 3*stmt+1+1+1*(1+(1+1)); got != want {
+	if got, want := gqlgenx.Cost(schema, doc.Operations[0], nil, l), 3*stmt+1+1+1*(1+(1+1)); got != want {
 		t.Errorf("cost %d, want %d", got, want)
 	}
 }
@@ -658,7 +658,7 @@ func TestCostConnectionWithoutArguments(t *testing.T) {
 // TestCostSelectsOperation: the Extension costs the operation gqlgen
 // selected, not the first of the document, and refuses a saturated one.
 func TestCostSelectsOperation(t *testing.T) {
-	ext := gqlgenx.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 300}))
+	ext := gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 300}))
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
 	if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
 		t.Fatal(err)
@@ -725,14 +725,14 @@ func FuzzCost(f *testing.F) {
 		l1 := veloxgql.Limits{MaxPage: int(maxPage), MaxList: int(maxList)}
 		l2 := veloxgql.Limits{MaxPage: int(maxPage) + 1, MaxList: int(maxList) + 1}
 		for _, op := range doc.Operations {
-			c1 := veloxgql.Cost(schema, op, nil, l1)
+			c1 := gqlgenx.Cost(schema, op, nil, l1)
 			if c1 < 0 || c1 > saturated {
 				t.Fatalf("%q under %+v: cost %d is outside [0, %d]", query, l1, c1, saturated)
 			}
-			if again := veloxgql.Cost(schema, op, nil, l1); again != c1 {
+			if again := gqlgenx.Cost(schema, op, nil, l1); again != c1 {
 				t.Fatalf("%q under %+v: cost %d, then %d", query, l1, c1, again)
 			}
-			if c2 := veloxgql.Cost(schema, op, nil, l2); c2 < c1 || c2 > saturated {
+			if c2 := gqlgenx.Cost(schema, op, nil, l2); c2 < c1 || c2 > saturated {
 				t.Fatalf("%q: cost %d under %+v but %d under %+v", query, c1, l1, c2, l2)
 			}
 		}
@@ -757,7 +757,7 @@ extend type Query { filtered(where: Wide): UserConnection! }`})
 		if len(errs) > 0 {
 			t.Fatalf("%s: %v", query, errs)
 		}
-		return veloxgql.Cost(schema, doc.Operations[0], vars, veloxgql.DefaultLimits())
+		return gqlgenx.Cost(schema, doc.Operations[0], vars, veloxgql.DefaultLimits())
 	}
 	const byVar = `query ($w: Wide) { filtered(where: $w) { totalCount } }`
 	base := cost(`{ filtered { totalCount } }`, nil)
@@ -812,7 +812,7 @@ type Mutation { deletePost(id: ID!): ID! deleteLabel(id: ID!): ID! deleteNothing
 		if len(errs) > 0 {
 			t.Fatalf("%s: %v", query, errs)
 		}
-		return veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
+		return gqlgenx.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
 	}
 	if got, want := cost(`mutation { deletePost(id: "1") }`), 1+100+300; got != want {
 		t.Errorf("two joins: cost %d, want %d", got, want)

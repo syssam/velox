@@ -280,7 +280,7 @@ func cursorArg(v any) (*veloxgql.Cursor, error) {
 // executable schema that resolves as gqlgen's generated code does: a
 // mutation's root fields one after another, every other object's fields
 // concurrently, each through the field middleware, its children after it.
-func gqlgenServer(t testing.TB, db *velox.DB, opts ...veloxgql.Option) server {
+func gqlgenServer(t testing.TB, db *velox.DB, opts ...gqlgenx.Option) server {
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: paritySDL})
 	resolvers := gqlgenResolvers()
 	es := &gqlgen.ExecutableSchemaMock{

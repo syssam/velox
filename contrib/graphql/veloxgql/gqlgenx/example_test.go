@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"encoding/json"
@@ -49,7 +49,7 @@ func ExampleCost() {
 		return
 	}
 	l := veloxgql.Limits{MaxPage: 100, MaxList: 100}
-	fmt.Println(veloxgql.Cost(schema, doc.Operations[0], nil, l))
+	fmt.Println(gqlgenx.Cost(schema, doc.Operations[0], nil, l))
 	// Output:
 	// 342
 }

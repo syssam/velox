@@ -530,7 +530,7 @@ func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
 //
 // Under Type.Veloxe each predicate is the column's alone, as veloxe's were:
 // compat shows the foreign key in the type, so the scoping would hide
-// nothing, and would only change results and add an EXISTS (ADR 0110).
+// nothing, and would only change results and add an EXISTS (ADR 0108).
 func EdgeIDField[V any](f *Filter, field string, col, edge int, target *Type, o Ops[V]) {
 	edgeIDs(f, field, col, edge, target.table(), o)
 }

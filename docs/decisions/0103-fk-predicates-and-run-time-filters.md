@@ -1,7 +1,7 @@
 # 103. Foreign-key predicates and run-time row filters
 
 Status: accepted, 2026-11-22. Amended by
-[0110](0110-veloxe-compat-paging-and-fk-filters.md): under compat=veloxe
+[0108](0108-veloxe-compat-paging-and-fk-filters.md): under compat=veloxe
 (`gqlgraph.Type.Veloxe`) `EdgeIDField` does not use `ScopedKey`, and a
 foreign key's predicates are the column's alone.
 

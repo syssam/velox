@@ -303,11 +303,16 @@ func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error {
 // MarshalGQL writes c as MarshalGQLContext does, for graphql-go, whose
 // scalar marshaler takes no context. gqlgen calls MarshalGQLContext, which
 // it prefers when a type has both. A cursor that does not encode (a value of
-// a type EncodeCursor refuses) writes null.
+// a type EncodeCursor refuses) panics, as a scalar marshaler without an
+// error has no other way to fail. graphql-go recovers it (WithRecover, on by
+// default) as an internal error, so no client gets a null cursor to page
+// with.
 func (c Cursor) MarshalGQL(w io.Writer) {
-	if err := c.MarshalGQLContext(context.Background(), w); err != nil {
-		_, _ = io.WriteString(w, "null")
+	s, err := EncodeCursor(c)
+	if err != nil {
+		panic(fmt.Sprintf("veloxgql: Cursor.MarshalGQL: the cursor does not encode: %v", err))
 	}
+	_, _ = io.WriteString(w, `"`+s+`"`)
 }
 
 // UnmarshalGQL decodes a cursor from v, as UnmarshalGQLContext does.

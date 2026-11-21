@@ -36,6 +36,13 @@ import (
 // (ctx is canceled, and err is context.Canceled) is not passed to log; a nil
 // log records it with slog.DebugContext, as "veloxgql: request canceled".
 // graphql-go's default presenter shows every error's text.
+//
+// One exception: the error a subscription's source function returns
+// (graphql.Subscribe's fn) reaches a client as its text. graphql-go makes it
+// a *graphql.Error of the text alone, dropping the error itself, before any
+// presenter or interceptor sees it, so neither this presenter nor With can
+// tell it from graphql-go's own. A source function returns an error whose
+// text a client may read, or a *graphql.Error with a code.
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter {
 	if log == nil {
 		return presenter(slogInternal, slogCanceled)

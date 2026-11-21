@@ -26,7 +26,7 @@ import (
 // response shares the request's context, so the load ends when theirs
 // would.
 type Table struct {
-	// scope is veloxgql.WithBatchScope's function, or nil.
+	// scope is gqlgenx.WithBatchScope's function, or nil.
 	scope func(context.Context) any
 
 	mu sync.Mutex
@@ -107,13 +107,13 @@ var errPanicked = errors.New("veloxgql: the batch of this edge panicked")
 // tableKey is the context key of an operation's *Table.
 type tableKey struct{}
 
-// WithTable returns ctx with a new, empty Table of veloxgql.WithBatchScope's
+// WithTable returns ctx with a new, empty Table of gqlgenx.WithBatchScope's
 // function scope, which may be nil.
 func WithTable(ctx context.Context, scope func(context.Context) any) context.Context {
 	return context.WithValue(ctx, tableKey{}, &Table{scope: scope})
 }
 
-// Scope returns the value veloxgql.WithBatchScope's function gives ctx; nil
+// Scope returns the value gqlgenx.WithBatchScope's function gives ctx; nil
 // when t is nil or has no function.
 func (t *Table) Scope(ctx context.Context) any {
 	if t == nil || t.scope == nil {

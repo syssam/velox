@@ -14,6 +14,7 @@ import (
 // publicAPI is the exported API of package gqlgenx, sorted. Every change to
 // the API edits this list.
 var publicAPI = []string{
+	"Cost",
 	"ErrorPresenter",
 	"Extension",
 	"Extension.ExtensionName",
@@ -33,6 +34,7 @@ var publicAPI = []string{
 	"MarshalUint64",
 	"NewExtension",
 	"OnCanceled",
+	"Option",
 	"PresenterOption",
 	"Server",
 	"Setup",
@@ -43,6 +45,10 @@ var publicAPI = []string{
 	"UnmarshalUUID",
 	"UnmarshalUint",
 	"UnmarshalUint64",
+	"WithBatchScope",
+	"WithLimits",
+	"WithTxFilter",
+	"WithTxOptions",
 }
 
 // exportedNames are the exported names of the package in dir, as "Name" and

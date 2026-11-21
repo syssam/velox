@@ -17,6 +17,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/schema"
@@ -194,7 +195,7 @@ func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)
 
 // batchServerWith is batchServer with the extension's options opts, after
 // its limits.
-func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
+func batchServerWith(db *velox.DB, opts []gqlgenx.Option, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
 	parent := func(ctx context.Context) any { return graphql.GetFieldContext(ctx).Parent.Result }
 	read := func(batch bool) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
@@ -266,7 +267,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 			return out, nil
 		},
 		"Pet.name": func(ctx context.Context, _ map[string]any) (any, error) { return parent(ctx).(*pet).Name, nil },
-	}), db, append([]veloxgql.Option{veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})}, opts...)...) // lists cost MaxList each
+	}), db, append([]gqlgenx.Option{gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10})}, opts...)...) // lists cost MaxList each
 }
 
 // petsOf is the response to field { name pets { totalCount nodes { name } } }
@@ -390,7 +391,7 @@ func TestBatchScopeOption(t *testing.T) {
 	if stmts, _ := log.take(); len(stmts) != 5 {
 		t.Errorf("without WithBatchScope: %d statements, want 5: %q", len(stmts), stmts)
 	}
-	srv := batchServerWith(db, []veloxgql.Option{veloxgql.WithBatchScope(func(ctx context.Context) any { return ctx.Value(viewerKey{}) })})
+	srv := batchServerWith(db, []gqlgenx.Option{gqlgenx.WithBatchScope(func(ctx context.Context) any { return ctx.Value(viewerKey{}) })})
 	if got := post(t, ctx, srv, query); got != want {
 		t.Errorf("\n got %s\nwant %s", got, want)
 	}
@@ -400,7 +401,7 @@ func TestBatchScopeOption(t *testing.T) {
 	}
 	// A value that cannot be compared reads alone: a load and a count for
 	// each keeper.
-	srv = batchServerWith(db, []veloxgql.Option{veloxgql.WithBatchScope(func(ctx context.Context) any { return []any{ctx.Value(viewerKey{})} })})
+	srv = batchServerWith(db, []gqlgenx.Option{gqlgenx.WithBatchScope(func(ctx context.Context) any { return []any{ctx.Value(viewerKey{})} })})
 	if got := post(t, ctx, srv, query); got != want {
 		t.Errorf("an incomparable scope:\n got %s\nwant %s", got, want)
 	}

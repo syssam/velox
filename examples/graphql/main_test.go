@@ -21,6 +21,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // The IDs of the seed's rows: an ID is the row's key, which the server
@@ -58,7 +59,7 @@ type testServer struct {
 	sql   *sql.DB
 }
 
-func newServer(t *testing.T, opts ...veloxgql.Option) *testServer {
+func newServer(t *testing.T, opts ...gqlgenx.Option) *testServer {
 	t.Helper()
 	s := &testServer{}
 	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")))

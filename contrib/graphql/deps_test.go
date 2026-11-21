@@ -81,7 +81,8 @@ func refuse(t *testing.T, rule string, pkgs []string, roots ...string) {
 }
 
 // TestCoreImportsNoEngine: the runtime that generated code imports (the core
-// veloxgql, gqlgraph) and the packages under it compile neither gqlgen nor
+// veloxgql, gqlgraph), the packages under it, and gqlgenx's document walks
+// compile neither gqlgen nor
 // graphql-go, nor net/http, nor gqlparser's validator, so one generated
 // package serves either engine and a server of one compiles none of the
 // other.
@@ -90,8 +91,18 @@ func TestCoreImportsNoEngine(t *testing.T) {
 		t.Skip("runs go list")
 	}
 	refuse(t, "the core imports no engine", []string{
-		"./veloxgql", "./veloxgql/gqlgraph", "./veloxgql/internal/gqlcore", "./veloxgql/internal/cost", "./veloxgql/internal/request",
+		"./veloxgql", "./veloxgql/gqlgraph", "./veloxgql/internal/gqlcore", "./veloxgql/internal/cost", "./veloxgql/gqlgenx/internal/request",
 	}, gqlgen, graphqlGo, "net/http", "github.com/vektah/gqlparser/v2/validator", "github.com/sosodev/duration", "github.com/agnivade/levenshtein")
+}
+
+// TestCoreImportsNoGqlparser: the core veloxgql and gqlgraph, which
+// generated code imports, compile no gqlparser at all: what reads a
+// document (the cost, the request checks) is gqlgenx's.
+func TestCoreImportsNoGqlparser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs go list")
+	}
+	refuse(t, "the core imports no gqlparser", []string{"./veloxgql", "./veloxgql/gqlgraph", "./veloxgql/internal/gqlcore"}, "github.com/vektah/gqlparser")
 }
 
 // TestGqlgenxImportsNoGraphqlGo: gqlgen's adapter compiles no graphql-go.

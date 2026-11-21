@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/plugin"
 )
 
@@ -109,7 +110,7 @@ func metaCost(t testing.TB, schema *ast.Schema, query string, l veloxgql.Limits)
 	if len(errs) > 0 {
 		t.Fatalf("%v", errs)
 	}
-	return veloxgql.Cost(schema, doc.Operations[0], nil, l)
+	return gqlgenx.Cost(schema, doc.Operations[0], nil, l)
 }
 
 // TestGraphiQLOnARichSchema: the default MaxIntrospectionCost admits GraphiQL's
@@ -177,7 +178,7 @@ func TestIntrospectionBudgetIsItsOwn(t *testing.T) {
 	l = veloxgql.DefaultLimits()
 	l.MaxIntrospectionCost = 10000
 	runtime.ReadMemStats(&before)
-	got := veloxgql.Cost(schema, doc.Operations[0], nil, l)
+	got := gqlgenx.Cost(schema, doc.Operations[0], nil, l)
 	runtime.ReadMemStats(&after)
 	if got <= l.MaxIntrospectionCost {
 		t.Errorf("cost %d", got)

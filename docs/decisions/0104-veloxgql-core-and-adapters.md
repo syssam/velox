@@ -1,6 +1,9 @@
 # 104. The veloxgql core and its adapters
 
-Status: accepted, 2026-11-22.
+Status: accepted, 2026-11-22. Amended by 0106: the options, their
+config and `Cost` moved from the core to `gqlgenx` (`gqlgenx.WithLimits`,
+`gqlgenx.WithTxOptions`, `gqlgenx.WithTxFilter`, `gqlgenx.WithBatchScope`,
+`gqlgenx.Cost`), and the core imports no gqlparser.
 
 ## Context
 

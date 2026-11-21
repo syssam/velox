@@ -1,8 +1,10 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"github.com/vektah/gqlparser/v2/ast"
 
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx/internal/request"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/cost"
 )
 
@@ -65,14 +67,9 @@ import (
 // wrap the cost to a small or negative number. A named
 // fragment is costed once for each page size it is spread under, so the walk is
 // linear in the document. schema is the server's; op is a parsed and validated
-// operation. Cost is the sum of what gqlgenx.Extension holds to two limits, before any
+// operation. Cost is the sum of what Extension holds to two limits, before any
 // statement runs: the introspection part to Limits.MaxIntrospectionCost, and the
 // rest to Limits.MaxCost.
-func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int {
-	return cost.Total(schema, op, vars, l.cost())
-}
-
-// cost is what the cost model reads of l.
-func (l Limits) cost() cost.Limits {
-	return cost.Limits{MaxPage: l.MaxPage, MaxList: l.MaxList, MaxIntrospectionCost: l.MaxIntrospectionCost}
+func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l veloxgql.Limits) int {
+	return cost.Total(schema, op, vars, request.CostLimits(l))
 }

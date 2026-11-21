@@ -14,8 +14,8 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx/internal/request"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/request"
 )
 
 // Extension is the gqlgen handler extension that serves a schema on a DB.
@@ -34,7 +34,7 @@ import (
 // subscriptions run on the DB, and a DB with replicas routes their reads to
 // them.
 //
-// A mutation operation runs in one db.Tx, on the primary, unless veloxgql.WithTxFilter
+// A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
 // leaves it out, and its resolvers get the transaction's DB and context, so
 // every statement of the operation, its nested fields' too, is in the
 // transaction. A statement a mutation's resolver runs on db itself, not on
@@ -49,7 +49,7 @@ import (
 // and subscriptions' still run concurrently. A resolver of a mutation must
 // not itself use the DB from more than one goroutine.
 //
-// A mutation veloxgql.WithTxFilter leaves out runs on db with no transaction: its
+// A mutation WithTxFilter leaves out runs on db with no transaction: its
 // statements are not atomic, and its field resolvers run concurrently as a
 // query's do. It runs in a velox session (velox.WithSession), so on a DB
 // with replicas its reads after its own writes go to the primary. Use the
@@ -78,7 +78,7 @@ import (
 // query that nests connections reads up to MaxPage to the power of its depth
 // rows, and aliases repeat a field as many times as the client writes it.
 // veloxgql.Limits.MaxCost bounds the whole request. Before any resolver runs, the
-// extension computes the operation's veloxgql.Cost, which multiplies by first and
+// extension computes the operation's Cost, which multiplies by first and
 // last, counts every alias, every statement and every branch of a fragment; a
 // request over MaxCost, or whose introspection, counted by the fields of its
 // response, is over MaxIntrospectionCost, fails with veloxgql.ErrTooCostly, the code
@@ -94,7 +94,7 @@ import (
 // extension.AutomaticPersistedQuery, so that the cache never stores a refused
 // query.
 //
-// veloxgql.Cost cannot see a value's size or a statement's time, so the Extension also holds a
+// Cost cannot see a value's size or a statement's time, so the Extension also holds a
 // response to MaxResponseBytes and MaxErrors and a query or a mutation to Timeout, and
 // stops the request there: what is not yet resolved does not run, and a
 // statement running is cancelled. A subscription has no Timeout, and each of its events
@@ -104,7 +104,7 @@ import (
 // transaction's, is not the Timeout, and its errors are the fields' own.
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
-// when veloxgql.WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
+// when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
 // The extension mutates the operation's parameters, to refuse a document or variables
@@ -127,13 +127,13 @@ type Extension struct {
 	// txFilter decides whether a mutation runs in a transaction; nil means
 	// every one does.
 	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
-	// batchScope is veloxgql.WithBatchScope's function, or nil.
+	// batchScope is WithBatchScope's function, or nil.
 	batchScope func(context.Context) any
 }
 
 // NewExtension returns the extension that serves a schema on db, configured
-// by opts (veloxgql.NewConfig): veloxgql.DefaultLimits() unless veloxgql.WithLimits
-// says otherwise. It panics on a zero veloxgql.Option.
+// by opts: veloxgql.DefaultLimits() unless WithLimits says otherwise. It
+// panics on a zero Option.
 //
 // Make one Extension per server: the server's Use gives it the server's
 // schema (Validate stores it), which costs every request, so one Extension
@@ -143,9 +143,9 @@ type Extension struct {
 // (srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))): without it, gqlgen's
 // default presenter shows a client every error's text, velox's and the
 // driver's, which name entities, tables, constraints and scope values.
-func NewExtension(db *velox.DB, opts ...veloxgql.Option) *Extension {
-	c := veloxgql.NewConfig(opts...)
-	return &Extension{db: db, limits: c.Limits, txOpts: c.TxOptions, txFilter: c.TxFilter, batchScope: c.BatchScope}
+func NewExtension(db *velox.DB, opts ...Option) *Extension {
+	c := newConfig(opts...)
+	return &Extension{db: db, limits: c.limits, txOpts: c.txOptions, txFilter: c.txFilter, batchScope: c.batchScope}
 }
 
 // NewContext returns ctx with the extension's DB and limits, as a query
@@ -208,7 +208,7 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 		return err
 	}
 	if n := velox.TxRetries(e.txOpts...); n > 0 {
-		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
+		return fmt.Errorf("gqlgenx.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
 	}
 	return nil
 }
@@ -225,7 +225,7 @@ func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawP
 }
 
 // MutateOperationContext implements graphql.OperationContextMutator: it
-// refuses a request whose veloxgql.Cost is over MaxCost with veloxgql.ErrTooCostly. gqlgen runs
+// refuses a request whose Cost is over MaxCost with veloxgql.ErrTooCostly. gqlgen runs
 // it after validation and before any resolver, so no statement is sent.
 func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error {
 	err := request.CostError(e.schema, rc.Operation, rc.Variables, e.limits)

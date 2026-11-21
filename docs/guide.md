@@ -1820,8 +1820,8 @@ walks through each step.
 The same runtime also serves
 [github.com/syssam/graphql-go](https://github.com/syssam/graphql-go), whose
 generator gqlc binds the SDL. Generate for it with `engine=graphql-go`, and
-gqlc binds every field but the root fields and JSON fields to the
-generated code:
+gqlc binds every field to the generated code except the root fields, JSON
+fields and fields of the application's own Go type:
 
 ```sh
 go tool velox-gen -plugin velox-graphql:engine=graphql-go ./veloxschema
@@ -1830,8 +1830,9 @@ go tool gqlc -config gqlc.yaml
 
 The SDL then names each type's Go type with `@goModel`, and `gqlc.yaml`
 needs the keys the package documentation of `contrib/graphql` lists under
-"graphql-go and gqlc". A JSON field is on the Resolver, whose method
-returns its getter's value in one line. gqlc does not read
+"graphql-go and gqlc". A JSON field or a field of the application's own
+Go type is on the Resolver, whose method returns its getter's value in one
+line. gqlc does not read
 `@goField(name:)` yet, so velox-gen refuses a field or edge renamed with
 `graphql.FieldName`, a non-null bytes field and a key not named ID, naming
 each. The adapter is `veloxgql/graphqlgo`,

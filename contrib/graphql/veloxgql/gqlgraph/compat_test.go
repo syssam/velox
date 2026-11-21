@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-// The tests of compat=veloxe's paging (ADR 0110): each case runs on a Type
+// The tests of compat=veloxe's paging (ADR 0108): each case runs on a Type
 // with Veloxe and, for the contrast, on one without.
 
 // user is veloxe's examples/fullgql User, as the parity probe seeded it: a

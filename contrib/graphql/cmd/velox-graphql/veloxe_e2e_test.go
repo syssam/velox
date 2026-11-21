@@ -258,7 +258,7 @@ func TestVeloxeNames(t *testing.T) {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
 	// The cost charges a list of objects MaxList rows for each parent: the root
 	// list and the json list of Assignee are lists of objects.
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db), gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10})))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -281,7 +281,7 @@ func TestVeloxeNames(t *testing.T) {
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIsNil: true}) { edges { node { id } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11"}}]}}}` + "`" + `,
 		// Cursors veloxe wrote, the parity probe's of keys 1 and 3, page on,
-		// with veloxe's page flags (ADR 0110).
+		// with veloxe's page flags (ADR 0108).
 		` + "`" + `{"query":"{ customers(first: 2, after: \"gqFpAaF2wA\") { edges { node { name } } pageInfo { hasNextPage hasPreviousPage } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"bob"}},{"node":{"name":"cy"}}],"pageInfo":{"hasNextPage":false,"hasPreviousPage":true}}}}` + "`" + `,
 		` + "`" + `{"query":"{ customers(last: 1, before: \"gqFpA6F2wA\") { edges { node { name } } pageInfo { hasNextPage hasPreviousPage } } }"}` + "`" + `: ` +
@@ -300,7 +300,7 @@ func TestVeloxeNames(t *testing.T) {
 		}
 	}
 	// A bool order pages on: the cursor holds the bool. bob and cy tie, and
-	// the key breaks the tie DESC, as veloxe did (ADR 0110): cy, then bob.
+	// the key breaks the tie DESC, as veloxe did (ADR 0108): cy, then bob.
 	var page struct {
 		Data struct {
 			Customers struct {
@@ -321,7 +321,7 @@ func TestVeloxeNames(t *testing.T) {
 		t.Errorf("the next page by vip:\n got %s\nwant %s", got, want)
 	}
 	// A WithFilter filter hides bob, as soft delete would. A foreign key's
-	// predicates are the column's, as veloxe's were (ADR 0110): bob's orders
+	// predicates are the column's, as veloxe's were (ADR 0108): bob's orders
 	// still match customerId 2 and customerIdIn [2].
 	hideBob := func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "Customer" || op != velox.OpSelect {
@@ -330,7 +330,7 @@ func TestVeloxeNames(t *testing.T) {
 		return velox.FieldNEQ("id", 2), nil
 	}
 	hidden := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	hidden.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db, velox.WithFilter(hideBob)), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})))
+	hidden.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db, velox.WithFilter(hideBob)), gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10})))
 	hidden.AddTransport(transport.POST{})
 	for q, want := range map[string]string{
 		"{\"query\":\"{ salesOrders(first: 5, where: {customerId: \\\"2\\\"}) { edges { node { id } } } }\"}":    "{\"data\":{\"salesOrders\":{\"edges\":[{\"node\":{\"id\":\"11\"}},{\"node\":{\"id\":\"12\"}}]}}}",

@@ -156,8 +156,7 @@ func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 			// A nil []byte, which an empty blob reads as, is null: a Bytes!
 			// needs the getter's "", and no resolver of the application
 			// should have to write it.
-			g.nameBound(where, "the field is read through the method "+gt.Method+", which writes an empty blob as \"\" and not null,",
-				"make it Nillable, or leave it out with graphql.Skip()")
+			g.refused = append(g.refused, fmt.Errorf("%s: engine=graphql-go: a non-null Bytes field needs its method %s, which writes an empty blob as \"\" and not null, and gqlc does not yet honour @goField(name:), which would bind the field to it; make the field Nillable, or leave it out with graphql.Skip()", where, gt.Method))
 		default:
 			// gqlc puts the field on the Resolver, whose method returns the
 			// field or its getter's value: gqlc does not read

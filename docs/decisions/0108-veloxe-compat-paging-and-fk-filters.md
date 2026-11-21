@@ -1,4 +1,4 @@
-# 110. Under compat=veloxe, cursors, ties, page flags and foreign keys are veloxe's
+# 108. Under compat=veloxe, cursors, ties, page flags and foreign keys are veloxe's
 
 Status: accepted, 2026-11-22. Extends 0088. Amends 0027 and 0103 for
 compat=veloxe only: a foreign key's predicates are the column's alone.

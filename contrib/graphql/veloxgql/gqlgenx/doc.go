@@ -15,9 +15,8 @@
 //
 // It uses NewExtension(db, opts...), first of the server's extensions, and
 // ErrorPresenter(nil), and returns a handler that bounds a request's body and
-// a websocket's messages. The options are veloxgql's (veloxgql.WithLimits,
-// veloxgql.WithTxOptions, veloxgql.WithTxFilter, veloxgql.WithBatchScope),
-// which every adapter takes.
+// a websocket's messages. The options are this package's: WithLimits,
+// WithTxOptions, WithTxFilter and WithBatchScope.
 //
 // # The Extension
 //
@@ -26,9 +25,9 @@
 // veloxgql.LimitsFromContext read them and generated code finds the field it
 // resolves. It runs a mutation operation in one transaction: it commits when
 // the response has no errors, and rolls back otherwise or on a panic.
-// veloxgql.WithTxOptions sets the transaction's options, and it refuses
+// WithTxOptions sets the transaction's options, and it refuses
 // velox.TxRetrySerializable, since gqlgen makes the response once.
-// veloxgql.WithTxFilter leaves a mutation out of a transaction: its
+// WithTxFilter leaves a mutation out of a transaction: its
 // statements are not atomic and its field resolvers are not serialized, but
 // it keeps read-your-writes in a velox session. Extension.NewContext puts the
 // same state in a context for generated code called outside a gqlgen server,
@@ -37,7 +36,7 @@
 //
 // Before gqlgen parses a request, the Extension refuses one whose document or
 // variables are over the limits, and before any resolver one whose
-// veloxgql.Cost is over MaxCost. It holds a response to MaxResponseBytes and
+// Cost is over MaxCost. It holds a response to MaxResponseBytes and
 // MaxErrors, and a query or a mutation to Timeout.
 //
 // # Selections

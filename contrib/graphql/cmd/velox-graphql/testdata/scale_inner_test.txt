@@ -58,7 +58,7 @@ type served struct {
 
 // serve is the schema on a seeded in-memory database, through gqlgen's handler
 // and the extension under these options.
-func serve(t *testing.T, opts ...veloxgql.Option) served {
+func serve(t *testing.T, opts ...gqlgenx.Option) served {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(0)")
 	if err != nil {
@@ -160,7 +160,7 @@ func TestLargeSchemaIntrospection(t *testing.T) {
 		t.Fatal(errs)
 	}
 	def := veloxgql.DefaultLimits()
-	cost := veloxgql.Cost(es.Schema(), doc.Operations[0], nil, veloxgql.Limits{MaxIntrospectionCost: 1 << 40})
+	cost := gqlgenx.Cost(es.Schema(), doc.Operations[0], nil, veloxgql.Limits{MaxIntrospectionCost: 1 << 40})
 	fits := cost <= def.MaxIntrospectionCost
 	t.Logf("%d entities: GraphiQL's query costs %d, the default limit is %d (fits: %v)", n, cost, def.MaxIntrospectionCost, fits)
 
@@ -173,12 +173,12 @@ func TestLargeSchemaIntrospection(t *testing.T) {
 	}
 
 	// The limit is exact: one under the cost refuses the query, and no data comes back.
-	tight := serve(t, veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost - 1})).do(graphiQL, nil)
+	tight := serve(t, gqlgenx.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost - 1})).do(graphiQL, nil)
 	if !strings.Contains(tight, "COST_LIMIT_EXCEEDED") || strings.Contains(tight, `"types"`) {
 		t.Errorf("a limit of %d under a cost of %d: %.300s", cost-1, cost, tight)
 	}
 
-	s := serve(t, veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost}))
+	s := serve(t, gqlgenx.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost}))
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
@@ -243,7 +243,7 @@ func TestLargeSchemaCostLimits(t *testing.T) {
 	flood.WriteString(" }")
 	if doc, errs := gqlparser.LoadQueryWithRules(schema().Schema(), flood.String(), nil); len(errs) > 0 {
 		t.Fatal(errs)
-	} else if cost, limit := veloxgql.Cost(schema().Schema(), doc.Operations[0], nil, veloxgql.Limits{MaxCost: 1 << 40}), veloxgql.DefaultLimits().MaxCost; cost <= limit {
+	} else if cost, limit := gqlgenx.Cost(schema().Schema(), doc.Operations[0], nil, veloxgql.Limits{MaxCost: 1 << 40}), veloxgql.DefaultLimits().MaxCost; cost <= limit {
 		t.Fatalf("the flood costs %d, within the default MaxCost %d: make it wider", cost, limit)
 	}
 	if got := s.do(flood.String(), nil); !strings.Contains(got, "COST_LIMIT_EXCEEDED") {

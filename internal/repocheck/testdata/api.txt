@@ -1572,26 +1572,18 @@ func (u UUID) MarshalGQL(w io.Writer)
 func (u UUID) String() string
 func (u Uint64) MarshalGQL(w io.Writer)
 func Batch[E any](ctx context.Context, rows []*E)
-func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int
 func DB(ctx context.Context) *velox.DB
 func DBFromContext(ctx context.Context) (*velox.DB, error)
 func DecodeCursor(s string) (Cursor, error)
 func DefaultLimits() Limits
 func EncodeCursor(c Cursor) (string, error)
 func LimitsFromContext(ctx context.Context) Limits
-func NewConfig(opts ...Option) Config
 func Present(err error) (code, msg string)
-func WithBatchScope(f func(context.Context) any) Option
-func WithLimits(l Limits) Option
-func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option
-func WithTxOptions(opts ...velox.TxOption) Option
 type Bytes []byte
-type Config struct { Limits Limits TxOptions []velox.TxOption TxFilter func(ctx context.Context, op *ast.OperationDefinition) bool BatchScope func(context.Context) any }
 type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
 type JSON json.RawMessage
 type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int MaxResponseBytes int Timeout time.Duration }
-type Option struct { }
 type OrderDirection string
 type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }
 type Time time.Time
@@ -1620,6 +1612,7 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error
 func (e *Extension) NewContext(ctx context.Context) context.Context
 func (e *Extension) Validate(es graphql.ExecutableSchema) error
+func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l veloxgql.Limits) int
 func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
 func MarshalBytes(b []byte) graphql.Marshaler
 func MarshalFloat32(f float32) graphql.Marshaler
@@ -1628,9 +1621,9 @@ func MarshalTime(t time.Time) graphql.Marshaler
 func MarshalUUID(u uuid.UUID) graphql.Marshaler
 func MarshalUint(u uint) graphql.Marshaler
 func MarshalUint64(u uint64) graphql.Marshaler
-func NewExtension(db *velox.DB, opts ...veloxgql.Option) *Extension
+func NewExtension(db *velox.DB, opts ...Option) *Extension
 func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
-func Setup(srv Server, db *velox.DB, opts ...veloxgql.Option) http.Handler
+func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler
 func UnmarshalBytes(v any) ([]byte, error)
 func UnmarshalFloat32(v any) (float32, error)
 func UnmarshalInt64ID(v any) (int64, error)
@@ -1638,7 +1631,12 @@ func UnmarshalTime(v any) (time.Time, error)
 func UnmarshalUUID(v any) (uuid.UUID, error)
 func UnmarshalUint(v any) (uint, error)
 func UnmarshalUint64(v any) (uint64, error)
+func WithBatchScope(f func(context.Context) any) Option
+func WithLimits(l veloxgql.Limits) Option
+func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option
+func WithTxOptions(opts ...velox.TxOption) Option
 type Extension struct { }
+type Option struct { }
 type PresenterOption struct { }
 type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
 

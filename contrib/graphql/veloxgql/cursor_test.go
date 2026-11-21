@@ -225,6 +225,15 @@ func TestEncodeCursorRefuses(t *testing.T) {
 			if err := c.MarshalGQLContext(context.Background(), io.Discard); err == nil {
 				t.Error("MarshalGQLContext wrote the cursor, want an error")
 			}
+			var buf strings.Builder
+			func() {
+				defer func() {
+					if p, _ := recover().(string); !strings.Contains(p, "veloxgql: Cursor.MarshalGQL: the cursor does not encode") || buf.Len() != 0 {
+						t.Errorf("MarshalGQL: panic %q, wrote %q; want a panic and nothing written", p, buf.String())
+					}
+				}()
+				c.MarshalGQL(&buf)
+			}()
 		})
 	}
 }

@@ -115,7 +115,7 @@ type Type struct {
 	// as veloxe had no such limits. MaxFilterDepth does.
 	//
 	// Veloxe gives the type's connections and foreign keys veloxe's
-	// semantics too (ADR 0110): a connection takes a cursor veloxe wrote
+	// semantics too (ADR 0108): a connection takes a cursor veloxe wrote
 	// (see Paginate); an order of one term breaks ties by the key in
 	// that term's direction, where it is otherwise ASC; a page after a
 	// cursor has hasPreviousPage, and one before a cursor hasNextPage; and

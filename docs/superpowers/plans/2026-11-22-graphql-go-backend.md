@@ -21,7 +21,7 @@
 - Q7: root query fields stay in velox.graphql (veloxe layout).
 - Q8: `SelectionSource` stays internal.
 - Q9: graphqlgo does not consult `Withheld`.
-- ADR numbers 0103–0109 as spec §7 assigns.
+- ADR numbers 0103–0108 as built: 0108 is Task 3b's. The parked Tasks 5 and 8 take the next free numbers.
 
 ## Global Constraints
 
@@ -52,7 +52,7 @@
 ### Task 3: graphqlgo adapter (spec §2.3, §3.6; ADR 0106)
 - [ ] parity suite; [ ] implement; [ ] verify -race; [ ] commit
 
-### Task 3b: veloxe compat parity for clients (parity report §5 items 1, 2, 3, 5; ADR 0110)
+### Task 3b: veloxe compat parity for clients (parity report §5 items 1, 2, 3, 5; ADR 0108)
 Source: `docs/superpowers/specs/2026-11-22-veloxe-behaviour-parity.md` §1, §2, §5. All changes apply only when `gqlgraph.Type.Veloxe` (compat=veloxe) is set; default output and behaviour unchanged.
 - Item 1: `veloxgql.Cursor` decoding also accepts veloxe's cursor (base64 RawStd msgpack `{i, v, vs}`, hand decoder for fixmap/ints/strings/nil/ext 1, no msgpack dependency), read as Key=i and v/vs as the current order's values. Velox cursors are still emitted. No legacy-emit option (YAGNI). Seed test vectors from the probe output in §8.
 - Item 2: single-term order: the key tie-break takes that term's direction.
@@ -64,7 +64,7 @@ Source: `docs/superpowers/specs/2026-11-22-veloxe-behaviour-parity.md` §1, §2,
 ### Task 4: engine=graphql-go output (spec §3.1, §3.2, §3.4; ADR 0107; Version28; Q2 refusal)
 - [ ] goldens both engines; [ ] implement; [ ] verify; [ ] commit
 
-### Task 5: split=entity (spec §3.3; ADR 0108)
+### Task 5: split=entity (spec §3.3; ADR: the next free number)
 - [ ] definitions-equal + identity tests; [ ] implement; [ ] verify; [ ] commit
 
 ### Task 6: examples/graphqlgo (spec §6.1; CI lane in ci-local.sh and ci.yml)
@@ -73,5 +73,5 @@ Source: `docs/superpowers/specs/2026-11-22-veloxe-behaviour-parity.md` §1, §2,
 ### Task 7: Measure and document (spec §5, §7.7)
 - [ ] bench 500-graphqlgo thresholds; [ ] docs; [ ] commit
 
-### Task 8: graphql-go default engine (ADR 0109)
+### Task 8: graphql-go default engine (ADR: the next free number)
 - [ ] flip; examples/graphql passes engine=gqlgen; [ ] verify; [ ] commit

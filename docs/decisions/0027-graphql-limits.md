@@ -8,7 +8,7 @@
   superseded by [0045](0045-graphql-input-setters.md): a null is a field not given, and
   only `clear<Field>` or `clear<Edge>` clears. Under compat=veloxe a foreign key's
   predicates are the column's alone, as veloxe's were, by
-  [0110](0110-veloxe-compat-paging-and-fk-filters.md).
+  [0108](0108-veloxe-compat-paging-and-fk-filters.md).
 
 ## Context
 

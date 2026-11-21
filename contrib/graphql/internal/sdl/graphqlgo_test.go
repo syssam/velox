@@ -142,7 +142,7 @@ func TestGraphQLGoRefusesNameBindings(t *testing.T) {
 					e.Fields = append(e.Fields, &plugin.Field{Name: "photo", GoName: "Photo", Type: "bytes", Column: "photo"})
 				}
 			}
-		}, "schema User, field photo: engine=graphql-go: the field is read through the method PhotoGQL, which writes an empty blob as \"\" and not null,"},
+		}, "schema User, field photo: engine=graphql-go: a non-null Bytes field needs its method PhotoGQL, which writes an empty blob as \"\" and not null, and gqlc does not yet honour"},
 		"key": {func(m *plugin.Model) {
 			for _, e := range m.Entities {
 				if e.Name == "Category" {

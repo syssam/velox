@@ -9,7 +9,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/request"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx/internal/request"
 )
 
 // TestCostError: CostError refuses a request over MaxCost, naming a list

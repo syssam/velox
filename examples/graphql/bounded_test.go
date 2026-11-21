@@ -268,7 +268,7 @@ func TestFieldErrorsBounded(t *testing.T) {
 // 22500. Each now costs a scan, so the default MaxCost refuses them (TestScanFloodRefused):
 // it is raised here, as what is tested is a statement the Timeout stops.
 func TestTimeoutCancelsStatements(t *testing.T) {
-	s := newServer(t, veloxgql.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond, MaxCost: 10_000_000}))
+	s := newServer(t, gqlgenx.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond, MaxCost: 10_000_000}))
 	s.seedRows(t, 150)
 	query := `{ ` + repeat(600, func(i int) string {
 		return fmt.Sprintf(`a%d: posts(where: {titleContains: "nothing%d"}) { totalCount }`, i, i)

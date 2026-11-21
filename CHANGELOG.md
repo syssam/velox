@@ -40,7 +40,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   before runs as it did, and the new output needs nothing new of the
   runtime.
 - Under velox-graphql's `compat=veloxe` (`gqlgraph.Type.Veloxe`), a
-  connection behaves for clients as veloxe's did (ADR 0110). It takes a
+  connection behaves for clients as veloxe's did (ADR 0108). It takes a
   cursor veloxe wrote, so a list a client paged before the deploy pages
   on. The cursor's key is the key, and its values are the current order's;
   a cursor with another number of values fails as one taken under another
@@ -62,7 +62,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   binds `Time`, `UUID`, `Bytes` and `Uint64`; `ErrorPresenter` shows
   `veloxgql.Present`'s codes. The
   limits of a request are graphql-go's own options; velox's page, list
-  and filter bounds are fixed at `veloxgql.DefaultLimits()`.
+  and filter bounds are fixed at `veloxgql.DefaultLimits()`. The error a
+  subscription's source function returns reaches a client as its text, as
+  graphql-go drops the error before any presenter sees it.
   contrib/graphql requires graphql-go v0.0.0-20261029022150-3e0050be7462.
 - Package `generate` runs velox-gen's generate from Go, as ent's
   `entc.Generate` and veloxe's `compiler.Generate` did (ADR 0097):
@@ -529,7 +531,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `migrate baseline` to adopt an existing database. `velox-gen migrate sql` feeds
   Atlas, for a directory that Atlas manages instead.
 - `contrib/graphql`: a GraphQL schema and resolvers generated for gqlgen, with node
-  IDs, keyset connections and mutations in savepoints. `veloxgql.Cost` reads `@skip`
+  IDs, keyset connections and mutations in savepoints. `gqlgenx.Cost` reads `@skip`
   and `@include`.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - Runnable examples in `examples/`, up to a whole service in `examples/tracker`.
@@ -557,14 +559,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   package `veloxgql/gqlgenx` (ADR 0104): `NewExtension`, `Extension`,
   `Setup`, `Server`, `ErrorPresenter`, `OnCanceled`, `PresenterOption` and
   the function marshalers (`MarshalTime`, `MarshalInt64ID` and the rest)
-  moved there. The options stay in `veloxgql` and configure a
-  `veloxgql.Config` (`NewConfig`); `veloxgql.Present` is the code and
-  message a client sees. In `gqlgen.yml`, `Int64ID`, `Float32`, `Uint64`,
+  moved there, and so did the options and the cost (ADR 0106):
+  `veloxgql.WithLimits`, `WithTxOptions`, `WithTxFilter`, `WithBatchScope`
+  and `Cost` are `gqlgenx.WithLimits` and the rest, of type
+  `gqlgenx.Option`; `veloxgql.Config`, `NewConfig` and `Option` are gone.
+  The core keeps `Limits`, `DefaultLimits` and `LimitsFromContext`, and
+  imports no gqlparser. `veloxgql.Present` is the code and message a
+  client sees. In `gqlgen.yml`, `Int64ID`, `Float32`, `Uint64`,
   `Uint`, `Time`, `UUID` and `Bytes` name `veloxgql/gqlgenx`; `JSON`,
   `Cursor`, `OrderDirection` and `PageInfo` stay on `veloxgql`. Generated
   code is unchanged; gqlgen's `generated.go` names `gqlgenx.MarshalTime`
-  and `gqlgenx.MarshalInt64ID`. `Cursor` gains `MarshalGQL` and
-  `UnmarshalGQL`; a nil `gqlgraph.Connection` is the empty connection.
+  and `gqlgenx.MarshalInt64ID`. `Cursor` gains `MarshalGQL`, which
+  panics on a cursor that does not encode, and `UnmarshalGQL`; a nil
+  `gqlgraph.Connection` is the empty connection.
 - A read of generated GraphQL code (a connection, an edge) in a context no
   adapter made fails with the new `veloxgql.ErrNoSelectionSource`, joined
   with `ErrNoDB`, and sends no statement (ADR 0105). It never falls back to
@@ -1237,7 +1244,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - An operation with `@defer` lets go of its `Limits.Timeout` timer when its
   last response is out. Before, the timer and its callback stayed until the
   deadline, on a websocket as long as the connection.
-- `veloxgql.Cost` counts a mutation's list of input objects, as a bulk
+- `gqlgenx.Cost` counts a mutation's list of input objects, as a bulk
   mutation of the application's takes, as one write for each element. Before,
   the list added no write.
 - velox-graphql refuses a `graphql.Type` that does not start with an upper-case

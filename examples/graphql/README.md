@@ -280,10 +280,10 @@ not get it. Anything else that fails at the same moment is logged.
 
 Every `veloxgql.Limits` field (`MaxPage`, `MaxList`, `MaxFilterDepth`,
 `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`) bounds one argument or
-one edge. The server takes the defaults; `veloxgql.WithLimits` sets others:
+one edge. The server takes the defaults; `gqlgenx.WithLimits` sets others:
 
 ```go
-gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
+gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 50}))
 ```
 
 A zero field is the default; a negative one is refused. They do not bound a

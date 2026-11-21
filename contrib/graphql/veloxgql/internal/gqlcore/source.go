@@ -123,15 +123,10 @@ func FieldOf(ctx context.Context) (Field, bool) {
 	return src.Field(ctx)
 }
 
-// noWait is the done function of a wait with no source.
-func noWait() {}
-
-// wait is the source's Wait for ctx, or a function that does nothing.
+// wait is the source's Wait for ctx. gqlgraph uses a batch only in a
+// context whose source knows its field (FieldOf), so ctx has a source.
 func wait(ctx context.Context) func() {
-	if src := Source(ctx); src != nil {
-		return src.Wait(ctx)
-	}
-	return noWait
+	return Source(ctx).Wait(ctx)
 }
 
 // Selected returns the names of the fields selected on the objects of the

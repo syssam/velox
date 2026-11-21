@@ -92,7 +92,7 @@ func TestWebsocketMessageBounded(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
 	const most = 4096
-	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
 	srv.AddTransport(transport.Websocket{})
 	ts := httptest.NewServer(h)
 	defer ts.Close()
@@ -204,7 +204,7 @@ func TestWebsocketFramesWithTheUpgrade(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
 	const most = 4096
-	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
 	srv.AddTransport(transport.Websocket{})
 	ts := httptest.NewServer(h)
 	defer ts.Close()

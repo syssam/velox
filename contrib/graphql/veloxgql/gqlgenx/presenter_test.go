@@ -359,7 +359,7 @@ func TestEdgeErrorPresented(t *testing.T) {
 // logged.
 func TestTooCostlyPresented(t *testing.T) {
 	l := &logged{}
-	ext := gqlgenx.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	ext := gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 2}))
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
 type PageInfo { hasNextPage: Boolean! }
 type User { id: ID! }

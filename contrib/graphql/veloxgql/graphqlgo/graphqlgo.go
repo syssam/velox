@@ -34,7 +34,7 @@ func With(db *velox.DB) graphql.ExecutorOption {
 	if db == nil {
 		panic("graphqlgo.With: nil DB")
 	}
-	w := &with{db: db, limits: veloxgql.DefaultLimits()}
+	w := &with{db: db}
 	return func(e *graphql.Executor) {
 		graphql.WithOperationInterceptor(w)(e)
 		graphql.WithSubscriptionInterceptor(w)(e)
@@ -44,10 +44,12 @@ func With(db *velox.DB) graphql.ExecutorOption {
 // with is With's interceptors.
 type with struct {
 	db *velox.DB
-	// limits are veloxgql.DefaultLimits(), which gqlgraph reads from the
-	// state: velox's backstop against unbounded reads and filters.
-	limits veloxgql.Limits
 }
+
+// defaultLimits are the limits every With puts in the state, which gqlgraph
+// reads: velox's backstop against unbounded reads and filters. Readers copy
+// them (veloxgql.LimitsFromContext), so all share one value.
+var defaultLimits = veloxgql.DefaultLimits()
 
 var (
 	_ graphql.OperationInterceptor    = (*with)(nil)
@@ -56,7 +58,7 @@ var (
 
 // install is ctx with the operation's state.
 func (w *with) install(ctx context.Context) context.Context {
-	return gqlcore.Install(ctx, w.db, &w.limits, source{})
+	return gqlcore.Install(ctx, w.db, &defaultLimits, source{})
 }
 
 // InterceptSubscription implements graphql.SubscriptionInterceptor: the

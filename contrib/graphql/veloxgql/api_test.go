@@ -26,8 +26,6 @@ var publicAPI = []string{
 	"CodeTimeout",
 	"CodeTooCostly",
 	"CodeUnauthenticated",
-	"Config",
-	"Cost",
 	"Cursor",
 	"Cursor.MarshalGQL",
 	"Cursor.MarshalGQLContext",
@@ -58,8 +56,6 @@ var publicAPI = []string{
 	"JSON.UnmarshalGQL",
 	"Limits",
 	"LimitsFromContext",
-	"NewConfig",
-	"Option",
 	"OrderDirection",
 	"OrderDirection.IsValid",
 	"OrderDirection.MarshalGQL",
@@ -79,10 +75,6 @@ var publicAPI = []string{
 	"Uint64",
 	"Uint64.MarshalGQL",
 	"Uint64.UnmarshalGQL",
-	"WithBatchScope",
-	"WithLimits",
-	"WithTxFilter",
-	"WithTxOptions",
 }
 
 // parseDoc is the documentation of the non-test files of the package in dir.

@@ -11,7 +11,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/scope"
-	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // TestPresent: the code and message a client sees, of each kind of error,
@@ -43,30 +42,9 @@ func TestPresent(t *testing.T) {
 	}
 }
 
-// TestConfig: NewConfig starts from DefaultLimits() and applies each
-// option, the last of two that set one thing winning, and panics on a zero
-// Option.
-func TestConfig(t *testing.T) {
-	filter := func(context.Context, *ast.OperationDefinition) bool { return false }
-	scoped := func(context.Context) any { return 1 }
-	c := veloxgql.NewConfig(veloxgql.WithLimits(veloxgql.Limits{MaxPage: 3}), veloxgql.WithTxOptions(velox.TxReadOnly()),
-		veloxgql.WithTxFilter(filter), veloxgql.WithBatchScope(scoped), veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4}))
-	if c.Limits.MaxPage != 4 || c.Limits.MaxCost != veloxgql.DefaultLimits().MaxCost || len(c.TxOptions) != 1 || c.TxFilter == nil || c.BatchScope == nil {
-		t.Errorf("NewConfig = %+v", c)
-	}
-	if d := veloxgql.NewConfig(); d.Limits != veloxgql.DefaultLimits() || d.TxOptions != nil || d.TxFilter != nil || d.BatchScope != nil {
-		t.Errorf("NewConfig() = %+v", d)
-	}
-	defer func() {
-		if recover() == nil {
-			t.Error("NewConfig(Option{}) did not panic")
-		}
-	}()
-	veloxgql.NewConfig(veloxgql.Option{})
-}
-
 // TestCursorPlainMarshalers: MarshalGQL and UnmarshalGQL, graphql-go's, are
-// the context pair's, and a cursor that does not encode writes null.
+// the context pair's. A cursor that does not encode panics in MarshalGQL
+// (TestEncodeCursorRefuses).
 func TestCursorPlainMarshalers(t *testing.T) {
 	c := veloxgql.Cursor{Type: "Post", Key: int64(7)}
 	var plain, withCtx bytes.Buffer
@@ -80,11 +58,6 @@ func TestCursorPlainMarshalers(t *testing.T) {
 	}
 	if err := back.UnmarshalGQL(1); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("UnmarshalGQL(1) = %v", err)
-	}
-	var bad bytes.Buffer
-	veloxgql.Cursor{Type: "Post", Key: make(chan int)}.MarshalGQL(&bad)
-	if bad.String() != "null" {
-		t.Errorf("a cursor that does not encode wrote %s", bad.String())
 	}
 	if veloxgql.OrderDirectionAsc.String() != "ASC" {
 		t.Error("OrderDirection.String")

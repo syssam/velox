@@ -6,16 +6,18 @@
 // What only generated code calls is in package gqlgraph, whose names are
 // stable by GeneratedCodeIsVersion27 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name. An engine is
-// served through its adapter: package gqlgenx for gqlgen. Generated code
-// imports this package and gqlgraph alone, so one generated package serves
-// any adapter.
+// served through its adapter: package gqlgenx for gqlgen, package graphqlgo
+// for github.com/syssam/graphql-go. Generated code imports this package and
+// gqlgraph alone, so one generated package serves either adapter.
 //
 // # Adapters
 //
-// An adapter puts an operation's state in its context: the DB, the limits
-// (a Config, which the Options configure: WithLimits, WithTxOptions,
-// WithTxFilter, WithBatchScope) and a selection source of its engine, which
-// tells generated code the field each resolver resolves and what it selects.
+// An adapter puts an operation's state in its context: the DB, the Limits
+// and a selection source of its engine, which tells generated code the
+// field each resolver resolves and what it selects. gqlgenx takes options
+// of its own (gqlgenx.WithLimits, gqlgenx.WithTxOptions,
+// gqlgenx.WithTxFilter, gqlgenx.WithBatchScope); graphqlgo takes none and
+// always puts DefaultLimits().
 // A read of generated code (a connection, an edge) in a context no adapter
 // made fails with ErrNoSelectionSource, and ErrNoDB: it never falls back to
 // reading every column and batching nothing.
@@ -165,18 +167,20 @@
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
 // MaxFilterWidth, MaxFilterNodes, MaxOrderTerms, MaxCost, MaxIntrospectionCost,
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes,
-// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. An adapter has
-// its own (WithLimits; a zero field is the default), which it puts in each
-// operation's context, and generated code reads them with LimitsFromContext,
-// which gives DefaultLimits() in a context without them. gqlgenx.Extension
-// refuses a negative limit. MaxList is how many rows a list edge reads, and more fail
+// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. The
+// adapter puts them in each operation's context, gqlgenx's those
+// gqlgenx.WithLimits gives (a zero field is the default) and graphqlgo's
+// always DefaultLimits(), and generated code reads them with
+// LimitsFromContext, which gives DefaultLimits() in a context without them.
+// gqlgenx.Extension refuses a negative limit. MaxList is how many rows a list edge reads, and more fail
 // with velox.ErrTooManyRows; graphql.MaxList(n) lowers it for one edge, and its cost.
 //
 // Every one of them but MaxCost bounds one argument or one edge, not a whole
 // request: connections nested in connections multiply (MaxPage rows, and a
 // query for each, at every level), and aliases repeat a field as often as the
-// client writes it. MaxCost bounds the request. Cost computes what an
-// operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
+// client writes it. MaxCost bounds the request under gqlgenx; under graphqlgo
+// it is not applied, and the server sets graphql.WithQueryCost.
+// gqlgenx.Cost computes what an operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
 // its children's cost times its multiplier, which is first or last for a
 // connection's edges and MaxList for another list of objects. On top of that, with no multiplier, a field that runs a statement
 // adds 100, so first: 0 and aliases count, and an input object adds its size at
@@ -201,7 +205,7 @@
 // it, which gqlgenx.Extension does on its own. MaxBodyBytes bounds the request's body and a
 // websocket's message, in the handler gqlgenx.Setup returns, the one call a server needs.
 //
-// Cost cannot see the size of a value, or how long a statement takes. MaxResponseBytes
+// gqlgenx.Cost cannot see the size of a value, or how long a statement takes. MaxResponseBytes
 // holds a response's strings, bytes and JSON, counted as its fields resolve; MaxErrors its
 // errors; and Timeout a query or a mutation's time. Over any of them the request stops,
 // with one error (ErrResponseTooLarge, ErrTooManyErrors, ErrTimeout) and data null, and a

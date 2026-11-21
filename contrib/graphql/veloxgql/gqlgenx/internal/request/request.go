@@ -4,6 +4,7 @@
 package request
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -634,4 +635,31 @@ func CostError(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]
 		return nil
 	}
 	return &gqlcore.Error{Code: veloxgql.CodeTooCostly, Msg: msg, Err: veloxgql.ErrTooCostly}
+}
+
+// OrDefault is l with each zero field taken from veloxgql.DefaultLimits().
+func OrDefault(l veloxgql.Limits) veloxgql.Limits {
+	d := veloxgql.DefaultLimits()
+	return veloxgql.Limits{
+		MaxPage:        cmp.Or(l.MaxPage, d.MaxPage),
+		MaxList:        cmp.Or(l.MaxList, d.MaxList),
+		MaxFilterDepth: cmp.Or(l.MaxFilterDepth, d.MaxFilterDepth),
+		MaxFilterWidth: cmp.Or(l.MaxFilterWidth, d.MaxFilterWidth),
+		MaxFilterNodes: cmp.Or(l.MaxFilterNodes, d.MaxFilterNodes),
+		MaxOrderTerms:  cmp.Or(l.MaxOrderTerms, d.MaxOrderTerms),
+		MaxCost:        cmp.Or(l.MaxCost, d.MaxCost),
+
+		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
+		MaxTokens:            cmp.Or(l.MaxTokens, d.MaxTokens),
+		MaxFields:            cmp.Or(l.MaxFields, d.MaxFields),
+		MaxFragments:         cmp.Or(l.MaxFragments, d.MaxFragments),
+		MaxDepth:             cmp.Or(l.MaxDepth, d.MaxDepth),
+		MaxNameBytes:         cmp.Or(l.MaxNameBytes, d.MaxNameBytes),
+		MaxLiteralBytes:      cmp.Or(l.MaxLiteralBytes, d.MaxLiteralBytes),
+		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
+		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
+		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
+		MaxResponseBytes:     cmp.Or(l.MaxResponseBytes, d.MaxResponseBytes),
+		Timeout:              cmp.Or(l.Timeout, d.Timeout),
+	}
 }
