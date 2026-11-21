@@ -52,6 +52,15 @@
 ### Task 3: graphqlgo adapter (spec §2.3, §3.6; ADR 0106)
 - [ ] parity suite; [ ] implement; [ ] verify -race; [ ] commit
 
+### Task 3b: veloxe compat parity for clients (parity report §5 items 1, 2, 3, 5; ADR 0110)
+Source: `docs/superpowers/specs/2026-11-22-veloxe-behaviour-parity.md` §1, §2, §5. All changes apply only when `gqlgraph.Type.Veloxe` (compat=veloxe) is set; default output and behaviour unchanged.
+- Item 1: `veloxgql.Cursor` decoding also accepts veloxe's cursor (base64 RawStd msgpack `{i, v, vs}`, hand decoder for fixmap/ints/strings/nil/ext 1, no msgpack dependency), read as Key=i and v/vs as the current order's values. Velox cursors are still emitted. No legacy-emit option (YAGNI). Seed test vectors from the probe output in §8.
+- Item 2: single-term order: the key tie-break takes that term's direction.
+- Item 3: FK predicates (`xID`, `xIDIn`, `xIDIsNil`, ...) are plain column predicates (no ScopedKey/EXISTS); amend ADRs 0027/0103.
+- Item 5: forward page with `after` → hasPreviousPage true; backward with `before` → hasNextPage true.
+- Item 4 is kept as velox2 behaviour (documented in Phase D); item 6 deferred.
+- [ ] failing tests (one per item, compat on, plus default-unchanged); [ ] implement; [ ] verify; [ ] commit
+
 ### Task 4: engine=graphql-go output (spec §3.1, §3.2, §3.4; ADR 0107; Version28; Q2 refusal)
 - [ ] goldens both engines; [ ] implement; [ ] verify; [ ] commit
 
