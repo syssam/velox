@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // budgetSDL is a schema of the leaves a response counts, and a field that fails.
@@ -132,7 +133,7 @@ func TestResolverErrorsBounded(t *testing.T) {
 			},
 		}), db, veloxgql.WithLimits(veloxgql.Limits{MaxErrors: 3, MaxCost: 1 << 30}))
 		if presented {
-			srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(context.Context, error) {}))
+			srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) {}))
 		}
 		var resp struct {
 			Data   any
@@ -196,7 +197,7 @@ func TestTimeout(t *testing.T) {
 	}
 	resolvers["add"] = addSlow
 	srv := handler.New(testSchemaOf(budgetSDL, resolvers))
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 200 * time.Millisecond}))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 200 * time.Millisecond}))
 	srv.AddTransport(transport.POST{})
 	const want = `{"errors":[{"message":"request timed out: it ran over 200ms","extensions":{"code":"TIMEOUT"}}],"data":null}`
 	start := time.Now()
@@ -226,7 +227,7 @@ func TestTimeout(t *testing.T) {
 	// A transaction's own deadline, velox.TxTimeout, is the mutation's error,
 	// and not the Timeout.
 	tx := handler.New(testSchemaOf(budgetSDL, resolvers))
-	txh := veloxgql.Setup(tx, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: time.Hour}), veloxgql.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
+	txh := gqlgenx.Setup(tx, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: time.Hour}), veloxgql.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
 	tx.AddTransport(transport.POST{})
 	resolvers["slow"] = slow
 	if got := post(t, context.Background(), txh, `mutation { add(id: 2) }`); strings.Contains(got, "TIMEOUT") || !strings.Contains(got, `"data":null`) {
@@ -250,8 +251,8 @@ func TestTimeoutIsNotTooManyErrors(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}}))
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond, MaxErrors: 3}))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(context.Context, error) { logged.Add(1) }))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond, MaxErrors: 3}))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) { logged.Add(1) }))
 	srv.AddTransport(transport.POST{})
 	const want = `{"errors":[{"message":"request timed out: it ran over 50ms","extensions":{"code":"TIMEOUT"}}],"data":null}`
 	for range 20 {
@@ -290,7 +291,7 @@ func TestSubscriptionHasNoTimeout(t *testing.T) {
 func TestLimitsNegativeNewOnes(t *testing.T) {
 	db, _ := handlerDB(t)
 	for name, l := range map[string]veloxgql.Limits{"Timeout": {Timeout: -1}, "MaxResponseBytes": {MaxResponseBytes: -1}} {
-		e := veloxgql.NewExtension(db, veloxgql.WithLimits(l))
+		e := gqlgenx.NewExtension(db, veloxgql.WithLimits(l))
 		if err := e.Validate(nil); err == nil || !strings.Contains(err.Error(), name) {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -310,7 +311,7 @@ func TestStoppedStreamEnds(t *testing.T) {
 	}
 	resolvers["slow"], resolvers["add"] = wait, wait
 	srv := handler.New(testSchemaOf(budgetSDL, resolvers))
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond}))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond}))
 	srv.AddTransport(transport.SSE{})
 	for _, q := range []string{`{ slow }`, `mutation { add(id: 1) }`} {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

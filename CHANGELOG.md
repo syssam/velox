@@ -510,6 +510,23 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `veloxgql` is an engine-free core, and gqlgen's adapter is the new
+  package `veloxgql/gqlgenx` (ADR 0104): `NewExtension`, `Extension`,
+  `Setup`, `Server`, `ErrorPresenter`, `OnCanceled`, `PresenterOption` and
+  the function marshalers (`MarshalTime`, `MarshalInt64ID` and the rest)
+  moved there. The options stay in `veloxgql` and configure a
+  `veloxgql.Config` (`NewConfig`); `veloxgql.Present` is the code and
+  message a client sees. In `gqlgen.yml`, `Int64ID`, `Float32`, `Uint64`,
+  `Uint`, `Time`, `UUID` and `Bytes` name `veloxgql/gqlgenx`; `JSON`,
+  `Cursor`, `OrderDirection` and `PageInfo` stay on `veloxgql`. Generated
+  code is unchanged; gqlgen's `generated.go` names `gqlgenx.MarshalTime`
+  and `gqlgenx.MarshalInt64ID`. `Cursor` gains `MarshalGQL` and
+  `UnmarshalGQL`; a nil `gqlgraph.Connection` is the empty connection.
+- A read of generated GraphQL code (a connection, an edge) in a context no
+  adapter made fails with the new `veloxgql.ErrNoSelectionSource`, joined
+  with `ErrNoDB`, and sends no statement (ADR 0105). It never falls back to
+  reading every column. `gqlgenx.Extension.NewContext` gives code outside a
+  server a context.
 - Handles are named by what the column holds (ADR 0096): a time field's is
   `velox.TimeCol` (`NullTimeCol`), and an Other field's that is no decimal
   `velox.OtherCol` (`NullOtherCol`), each with the methods `OrderedCol` had.

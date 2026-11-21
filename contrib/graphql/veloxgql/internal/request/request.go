@@ -1,20 +1,25 @@
-package veloxgql
+// Package request bounds a request's document and variables by the limits,
+// before an engine parses or validates them: the walks gqlgenx runs on every
+// request. It imports no engine.
+package request
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/99designs/gqlgen/graphql/errcode"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 	"github.com/vektah/gqlparser/v2/parser"
 
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/cost"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 const (
+	// parseFailed is the code gqlgen gives a document that does not parse,
+	// its errcode.ParseFailed.
+	parseFailed = "GRAPHQL_PARSE_FAILED"
 	// conflictPairsPerField is the pairs of fields under one response name that
 	// differ that a document may hold, for each of Limits.MaxFields. Validation
 	// makes an error of each, whether it is returned or not.
@@ -32,10 +37,10 @@ const (
 	inputObjectNodes = 4
 )
 
-// bounds is what the one check of a request holds it to: the limits, and what the
-// schema makes of them.
-type bounds struct {
-	Limits
+// Bounds is what the one check of a request holds it to: the limits, and what the
+// schema makes of them. NewBounds makes it.
+type Bounds struct {
+	veloxgql.Limits
 	schema *ast.Schema
 	// names is the longest name: MaxNameBytes, or the schema's longest.
 	names int
@@ -44,9 +49,9 @@ type bounds struct {
 	widest int64
 }
 
-// newBounds is l's bounds on schema, which may be nil.
-func newBounds(l Limits, schema *ast.Schema) bounds {
-	b := bounds{Limits: l, schema: schema, names: l.MaxNameBytes, widest: 1}
+// NewBounds is l's bounds on schema, which may be nil.
+func NewBounds(l veloxgql.Limits, schema *ast.Schema) Bounds {
+	b := Bounds{Limits: l, schema: schema, names: l.MaxNameBytes, widest: 1}
 	if schema == nil {
 		return b
 	}
@@ -70,26 +75,27 @@ func newBounds(l Limits, schema *ast.Schema) bounds {
 	return b
 }
 
-// checkRequest refuses a request whose document or variables any later stage would
-// do more than linear work for, or more than the limits say. A query sent by its
-// hash, that an APQ extension after this one fills, has only its variables here: it
-// was checked when it was stored.
-func checkRequest(p *graphql.RawParams, b bounds) *gqlerror.Error {
-	if len(p.OperationName) > b.names {
-		return tooLarge(fmt.Sprintf("it has a name of %d bytes, and the most is %d", len(p.OperationName), b.names))
+// Check refuses a request, of the operation name, the query and the
+// variables vars, whose document or variables any later stage would do more
+// than linear work for, or more than the limits say. A query sent by its
+// hash, that an APQ extension after this check fills, has only its
+// variables here: it was checked when it was stored.
+func Check(name, query string, vars map[string]any, b Bounds) *gqlerror.Error {
+	if len(name) > b.names {
+		return TooLarge(fmt.Sprintf("it has a name of %d bytes, and the most is %d", len(name), b.names))
 	}
 	var op *ast.OperationDefinition
-	if p.Query != "" {
-		doc, err := checkDocument(p.Query, b)
+	if query != "" {
+		doc, err := CheckDocument(query, b)
 		if err != nil {
 			return err
 		}
-		op = doc.Operations.ForName(p.OperationName)
+		op = doc.Operations.ForName(name)
 	}
-	return checkVariables(p.Variables, op, p.Query == "", b)
+	return CheckVariables(vars, op, query == "", b)
 }
 
-// checkDocument parses query under the limits' MaxTokens and bounds it: everything
+// CheckDocument parses query under the limits' MaxTokens and bounds it: everything
 // in it is read once, and then each selection once for each place a fragment is
 // spread, up to a bound, so its work is linear. Each thing validation or a resolver
 // does more for has its limit:
@@ -105,20 +111,24 @@ func checkRequest(p *graphql.RawParams, b bounds) *gqlerror.Error {
 //   - the bytes of any name or alias, which each row and error repeats, and of a
 //     string literal, which errors repeat;
 //   - pairs of fields under one response name, and the fields spreads reach.
-func checkDocument(query string, b bounds) (*ast.QueryDocument, *gqlerror.Error) {
+func CheckDocument(query string, b Bounds) (*ast.QueryDocument, *gqlerror.Error) {
 	if len(query) > b.MaxBodyBytes {
-		return nil, tooLarge(fmt.Sprintf("its query is over %d bytes", b.MaxBodyBytes))
+		return nil, TooLarge(fmt.Sprintf("its query is over %d bytes", b.MaxBodyBytes))
 	}
 	doc, err := parser.ParseQueryWithTokenLimit(&ast.Source{Input: query}, b.MaxTokens)
 	if err != nil {
-		// What gqlgen makes of a parser's error, as it would have failed the same.
+		// What gqlgen makes of a parser's error, as it would have failed the same:
+		// errcode.Set(gqlErr, errcode.ParseFailed).
 		gqlErr := gqlerror.WrapIfUnwrapped(err)
-		errcode.Set(gqlErr, errcode.ParseFailed)
+		if gqlErr.Extensions == nil {
+			gqlErr.Extensions = map[string]any{}
+		}
+		gqlErr.Extensions["code"] = parseFailed
 		return nil, gqlErr
 	}
-	w := &docWalk{bounds: b}
+	w := &docWalk{Bounds: b}
 	if !w.document(doc) {
-		return nil, tooLarge(w.why)
+		return nil, TooLarge(w.why)
 	}
 	m := &merger{
 		frags:        make(map[string]*ast.FragmentDefinition, len(doc.Fragments)),
@@ -138,20 +148,22 @@ func checkDocument(query string, b bounds) (*ast.QueryDocument, *gqlerror.Error)
 		ok = ok && m.merge([]ast.SelectionSet{f.SelectionSet}, 1)
 	}
 	if !ok {
-		return nil, tooLarge(m.why())
+		return nil, TooLarge(m.why())
 	}
 	return doc, nil
 }
 
-func tooLarge(reason string) *gqlerror.Error {
-	err := &gqlcore.Error{Code: CodeBadUserInput, Msg: fmt.Sprintf("%v: %s", ErrRequestTooLarge, reason), Err: ErrRequestTooLarge}
+// TooLarge is the error of a request over a bound: BAD_USER_INPUT wrapping
+// ErrRequestTooLarge, which says why.
+func TooLarge(reason string) *gqlerror.Error {
+	err := &gqlcore.Error{Code: veloxgql.CodeBadUserInput, Msg: fmt.Sprintf("%v: %s", veloxgql.ErrRequestTooLarge, reason), Err: veloxgql.ErrRequestTooLarge}
 	return &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()}
 }
 
 // docWalk reads a document as written. Its methods report whether it stayed within
 // the bounds, and why not is its why.
 type docWalk struct {
-	bounds
+	Bounds
 	fields, spreads int
 	frags           map[string]bool
 	why             string
@@ -468,14 +480,14 @@ func (m *merger) pair(g *group, f *ast.Field, inline int) {
 	g.n++
 }
 
-// checkVariables bounds vars, the variables of op, before gqlgen coerces them and any
+// CheckVariables bounds vars, the variables of op, before gqlgen coerces them and any
 // resolver unmarshals them: how deep they nest, their bytes (a websocket's messages
 // have no other limit) and their nodes, each object weighing what its input type
 // does. A variable that op does not declare is never coerced, and weighs by its
 // nodes alone. unknown is true when there is no op to read yet, a query sent by its
 // hash, when an object weighs as the schema's widest input does.
-func checkVariables(vars map[string]any, op *ast.OperationDefinition, unknown bool, b bounds) *gqlerror.Error {
-	w := &varWalk{bounds: b, unknown: unknown}
+func CheckVariables(vars map[string]any, op *ast.OperationDefinition, unknown bool, b Bounds) *gqlerror.Error {
+	w := &varWalk{Bounds: b, unknown: unknown}
 	for name, v := range vars {
 		var d *ast.Definition
 		if op != nil && b.schema != nil {
@@ -484,7 +496,7 @@ func checkVariables(vars map[string]any, op *ast.OperationDefinition, unknown bo
 			}
 		}
 		if w.bytes += len(name); !w.value(v, d, 1) {
-			return tooLarge(w.why)
+			return TooLarge(w.why)
 		}
 	}
 	return nil
@@ -492,7 +504,7 @@ func checkVariables(vars map[string]any, op *ast.OperationDefinition, unknown bo
 
 // varWalk reads variables, as docWalk does a document.
 type varWalk struct {
-	bounds
+	Bounds
 	unknown      bool
 	nodes, bytes int
 	why          string
@@ -546,4 +558,54 @@ func (w *varWalk) value(v any, d *ast.Definition, depth int) bool {
 		return false
 	}
 	return true
+}
+
+// CostLimits is what the cost model reads of l.
+func CostLimits(l veloxgql.Limits) cost.Limits {
+	return cost.Limits{MaxPage: l.MaxPage, MaxList: l.MaxList, MaxIntrospectionCost: l.MaxIntrospectionCost}
+}
+
+// CheckLimits refuses a negative limit of l, naming who was given it and
+// the limit: "gqlgenx.NewExtension: Limits.MaxCost is -1, and a limit must
+// not be negative (zero is the default)".
+func CheckLimits(who string, l veloxgql.Limits) error {
+	for _, f := range fields(l) {
+		if f.n < 0 {
+			return fmt.Errorf("%s: Limits.%s is %d, and a limit must not be negative (zero is the default)", who, f.name, f.n)
+		}
+	}
+	if l.Timeout < 0 {
+		return fmt.Errorf("%s: Limits.Timeout is %v, and a limit must not be negative (zero is the default)", who, l.Timeout)
+	}
+	return nil
+}
+
+// fields are l's fields by name, in declaration order.
+func fields(l veloxgql.Limits) []struct {
+	name string
+	n    int
+} {
+	return []struct {
+		name string
+		n    int
+	}{
+		{"MaxPage", l.MaxPage},
+		{"MaxList", l.MaxList},
+		{"MaxFilterDepth", l.MaxFilterDepth},
+		{"MaxFilterWidth", l.MaxFilterWidth},
+		{"MaxFilterNodes", l.MaxFilterNodes},
+		{"MaxOrderTerms", l.MaxOrderTerms},
+		{"MaxCost", l.MaxCost},
+		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
+		{"MaxTokens", l.MaxTokens},
+		{"MaxFields", l.MaxFields},
+		{"MaxFragments", l.MaxFragments},
+		{"MaxDepth", l.MaxDepth},
+		{"MaxNameBytes", l.MaxNameBytes},
+		{"MaxLiteralBytes", l.MaxLiteralBytes},
+		{"MaxVariableNodes", l.MaxVariableNodes},
+		{"MaxErrors", l.MaxErrors},
+		{"MaxBodyBytes", l.MaxBodyBytes},
+		{"MaxResponseBytes", l.MaxResponseBytes},
+	}
 }

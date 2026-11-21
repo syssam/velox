@@ -33,6 +33,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/examples/graphql/graph"
 	"github.com/syssam/velox/examples/graphql/veloxgen"
 	"github.com/syssam/velox/examples/graphql/veloxschema"
@@ -96,10 +97,10 @@ func serve(ctx context.Context, ln net.Listener) error {
 }
 
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
-// made safe by veloxgql.Setup. Every operation's context holds db and the default
+// made safe by gqlgenx.Setup. Every operation's context holds db and the default
 // limits, where the generated code reads them; a request has a limit on its body,
 // its query's tokens and fields, what it costs and its introspection, before any
-// of it is validated or run. veloxgql.ErrorPresenter shows a client only what is
+// of it is validated or run. gqlgenx.ErrorPresenter shows a client only what is
 // safe, with a code: gqlgen's default presenter would show it every error's text,
 // the driver's and velox's, which name tables, entities and constraints. It logs
 // the rest with slog, and says "internal error". The directive @admin is the
@@ -109,7 +110,7 @@ func server(db *velox.DB, opts ...veloxgql.Option) http.Handler {
 		Resolvers:  &graph.Resolver{},
 		Directives: graph.DirectiveRoot{Admin: admin},
 	}))
-	h := veloxgql.Setup(srv, db, opts...)
+	h := gqlgenx.Setup(srv, db, opts...)
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
 	return h
@@ -174,7 +175,7 @@ func userFromHeader(next http.Handler) http.Handler {
 // admin implements the directive @admin, on a field or on a where input's
 // field: it resolves the field, or reads the predicate, only when the role is
 // admin. Otherwise it fails with an error of the application's, which
-// veloxgql.ErrorPresenter shows the client as it is, code and all.
+// gqlgenx.ErrorPresenter shows the client as it is, code and all.
 func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 	if role, _ := ctx.Value(roleKey{}).(string); role != "admin" {
 		return nil, &gqlerror.Error{

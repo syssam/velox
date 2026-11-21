@@ -384,8 +384,8 @@ neither.
   entity's key in its own Go type, which gqlgen decodes: a resolver takes
   `id int64`, and an input's `authorID` is an `int64`. Every key of a
   schema's GraphQL types has one Go type, since gqlgen binds every ID
-  argument to the first model `gqlgen.yml` lists for `ID`: `veloxgql.Int64ID`
-  for int64, `veloxgql.UUID` for UUID, gqlgen's `graphql.ID` for string.
+  argument to the first model `gqlgen.yml` lists for `ID`: `gqlgenx.Int64ID`
+  for int64, `gqlgenx.UUID` for UUID, gqlgen's `graphql.ID` for string.
   velox-graphql refuses a schema whose keys differ. An application that
   needs `node(id:)` declares and resolves it itself (ADR 0061).
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,

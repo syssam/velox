@@ -8,6 +8,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
@@ -48,7 +49,7 @@ func TestEdgeErrors(t *testing.T) {
 	if c, err := gqlgraph.Paginate(noDB, kids, gqlgraph.TableType[child]("Child"), gqlgraph.Args{}); c != nil || !errors.Is(err, veloxgql.ErrNoDB) {
 		t.Errorf("Paginate of an edge with no DB = %v, %v", c, err)
 	}
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
 	// A row of another entity than the owner's fails the edge's read, with
 	// an error and no panic.
 	wrong := gqlgraph.TableType[child]("Child").Edge(&owner{ID: 1}, int(children.Owner.I))

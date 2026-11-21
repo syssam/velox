@@ -232,6 +232,7 @@ import (
 	"example.com/app/graph"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func TestVeloxeNames(t *testing.T) {
@@ -256,7 +257,7 @@ func TestVeloxeNames(t *testing.T) {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
 	// The cost charges a list of objects MaxList rows for each parent: the root
 	// list and the json list of Assignee are lists of objects.
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -372,7 +373,7 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func TestVeloxeNodeAndFilters(t *testing.T) {
@@ -396,8 +397,8 @@ func TestVeloxeNodeAndFilters(t *testing.T) {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))

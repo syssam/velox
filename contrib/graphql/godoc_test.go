@@ -18,14 +18,14 @@ import (
 var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section|note)\b|\bsection \d|\b(schema|policy|routing|observability|core|graphql) (design|spec)\b|\bdocs/(specs|plans|reviews)\b|\b(GraphQL|API)\s+plan\s+\d`)
 
 // TestGodocCitesNoSpec: no comment in the public packages of this module
-// (graphql, veloxgql and gqlgraph, tests included) and no string literal in
+// (graphql, veloxgql, gqlgraph and gqlgenx, tests included) and no string literal in
 // them, which holds the messages a user sees, cites a design document or a
 // ruling.
 func TestGodocCitesNoSpec(t *testing.T) {
 	_, self, _, _ := runtime.Caller(0)
 	root := filepath.Dir(self)
 	var files []string
-	for _, dir := range []string{".", "veloxgql", "veloxgql/gqlgraph"} {
+	for _, dir := range []string{".", "veloxgql", "veloxgql/gqlgraph", "veloxgql/gqlgenx"} {
 		m, err := filepath.Glob(filepath.Join(root, dir, "*.go"))
 		if err != nil {
 			t.Fatal(err)

@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"context"
@@ -415,7 +415,7 @@ func TestBatchScopeOption(t *testing.T) {
 func TestBatchReadThatFailsReadsAlone(t *testing.T) {
 	db, log := batchDB(t)
 	got := post(t, context.Background(), batchServer(db), `{ keepers { name pets { totalCount } } }`)
-	const denied = "velox: veloxgql_test.pet: select denied by policy: velox/scope: the context has no scope value: org"
+	const denied = "velox: gqlgenx_test.pet: select denied by policy: velox/scope: the context has no scope value: org"
 	for i := range 3 {
 		if want := fmt.Sprintf(`{"message":%q,"path":["keepers",%d,"pets","totalCount"]}`, denied, i); !strings.Contains(got, want) {
 			t.Errorf("keeper %d's error is missing:\n%s", i, got)

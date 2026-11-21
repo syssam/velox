@@ -1,10 +1,24 @@
 // Package veloxgql is the runtime the GraphQL code velox-graphql generates
-// binds to, through gqlgen: the ID scalar, connection cursors, where filters,
-// the scalars, and the limits on what a client may ask for.
+// binds to, whichever GraphQL engine serves it: connection cursors, where
+// filters, the scalars, the errors and their codes, and the limits on what a
+// client may ask for. It imports no engine.
 //
 // What only generated code calls is in package gqlgraph, whose names are
 // stable by GeneratedCodeIsVersion27 and not by semantic versioning. Where a
-// name below belongs to gqlgraph it is written gqlgraph.Name.
+// name below belongs to gqlgraph it is written gqlgraph.Name. An engine is
+// served through its adapter: package gqlgenx for gqlgen. Generated code
+// imports this package and gqlgraph alone, so one generated package serves
+// any adapter.
+//
+// # Adapters
+//
+// An adapter puts an operation's state in its context: the DB, the limits
+// (a Config, which the Options configure: WithLimits, WithTxOptions,
+// WithTxFilter, WithBatchScope) and a selection source of its engine, which
+// tells generated code the field each resolver resolves and what it selects.
+// A read of generated code (a connection, an edge) in a context no adapter
+// made fails with ErrNoSelectionSource, and ErrNoDB: it never falls back to
+// reading every column and batching nothing.
 //
 // # IDs
 //
@@ -13,9 +27,10 @@
 // argument or input field to the key's Go type, so a resolver takes the key
 // as it is. gqlgen binds every ID argument to the first model gqlgen.yml
 // lists for ID, so the keys of a schema's GraphQL types are of one Go type.
-// MarshalInt64ID and UnmarshalInt64ID are the ID scalar of an int64 key: a
-// JSON string of the decimal digits out, a string or an integer in. A UUID
-// key binds to UUID's marshalers and a string key to gqlgen's graphql.ID.
+// gqlgenx.MarshalInt64ID and gqlgenx.UnmarshalInt64ID are the ID scalar of an
+// int64 key: a JSON string of the decimal digits out, a string or an integer
+// in. A UUID key binds to gqlgenx.MarshalUUID and a string key to gqlgen's
+// graphql.ID.
 //
 // An ID names a row of its type only where its type is known: the key 7 is
 // both Post 7 and User 7. There is no Node interface and no node query. A
@@ -25,25 +40,10 @@
 // # The DB
 //
 // Generated code runs its queries on the DB that DBFromContext reads from the
-// request's context. The Extension (NewExtension) is the gqlgen handler
-// extension that puts it there, with the limits, for every operation, and
-// runs a mutation operation in one transaction: it commits when the response
-// has no errors, and rolls back otherwise or on a panic. Extension.NewContext
-// puts the same in a context for generated code called outside a gqlgen
-// server, in a job or a test.
-//
-// WithTxOptions sets the options of a mutation's transaction
-// (velox.TxIsolation, velox.TxReadOnly, velox.TxTimeout). It refuses
-// velox.TxRetrySerializable, since gqlgen makes the response once and the
-// operation cannot run again. WithTxFilter decides for each mutation
-// operation, from its context and definition, whether it runs in a
-// transaction; a nil filter means every mutation does. Use it for mutations
-// that only call other services, which would hold a pooled connection in a
-// transaction for no statement. One the filter leaves out runs on the DB: its
-// statements are not atomic and its field resolvers are not serialized, but
-// it keeps read-your-writes, since it runs in a velox session
-// (velox.WithSession) and a DB with replicas reads its own writes from the
-// primary.
+// request's context, where the adapter puts it with the limits for every
+// operation; LimitsFromContext reads those. gqlgenx.Extension runs a
+// mutation operation in one transaction, and its NewContext puts the DB in a
+// context for generated code called outside a server, in a job or a test.
 //
 // # Cursors
 //
@@ -81,8 +81,8 @@
 // different scope values, bypasses or shards never share a read; any other
 // context value a policy or a hook reads must be the same for every row of a
 // field, or be returned by WithBatchScope. Nothing waits for other
-// resolvers, which a mutation could not allow. Outside a gqlgen field Batch
-// does nothing.
+// resolvers, which a mutation could not allow. Outside a field Batch does
+// nothing.
 //
 // # Where
 //
@@ -130,15 +130,13 @@
 // # Scalars
 //
 // Time, UUID, Bytes, JSON, Uint64 and Cursor are the GraphQL scalars of
-// those names, and OrderDirection the enum: each implements gqlgen's
-// graphql.Marshaler and graphql.Unmarshaler. PageInfo is the object type,
-// which gqlgen binds by its fields. The function marshalers MarshalTime,
-// MarshalUUID, MarshalBytes, MarshalUint64, MarshalUint and MarshalFloat32,
-// with their Unmarshal functions, bind the scalars to the Go types velox
-// entities hold (time.Time, uuid.UUID, []byte, uint64, uint, float32): gqlgen
-// prefers a model's function marshalers to its type. The gqlgen.yml models
-// that map each scalar are in the documentation of package
-// github.com/syssam/velox/contrib/graphql.
+// those names, and OrderDirection the enum: each has the methods MarshalGQL
+// and UnmarshalGQL, which gqlgen and graphql-go call (Cursor has a context
+// pair too, which gqlgen prefers). PageInfo is the object type, which the
+// engine binds by its fields. gqlgenx's function marshalers bind the scalars
+// to the Go types velox entities hold (time.Time, uuid.UUID, []byte, uint64,
+// uint, float32). The gqlgen.yml models that map each scalar are in the
+// documentation of package github.com/syssam/velox/contrib/graphql.
 //
 // Uint64 is a decimal string on the wire both ways, since a JSON number loses
 // precision above 2^53 in many clients.
@@ -152,28 +150,26 @@
 // ExtendedError. Its text starts "veloxgql: ", and errors.Is finds its
 // sentinel. gqlgraph.InputErrorf makes one, for generated code.
 //
-// ErrorPresenter is the presenter to give the server
-// (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))). It shows a client a
-// coded error's message and code; a fixed message for velox's errors without
-// a scope value (CodeUnauthenticated), denied by a policy (CodeForbidden), of a
-// validator or a violated constraint (CodeBadUserInput); gqlgen's text for an
-// integer that an Int8…Uint32 argument cannot hold (CodeBadUserInput); and
-// "internal error" (CodeInternal) for anything else, which it logs: a
-// driver's error, a deadline of the application's, a list edge over MaxList, ErrNoDB. An error
-// that is only the cancellation of the request, the client gone, is not
-// logged as an internal error. So no driver text, SQL, scope, entity or constraint name reaches a
-// client. gqlgen's default presenter shows every error's text, and no code.
+// Present is the code and the message a client may see for an error, which
+// an adapter's presenter (gqlgenx.ErrorPresenter) shows: a coded error's
+// message and code; a fixed message for velox's errors without a scope value
+// (CodeUnauthenticated), denied by a policy (CodeForbidden), of a validator or
+// a violated constraint (CodeBadUserInput); and "internal error"
+// (CodeInternal) for anything else, which the presenter logs: a driver's
+// error, a deadline of the application's, a list edge over MaxList, ErrNoDB,
+// ErrNoSelectionSource. So no driver text, SQL, scope, entity or constraint
+// name reaches a client.
 //
 // # Limits
 //
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
 // MaxFilterWidth, MaxFilterNodes, MaxOrderTerms, MaxCost, MaxIntrospectionCost,
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes,
-// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. An Extension has
+// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. An adapter has
 // its own (WithLimits; a zero field is the default), which it puts in each
 // operation's context, and generated code reads them with LimitsFromContext,
-// which gives DefaultLimits() in a context without them. The Extension refuses
-// a negative limit. MaxList is how many rows a list edge reads, and more fail
+// which gives DefaultLimits() in a context without them. gqlgenx.Extension
+// refuses a negative limit. MaxList is how many rows a list edge reads, and more fail
 // with velox.ErrTooManyRows; graphql.MaxList(n) lowers it for one edge, and its cost.
 //
 // Every one of them but MaxCost bounds one argument or one edge, not a whole
@@ -192,7 +188,7 @@
 // variable's default, when it has one; a condition that is not a boolean
 // counts); the value above it is read all the same, and costs as if it selected
 // __typename. Introspection costs one for each field of its response, counted over
-// the schema, and answers to MaxIntrospectionCost. The Extension refuses a
+// the schema, and answers to MaxIntrospectionCost. gqlgenx.Extension refuses a
 // request over either with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
 // before any resolver, so before any statement. The default MaxCost, 150000,
 // lets two levels of full connection pages through (about 20000) and not
@@ -202,8 +198,8 @@
 //
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes and
 // MaxVariableNodes bound the document and its variables, before gqlgen parses or validates
-// it, which the Extension does on its own. MaxBodyBytes bounds the request's body and a
-// websocket's message, in the handler Setup returns, the one call a server needs.
+// it, which gqlgenx.Extension does on its own. MaxBodyBytes bounds the request's body and a
+// websocket's message, in the handler gqlgenx.Setup returns, the one call a server needs.
 //
 // Cost cannot see the size of a value, or how long a statement takes. MaxResponseBytes
 // holds a response's strings, bytes and JSON, counted as its fields resolve; MaxErrors its

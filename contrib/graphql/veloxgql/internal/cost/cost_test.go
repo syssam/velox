@@ -15,6 +15,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // stmt is what a field that runs a statement adds.
@@ -657,7 +658,7 @@ func TestCostConnectionWithoutArguments(t *testing.T) {
 // TestCostSelectsOperation: the Extension costs the operation gqlgen
 // selected, not the first of the document, and refuses a saturated one.
 func TestCostSelectsOperation(t *testing.T) {
-	ext := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 300}))
+	ext := gqlgenx.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 300}))
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
 	if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
 		t.Fatal(err)

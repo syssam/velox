@@ -41,3 +41,74 @@ func TestAnnotationsImportOnlySchema(t *testing.T) {
 func isSchema(p string) bool {
 	return p == "github.com/syssam/velox/schema" || strings.HasPrefix(p, "github.com/syssam/velox/schema/")
 }
+
+// The import paths of the GraphQL engines, and of what only a server needs.
+const (
+	gqlgen    = "github.com/99designs/gqlgen"
+	graphqlGo = "github.com/syssam/graphql-go"
+)
+
+// depends returns the packages pkg depends on, through go list -deps.
+func depends(t *testing.T, pkg string) []string {
+	t.Helper()
+	out, err := exec.Command("go", "list", "-deps", pkg).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	return strings.Fields(string(out))
+}
+
+// under reports whether p is root or one of its packages, and not a sibling
+// such as rootX.
+func under(p, root string) bool {
+	return p == root || strings.HasPrefix(p, root+"/")
+}
+
+// refuse fails t for each package of pkgs that depends on one under a root
+// of roots, naming the rule.
+func refuse(t *testing.T, rule string, pkgs []string, roots ...string) {
+	t.Helper()
+	for _, pkg := range pkgs {
+		for _, p := range depends(t, pkg) {
+			for _, root := range roots {
+				if under(p, root) {
+					t.Errorf("%s depends on %s: %s", pkg, p, rule)
+				}
+			}
+		}
+	}
+}
+
+// TestCoreImportsNoEngine: the runtime that generated code imports (the core
+// veloxgql, gqlgraph) and the packages under it compile neither gqlgen nor
+// graphql-go, nor net/http, nor gqlparser's validator, so one generated
+// package serves either engine and a server of one compiles none of the
+// other.
+func TestCoreImportsNoEngine(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs go list")
+	}
+	refuse(t, "the core imports no engine", []string{
+		"./veloxgql", "./veloxgql/gqlgraph", "./veloxgql/internal/gqlcore", "./veloxgql/internal/cost", "./veloxgql/internal/request",
+	}, gqlgen, graphqlGo, "net/http", "github.com/vektah/gqlparser/v2/validator", "github.com/sosodev/duration", "github.com/agnivade/levenshtein")
+}
+
+// TestGqlgenxImportsNoGraphqlGo: gqlgen's adapter compiles no graphql-go.
+func TestGqlgenxImportsNoGraphqlGo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs go list")
+	}
+	refuse(t, "gqlgenx imports no graphql-go", []string{"./veloxgql/gqlgenx"}, graphqlGo)
+}
+
+// TestGeneratorImportsNoEngine: the plugin and the packages that write the
+// SDL and the Go compile neither engine: they name gqlgen's types as strings
+// only.
+func TestGeneratorImportsNoEngine(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs go list")
+	}
+	refuse(t, "the generator imports no engine", []string{
+		"./cmd/velox-graphql", "./internal/gqlplugin", "./internal/sdl", "./internal/gogen",
+	}, gqlgen, graphqlGo)
+}

@@ -1,10 +1,9 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -14,8 +13,10 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/cost"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/request"
 )
 
 // Extension is the gqlgen handler extension that serves a schema on a DB.
@@ -23,22 +24,22 @@ import (
 // of the server's extensions:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
-//	srv.Use(veloxgql.NewExtension(db))
-//	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
+//	srv.Use(gqlgenx.NewExtension(db))
+//	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
 //
 // or let Setup do that, with a limit on the body too, which no extension can
 // set.
 //
-// Every operation's context gets the DB, which DBFromContext reads, and the
-// extension's limits, which LimitsFromContext reads, so queries and
+// Every operation's context gets the DB, which veloxgql.DBFromContext reads, and the
+// extension's limits, which veloxgql.LimitsFromContext reads, so queries and
 // subscriptions run on the DB, and a DB with replicas routes their reads to
 // them.
 //
-// A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
+// A mutation operation runs in one db.Tx, on the primary, unless veloxgql.WithTxFilter
 // leaves it out, and its resolvers get the transaction's DB and context, so
 // every statement of the operation, its nested fields' too, is in the
 // transaction. A statement a mutation's resolver runs on db itself, not on
-// the DB DBFromContext reads, fails with velox.ErrOutsideTx; under
+// the DB veloxgql.DBFromContext reads, fails with velox.ErrOutsideTx; under
 // velox.WithoutTx(ctx) it runs outside the transaction, as an audit row that
 // must survive a rollback does.
 //
@@ -49,7 +50,7 @@ import (
 // and subscriptions' still run concurrently. A resolver of a mutation must
 // not itself use the DB from more than one goroutine.
 //
-// A mutation WithTxFilter leaves out runs on db with no transaction: its
+// A mutation veloxgql.WithTxFilter leaves out runs on db with no transaction: its
 // statements are not atomic, and its field resolvers run concurrently as a
 // query's do. It runs in a velox session (velox.WithSession), so on a DB
 // with replicas its reads after its own writes go to the primary. Use the
@@ -77,12 +78,12 @@ import (
 // Every limit but MaxCost bounds one argument or one edge, not a request: a
 // query that nests connections reads up to MaxPage to the power of its depth
 // rows, and aliases repeat a field as many times as the client writes it.
-// Limits.MaxCost bounds the whole request. Before any resolver runs, the
-// extension computes the operation's Cost, which multiplies by first and
+// veloxgql.Limits.MaxCost bounds the whole request. Before any resolver runs, the
+// extension computes the operation's veloxgql.Cost, which multiplies by first and
 // last, counts every alias, every statement and every branch of a fragment; a
 // request over MaxCost, or whose introspection, counted by the fields of its
-// response, is over MaxIntrospectionCost, fails with ErrTooCostly, the code
-// CodeTooCostly and data null, and sends no statement. It reads the schema the
+// response, is over MaxIntrospectionCost, fails with veloxgql.ErrTooCostly, the code
+// veloxgql.CodeTooCostly and data null, and sends no statement. It reads the schema the
 // server's Use gives Validate; gqlgen's extension.FixedComplexityLimit counts
 // fields, not rows, and is not needed with it.
 //
@@ -94,7 +95,7 @@ import (
 // extension.AutomaticPersistedQuery, so that the cache never stores a refused
 // query.
 //
-// Cost cannot see a value's size or a statement's time, so the Extension also holds a
+// veloxgql.Cost cannot see a value's size or a statement's time, so the Extension also holds a
 // response to MaxResponseBytes and MaxErrors and a query or a mutation to Timeout, and
 // stops the request there: what is not yet resolved does not run, and a
 // statement running is cancelled. A subscription has no Timeout, and each of its events
@@ -104,7 +105,7 @@ import (
 // transaction's, is not the Timeout, and its errors are the fields' own.
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
-// when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
+// when veloxgql.WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
 // The extension mutates the operation's parameters, to refuse a document or variables
@@ -117,103 +118,49 @@ import (
 // their resolvers one at a time.
 type Extension struct {
 	db     *velox.DB
-	limits Limits
+	limits veloxgql.Limits
 	// schema is the server's, which Validate stores; nil for Validate(nil).
 	schema *ast.Schema
 	// bounds is what the check of a request reads, of the limits and the schema.
-	bounds bounds
+	bounds request.Bounds
 	// txOpts are the options of a mutation's transaction.
 	txOpts []velox.TxOption
 	// txFilter decides whether a mutation runs in a transaction; nil means
 	// every one does.
 	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
-	// batchScope is WithBatchScope's function, or nil.
+	// batchScope is veloxgql.WithBatchScope's function, or nil.
 	batchScope func(context.Context) any
 }
 
-// Option configures an Extension. The With functions make them; the zero
-// Option is not valid, and NewExtension panics on it, as velox.Open does.
-type Option struct{ apply func(*Extension) }
-
-// NewExtension returns the extension that serves a schema on db, with
-// DefaultLimits() unless WithLimits says otherwise.
+// NewExtension returns the extension that serves a schema on db, configured
+// by opts (veloxgql.NewConfig): veloxgql.DefaultLimits() unless veloxgql.WithLimits
+// says otherwise. It panics on a zero veloxgql.Option.
 //
 // Make one Extension per server: the server's Use gives it the server's
 // schema (Validate stores it), which costs every request, so one Extension
 // used by two servers would cost both against the last one's schema.
 //
 // Set ErrorPresenter on the server too
-// (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))): without it, gqlgen's
+// (srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))): without it, gqlgen's
 // default presenter shows a client every error's text, velox's and the
 // driver's, which name entities, tables, constraints and scope values.
-func NewExtension(db *velox.DB, opts ...Option) *Extension {
-	e := &Extension{db: db, limits: DefaultLimits()}
-	for _, o := range opts {
-		o.apply(e)
-	}
-	return e
-}
-
-// WithLimits sets the extension's limits to l, each zero field of l taken
-// from DefaultLimits(). Given twice, the last wins.
-func WithLimits(l Limits) Option {
-	return Option{func(e *Extension) { e.limits = l.orDefault() }}
-}
-
-// WithTxOptions sets the options of a mutation's transaction. Validate
-// refuses TxRetrySerializable: gqlgen makes the response once, so the
-// operation cannot run again. Given twice, the last wins.
-func WithTxOptions(opts ...velox.TxOption) Option {
-	opts = slices.Clone(opts)
-	return Option{func(e *Extension) { e.txOpts = opts }}
-}
-
-// WithTxFilter decides, for each mutation operation, whether it runs in a
-// transaction. f gets the operation's context and its definition, and runs
-// once per mutation operation. A nil f means every mutation does.
-//
-// Use it for mutations that only call other services: in a transaction they
-// would hold a pooled connection while they wait, for no statement. A
-// mutation f leaves out runs on the extension's DB with no transaction, so
-// its statements are not atomic, and its field resolvers are not serialized,
-// since no transaction's DB is shared. It keeps read-your-writes: it runs in
-// a velox session (velox.WithSession), so on a DB with replicas a read after
-// its own write goes to the primary. A session of the request's context is
-// replaced, with its pin kept.
-func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option {
-	return Option{func(e *Extension) { e.txFilter = f }}
-}
-
-// WithBatchScope adds f's value to what the edges' batches are keyed by:
-// edge calls whose contexts give different values never share a read. f
-// gets the context of each call of a generated edge method (its field's
-// resolver's), and returns a comparable value; a caller whose value cannot
-// be compared (reflect.Value.Comparable) reads alone. f is called from
-// concurrent resolvers, so it must be safe for concurrent use. Given twice,
-// the last wins.
-//
-// A batch reads every row's edge under its first caller's context. velox's row
-// scope (velox.RowScopeFromContext: the scope values, the
-// WithoutPolicy bypass, the shard) is always in the key, and so are the DB,
-// a list edge's MaxList and the SQL each caller's context reads the target
-// with, after the Read policy, the interceptors and the Rewrite hooks. So
-// callers that a policy shows different rows never share a read. An Around
-// hook runs only when the batch is read: a context value that only an Around
-// hook reads must be the same for every row of a field, or be in f's value.
-func WithBatchScope(f func(context.Context) any) Option {
-	return Option{func(e *Extension) { e.batchScope = f }}
+func NewExtension(db *velox.DB, opts ...veloxgql.Option) *Extension {
+	c := veloxgql.NewConfig(opts...)
+	return &Extension{db: db, limits: c.Limits, txOpts: c.TxOptions, txFilter: c.TxFilter, batchScope: c.BatchScope}
 }
 
 // NewContext returns ctx with the extension's DB and limits, as a query
 // operation gets them: for generated code called outside a gqlgen server.
-// DBFromContext and LimitsFromContext read them back. Outside a server
-// nothing batches, so the context holds no table of rows. It panics with the
-// error Validate would return.
+// veloxgql.DBFromContext and veloxgql.LimitsFromContext read them back. Its
+// selection source is gqlgen's, which outside a gqlgen field finds none, so
+// generated code reads alone and every column. Outside a server nothing
+// batches, so the context holds no table of rows. It panics with the error
+// Validate would return.
 func (e *Extension) NewContext(ctx context.Context) context.Context {
 	if err := e.Validate(nil); err != nil {
 		panic(err)
 	}
-	return withState(ctx, e.db, e.limits)
+	return gqlcore.Install(ctx, e.db, &e.limits, &source{schema: e.schema})
 }
 
 var (
@@ -254,17 +201,12 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	if es != nil {
 		e.schema = es.Schema()
 	}
-	e.bounds = newBounds(e.limits, e.schema)
+	e.bounds = request.NewBounds(e.limits, e.schema)
 	if e.db == nil {
-		return errors.New("veloxgql.NewExtension: nil DB")
+		return errors.New("gqlgenx.NewExtension: nil DB")
 	}
-	for _, l := range e.limits.fields() {
-		if l.n < 0 {
-			return fmt.Errorf("veloxgql.NewExtension: Limits.%s is %d, and a limit must not be negative (zero is the default)", l.name, l.n)
-		}
-	}
-	if e.limits.Timeout < 0 {
-		return fmt.Errorf("veloxgql.NewExtension: Limits.Timeout is %v, and a limit must not be negative (zero is the default)", e.limits.Timeout)
+	if err := request.CheckLimits("gqlgenx.NewExtension", e.limits); err != nil {
+		return err
 	}
 	if n := velox.TxRetries(e.txOpts...); n > 0 {
 		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
@@ -278,24 +220,24 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error {
 	b := e.bounds
 	if e.schema == nil {
-		b = newBounds(e.limits, nil) // before Validate, for a test
+		b = request.NewBounds(e.limits, nil) // before Validate, for a test
 	}
-	return checkRequest(p, b)
+	return request.Check(p.OperationName, p.Query, p.Variables, b)
 }
 
 // MutateOperationContext implements graphql.OperationContextMutator: it
-// refuses a request whose Cost is over MaxCost with ErrTooCostly. gqlgen runs
+// refuses a request whose veloxgql.Cost is over MaxCost with veloxgql.ErrTooCostly. gqlgen runs
 // it after validation and before any resolver, so no statement is sent.
 func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error {
 	if e.schema == nil || rc.Operation == nil {
 		return nil
 	}
-	data, meta, list := cost.Of(e.schema, rc.Operation, rc.Variables, e.limits.cost())
+	data, meta, list := cost.Of(e.schema, rc.Operation, rc.Variables, request.CostLimits(e.limits))
 	var msg string
 	if meta > int64(e.limits.MaxIntrospectionCost) {
-		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", ErrTooCostly, meta, e.limits.MaxIntrospectionCost)
+		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", veloxgql.ErrTooCostly, meta, e.limits.MaxIntrospectionCost)
 	} else if data > int64(e.limits.MaxCost) {
-		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, data, e.limits.MaxCost)
+		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", veloxgql.ErrTooCostly, data, e.limits.MaxCost)
 		if list != "" {
 			// A client cannot lower what a list charges, as it can a page.
 			msg += fmt.Sprintf("; a list such as %s costs its limit for each parent, however few rows it has: the schema lowers that with graphql.MaxList on the edge, or makes the edge a Connection", list)
@@ -303,7 +245,7 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 	} else {
 		return nil
 	}
-	err := &gqlcore.Error{Code: CodeTooCostly, Msg: msg, Err: ErrTooCostly}
+	err := &gqlcore.Error{Code: veloxgql.CodeTooCostly, Msg: msg, Err: veloxgql.ErrTooCostly}
 	return &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()}
 }
 
@@ -317,7 +259,7 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 		errcode.Set(err, errcode.ValidationFailed)
 		return graphql.OneShot(&graphql.Response{Errors: gqlerror.List{err}})
 	}
-	ctx = withState(ctx, e.db, e.limits)
+	ctx = gqlcore.Install(ctx, e.db, &e.limits, &source{schema: e.schema})
 	if rc.Operation == nil || rc.Operation.Operation != ast.Subscription {
 		ctx = context.WithValue(ctx, operationKey{}, new(operation))
 	}
@@ -374,7 +316,7 @@ func asksIntrospection(set ast.SelectionSet, seen map[string]bool) bool {
 // rows are let go of when it is made.
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
 	given := ctx
-	ctx = gqlcore.WithTable(ctx, e.schema, e.batchScope)
+	ctx = gqlcore.WithTable(ctx, e.batchScope)
 	ctx, r, done := e.operationResponse(ctx)
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
 	if m == nil || m.plain || m.started.Swap(true) {
@@ -386,7 +328,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 	var resp *graphql.Response
 	err := e.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		// The transaction's ctx: its deadline, and the TxAround hooks' values.
-		resp = next(withState(ctx, tx, e.limits))
+		resp = next(gqlcore.WithDB(ctx, tx))
 		if resp != nil && len(resp.Errors) > 0 || r.why.Load() != 0 {
 			return errRollback
 		}

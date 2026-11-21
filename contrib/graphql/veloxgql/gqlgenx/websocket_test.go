@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"bufio"
@@ -17,6 +17,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // wsDial upgrades a raw connection to url's server, as a client that writes frames itself
@@ -91,7 +92,7 @@ func TestWebsocketMessageBounded(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
 	const most = 4096
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
 	srv.AddTransport(transport.Websocket{})
 	ts := httptest.NewServer(h)
 	defer ts.Close()
@@ -172,7 +173,7 @@ func TestWebsocketMessageBounded(t *testing.T) {
 func TestSetupKeepsOtherTransports(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"slow": func(_ context.Context, _ map[string]any) (any, error) { return 1, nil }}))
-	h := veloxgql.Setup(srv, db)
+	h := gqlgenx.Setup(srv, db)
 	srv.AddTransport(transport.POST{})
 	if got := post(t, t.Context(), h, `{ slow }`); got != `{"data":{"slow":1}}` {
 		t.Errorf("a POST: %s", got)
@@ -203,7 +204,7 @@ func TestWebsocketFramesWithTheUpgrade(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
 	const most = 4096
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
 	srv.AddTransport(transport.Websocket{})
 	ts := httptest.NewServer(h)
 	defer ts.Close()

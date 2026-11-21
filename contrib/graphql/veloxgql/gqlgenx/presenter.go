@@ -1,44 +1,16 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
-	"github.com/syssam/velox/scope"
-)
-
-// The codes ErrorPresenter writes as extensions.code: Apollo's, NOT_FOUND
-// and COST_LIMIT_EXCEEDED.
-const (
-	// CodeBadUserInput: the client's input is wrong, and says how: an ID,
-	// a cursor, paging arguments, a filter or a scalar that veloxgql,
-	// generated code or gqlgen's integer types refused, a value a validator
-	// refused, or a violated constraint.
-	CodeBadUserInput = gqlcore.CodeBadUserInput
-	// CodeForbidden: a policy denied the statement (velox.ErrDenied), or it
-	// wrote a row outside the caller's scope (scope.ErrMismatch).
-	CodeForbidden = "FORBIDDEN"
-	// CodeUnauthenticated: the request has no scope value (scope.ErrNoScope).
-	CodeUnauthenticated = "UNAUTHENTICATED"
-	// CodeNotFound: an edge setter's key names no row the caller may see or
-	// change (a *velox.EdgeError of velox.ErrNotFound).
-	CodeNotFound = gqlcore.CodeNotFound
-	// CodeTooCostly: the request costs more than Limits.MaxCost allows
-	// (ErrTooCostly). It is not a bad argument: the client can ask for less.
-	CodeTooCostly = "COST_LIMIT_EXCEEDED"
-	// CodeTimeout: the request ran over Limits.Timeout (ErrTimeout).
-	CodeTimeout = "TIMEOUT"
-	// CodeInternal: anything else, which the client cannot fix, such as a
-	// driver's error, a deadline of the application's, a list edge over MaxList or
-	// ErrNoDB.
-	CodeInternal = "INTERNAL_SERVER_ERROR"
 )
 
 // ErrorPresenter is a gqlgen error presenter for srv.SetErrorPresenter. It
@@ -129,7 +101,7 @@ const (
 //
 // gqlgen's default presenter shows every error's text, and no codes.
 //
-// It is what holds a response to Limits.MaxErrors as its errors are made: under the
+// It is what holds a response to veloxgql.Limits.MaxErrors as its errors are made: under the
 // Extension it returns nil, which gqlgen drops, once a response has MaxErrors or has
 // stopped. A presenter of the application's that does not call it keeps the limit on
 // what a resolver returns, as the request stops there, and its errors are made and
@@ -141,7 +113,7 @@ func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterO
 	}
 	for _, o := range opts {
 		if o.apply == nil {
-			panic("veloxgql.ErrorPresenter: zero PresenterOption")
+			panic("gqlgenx.ErrorPresenter: zero PresenterOption")
 		}
 		o.apply(&p)
 	}
@@ -170,7 +142,7 @@ func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterO
 			out.Path, out.Locations, out.Rule = gqlErr.Path, gqlErr.Locations, gqlErr.Rule
 		}
 		code, msg := present(err)
-		if code == CodeInternal || len(leaves) > 0 {
+		if code == veloxgql.CodeInternal || len(leaves) > 0 {
 			log(ctx, err)
 		}
 		out.Message, out.Extensions = msg, map[string]any{"code": code}
@@ -233,7 +205,7 @@ func logAttrs(ctx context.Context, err error) []any {
 // alone would be internal errors. A client is not shown them, so they are
 // logged. The tree is not searched below an error whose wrapped errors are
 // known and never shown: one of veloxgql's coded errors (what it wraps, as
-// ErrBadCursor, is there for errors.Is), and
+// veloxgql.ErrBadCursor, is there for errors.Is), and
 // velox's policy, validation, constraint and edge errors. An application's coded
 // error is searched, so one that wraps a driver's error is logged.
 func internalLeaves(err error, out []error) []error {
@@ -287,44 +259,21 @@ func internal(err error) bool {
 		return false
 	}
 	code, _ := present(err)
-	return code == CodeInternal
+	return code == veloxgql.CodeInternal
 }
 
-// present is the code and the message the client sees for err.
+// present is the code and the message the client sees for err: what
+// veloxgql.Present gives, and for gqlgen's error of an integer the argument's
+// Go type cannot hold (a *graphql.IntegerError, which
+// *graphql.NumberOverflowError and *graphql.UintSignError wrap)
+// BAD_USER_INPUT and gqlgen's text, which holds only the client's number.
 func present(err error) (code, msg string) {
-	if c, code := gqlcore.Coded(err); c != nil {
-		return code, strings.TrimPrefix(c.Error(), "veloxgql: ")
-	}
-	// Through shared's Is and As: a driver's typed nil in err's tree
-	// cannot panic.
-	switch {
-	case gqlcore.Is(err, scope.ErrNoScope):
-		return CodeUnauthenticated, "unauthenticated"
-	case gqlcore.Is(err, velox.ErrDenied), gqlcore.Is(err, scope.ErrMismatch):
-		return CodeForbidden, "forbidden"
-	}
-	if edge, ok := gqlcore.As[*velox.EdgeError](err); ok {
-		switch {
-		case gqlcore.Is(edge.Err, velox.ErrLinked):
-			return CodeBadUserInput, "edge " + edge.Edge + ": already linked to another owner"
-		case !gqlcore.Is(edge.Err, velox.ErrNotFound):
-		case len(edge.Keys) == 1:
-			return CodeNotFound, "edge " + edge.Edge + ": no node has this ID"
-		default:
-			return CodeNotFound, "edge " + edge.Edge + ": an ID names no node"
-		}
-	}
-	if validation, ok := gqlcore.As[*velox.ValidationError](err); ok {
-		if validation.Err == nil {
-			return CodeBadUserInput, "invalid value"
-		}
-		return CodeBadUserInput, "invalid value: " + validation.Err.Error()
-	}
-	if constraint, ok := gqlcore.As[*velox.ConstraintError](err); ok {
-		return CodeBadUserInput, constraint.Kind.String() + " constraint violated"
+	code, msg = veloxgql.Present(err)
+	if code != veloxgql.CodeInternal {
+		return code, msg
 	}
 	if integer, ok := gqlcore.As[*graphql.IntegerError](err); ok {
-		return CodeBadUserInput, integer.Message
+		return veloxgql.CodeBadUserInput, integer.Message
 	}
-	return CodeInternal, "internal error"
+	return code, msg
 }

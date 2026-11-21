@@ -6,28 +6,26 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/99designs/gqlgen/graphql"
-
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/untyped"
 )
 
-// The edges batch: the first edge field gqlgen resolves on any row of a
+// The edges batch: the first edge field resolved on any row of a
 // group (the rows one statement read, or veloxgql.Batch was given) reads
 // that edge for every row of the group, in one statement, and the rows it
 // reads are a group in turn. So a nested query sends one statement per edge
 // per level, whatever its rows.
 //
-// A caller batches only from the edge's own field: the field of ctx
-// (graphql.GetFieldContext) must be the edge's ("Post.likes": its owner's
+// A caller batches only from the edge's own field: the field of ctx (as the
+// adapter's selection source tells it) must be the edge's ("Post.likes": its owner's
 // Name and its Edges entry for the relation). A call from any other field,
 // an application's resolver calling x.Children, reads alone: one statement
 // for its row, by its own arguments.
 //
-// A batch is keyed by its group, the edge's field (Field.Field, so two aliases
-// are two batches) and its selections, the edge (its name, the relation and the
+// A batch is keyed by its group, the edge's field occurrence (so two aliases
+// are two batches, and so are two selections of one field), the edge (its name, the relation and the
 // target type), the DB veloxgql.DBFromContext reads, EdgeList's MaxList, the
 // callers' row scope (velox.RowScopeFromContext: the scope values, the WithoutPolicy
 // reason and the WithShard shard, of the context each passes
@@ -43,8 +41,9 @@ import (
 //
 // The first caller reads for all, under the context it passed to the edge
 // function, on the DB of its query; the others wait on the batch's
-// sync.Once, never for one another, so a mutation's resolvers, which the
-// extension runs one at a time, batch too. A context value that only an
+// sync.Once, inside their source's Wait, never for one another, so a
+// mutation's resolvers, which the gqlgen extension runs one at a time, batch
+// too. A context value that only an
 // Around hook reads is the first caller's for every row: it must be the
 // same for every row of the field, or be in WithBatchScope's value. A
 // caller whose read fails (a policy denies it) reads alone. A waiter does not watch its
@@ -91,6 +90,9 @@ func (e Edge) fieldName() string {
 // become a group. Otherwise its queries are filtered by the relation of the
 // row.
 func (e Edge) paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error) {
+	if err := needSource(ctx); err != nil {
+		return nil, err
+	}
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -154,6 +156,9 @@ func EdgeList(ctx context.Context, target *Type, e Edge, maxList int) (any, erro
 // edgeQuery is the query of target's rows that an edge reads, on the DB in
 // ctx, reading only the columns the selection of the field in ctx needs.
 func edgeQuery(ctx context.Context, target *Type) (untyped.TableQuery, error) {
+	if err := needSource(ctx); err != nil {
+		return untyped.TableQuery{}, err
+	}
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return untyped.TableQuery{}, err
@@ -191,7 +196,7 @@ func edgeConnection(ctx context.Context, c *Connection, e Edge, args any) *Conne
 			return parts[i], nil
 		},
 		count: func(q untyped.TableQuery) (int, error) {
-			counts, err := b.Counts(func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, e.rel, ptrs) })
+			counts, err := b.Counts(ctx, func() ([]int64, error) { return q.Limit(0).CountEach(ctx, owner, e.rel, ptrs) })
 			if err != nil {
 				return 0, err
 			}
@@ -302,16 +307,16 @@ type batchKey struct {
 // batchOf returns the batch of the edge e, to target, read with the
 // arguments args (most being EdgeList's MaxList), for the group of e's row
 // and ctx's key, the group's rows and the row's index in them. The batch is
-// nil, and the row reads alone, when ctx is in no gqlgen field or not in
-// e's, when the row is in no group of ctx's table, when the key cannot be
-// compared, or when the batch was made with other arguments.
+// nil, and the row reads alone, when ctx is in no field its source knows,
+// or not in e's, when the row is in no group of ctx's table, when the key
+// cannot be compared, or when the batch was made with other arguments.
 func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args any) (*gqlcore.Batch, []any, int) {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || fc.Field.Field == nil {
+	f, ok := gqlcore.FieldOf(ctx)
+	if !ok || f.Key == nil {
 		return nil, nil, 0
 	}
 	typ, name := e.field()
-	if name == "" || fc.Object != typ || fc.Field.Name != name {
+	if name == "" || f.Object != typ || f.Name != name {
 		return nil, nil, 0
 	}
 	t := gqlcore.TableFromContext(ctx)
@@ -333,7 +338,7 @@ func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args a
 		return nil, nil, 0
 	}
 	key.read = read
-	b := g.Batch(fc.Field.Field, fc.Field.Selections, key, args)
+	b := g.Batch(f.Key, key, args)
 	if b == nil {
 		return nil, nil, 0
 	}
@@ -381,7 +386,7 @@ func canCompare(v any) bool {
 // q.LoadEach(ctx, owner, edge, each, owners) on the first call. The first
 // keep(rows) rows of each owner become one group.
 func loadBatch(ctx context.Context, b *gqlcore.Batch, q untyped.TableQuery, owner untyped.Table, edge, each int, owners []any, keep func(untyped.Rows) int) ([]untyped.Rows, error) {
-	v, err := b.Rows(func() (any, error) {
+	v, err := b.Rows(ctx, func() (any, error) {
 		parts, err := q.LoadEach(ctx, owner, edge, each, owners)
 		if err != nil {
 			return nil, err

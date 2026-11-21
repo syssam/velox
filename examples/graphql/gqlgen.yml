@@ -28,14 +28,14 @@ resolver:
 autobind:
   - github.com/syssam/velox/examples/graphql/veloxgen
 
-# ID and the scalars bind to veloxgql. An ID is the entity's key, an int64
+# ID and the scalars bind to veloxgql and gqlgenx, its gqlgen adapter. An ID is the entity's key, an int64
 # here: gqlgen binds every ID argument to ID's first model, and Int64ID reads
 # an integer or a string of one and writes a string. A scalar lists one model
 # for each Go type velox entities hold, since gqlgen binds a field only to a
 # model of its own Go type (contrib/graphql's package documentation).
 models:
   ID:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int
@@ -49,17 +49,17 @@ models:
   Float:
     model:
       - github.com/99designs/gqlgen/graphql.FloatContext
-      - github.com/syssam/velox/contrib/graphql/veloxgql.Float32
+      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Float32
   Uint64:
     model:
-      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint64
-      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint
+      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Uint64
+      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Uint
   Time:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Time
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Time
   UUID:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.UUID
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.UUID
   Bytes:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Bytes
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Bytes
   JSON:
     model: github.com/syssam/velox/contrib/graphql/veloxgql.JSON
   Cursor:

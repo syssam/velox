@@ -17,7 +17,7 @@ import (
 var (
 	// ErrNodeNotFound: no type of Node has a row of the ID that the caller
 	// may read. Its text is veloxe's. ResolveNode returns it in an error
-	// with the code NOT_FOUND, which veloxgql.ErrorPresenter shows the client.
+	// with the code NOT_FOUND, which gqlgenx.ErrorPresenter shows the client.
 	ErrNodeNotFound = errors.New("could not resolve to a node with the global ID")
 	// ErrAmbiguousNodeID: more than one type of Node has a row of the ID, as
 	// veloxe refused it. A Node's ID holds no type, so node(id:) needs IDs

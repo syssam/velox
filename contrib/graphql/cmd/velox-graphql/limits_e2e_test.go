@@ -604,7 +604,7 @@ import (
 	"example.com/app/graph"
 	"example.com/app/schema"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 type served struct {
@@ -654,8 +654,8 @@ func serve(t *testing.T) served {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(_ context, err error) { t.Logf("internal: %v", err) }))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
 	do := func(query string, vars map[string]any) string {

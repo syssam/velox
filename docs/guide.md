@@ -1781,7 +1781,7 @@ the driver's code.
 Go code for [gqlgen](https://gqlgen.com): Relay connections with `orderBy`
 and `where` inputs, edges, and create and update inputs. An ID is the
 entity's key, so a resolver takes `id int64`; `gqlgen.yml` binds `ID` to
-`veloxgql.Int64ID` for int64 keys. You annotate the schema:
+`gqlgenx.Int64ID` for int64 keys. You annotate the schema:
 
 ```go
 field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
@@ -1805,9 +1805,13 @@ go tool velox-gen -plugin velox-graphql ./veloxschema
 go tool gqlgen generate
 ```
 
-Most resolvers are one line. `veloxgql.Setup` wraps the gqlgen server with
-limits on a request's size, depth and cost, and `veloxgql.ErrorPresenter`
-keeps database and velox error text away from clients. GraphQL reads and
+Most resolvers are one line. The generated code imports the engine-free
+runtime `veloxgql` and its package `gqlgraph`; gqlgen's adapter is
+`veloxgql/gqlgenx`. `gqlgenx.Setup` wraps the gqlgen server with limits on
+a request's size, depth and cost, and `gqlgenx.ErrorPresenter` keeps
+database and velox error text away from clients. A connection or an edge
+read in a context no adapter made fails with
+`veloxgql.ErrNoSelectionSource`. GraphQL reads and
 writes run through the same velox runtime, so policies and scopes apply to
 them too. The
 [graphql example](../examples/graphql) is a complete server, and its README

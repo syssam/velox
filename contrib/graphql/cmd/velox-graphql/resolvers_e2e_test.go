@@ -111,7 +111,7 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func serve(t *testing.T, query string) string {
@@ -131,7 +131,7 @@ func serve(t *testing.T, query string) string {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
 	srv.AddTransport(transport.POST{})
 	req := httptest.NewRequest("POST", "/", strings.NewReader(` + "`" + `{"query":"` + "`" + ` + query + ` + "`" + `"}` + "`" + `))
 	req.Header.Set("Content-Type", "application/json")

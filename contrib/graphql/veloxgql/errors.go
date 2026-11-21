@@ -7,12 +7,13 @@ import "errors"
 // a bare phrase; test for them with errors.Is. None of them echoes what the
 // client sent: the message names only what the server wanted.
 //
-// Each but ErrNoDB, ErrTooCostly, ErrResponseTooLarge, ErrTooManyErrors and ErrTimeout
-// is an error in the client's input, and is returned in an error with the code
-// CodeBadUserInput, which ErrorPresenter shows the client. ErrTooCostly,
-// ErrResponseTooLarge and ErrTooManyErrors have the code CodeTooCostly, and ErrTimeout
-// CodeTimeout. ErrNoDB is a programming error, which has no code: ErrorPresenter logs it
-// and shows "internal error".
+// Each but ErrNoDB, ErrNoSelectionSource, ErrTooCostly, ErrResponseTooLarge,
+// ErrTooManyErrors and ErrTimeout is an error in the client's input, and is
+// returned in an error with the code CodeBadUserInput, which an adapter's
+// error presenter shows the client. ErrTooCostly, ErrResponseTooLarge and
+// ErrTooManyErrors have the code CodeTooCostly, and ErrTimeout CodeTimeout.
+// ErrNoDB and ErrNoSelectionSource are programming errors, which have no
+// code: the presenter logs them and shows "internal error".
 var (
 	// ErrBadCursor: a cursor that does not decode, or one taken on another
 	// type or under another order than the query's, or whose values are not
@@ -36,7 +37,7 @@ var (
 	// MaxFilterNodes of LimitsFromContext(ctx) inputs, predicates and values.
 	ErrFilterTooLarge = errors.New("filter is too large")
 	// ErrTooCostly: a request whose Cost is over the MaxCost of the
-	// Extension's limits. It is returned with the code CodeTooCostly, before
+	// adapter's limits. It is returned with the code CodeTooCostly, before
 	// any statement runs.
 	ErrTooCostly = errors.New("request is too costly")
 	// ErrRequestTooLarge: a request whose query is over the MaxFields, or whose
@@ -51,7 +52,12 @@ var (
 	// ErrTimeout: a query or a mutation ran over the Timeout of the limits, whose
 	// statements were cancelled. Its data is null.
 	ErrTimeout = errors.New("request timed out")
-	// ErrNoDB: a resolver ran with no DB in its context, which the
-	// Extension puts there.
+	// ErrNoDB: a resolver ran with no DB in its context, which an adapter
+	// (gqlgenx.NewExtension) puts there.
 	ErrNoDB = errors.New("no DB in the context")
+	// ErrNoSelectionSource: a read of generated code (a connection, an edge)
+	// ran in a context no adapter made, so nothing tells it the field it
+	// resolves. It fails rather than read every column and batch nothing.
+	// It is returned with ErrNoDB, as the adapter puts both there.
+	ErrNoSelectionSource = errors.New("no selection source in the context")
 )

@@ -16,6 +16,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/examples/graphql/veloxgen"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -7947,13 +7948,13 @@ func (ec *executionContext) marshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontr
 }
 
 func (ec *executionContext) unmarshalNID2int64(ctx context.Context, v any) (int64, error) {
-	res, err := veloxgql.UnmarshalInt64ID(v)
+	res, err := gqlgenx.UnmarshalInt64ID(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNID2int64(ctx context.Context, sel ast.SelectionSet, v int64) graphql.Marshaler {
 	_ = sel
-	res := veloxgql.MarshalInt64ID(v)
+	res := gqlgenx.MarshalInt64ID(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8256,13 +8257,13 @@ func (ec *executionContext) marshalNString2string(ctx context.Context, sel ast.S
 }
 
 func (ec *executionContext) unmarshalNTime2timeᚐTime(ctx context.Context, v any) (time.Time, error) {
-	res, err := veloxgql.UnmarshalTime(v)
+	res, err := gqlgenx.UnmarshalTime(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel ast.SelectionSet, v time.Time) graphql.Marshaler {
 	_ = sel
-	res := veloxgql.MarshalTime(v)
+	res := gqlgenx.MarshalTime(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8732,7 +8733,7 @@ func (ec *executionContext) unmarshalOID2ᚖint64(ctx context.Context, v any) (*
 	if v == nil {
 		return nil, nil
 	}
-	res, err := veloxgql.UnmarshalInt64ID(v)
+	res, err := gqlgenx.UnmarshalInt64ID(v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -8742,7 +8743,7 @@ func (ec *executionContext) marshalOID2ᚖint64(ctx context.Context, sel ast.Sel
 	}
 	_ = sel
 	_ = ctx
-	res := veloxgql.MarshalInt64ID(*v)
+	res := gqlgenx.MarshalInt64ID(*v)
 	return res
 }
 
@@ -9101,7 +9102,7 @@ func (ec *executionContext) unmarshalOTime2ᚖtimeᚐTime(ctx context.Context, v
 	if v == nil {
 		return nil, nil
 	}
-	res, err := veloxgql.UnmarshalTime(v)
+	res, err := gqlgenx.UnmarshalTime(v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -9111,7 +9112,7 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	}
 	_ = sel
 	_ = ctx
-	res := veloxgql.MarshalTime(*v)
+	res := gqlgenx.MarshalTime(*v)
 	return res
 }
 

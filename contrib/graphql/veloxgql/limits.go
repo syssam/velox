@@ -4,12 +4,14 @@ import (
 	"cmp"
 	"context"
 	"time"
+
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Limits caps what a client may ask for. Each bounds one argument or one
 // edge. A zero field means the default.
 //
-// The limits of an operation are the Extension's (WithLimits), which it puts in
+// The limits of an operation are its adapter's (WithLimits), which it puts in
 // the operation's context, where LimitsFromContext reads them: two servers in
 // one process can have different limits.
 type Limits struct {
@@ -72,8 +74,8 @@ type Limits struct {
 	MaxIntrospectionCost int
 
 	// MaxTokens is the most lexer tokens a request's query may have. More is the
-	// parser's error, GRAPHQL_PARSE_FAILED, before any of it is validated. The
-	// Extension enforces it, and Setup gives it to gqlgen too.
+	// parser's error, GRAPHQL_PARSE_FAILED, before any of it is validated.
+	// gqlgenx.Extension enforces it, and gqlgenx.Setup gives it to gqlgen too.
 	MaxTokens int
 
 	// MaxFields is the most fields a request's query may hold, as written, a
@@ -114,14 +116,14 @@ type Limits struct {
 
 	// MaxErrors is the most errors a response may hold, and one that says there are
 	// more. Each pair of fields that differ and each unknown name makes one of
-	// validation's, held to this on a server Setup made; a list of a field that a
+	// validation's, held to this on a server gqlgenx.Setup made; a list of a field that a
 	// directive refuses makes one for each row, and over the limit the request stops
-	// (ErrTooManyErrors) with data null, under the Extension and ErrorPresenter.
+	// (ErrTooManyErrors) with data null, under gqlgenx.Extension and gqlgenx.ErrorPresenter.
 	MaxErrors int
 
 	// MaxBodyBytes is the most bytes the body of a request may have, its
 	// variables and any upload included. More is refused with 413, by the handler
-	// Setup returns, as nothing else bounds it. The same handler holds a websocket's
+	// gqlgenx.Setup returns, as nothing else bounds it. The same handler holds a websocket's
 	// messages to it, and closes the connection of one over.
 	MaxBodyBytes int
 
@@ -153,11 +155,11 @@ func DefaultLimits() Limits {
 	}
 }
 
-// LimitsFromContext returns the limits the extension put in ctx, or
+// LimitsFromContext returns the limits an adapter put in ctx, or
 // DefaultLimits() when there are none.
 func LimitsFromContext(ctx context.Context) Limits {
-	if s, ok := ctx.Value(stateKey{}).(*state); ok {
-		return s.limits
+	if l, ok := gqlcore.LimitsOf(ctx).(*Limits); ok && l != nil {
+		return *l
 	}
 	return DefaultLimits()
 }
@@ -186,35 +188,5 @@ func (l Limits) orDefault() Limits {
 		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
 		MaxResponseBytes:     cmp.Or(l.MaxResponseBytes, d.MaxResponseBytes),
 		Timeout:              cmp.Or(l.Timeout, d.Timeout),
-	}
-}
-
-// fields are l's fields by name, in declaration order.
-func (l Limits) fields() []struct {
-	name string
-	n    int
-} {
-	return []struct {
-		name string
-		n    int
-	}{
-		{"MaxPage", l.MaxPage},
-		{"MaxList", l.MaxList},
-		{"MaxFilterDepth", l.MaxFilterDepth},
-		{"MaxFilterWidth", l.MaxFilterWidth},
-		{"MaxFilterNodes", l.MaxFilterNodes},
-		{"MaxOrderTerms", l.MaxOrderTerms},
-		{"MaxCost", l.MaxCost},
-		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
-		{"MaxTokens", l.MaxTokens},
-		{"MaxFields", l.MaxFields},
-		{"MaxFragments", l.MaxFragments},
-		{"MaxDepth", l.MaxDepth},
-		{"MaxNameBytes", l.MaxNameBytes},
-		{"MaxLiteralBytes", l.MaxLiteralBytes},
-		{"MaxVariableNodes", l.MaxVariableNodes},
-		{"MaxErrors", l.MaxErrors},
-		{"MaxBodyBytes", l.MaxBodyBytes},
-		{"MaxResponseBytes", l.MaxResponseBytes},
 	}
 }

@@ -119,7 +119,7 @@ import (
 	"example.com/app/gen"
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // TestTagIDGT: a string key's idGT compiles, to Tags.ID.GT, and compares
@@ -174,7 +174,7 @@ func TestAlertLevel(t *testing.T) {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
 	srv.AddTransport(transport.POST{})
 	req := httptest.NewRequest("POST", "/", strings.NewReader(` + "`" + `{"query":"{ alerts { edges { node { id level } } } }"}` + "`" + `))
 	req.Header.Set("Content-Type", "application/json")
@@ -188,7 +188,7 @@ func TestAlertLevel(t *testing.T) {
 
 // e2eStringIDGqlgen is e2eCollectGqlgen with ID bound to gqlgen's
 // graphql.ID, the model of a schema whose keys are strings.
-var e2eStringIDGqlgen = strings.Replace(e2eCollectGqlgen, "github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID", "github.com/99designs/gqlgen/graphql.ID", 1)
+var e2eStringIDGqlgen = strings.Replace(e2eCollectGqlgen, "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID", "github.com/99designs/gqlgen/graphql.ID", 1)
 
 // TestAppEnumRenamed generates an application whose renamed entity has a
 // field of its own enum type, then runs gqlgen over it with no models entry

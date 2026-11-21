@@ -201,12 +201,12 @@
 // velox.ErrTooManyRows beyond them, whatever the DB's cap; graphql.MaxList(n), which an
 // edge may set under the limit, lowers that and what the edge costs, and a request
 // refused for a list edge's cost names the edge and these two ways out: it or a connection. The limits are
-// veloxgql.LimitsFromContext(ctx): the ones given to veloxgql.NewExtension with
+// veloxgql.LimitsFromContext(ctx): the ones given to gqlgenx.NewExtension with
 // veloxgql.WithLimits, or veloxgql.DefaultLimits().
 //
 // Every one of these limits bounds one argument or one edge, not a request;
 // see "The cost limit" below. A mutation's transaction does not cover @defer
-// (see veloxgql.Extension): do not defer fields of a mutation.
+// (see gqlgenx.Extension): do not defer fields of a mutation.
 //
 // The application writes the root query's resolvers: for each QueryField a
 // query's Paginate on the request's DB, veloxgql.DB(ctx):
@@ -407,7 +407,7 @@
 // only link a child whose key is NULL, stay.
 //
 // A write with edge setters is atomic: velox runs the insert or update and
-// its edges in a db.Tx, a savepoint inside the transaction the Extension
+// its edges in a db.Tx, a savepoint inside the transaction gqlgenx.Extension
 // opened for the operation, so an edge's error undoes the row at once. One
 // with column setters alone is one statement. A resolver that returns the
 // error fails the operation, and the Extension rolls all of it back; a
@@ -429,7 +429,7 @@
 // variable of the wrong shape) are left as gqlgen writes them,
 // GRAPHQL_VALIDATION_FAILED with a path or locations. An ID that is no key,
 // as "abc" for an int64 key, fails in its marshaler, before any resolver, and
-// veloxgql.ErrorPresenter shows it as BAD_USER_INPUT.
+// gqlgenx.ErrorPresenter shows it as BAD_USER_INPUT.
 //
 // Not written: a key the caller supplies in a create input and JSON append.
 //
@@ -533,7 +533,7 @@
 // The limits above each bound one argument. Connections nested in
 // connections multiply, and aliases repeat a field, so a server also limits
 // the cost of the whole request: veloxgql.Limits.MaxCost, 150000 by default.
-// veloxgql.Cost computes it, and the Extension refuses a request over it,
+// veloxgql.Cost computes it, and gqlgenx.Extension refuses a request over it,
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
 //
@@ -587,10 +587,10 @@
 //
 // # What a server must call
 //
-// A server calls veloxgql.Setup first, and serves what it returns:
+// A server calls gqlgenx.Setup first, and serves what it returns:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
-//	h := veloxgql.Setup(srv, db)
+//	h := gqlgenx.Setup(srv, db)
 //	srv.AddTransport(transport.POST{})
 //	http.Handle("/graphql", h)
 //
@@ -615,7 +615,7 @@
 // also bounds the pairs of fields under one response name, the fragments spread where they
 // are, at 2 times it for pairs that differ and 200 times for pairs that agree, so that 340
 // colocated fragments of 14 common fields pass. In TestRequestBounded's shapes, validation
-// allocates under 40 MB through veloxgql.Setup, which also stops at MaxErrors errors and
+// allocates under 40 MB through gqlgenx.Setup, which also stops at MaxErrors errors and
 // shows no suggestions, and what runs after it answers to the cost. GraphiQL's query is
 // far under each limit.
 //
@@ -633,7 +633,7 @@
 // is passed are read before they are counted, one per connection a client aliased; a
 // custom scalar's value that is not a string, bytes or JSON kind is not counted; a resolver
 // that ignores its context holds the response until it returns; a presenter of the
-// application's that does not call veloxgql.ErrorPresenter makes the errors of fields
+// application's that does not call gqlgenx.ErrorPresenter makes the errors of fields
 // that stop before they are dropped. Time and bytes are per request: many of them are for
 // what is in front.
 // docs/decisions/0027-graphql-limits.md has the measurements.
@@ -642,7 +642,7 @@
 //
 // gqlgen binds a field only to a scalar model of the field's own Go type, so
 // each scalar maps to a list of models, one for each Go type velox entities
-// hold: veloxgql's function marshalers (MarshalTime for time.Time, and so on)
+// hold: gqlgenx's function marshalers (MarshalTime for time.Time, and so on)
 // and gqlgen's own for the narrow integers. A field of another Go type of the
 // application's, and a JSON field, binds to a generated <Field>GQL getter
 // that returns a type of the list. A JSON field of []string, []int, []int64,
@@ -656,7 +656,7 @@
 //	  - <module>/gen
 //	models:
 //	  ID:
-//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID
 //	  Int:
 //	    model:
 //	      - github.com/99designs/gqlgen/graphql.Int
@@ -670,17 +670,17 @@
 //	  Float:
 //	    model:
 //	      - github.com/99designs/gqlgen/graphql.FloatContext
-//	      - github.com/syssam/velox/contrib/graphql/veloxgql.Float32
+//	      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Float32
 //	  Uint64:
 //	    model:
-//	      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint64
-//	      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint
+//	      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Uint64
+//	      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Uint
 //	  Time:
-//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Time
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Time
 //	  UUID:
-//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.UUID
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.UUID
 //	  Bytes:
-//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Bytes
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Bytes
 //	  JSON:
 //	    model: github.com/syssam/velox/contrib/graphql/veloxgql.JSON
 //	  Cursor:
@@ -699,12 +699,12 @@
 // velox-gen's own enum types.
 //
 // String and Boolean keep gqlgen's own models; ID's is the key's, below.
-// veloxgql.Time,
-// veloxgql.UUID, veloxgql.Bytes and veloxgql.Uint64 resolve to the function
-// marshalers of those names, which bind time.Time, uuid.UUID, []byte and
-// uint64; veloxgql.Uint and veloxgql.Float32 to MarshalUint and
-// MarshalFloat32. gqlgen's narrow integers refuse an Int their Go type
-// cannot hold (300 for an int8), and veloxgql.ErrorPresenter shows the
+// gqlgenx.Time, gqlgenx.UUID, gqlgenx.Bytes and gqlgenx.Uint64 resolve to
+// the function marshalers of those names, which bind time.Time, uuid.UUID,
+// []byte and uint64; gqlgenx.Uint and gqlgenx.Float32 to MarshalUint and
+// MarshalFloat32. JSON, Cursor, OrderDirection and PageInfo are veloxgql's
+// types, which every engine binds. gqlgen's narrow integers refuse an Int their Go type
+// cannot hold (300 for an int8), and gqlgenx.ErrorPresenter shows the
 // client gqlgen's text with BAD_USER_INPUT.
 //
 // # IDs
@@ -723,15 +723,15 @@
 // graphql.Skip(). The ID model is that Go type's:
 //
 //	key's Go type              ID: model:
-//	int64 (velox's default)    github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
-//	uuid.UUID                  github.com/syssam/velox/contrib/graphql/veloxgql.UUID
+//	int64 (velox's default)    github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID
+//	uuid.UUID                  github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.UUID
 //	string                     github.com/99designs/gqlgen/graphql.ID
 //	int                        github.com/99designs/gqlgen/graphql.IntID
 //	another, or a named type   the application's own marshalers
 //
-// veloxgql.Int64ID writes the key as a JSON string, as GraphQL's ID is, and
+// gqlgenx.Int64ID writes the key as a JSON string, as GraphQL's ID is, and
 // reads a string of decimal digits or an integer; anything else is
-// BAD_USER_INPUT. veloxgql.UUID writes and reads the UUID's text. gqlgen
+// BAD_USER_INPUT. gqlgenx.UUID writes and reads the UUID's text. gqlgen
 // casts only named types whose base is string, so a key of a named integer
 // type, as type UserID int64, needs the application's own model.
 //

@@ -1,4 +1,4 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"bufio"
@@ -19,6 +19,7 @@ import (
 	"github.com/vektah/gqlparser/v2/validator/rules"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Server is what Setup needs of gqlgen's *handler.Server.
@@ -35,7 +36,7 @@ type Server interface {
 // it returns, not srv:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
-//	h := veloxgql.Setup(srv, db)
+//	h := gqlgenx.Setup(srv, db)
 //	srv.AddTransport(transport.POST{})
 //
 // It uses NewExtension(db, opts...), first of the server's extensions, and
@@ -46,7 +47,7 @@ type Server interface {
 // the schema, where a directive may hide part of it. Those rules return the limits'
 // MaxErrors errors, and one that says there are more. The handler it returns refuses a
 // body over the limits' MaxBodyBytes with 413, and BAD_USER_INPUT wrapping
-// ErrRequestTooLarge; nothing else in a request bounds one. It holds the whole of
+// veloxgql.ErrRequestTooLarge; nothing else in a request bounds one. It holds the whole of
 // a body of unknown length, up to that. A websocket's messages are held to the same: the
 // connection of one over closes before it is read, whichever transport or gqlgen. It
 // takes the extensions off the upgrade, so no message is compressed: what a client sends
@@ -58,7 +59,7 @@ type Server interface {
 // Call SetErrorPresenter again, after it, to give another presenter. Without
 // Setup, the Extension still enforces the limits of the document, the variables and the
 // response, and no body or websocket limit holds, nor one of validation's errors.
-func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler {
+func Setup(srv Server, db *velox.DB, opts ...veloxgql.Option) http.Handler {
 	e := NewExtension(db, opts...)
 	srv.Use(e)
 	srv.SetErrorPresenter(ErrorPresenter(nil))
@@ -303,8 +304,8 @@ func refuseBody(w http.ResponseWriter, most int64) {
 	w.WriteHeader(http.StatusRequestEntityTooLarge)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"errors": []map[string]any{{
-			"message":    fmt.Sprintf("%v: its body is over %d bytes", ErrRequestTooLarge, most),
-			"extensions": map[string]any{"code": CodeBadUserInput},
+			"message":    fmt.Sprintf("%v: its body is over %d bytes", veloxgql.ErrRequestTooLarge, most),
+			"extensions": map[string]any{"code": veloxgql.CodeBadUserInput},
 		}},
 		"data": nil,
 	})

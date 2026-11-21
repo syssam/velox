@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"bytes"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/scope"
 	"github.com/syssam/velox/untyped"
@@ -89,7 +90,8 @@ func (w *leaky) predicate(ctx context.Context) (velox.Predicate, error) {
 // input is coded BAD_USER_INPUT, and errors.Is still finds its sentinel.
 func TestErrorsAreCoded(t *testing.T) {
 	db, _ := handlerDB(t)
-	ctx := context.Background()
+	// A context an adapter made: gqlgraph fails closed without one.
+	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
 	key := &gqlgraph.Type{Name: "Person", Key: []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}}}
 	conn := func(args gqlgraph.Args) error {
 		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.Query(db, untyped.TableOf[person]())), key, args)
@@ -116,8 +118,8 @@ func TestErrorsAreCoded(t *testing.T) {
 		err  error
 		is   error
 	}{
-		{"UnmarshalInt64ID", func() error { _, err := veloxgql.UnmarshalInt64ID(1.5); return err }(), nil},
-		{"UnmarshalInt64ID text", func() error { _, err := veloxgql.UnmarshalInt64ID("x"); return err }(), nil},
+		{"UnmarshalInt64ID", func() error { _, err := gqlgenx.UnmarshalInt64ID(1.5); return err }(), nil},
+		{"UnmarshalInt64ID text", func() error { _, err := gqlgenx.UnmarshalInt64ID("x"); return err }(), nil},
 		{"DecodeCursor", func() error { _, err := veloxgql.DecodeCursor("!"); return err }(), veloxgql.ErrBadCursor},
 		{"Cursor.UnmarshalGQLContext", new(veloxgql.Cursor).UnmarshalGQLContext(context.Background(), 1), veloxgql.ErrBadCursor},
 		{"cursor of another type", conn(gqlgraph.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrBadCursor},
@@ -127,10 +129,10 @@ func TestErrorsAreCoded(t *testing.T) {
 		{"filter too deep", pred(deep), veloxgql.ErrFilterTooDeep},
 		{"filter too wide", pred(wide), veloxgql.ErrFilterTooWide},
 		{"filter too large", pred(large), veloxgql.ErrFilterTooLarge},
-		{"UnmarshalUUID", func() error { _, err := veloxgql.UnmarshalUUID("x"); return err }(), nil},
-		{"UnmarshalTime", func() error { _, err := veloxgql.UnmarshalTime(1); return err }(), nil},
-		{"UnmarshalUint", func() error { _, err := veloxgql.UnmarshalUint64("-1"); return err }(), nil},
-		{"UnmarshalFloat32", func() error { _, err := veloxgql.UnmarshalFloat32("x"); return err }(), nil},
+		{"UnmarshalUUID", func() error { _, err := gqlgenx.UnmarshalUUID("x"); return err }(), nil},
+		{"UnmarshalTime", func() error { _, err := gqlgenx.UnmarshalTime(1); return err }(), nil},
+		{"UnmarshalUint", func() error { _, err := gqlgenx.UnmarshalUint64("-1"); return err }(), nil},
+		{"UnmarshalFloat32", func() error { _, err := gqlgenx.UnmarshalFloat32("x"); return err }(), nil},
 		{"Bytes", new(veloxgql.Bytes).UnmarshalGQL(1), nil},
 		{"JSON", new(veloxgql.JSON).UnmarshalGQL(func() {}), nil},
 		{"OrderDirection", new(veloxgql.OrderDirection).UnmarshalGQL("UP"), nil},
@@ -201,7 +203,7 @@ func (l *logged) take() []error {
 // which is logged; never the text of a driver, an entity or a constraint.
 func TestErrorPresenter(t *testing.T) {
 	driverErr := errors.New(`sqlite: no such table: posts (users_email_key, tenant 7, /srv/app/db.go)`)
-	_, codedBadID := veloxgql.UnmarshalInt64ID(true)
+	_, codedBadID := gqlgenx.UnmarshalInt64ID(true)
 	path := ast.Path{ast.PathName("posts"), ast.PathIndex(0), ast.PathName("author")}
 	fieldCtx := graphql.WithFieldContext(context.Background(), &graphql.FieldContext{
 		Field: graphql.CollectedField{Field: &ast.Field{Alias: "node"}},
@@ -251,7 +253,7 @@ func TestErrorPresenter(t *testing.T) {
 		{"negative uint32", fmt.Errorf("input: %w", uintSignErr), "BAD_USER_INPUT", "-1 is an invalid unsigned integer: includes sign", `["node"]`, false},
 	} {
 		l := &logged{}
-		got := veloxgql.ErrorPresenter(l.log)(fieldCtx, c.err)
+		got := gqlgenx.ErrorPresenter(l.log)(fieldCtx, c.err)
 		b, err := json.Marshal(got)
 		if err != nil {
 			t.Fatal(err)
@@ -279,7 +281,7 @@ func TestErrorPresenter(t *testing.T) {
 	}
 
 	l := &logged{}
-	present := veloxgql.ErrorPresenter(l.log)
+	present := gqlgenx.ErrorPresenter(l.log)
 	if got := present(fieldCtx, nil); got != nil {
 		t.Errorf("nil: got %v", got)
 	}
@@ -315,7 +317,7 @@ func TestErrorPresenter(t *testing.T) {
 	}
 
 	// A nil log logs with slog, and still presents.
-	if got := veloxgql.ErrorPresenter(nil)(fieldCtx, driverErr); got.Message != "internal error" {
+	if got := gqlgenx.ErrorPresenter(nil)(fieldCtx, driverErr); got.Message != "internal error" {
 		t.Errorf("a nil log: got %q", got.Message)
 	}
 }
@@ -334,7 +336,7 @@ func TestEdgeErrorPresented(t *testing.T) {
 		{&velox.EdgeError{Entity: "gen.User", Edge: "pet", Keys: []any{int64(7)}, Err: velox.ErrLinked}, veloxgql.CodeBadUserInput, "edge pet: already linked to another owner"},
 	} {
 		l := &logged{}
-		got := veloxgql.ErrorPresenter(l.log)(context.Background(), fmt.Errorf("resolver: %w", c.err))
+		got := gqlgenx.ErrorPresenter(l.log)(context.Background(), fmt.Errorf("resolver: %w", c.err))
 		if got.Message != c.want || got.Extensions["code"] != c.code {
 			t.Errorf("%v: got %q %v, want %s %q", c.err, got.Message, got.Extensions, c.code, c.want)
 		}
@@ -344,7 +346,7 @@ func TestEdgeErrorPresented(t *testing.T) {
 	}
 	l := &logged{}
 	other := &velox.EdgeError{Entity: "gen.Post", Edge: "tags", Err: errors.New("disk full")}
-	if got := veloxgql.ErrorPresenter(l.log)(context.Background(), other); got.Message != "internal error" || got.Extensions["code"] != veloxgql.CodeInternal {
+	if got := gqlgenx.ErrorPresenter(l.log)(context.Background(), other); got.Message != "internal error" || got.Extensions["code"] != veloxgql.CodeInternal {
 		t.Errorf("an EdgeError of another Err: got %q %v", got.Message, got.Extensions)
 	}
 	if errs := l.take(); len(errs) != 1 {
@@ -357,7 +359,7 @@ func TestEdgeErrorPresented(t *testing.T) {
 // logged.
 func TestTooCostlyPresented(t *testing.T) {
 	l := &logged{}
-	ext := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	ext := gqlgenx.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
 type PageInfo { hasNextPage: Boolean! }
 type User { id: ID! }
@@ -379,7 +381,7 @@ type Query { users(first: Int): UserConnection! }
 	if !errors.Is(gerr, veloxgql.ErrTooCostly) || codeOf(gerr) != veloxgql.CodeTooCostly {
 		t.Errorf("error %v: is ErrTooCostly %v, code %q", gerr, errors.Is(gerr, veloxgql.ErrTooCostly), codeOf(gerr))
 	}
-	got := veloxgql.ErrorPresenter(l.log)(context.Background(), gerr)
+	got := gqlgenx.ErrorPresenter(l.log)(context.Background(), gerr)
 	if want := "request is too costly: it costs 202, and the most is 2"; got.Message != want || got.Extensions["code"] != "COST_LIMIT_EXCEEDED" {
 		t.Errorf("got %q %v, want %q and COST_LIMIT_EXCEEDED", got.Message, got.Extensions, want)
 	}
@@ -397,7 +399,7 @@ func TestCommitErrorIsInternal(t *testing.T) {
 	defer cancel()
 	srv := handlerServer(t, db, &cancel)
 	l := &logged{}
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(l.log))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(l.log))
 	got := post(t, ctx, srv, `mutation { cancel(id: 1) }`)
 	if want := `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}`; got != want {
 		t.Errorf("got %s, want %s", got, want)
@@ -422,7 +424,7 @@ func TestCommitErrorOnLiveRequest(t *testing.T) {
 	}))
 	srv := handlerServer(t, db, nil)
 	l := &logged{}
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(l.log))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(l.log))
 	got := post(t, context.Background(), srv, `mutation { add(id: 1) }`)
 	if want := `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}`; got != want {
 		t.Errorf("got %s, want %s", got, want)
@@ -465,7 +467,7 @@ func TestErrorPresenterCanceled(t *testing.T) {
 		{"cancellation joined with a driver error", errors.Join(context.Canceled, driverErr), true},
 		{"cancellation joined with a panic", errors.Join(fmt.Errorf("velox: %w", context.Canceled), panicErr), true},
 	} {
-		got := veloxgql.ErrorPresenter(l.log)(canceled, c.err)
+		got := gqlgenx.ErrorPresenter(l.log)(canceled, c.err)
 		if code := got.Extensions["code"]; code != "INTERNAL_SERVER_ERROR" && code != "BAD_USER_INPUT" {
 			t.Errorf("%s: presented %v", c.name, got)
 		}
@@ -478,10 +480,10 @@ func TestErrorPresenterCanceled(t *testing.T) {
 		}
 	}
 	// On a live request a cancellation of the application's own is logged.
-	if got := veloxgql.ErrorPresenter(l.log)(context.Background(), context.Canceled); got.Message != "internal error" || len(l.take()) != 1 {
+	if got := gqlgenx.ErrorPresenter(l.log)(context.Background(), context.Canceled); got.Message != "internal error" || len(l.take()) != 1 {
 		t.Errorf("a live request's cancellation: presented %q, want it logged", got.Message)
 	}
-	if got := veloxgql.ErrorPresenter(l.log)(expired, context.DeadlineExceeded); got.Message != "internal error" {
+	if got := gqlgenx.ErrorPresenter(l.log)(expired, context.DeadlineExceeded); got.Message != "internal error" {
 		t.Errorf("timed out: presented %q", got.Message)
 	}
 	if errs := l.take(); len(errs) != 1 {
@@ -492,7 +494,7 @@ func TestErrorPresenterCanceled(t *testing.T) {
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	if got := veloxgql.ErrorPresenter(nil)(canceled, context.Canceled); got.Message != "internal error" {
+	if got := gqlgenx.ErrorPresenter(nil)(canceled, context.Canceled); got.Message != "internal error" {
 		t.Errorf("a nil log: presented %q", got.Message)
 	}
 	var rec map[string]any
@@ -504,7 +506,7 @@ func TestErrorPresenterCanceled(t *testing.T) {
 	}
 	// A driver's error on a canceled request is logged at level error.
 	buf.Reset()
-	if got := veloxgql.ErrorPresenter(nil)(canceled, errors.Join(context.Canceled, driverErr)); got.Message != "internal error" {
+	if got := gqlgenx.ErrorPresenter(nil)(canceled, errors.Join(context.Canceled, driverErr)); got.Message != "internal error" {
 		t.Errorf("a driver error on a canceled request: presented %q", got.Message)
 	}
 	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil || rec["level"] != "ERROR" || rec["msg"] != "veloxgql: internal error" {
@@ -523,7 +525,7 @@ func TestErrorPresenterOnCanceled(t *testing.T) {
 	canceled = graphql.WithFieldContext(canceled, &graphql.FieldContext{Field: graphql.CollectedField{Field: &ast.Field{Alias: "posts"}}})
 
 	l, c := &logged{}, &logged{}
-	present := veloxgql.ErrorPresenter(l.log, veloxgql.OnCanceled(c.log))
+	present := gqlgenx.ErrorPresenter(l.log, gqlgenx.OnCanceled(c.log))
 	got := present(canceled, context.Canceled)
 	if got.Message != "internal error" || got.Extensions["code"] != "INTERNAL_SERVER_ERROR" {
 		t.Errorf("a bare cancellation: presented %v", got)
@@ -549,7 +551,7 @@ func TestErrorPresenterOnCanceled(t *testing.T) {
 	}
 	// The last OnCanceled wins.
 	first := &logged{}
-	_ = veloxgql.ErrorPresenter(l.log, veloxgql.OnCanceled(first.log), veloxgql.OnCanceled(c.log))(canceled, context.Canceled)
+	_ = gqlgenx.ErrorPresenter(l.log, gqlgenx.OnCanceled(first.log), gqlgenx.OnCanceled(c.log))(canceled, context.Canceled)
 	if len(first.take()) != 0 || len(c.take()) != 1 || len(l.take()) != 0 {
 		t.Error("two OnCanceled: the cancellation must go to the last one's function only")
 	}
@@ -560,29 +562,29 @@ func TestErrorPresenterOnCanceled(t *testing.T) {
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	if got := veloxgql.ErrorPresenter(nil, veloxgql.OnCanceled(nil))(canceled, context.Canceled); got.Message != "internal error" {
+	if got := gqlgenx.ErrorPresenter(nil, gqlgenx.OnCanceled(nil))(canceled, context.Canceled); got.Message != "internal error" {
 		t.Errorf("OnCanceled(nil): presented %q", got.Message)
 	}
 	if buf.Len() != 0 {
 		t.Errorf("OnCanceled(nil) logged %s, want nothing", buf.Bytes())
 	}
-	_ = veloxgql.ErrorPresenter(nil, veloxgql.OnCanceled(c.log))(canceled, context.Canceled)
+	_ = gqlgenx.ErrorPresenter(nil, gqlgenx.OnCanceled(c.log))(canceled, context.Canceled)
 	if buf.Len() != 0 || len(c.take()) != 1 {
 		t.Errorf("a nil log with OnCanceled: slog got %s, want nothing, and OnCanceled the error", buf.Bytes())
 	}
 	// A driver's error is still logged at level error.
-	_ = veloxgql.ErrorPresenter(nil, veloxgql.OnCanceled(nil))(canceled, driverErr)
+	_ = gqlgenx.ErrorPresenter(nil, gqlgenx.OnCanceled(nil))(canceled, driverErr)
 	if !strings.Contains(buf.String(), `"level":"ERROR"`) {
 		t.Errorf("a driver's error on a canceled request: logged %s", buf.Bytes())
 	}
 
 	// The zero option is not valid.
 	defer func() {
-		if r := recover(); r != "veloxgql.ErrorPresenter: zero PresenterOption" {
+		if r := recover(); r != "gqlgenx.ErrorPresenter: zero PresenterOption" {
 			t.Errorf("zero PresenterOption: recovered %v", r)
 		}
 	}()
-	veloxgql.ErrorPresenter(nil, veloxgql.PresenterOption{})
+	gqlgenx.ErrorPresenter(nil, gqlgenx.PresenterOption{})
 	t.Error("zero PresenterOption: no panic")
 }
 
@@ -597,7 +599,7 @@ func TestErrorPresenterSlog(t *testing.T) {
 	driverErr := errors.New("sqlite: no such table: posts")
 	ctx := graphql.WithOperationContext(context.Background(), &graphql.OperationContext{OperationName: "Feed"})
 	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{Field: graphql.CollectedField{Field: &ast.Field{Alias: "posts"}}})
-	present := veloxgql.ErrorPresenter(nil)
+	present := gqlgenx.ErrorPresenter(nil)
 	for _, c := range []struct {
 		name string
 		ctx  context.Context

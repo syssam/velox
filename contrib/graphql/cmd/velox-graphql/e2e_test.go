@@ -495,6 +495,7 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 const ddl = ` + "`" + `
@@ -550,7 +551,7 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	}
 
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 	by := func(d veloxgql.OrderDirection) *gen.PostOrder {
 		return &gen.PostOrder{Direction: d, Field: gen.PostOrderFieldAuthorName}
@@ -614,7 +615,7 @@ func TestConnections(t *testing.T) {
 		ran.Add(1)
 		return next(ctx)
 	}))
-	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
 	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
@@ -707,7 +708,7 @@ func TestConnections(t *testing.T) {
 	}
 	// A list edge reads at most MaxList rows, the DB's cap being none: more
 	// fail with ErrTooManyRows, and the error names the edge.
-	one := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
+	one := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
 	_, err = ann.Groups(one)
 	if gs, err2 := bob.Groups(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)
@@ -808,7 +809,7 @@ func TestPaginateQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	c, err := db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")).Paginate(ctx, nil, nil, nil, nil)
@@ -837,7 +838,7 @@ func TestPaginateLimitOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	var all []int64
@@ -892,6 +893,7 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 const ddl = ` + "`" + `
@@ -934,7 +936,7 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 		return next(ctx)
 	}))
 	db := velox.Open(velox.SQLite, sqlDB, opts...)
-	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
 	return ctx, db
 }
 

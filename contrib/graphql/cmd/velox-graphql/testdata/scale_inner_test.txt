@@ -20,6 +20,7 @@ import (
 	"example.com/app/graph"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // n is the number of entities: scale_e2e_test.go writes it.
@@ -78,7 +79,7 @@ func serve(t *testing.T, opts ...veloxgql.Option) served {
 		t.Fatal(err)
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db), opts...))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db), opts...))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
 	do := func(query string, vars map[string]any) string {

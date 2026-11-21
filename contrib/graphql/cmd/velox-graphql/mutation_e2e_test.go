@@ -259,6 +259,7 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // countless is a driver whose results report no count.
@@ -319,7 +320,7 @@ func TestUnknownRowCount(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, raw)
-	ctx := schema.Org.With(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
 	w := &gen.Writer{Name: "w", Password: "x"}
 	insert(t, ctx, db, w)
 	a := &gen.Article{Title: "a"}
@@ -371,6 +372,7 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/veloxpgx"
 )
 
@@ -604,7 +606,7 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 				}
 			}
 			e.raw, e.db = raw, db
-			e.ctx = schema.Org.With(veloxgql.NewExtension(e.db).NewContext(context.Background()), int64(7))
+			e.ctx = schema.Org.With(gqlgenx.NewExtension(e.db).NewContext(context.Background()), int64(7))
 			fn(t, e)
 		})
 	}
@@ -699,7 +701,7 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string,
 }
 
 // codedError is an application's error with a GraphQL code, which
-// veloxgql.ErrorPresenter shows the client as it is.
+// gqlgenx.ErrorPresenter shows the client as it is.
 type codedError struct{ msg, code string }
 
 func (e *codedError) Error() string              { return e.msg }
@@ -723,7 +725,7 @@ func code(err error) string {
 }
 
 // wantEdgeErr fails the test unless err is a *velox.EdgeError, which
-// veloxgql.ErrorPresenter shows the client with the code and the message
+// gqlgenx.ErrorPresenter shows the client with the code and the message
 // msg.
 func wantEdgeErr(t *testing.T, ctx context.Context, what string, err error, code, msg string) {
 	t.Helper()
@@ -731,7 +733,7 @@ func wantEdgeErr(t *testing.T, ctx context.Context, what string, err error, code
 		t.Errorf("%s: %v, want a *velox.EdgeError", what, err)
 		return
 	}
-	ge := veloxgql.ErrorPresenter(nil)(ctx, err)
+	ge := gqlgenx.ErrorPresenter(nil)(ctx, err)
 	if ge.Extensions["code"] != code || ge.Message != msg {
 		t.Errorf("%s: %v, presented as %q %v; want %s %q", what, err, ge.Message, ge.Extensions, code, msg)
 	}
@@ -1315,7 +1317,7 @@ func TestAtomic(t *testing.T) {
 		w := &gen.Writer{Name: "w", Password: "x"}
 		insert(t, e.ctx, e.db, w)
 		err = e.db.Tx(e.ctx, func(ctx context.Context, tx *velox.DB) error {
-			ctx = schema.Org.With(veloxgql.NewExtension(tx).NewContext(ctx), int64(7))
+			ctx = schema.Org.With(gqlgenx.NewExtension(tx).NewContext(ctx), int64(7))
 			if err := tx.Insert(&gen.Circle{Name: "kept"}).Exec(ctx); err != nil {
 				return err
 			}
@@ -2077,7 +2079,7 @@ func TestRequiredSelfEdge(t *testing.T) {
 		if e.target == "sqlite" && !strings.HasPrefix(err.Error(), "velox: gen.Folder: unique constraint folders.folder_next violated: ") {
 			t.Errorf("the error is %q, want it to start with the folders.folder_next constraint", err)
 		}
-		ge := veloxgql.ErrorPresenter(nil)(e.ctx, err)
+		ge := gqlgenx.ErrorPresenter(nil)(e.ctx, err)
 		if ge.Message != "unique constraint violated" || ge.Extensions["code"] != veloxgql.CodeBadUserInput {
 			t.Errorf("presented as %q %v, want BAD_USER_INPUT unique constraint violated", ge.Message, ge.Extensions)
 		}
@@ -2308,7 +2310,7 @@ func TestBidiPartner(t *testing.T) {
 		if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintUnique {
 			t.Fatalf("c takes a, d's partner: %v, want a unique ConstraintError", err)
 		}
-		ge := veloxgql.ErrorPresenter(nil)(e.ctx, err)
+		ge := gqlgenx.ErrorPresenter(nil)(e.ctx, err)
 		if ge.Message != "unique constraint violated" || ge.Extensions["code"] != veloxgql.CodeBadUserInput {
 			t.Errorf("presented as %q %v", ge.Message, ge.Extensions)
 		}
@@ -2350,7 +2352,7 @@ func TestBidiPartner(t *testing.T) {
 		if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Field != "WriterPartner" {
 			t.Errorf("c as its own partner: %v, want a *velox.ValidationError of WriterPartner", err)
 		}
-		if ge := veloxgql.ErrorPresenter(nil)(e.ctx, err); ge.Extensions["code"] != veloxgql.CodeBadUserInput || ge.Message != "invalid value: a row cannot be its own partner" {
+		if ge := gqlgenx.ErrorPresenter(nil)(e.ctx, err); ge.Extensions["code"] != veloxgql.CodeBadUserInput || ge.Message != "invalid value: a row cannot be its own partner" {
 			t.Errorf("c as its own partner: presented as %q %v", ge.Message, ge.Extensions)
 		}
 		wantPartners(t, e, "c fails to take itself", c.ID, 0, a.ID, d.ID, d.ID, a.ID)
@@ -2490,7 +2492,7 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // TestFolderServed: a folder's parent and prev, which are Required, read as
@@ -2513,8 +2515,8 @@ func TestFolderServed(t *testing.T) {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) string {
 		t.Helper()

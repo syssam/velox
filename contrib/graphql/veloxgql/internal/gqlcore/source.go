@@ -1,0 +1,220 @@
+package gqlcore
+
+import (
+	"context"
+	"slices"
+
+	"github.com/syssam/velox"
+)
+
+// A SelectionSource tells the runtime about the field resolving in ctx.
+// An adapter installs exactly one with the operation's state (Install).
+type SelectionSource interface {
+	// Field is the field resolving in ctx; ok is false outside a field
+	// (an application's own code, a field the engine gives no context).
+	Field(ctx context.Context) (f Field, ok bool)
+	// Wait is called around a wait on another field's batch and returns
+	// the function that ends it.
+	Wait(ctx context.Context) (done func())
+}
+
+// Field is one field occurrence of the operation.
+type Field struct {
+	Object string // the parent GraphQL type, "Post"
+	Name   string // the field's name, not its alias, "tags"
+	// Type is the named type the field returns, its list and non-null
+	// wrappers taken off: "PostConnection", "Tag".
+	Type string
+	// Key is comparable and distinct per occurrence (two aliases are two
+	// keys); every row of a list shares it. Batches and selections are
+	// memoised by it. A nil Key batches nothing: the row reads alone.
+	Key any
+	// Sel is the field's sub-selection; nil when the source cannot read
+	// it, and the caller reads every column.
+	Sel Selection
+}
+
+// Selection is a sub-selection, its fragments folded.
+type Selection interface {
+	// On is the fields selected on objects of the type typ, with each
+	// one's sub-selection; ok is false when the source cannot tell (a
+	// fragment on an interface it has no schema for).
+	On(typ string) (fields []SelectedField, ok bool)
+}
+
+// SelectedField is a field a Selection selects: its name, not its alias,
+// and its own sub-selection.
+type SelectedField struct {
+	Name string
+	Sel  Selection // nil for a leaf
+}
+
+// state is what an adapter puts in an operation's context: the DB, the
+// limits and the selection source, as one value. A mutation's transaction
+// replaces the DB and keeps the rest.
+type state struct {
+	db *velox.DB
+	// limits is the adapter's *veloxgql.Limits, which this package cannot
+	// name: veloxgql reads it back.
+	limits any
+	src    SelectionSource
+}
+
+// stateKey is the context key of the *state.
+type stateKey struct{}
+
+// Install returns ctx with an operation's state: db, limits (a
+// *veloxgql.Limits, which LimitsOf returns) and src, the adapter's selection
+// source. Only the adapters call it. It panics on a nil src: a state
+// without a source would read every column and batch nothing, silently.
+func Install(ctx context.Context, db *velox.DB, limits any, src SelectionSource) context.Context {
+	if src == nil {
+		panic("veloxgql: an operation's state needs a SelectionSource")
+	}
+	return context.WithValue(ctx, stateKey{}, &state{db: db, limits: limits, src: src})
+}
+
+// WithDB returns ctx with its state's DB replaced by db, the limits and the
+// source kept: a mutation's transaction. ctx must hold a state.
+func WithDB(ctx context.Context, db *velox.DB) context.Context {
+	s := *stateOf(ctx)
+	s.db = db
+	return context.WithValue(ctx, stateKey{}, &s)
+}
+
+// stateOf is ctx's state, or nil.
+func stateOf(ctx context.Context) *state {
+	s, _ := ctx.Value(stateKey{}).(*state)
+	return s
+}
+
+// DB returns the DB of ctx's state; nil without one.
+func DB(ctx context.Context) *velox.DB {
+	if s := stateOf(ctx); s != nil {
+		return s.db
+	}
+	return nil
+}
+
+// LimitsOf returns the limits of ctx's state, as Install was given them;
+// nil without one.
+func LimitsOf(ctx context.Context) any {
+	if s := stateOf(ctx); s != nil {
+		return s.limits
+	}
+	return nil
+}
+
+// Source returns the selection source of ctx's state; nil without one.
+func Source(ctx context.Context) SelectionSource {
+	if s := stateOf(ctx); s != nil {
+		return s.src
+	}
+	return nil
+}
+
+// FieldOf returns the field of ctx, as its source tells it; ok is false
+// without a source or outside a field.
+func FieldOf(ctx context.Context) (Field, bool) {
+	src := Source(ctx)
+	if src == nil {
+		return Field{}, false
+	}
+	return src.Field(ctx)
+}
+
+// noWait is the done function of a wait with no source.
+func noWait() {}
+
+// wait is the source's Wait for ctx, or a function that does nothing.
+func wait(ctx context.Context) func() {
+	if src := Source(ctx); src != nil {
+		return src.Wait(ctx)
+	}
+	return noWait
+}
+
+// Selected returns the names of the fields selected on the objects of the
+// GraphQL type typ that the field of ctx returns: through edges and node for
+// a connection field, the field's own selection otherwise, with fragments
+// whose type is typ, and without __typename. ok is false outside a field,
+// and when the field returns neither typ nor a connection to it. The result
+// is computed once per field occurrence (Field.Key) and type per table.
+//
+// ok is false too where the source cannot see what the objects' resolvers
+// read, so that the caller reads every column:
+//   - a field of the connection other than edges, pageInfo, totalCount and
+//     __typename, or of an edge other than node, cursor and __typename (an
+//     application's own, which may resolve from the nodes);
+//   - a selection the source cannot read (Field.Sel nil, or On's ok false),
+//     as gqlgen's without the server's schema and a fragment on an
+//     interface or a union.
+//
+// The result is shared: the caller must not change it.
+func Selected(ctx context.Context, typ string) (fields []string, ok bool) {
+	f, ok := FieldOf(ctx)
+	if !ok || f.Key == nil || f.Sel == nil {
+		return nil, false
+	}
+	return TableFromContext(ctx).Selected(f.Key, typ, func() ([]string, bool) {
+		return computeSelected(f, typ)
+	})
+}
+
+// computeSelected is Selected's result for f, computed.
+func computeSelected(f Field, typ string) ([]string, bool) {
+	var objs []Selection // the selections on the objects of typ
+	switch f.Type {
+	case typ:
+		objs = []Selection{f.Sel}
+	case typ + "Connection":
+		conn, ok := on(f.Sel, typ+"Connection")
+		if !ok {
+			return nil, false
+		}
+		for _, e := range conn {
+			switch e.Name {
+			case "pageInfo", "totalCount", "__typename":
+			case "edges":
+				edges, ok := on(e.Sel, typ+"Edge")
+				if !ok {
+					return nil, false
+				}
+				for _, n := range edges {
+					switch n.Name {
+					case "cursor", "__typename":
+					case "node":
+						objs = append(objs, n.Sel)
+					default:
+						return nil, false
+					}
+				}
+			default:
+				return nil, false
+			}
+		}
+	default:
+		return nil, false
+	}
+	fields := []string{}
+	for _, s := range objs {
+		cs, ok := on(s, typ)
+		if !ok {
+			return nil, false
+		}
+		for _, c := range cs {
+			if c.Name != "__typename" && !slices.Contains(fields, c.Name) {
+				fields = append(fields, c.Name)
+			}
+		}
+	}
+	return fields, true
+}
+
+// on is s.On(typ); a nil s, a leaf's, selects nothing.
+func on(s Selection, typ string) ([]SelectedField, bool) {
+	if s == nil {
+		return nil, true
+	}
+	return s.On(typ)
+}

@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"bytes"
@@ -31,6 +31,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -255,7 +256,7 @@ func TestZeroOptionPanics(t *testing.T) {
 		return false
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	if !panics(func() { veloxgql.NewExtension(db, veloxgql.Option{}) }) {
+	if !panics(func() { gqlgenx.NewExtension(db, veloxgql.Option{}) }) {
 		t.Error("NewExtension(db, Option{}) did not panic")
 	}
 	if !panics(func() { velox.Open(velox.SQLite, sqlDB, velox.Option{}) }) {
@@ -266,7 +267,7 @@ func TestZeroOptionPanics(t *testing.T) {
 // errFail is the error of the fail field.
 var errFail = errors.New("fail failed")
 
-// handlerServer serves testSchema through veloxgql.NewExtension(db). Its
+// handlerServer serves testSchema through gqlgenx.NewExtension(db). Its
 // resolvers read the DB with DBFromContext: add inserts a person and returns
 // its id; fail and boom insert one and then fail with errFail or panic; cancel
 // inserts one, calls the cancel function set in *cancel, and returns its id;
@@ -350,18 +351,18 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 }
 
 // serve serves testSchema with resolvers through
-// veloxgql.NewExtension(db, opts...).
+// gqlgenx.NewExtension(db, opts...).
 func serve(db *velox.DB, resolvers map[string]resolver, opts ...veloxgql.Option) *handler.Server {
 	return serveSchema(testSchema(resolvers), db, opts...)
 }
 
-// serveSchema serves es through veloxgql.NewExtension(db, opts...).
+// serveSchema serves es through gqlgenx.NewExtension(db, opts...).
 func serveSchema(es graphql.ExecutableSchema, db *velox.DB, opts ...veloxgql.Option) *handler.Server {
 	srv := handler.New(es)
 	srv.AddTransport(transport.SSE{})
 	srv.AddTransport(transport.POST{})
 	srv.SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })
-	srv.Use(veloxgql.NewExtension(db, opts...))
+	srv.Use(gqlgenx.NewExtension(db, opts...))
 	return srv
 }
 
@@ -415,10 +416,10 @@ func TestExtensionPutsTheDB(t *testing.T) {
 		return nil, err
 	}}))
 	bare.AddTransport(transport.POST{})
-	if got := post(t, context.Background(), bare, `{ hasDB }`); !strings.Contains(got, "veloxgql.NewExtension") {
-		t.Errorf("without the extension: %s, want an error naming veloxgql.NewExtension", got)
+	if got := post(t, context.Background(), bare, `{ hasDB }`); !strings.Contains(got, "gqlgenx.NewExtension") {
+		t.Errorf("without the extension: %s, want an error naming gqlgenx.NewExtension", got)
 	}
-	if name := veloxgql.NewExtension(db).ExtensionName(); name != "VeloxDB" {
+	if name := gqlgenx.NewExtension(db).ExtensionName(); name != "VeloxDB" {
 		t.Errorf("ExtensionName() = %q, want VeloxDB", name)
 	}
 }
@@ -453,20 +454,20 @@ func TestExtensionGivesMutationsItsTx(t *testing.T) {
 			t.Errorf("%s: DBFromContext %p, want db %p", name, got, db)
 		}
 	}
-	got, err := veloxgql.DBFromContext(veloxgql.NewExtension(db).NewContext(context.Background()))
+	got, err := veloxgql.DBFromContext(gqlgenx.NewExtension(db).NewContext(context.Background()))
 	if err != nil || got != db {
 		t.Errorf("NewContext: DBFromContext %p, %v; want db %p", got, err, db)
 	}
 }
 
 func TestExtensionNilDB(t *testing.T) {
-	const want = "veloxgql.NewExtension: nil DB"
-	if err := veloxgql.NewExtension(nil).Validate(nil); err == nil || err.Error() != want {
+	const want = "gqlgenx.NewExtension: nil DB"
+	if err := gqlgenx.NewExtension(nil).Validate(nil); err == nil || err.Error() != want {
 		t.Errorf("Validate: %v, want %q", err, want)
 	}
 	for name, use := range map[string]func(){
-		"Use":        func() { handler.New(testSchema(nil)).Use(veloxgql.NewExtension(nil)) },
-		"NewContext": func() { veloxgql.NewExtension(nil).NewContext(context.Background()) },
+		"Use":        func() { handler.New(testSchema(nil)).Use(gqlgenx.NewExtension(nil)) },
+		"NewContext": func() { gqlgenx.NewExtension(nil).NewContext(context.Background()) },
 	} {
 		func() {
 			defer func() {
@@ -484,10 +485,10 @@ func TestExtensionNilDB(t *testing.T) {
 // server's Use and Context, with the same text. A zero field is the default.
 func TestExtensionRefusesNegativeLimits(t *testing.T) {
 	db, _ := handlerDB(t)
-	if err := veloxgql.NewExtension(db).Validate(nil); err != nil {
+	if err := gqlgenx.NewExtension(db).Validate(nil); err != nil {
 		t.Fatalf("the defaults: %v", err)
 	}
-	if err := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{})).Validate(nil); err != nil {
+	if err := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{})).Validate(nil); err != nil {
 		t.Fatalf("zero limits: %v", err)
 	}
 	for name, set := range map[string]func(*veloxgql.Limits){
@@ -505,8 +506,8 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 	} {
 		var l veloxgql.Limits
 		set(&l)
-		ext := veloxgql.NewExtension(db, veloxgql.WithLimits(l))
-		want := "veloxgql.NewExtension: Limits." + name + " is -1, and a limit must not be negative (zero is the default)"
+		ext := gqlgenx.NewExtension(db, veloxgql.WithLimits(l))
+		want := "gqlgenx.NewExtension: Limits." + name + " is -1, and a limit must not be negative (zero is the default)"
 		if err := ext.Validate(nil); err == nil || err.Error() != want {
 			t.Errorf("%s -1: Validate: %v, want %q", name, err, want)
 		}
@@ -559,7 +560,7 @@ func TestTwoServersDiffer(t *testing.T) {
 	}
 	wg.Wait()
 	// The error is ErrPageTooLarge.
-	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
+	ctx := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
 	if _, err := handlerResolvers(db, nil)["page"](ctx, map[string]any{"first": int64(3)}); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 3 under MaxPage 2: %v, want ErrPageTooLarge", err)
 	}
@@ -854,7 +855,7 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 // gqlgen makes the response once and the operation cannot run again.
 func TestTxOptionsRefuseRetry(t *testing.T) {
 	db, _ := handlerDB(t)
-	err := veloxgql.NewExtension(db, veloxgql.WithTxOptions(velox.TxTimeout(time.Second), velox.TxRetrySerializable(3))).Validate(nil)
+	err := gqlgenx.NewExtension(db, veloxgql.WithTxOptions(velox.TxTimeout(time.Second), velox.TxRetrySerializable(3))).Validate(nil)
 	want := "veloxgql.WithTxOptions: TxRetrySerializable(3) would run the mutation again, and gqlgen makes its response once"
 	if err == nil || err.Error() != want {
 		t.Errorf("Validate = %v, want %q", err, want)
@@ -863,12 +864,12 @@ func TestTxOptionsRefuseRetry(t *testing.T) {
 		"the last retry asks for none": {velox.TxRetrySerializable(3), velox.TxRetrySerializable(0)},
 		"isolation":                    {velox.TxIsolation(sql.LevelSerializable)},
 	} {
-		if err := veloxgql.NewExtension(db, veloxgql.WithTxOptions(opts...)).Validate(nil); err != nil {
+		if err := gqlgenx.NewExtension(db, veloxgql.WithTxOptions(opts...)).Validate(nil); err != nil {
 			t.Errorf("%s: Validate = %v, want nil", name, err)
 		}
 	}
 	// Given twice, the last wins.
-	e := veloxgql.NewExtension(db, veloxgql.WithTxOptions(velox.TxRetrySerializable(3)), veloxgql.WithTxOptions(velox.TxReadOnly()))
+	e := gqlgenx.NewExtension(db, veloxgql.WithTxOptions(velox.TxRetrySerializable(3)), veloxgql.WithTxOptions(velox.TxReadOnly()))
 	if err := e.Validate(nil); err != nil {
 		t.Errorf("the last WithTxOptions should win: %v", err)
 	}
@@ -1139,7 +1140,7 @@ func TestDocumentAndAPQ(t *testing.T) {
 	db, _ := handlerDB(t)
 	es := testSchema(handlerResolvers(db, nil))
 	srv := handler.New(es)
-	srv.Use(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxFields: 2})))
+	srv.Use(gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxFields: 2})))
 	srv.Use(extension.AutomaticPersistedQuery{Cache: lru.New[string](10)})
 	srv.AddTransport(transport.POST{})
 	const query = `{ a: count b: count c: count }`
@@ -1169,7 +1170,7 @@ func TestDocumentAndAPQ(t *testing.T) {
 func TestSetup(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchema(handlerResolvers(db, nil)))
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: 100, MaxFields: 2, MaxTokens: 1000}))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: 100, MaxFields: 2, MaxTokens: 1000}))
 	srv.AddTransport(transport.POST{})
 	do := func(body io.Reader, length int64) (int, string) {
 		req := httptest.NewRequest(http.MethodPost, "/", body)
@@ -1226,7 +1227,7 @@ func TestListCostNamesTheFix(t *testing.T) {
 func TestValidationErrorsBounded(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := handler.New(testSchema(handlerResolvers(db, nil)))
-	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxErrors: 3}))
+	h := gqlgenx.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxErrors: 3}))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) string {
 		body, err := json.Marshal(map[string]string{"query": query})
@@ -1318,7 +1319,7 @@ fragment TypeRef on __Type {
 // a walk of GraphiQL's query, which gqlgen's cache would have spared.
 func BenchmarkCheckDocument(b *testing.B) {
 	db := &velox.DB{}
-	e := veloxgql.NewExtension(db)
+	e := gqlgenx.NewExtension(db)
 	p := &graphql.RawParams{Query: graphiQL}
 	b.ReportAllocs()
 	for b.Loop() {
@@ -1326,4 +1327,14 @@ func BenchmarkCheckDocument(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// spell is f(0) to f(n-1), joined by a space.
+func spell(n int, f func(i int) string) string {
+	var b strings.Builder
+	for i := range n {
+		b.WriteString(f(i))
+		b.WriteByte(' ')
+	}
+	return b.String()
 }

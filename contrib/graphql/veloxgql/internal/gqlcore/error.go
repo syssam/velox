@@ -14,8 +14,8 @@ const CodeBadUserInput = "BAD_USER_INPUT"
 // may see or change, which veloxgql exports as CodeNotFound.
 const CodeNotFound = "NOT_FOUND"
 
-// Error is an error with a code for the client, which veloxgql's
-// ErrorPresenter writes as extensions.code, and a message safe to show it.
+// Error is an error with a code for the client, which an adapter's error
+// presenter writes as extensions.code, and a message safe to show it.
 type Error struct {
 	Code string
 	Msg  string // the message, without "veloxgql: "
@@ -29,13 +29,18 @@ func (e *Error) Error() string { return "veloxgql: " + e.Msg }
 func (e *Error) Unwrap() error { return e.Err }
 
 // Extensions is {"code": Code}, the shape of gqlgen's former ExtendedError,
-// which veloxgql's ErrorPresenter reads; nil when Code is "".
+// which veloxgql.Present reads; nil when Code is "".
 func (e *Error) Extensions() map[string]any {
 	if e.Code == "" {
 		return nil
 	}
 	return map[string]any{"code": e.Code}
 }
+
+// GraphQLExtensions is Extensions, under the name graphql-go's
+// ExtensionsProvider reads, so that the code reaches any graphql-go error
+// presenter.
+func (e *Error) GraphQLExtensions() map[string]any { return e.Extensions() }
 
 // InputErrorf is a BAD_USER_INPUT error whose text is "veloxgql: " and
 // fmt.Sprintf of format and args, %w included. The client sees the text, so

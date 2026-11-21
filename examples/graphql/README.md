@@ -61,8 +61,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `updateLabel`, `createUser` and `updateUser`, which velox-graphql leaves to
    it, as entgql does; and its own query and field (below). `gqlgen.yml`:
    the schema files, `autobind` to `veloxgen`, and `models` binding `ID` and the
-   scalars to `veloxgql`. An ID is the entity's key, an `int64` here, so `ID`
-   binds to `veloxgql.Int64ID`: a resolver's `id` argument is an `int64`,
+   scalars to `veloxgql` and its gqlgen adapter `gqlgenx`. An ID is the
+   entity's key, an `int64` here, so `ID` binds to `gqlgenx.Int64ID`: a resolver's `id` argument is an `int64`,
    which the client sends as an integer or a string of one, and reads as a
    string.
 4. gqlgen, which writes `graph/generated.go` and `graph/models_gen.go`, and
@@ -147,9 +147,9 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    name on the entity, `Post.Author(ctx)`, as entgql's is, and `id` is the
    `ID` field, the key; connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
-6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
+6. `main.go`: gqlgen's server with `gqlgenx.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a
-   mutation in one transaction), `veloxgql.ErrorPresenter`, a limit on the
+   mutation in one transaction), `gqlgenx.ErrorPresenter`, a limit on the
    cost of a request, middlewares that put the organization, the role and the
    viewer in the context, and the directive `@admin`.
 
@@ -180,9 +180,9 @@ The validators (`title`'s `NotEmpty()`) run on the fields an input sets in
 its `Setters`, before any statement: `createPost` with an empty title is
 `BAD_USER_INPUT`, naming `title`, whatever its IDs name. An ID that names no
 row the caller may read fails the write with a `*velox.EdgeError`, which
-`veloxgql.ErrorPresenter` shows as `NOT_FOUND` naming the edge.
+`gqlgenx.ErrorPresenter` shows as `NOT_FOUND` naming the edge.
 
-**One transaction per operation.** `veloxgql.NewExtension` runs a mutation
+**One transaction per operation.** `gqlgenx.NewExtension` runs a mutation
 operation in one transaction, and rolls it back when the response has any
 error. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
 (its name is taken), `a`'s row is rolled back too, and `data` is `null`.
@@ -251,7 +251,7 @@ release, because those filters were unguarded before.
 
 ### What a client sees of an error
 
-The server sets `srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))`.
+The server sets `srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))`.
 gqlgen's default presenter shows the client every error's text, and velox's
 and the driver's name entities, tables, constraints and columns: without a
 organization, a client would read `velox: veloxgen.Post: select denied by policy: velox/scope: the context has no scope value: org`.
@@ -283,7 +283,7 @@ Every `veloxgql.Limits` field (`MaxPage`, `MaxList`, `MaxFilterDepth`,
 one edge. The server takes the defaults; `veloxgql.WithLimits` sets others:
 
 ```go
-veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
+gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
 ```
 
 A zero field is the default; a negative one is refused. They do not bound a
@@ -320,7 +320,7 @@ and variables. So the extension parses a request first, and refuses one over
 `Limits.MaxTokens` (15000), `MaxFields` (2000), `MaxFragments` (500), `MaxDepth` (64),
 `MaxNameBytes` (128), `MaxLiteralBytes` (64 KiB) or `MaxVariableNodes` (25000), or with
 more than 5 times `MaxFields` pairs that differ under one response name, with
-`BAD_USER_INPUT`. `main.go` calls `veloxgql.Setup`, which does what a server needs: it
+`BAD_USER_INPUT`. `main.go` calls `gqlgenx.Setup`, which does what a server needs: it
 uses the extension and `ErrorPresenter`, stops validation at `MaxErrors` (100) errors,
 shows no suggestions, and the handler it returns refuses a body over
 `Limits.MaxBodyBytes` (1 MiB). `bounded_test.go` asserts what each shape allocates, and

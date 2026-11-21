@@ -1,4 +1,4 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // TestValueBytesLists: a nullable list, a pointer to a list and a list of
@@ -22,9 +23,9 @@ func TestValueBytesLists(t *testing.T) {
 	}{
 		{[]*string{&a, nil, &b}, 2 + 3},
 		{&[]string{a, b}, 2 + 3},
-		{[]Bytes{{1, 2, 3}, {4}}, 4 + 4},
-		{[]JSON{JSON(`{"a":1}`), JSON(`[]`)}, 7 + 2},
-		{&JSON{'1', '2'}, 2},
+		{[]veloxgql.Bytes{{1, 2, 3}, {4}}, 4 + 4},
+		{[]veloxgql.JSON{veloxgql.JSON(`{"a":1}`), veloxgql.JSON(`[]`)}, 7 + 2},
+		{&veloxgql.JSON{'1', '2'}, 2},
 		{[]name{"xyz"}, 3},
 		{(*[]string)(nil), 0},
 		{[]*row{{S: "abc"}}, 0},
@@ -52,7 +53,7 @@ type (
 // alone, and with HasNext set it left the timer and its callback to the
 // deadline, on a websocket as long as the connection.
 func TestDeferEndsTimeout(t *testing.T) {
-	e := &Extension{limits: Limits{Timeout: time.Hour}}
+	e := &Extension{limits: veloxgql.Limits{Timeout: time.Hour}}
 	ctx := context.WithValue(context.Background(), operationKey{}, new(operation))
 	more, last := true, false
 	fctx, r, done := e.operationResponse(ctx)

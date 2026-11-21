@@ -17,7 +17,7 @@ import (
 )
 
 // Resolver is the root resolver. It holds nothing: the generated code reads
-// the *velox.DB from the request context, where veloxgql.NewExtension puts
+// the *velox.DB from the request context, where gqlgenx.NewExtension puts
 // it.
 type Resolver struct{}
 
@@ -30,7 +30,7 @@ func WithViewer(ctx context.Context, user int64) context.Context {
 }
 
 // Viewer is the viewer WithViewer put in ctx; without one, an
-// UNAUTHENTICATED error, which veloxgql.ErrorPresenter shows the client as it
+// UNAUTHENTICATED error, which gqlgenx.ErrorPresenter shows the client as it
 // is.
 func Viewer(ctx context.Context) (int64, error) {
 	if user, ok := ctx.Value(viewerKey{}).(int64); ok {
@@ -85,7 +85,7 @@ func NotFound(ctx context.Context, typ string) error {
 }
 
 // codedError is the error message with the code code, which
-// veloxgql.ErrorPresenter shows the client as it is.
+// gqlgenx.ErrorPresenter shows the client as it is.
 func codedError(ctx context.Context, message, code string) error {
 	return &gqlerror.Error{Path: graphql.GetPath(ctx), Message: message, Extensions: map[string]any{"code": code}}
 }

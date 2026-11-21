@@ -14,6 +14,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
@@ -254,7 +255,7 @@ func TestPaginate(t *testing.T) {
 func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
-	ctx = veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
+	ctx = gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
 	p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)
@@ -476,7 +477,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 // the connection's: the page and the count start at the first row.
 func TestPaginateClearsOffset(t *testing.T) {
 	db, _ := peopleDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().Limit(1).Offset(3)
 	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
 	if err != nil {
@@ -497,7 +498,7 @@ func TestPaginateClearsOffset(t *testing.T) {
 // nothing is queried.
 func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	db, st := peopleDB(t)
-	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
 	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
 	want := "veloxgql: Paginate of Person: q has an OrderBy; the connection orders by its orderBy argument"

@@ -8,15 +8,16 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func TestDBFrom(t *testing.T) {
 	_, err := veloxgql.DBFromContext(context.Background())
-	if !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "serve the schema through veloxgql.NewExtension") {
-		t.Errorf("DBFromContext with no DB: %v, want ErrNoDB naming veloxgql.NewExtension", err)
+	if !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "serve the schema through gqlgenx.NewExtension") {
+		t.Errorf("DBFromContext with no DB: %v, want ErrNoDB naming gqlgenx.NewExtension", err)
 	}
 	db := &velox.DB{}
-	if got, err := veloxgql.DBFromContext(veloxgql.NewExtension(db).NewContext(context.Background())); got != db || err != nil {
+	if got, err := veloxgql.DBFromContext(gqlgenx.NewExtension(db).NewContext(context.Background())); got != db || err != nil {
 		t.Errorf("DBFromContext = %p, %v, want %p", got, err, db)
 	}
 }
@@ -25,7 +26,7 @@ func TestDBFrom(t *testing.T) {
 // is none.
 func TestDB(t *testing.T) {
 	db := &velox.DB{}
-	if got := veloxgql.DB(veloxgql.NewExtension(db).NewContext(context.Background())); got != db {
+	if got := veloxgql.DB(gqlgenx.NewExtension(db).NewContext(context.Background())); got != db {
 		t.Errorf("DB = %p, want %p", got, db)
 	}
 	defer func() {

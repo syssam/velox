@@ -163,7 +163,7 @@ autobind:
   - example.com/app/gen
 models:
   ID:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int
@@ -177,17 +177,17 @@ models:
   Float:
     model:
       - github.com/99designs/gqlgen/graphql.FloatContext
-      - github.com/syssam/velox/contrib/graphql/veloxgql.Float32
+      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Float32
   Uint64:
     model:
-      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint64
-      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint
+      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Uint64
+      - github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Uint
   Time:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Time
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Time
   UUID:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.UUID
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.UUID
   Bytes:
-    model: github.com/syssam/velox/contrib/graphql/veloxgql.Bytes
+    model: github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Bytes
   JSON:
     model: github.com/syssam/velox/contrib/graphql/veloxgql.JSON
   Cursor:
@@ -286,6 +286,7 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/veloxpgx"
 )
 
@@ -526,8 +527,8 @@ func newEnv(t *testing.T, tg target, opts ...veloxgql.Option) *env {
 	}
 
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(db, opts...))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(_ context.Context, err error) {
+	srv.Use(gqlgenx.NewExtension(db, opts...))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context.Context, err error) {
 		e.mu.Lock()
 		e.log = append(e.log, err.Error())
 		e.mu.Unlock()

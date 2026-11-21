@@ -95,7 +95,7 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func TestTaskStatus(t *testing.T) {
@@ -114,7 +114,7 @@ func TestTaskStatus(t *testing.T) {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -144,7 +144,7 @@ func TestAppOwnSDLEnums(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	gqlgen := strings.Replace(strings.Replace(e2eCollectGqlgen, "  - gen/*.graphql\n", "", 1),
-		"github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID", "github.com/99designs/gqlgen/graphql.ID", 1)
+		"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID", "github.com/99designs/gqlgen/graphql.ID", 1)
 	dir, run := app(t, map[string]string{
 		"schema/schema.go":          e2eOwnSDLSchema,
 		"graph/schema.graphql":      e2eOwnSDL,

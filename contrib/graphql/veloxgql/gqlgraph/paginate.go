@@ -400,7 +400,10 @@ func (p *Page) Node(i int) any { return p.Rows[i] }
 // is called, and TotalCount the COUNT, once too. So a GraphQL selection of
 // only totalCount runs no page query, and one without it no COUNT.
 //
-// A Connection is made by Paginate, and must not be copied.
+// A Connection is made by Paginate, and must not be copied. The nil
+// *Connection is the empty connection: its page has no rows and its
+// totalCount is 0, so the zero connection type of generated code, which an
+// application returns for a list it denies, is one.
 type Connection struct {
 	query untyped.TableQuery // the whole list, unordered
 	typ   string             // the GraphQL type of the nodes
@@ -426,8 +429,10 @@ type Connection struct {
 // c's key, each column ASC. For generated code: the body of a type's
 // newXConnection, which the entity's PaginateQuery calls with a Query and
 // an edge method with an Edge. It checks the query and the arguments, decodes the cursor,
-// and runs no query. An Edge's connection batches (see Edge's paginate),
-// and it fails as veloxgql.DBFromContext does without a DB in ctx.
+// and runs no query. An Edge's connection batches (see Edge's paginate). It
+// fails with veloxgql.ErrNoSelectionSource, and veloxgql.ErrNoDB, in a
+// context no adapter made (gqlgenx.NewExtension), which tells it nothing of
+// the field it resolves.
 //
 // A Query's q keeps its filters, its With loads and the scope the application gave
 // it. It must not be ordered, since its order would come first and break the
@@ -449,6 +454,9 @@ type Connection struct {
 // another type, taken under another order, or whose
 // values are not of the order's types.
 func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
+	if err := needSource(ctx); err != nil {
+		return nil, err
+	}
 	return from.paginate(ctx, c, args, args.Order)
 }
 
@@ -579,6 +587,9 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 // page is the connection's part of the batch, which may return n+1 rows per
 // owner.
 func (c *Connection) Page(ctx context.Context) (*Page, error) {
+	if c == nil {
+		return &Page{}, nil
+	}
 	c.pageOnce.Do(func() {
 		c.pageErr = errPanicked // the other callers' error, when run panics
 		c.page, c.pageErr = c.run(ctx)
@@ -589,6 +600,9 @@ func (c *Connection) Page(ctx context.Context) (*Page, error) {
 // TotalCount returns the number of nodes in the whole connection, not only
 // on its page, running a COUNT on the first call.
 func (c *Connection) TotalCount(ctx context.Context) (int, error) {
+	if c == nil {
+		return 0, nil
+	}
 	c.countOnce.Do(func() {
 		c.countErr = errPanicked // the other callers' error, when the count panics
 		if c.edge != nil {

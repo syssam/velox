@@ -18,6 +18,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/examples/graphql/graph"
 )
 
@@ -95,7 +96,7 @@ func longName(i int) string {
 func TestRequestBounded(t *testing.T) {
 	s := newServer(t)
 	s.seedRows(t, 100)
-	e := veloxgql.NewExtension(&velox.DB{})
+	e := gqlgenx.NewExtension(&velox.DB{})
 	frags := func(n int, f func(i int) string) string { return repeat(n, f) }
 	spreads := func(n int) string { return repeat(n, func(i int) string { return fmt.Sprintf("...F%d", i) }) }
 	field := `id name role joinedAt`
@@ -324,7 +325,7 @@ func TestIntrospectionOffShowsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}, Directives: graph.DirectiveRoot{Admin: admin}}))
-	h := veloxgql.Setup(srv, db)
+	h := gqlgenx.Setup(srv, db)
 	srv.AddTransport(transport.POST{})
 	ts := httptest.NewServer(orgFromHeader(roleFromHeader(h)))
 	t.Cleanup(ts.Close)

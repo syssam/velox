@@ -1,4 +1,4 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
@@ -39,7 +40,7 @@ type operation struct {
 // response is what the limits keep of one response, which the fields' goroutines share:
 // a subscription's event is one, and a query's or a mutation's responses share theirs.
 type response struct {
-	limits Limits
+	limits veloxgql.Limits
 	// mutation is the operation's, when its resolvers run one at a time.
 	mutation *mutation
 	// bytes, fieldErrs and presented count its values and its errors. fieldErrs holds
@@ -127,13 +128,13 @@ func valueBytes(v any) int64 {
 		if x != nil {
 			return quotedLen(*x)
 		}
-	case Bytes:
+	case veloxgql.Bytes:
 		return int64(base64.StdEncoding.EncodedLen(len(x)))
-	case *Bytes:
+	case *veloxgql.Bytes:
 		if x != nil {
 			return int64(base64.StdEncoding.EncodedLen(len(*x)))
 		}
-	case JSON:
+	case veloxgql.JSON:
 		return int64(len(x))
 	case json.RawMessage:
 		return int64(len(x))
@@ -197,7 +198,7 @@ func reflectBytes(v reflect.Value) int64 {
 		return quotedLen(v.String())
 	case reflect.Slice:
 		if v.Type().Elem().Kind() == reflect.Uint8 {
-			if t := v.Type(); t == reflect.TypeFor[JSON]() || t == reflect.TypeFor[json.RawMessage]() {
+			if t := v.Type(); t == reflect.TypeFor[veloxgql.JSON]() || t == reflect.TypeFor[json.RawMessage]() {
 				return int64(v.Len()) // as it is, not as base64
 			}
 			return int64(base64.StdEncoding.EncodedLen(v.Len()))
@@ -280,14 +281,14 @@ func (e *Extension) finish(ctx context.Context, r *response, resp *graphql.Respo
 	var err *gqlcore.Error
 	switch why {
 	case stopBytes:
-		err = &gqlcore.Error{Code: CodeTooCostly, Err: ErrResponseTooLarge,
-			Msg: fmt.Sprintf("%v: its values are over %d bytes", ErrResponseTooLarge, r.limits.MaxResponseBytes)}
+		err = &gqlcore.Error{Code: veloxgql.CodeTooCostly, Err: veloxgql.ErrResponseTooLarge,
+			Msg: fmt.Sprintf("%v: its values are over %d bytes", veloxgql.ErrResponseTooLarge, r.limits.MaxResponseBytes)}
 	case stopErrors:
-		err = &gqlcore.Error{Code: CodeTooCostly, Err: ErrTooManyErrors,
-			Msg: fmt.Sprintf("%v: over %d: the rest are left out, and it stopped", ErrTooManyErrors, r.limits.MaxErrors)}
+		err = &gqlcore.Error{Code: veloxgql.CodeTooCostly, Err: veloxgql.ErrTooManyErrors,
+			Msg: fmt.Sprintf("%v: over %d: the rest are left out, and it stopped", veloxgql.ErrTooManyErrors, r.limits.MaxErrors)}
 	default:
-		err = &gqlcore.Error{Code: CodeTimeout, Err: ErrTimeout,
-			Msg: fmt.Sprintf("%v: it ran over %v", ErrTimeout, r.limits.Timeout)}
+		err = &gqlcore.Error{Code: veloxgql.CodeTimeout, Err: veloxgql.ErrTimeout,
+			Msg: fmt.Sprintf("%v: it ran over %v", veloxgql.ErrTimeout, r.limits.Timeout)}
 	}
 	rctx := graphql.WithFreshResponseContext(ctx)
 	graphql.AddError(rctx, &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()})

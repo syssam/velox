@@ -1,4 +1,4 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"io"
@@ -9,6 +9,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/google/uuid"
 
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
@@ -22,38 +23,38 @@ import (
 // Int; the gqlgen.yml in the package documentation lists them all.
 
 // MarshalTime writes t as the Time scalar does.
-func MarshalTime(t time.Time) graphql.Marshaler { return Time(t) }
+func MarshalTime(t time.Time) graphql.Marshaler { return veloxgql.Time(t) }
 
 // UnmarshalTime reads the Time scalar.
 func UnmarshalTime(v any) (time.Time, error) {
-	var t Time
+	var t veloxgql.Time
 	err := t.UnmarshalGQL(v)
 	return time.Time(t), err
 }
 
 // MarshalUUID writes u as the UUID scalar does.
-func MarshalUUID(u uuid.UUID) graphql.Marshaler { return UUID(u) }
+func MarshalUUID(u uuid.UUID) graphql.Marshaler { return veloxgql.UUID(u) }
 
 // UnmarshalUUID reads the UUID scalar.
 func UnmarshalUUID(v any) (uuid.UUID, error) {
-	var u UUID
+	var u veloxgql.UUID
 	err := u.UnmarshalGQL(v)
 	return uuid.UUID(u), err
 }
 
 // MarshalUint64 writes u as the Uint64 scalar does, a decimal string.
-func MarshalUint64(u uint64) graphql.Marshaler { return Uint64(u) }
+func MarshalUint64(u uint64) graphql.Marshaler { return veloxgql.Uint64(u) }
 
 // UnmarshalUint64 reads the Uint64 scalar, a decimal string.
 func UnmarshalUint64(v any) (uint64, error) {
-	var u Uint64
+	var u veloxgql.Uint64
 	err := u.UnmarshalGQL(v)
 	return uint64(u), err
 }
 
 // MarshalUint writes u as the Uint64 scalar, a decimal string: a uint field
 // is a Uint64, as a uint is 64 bits wide where velox runs.
-func MarshalUint(u uint) graphql.Marshaler { return Uint64(u) }
+func MarshalUint(u uint) graphql.Marshaler { return veloxgql.Uint64(u) }
 
 // UnmarshalUint reads the Uint64 scalar into a uint.
 func UnmarshalUint(v any) (uint, error) {
@@ -65,11 +66,11 @@ func UnmarshalUint(v any) (uint, error) {
 }
 
 // MarshalBytes writes b as the Bytes scalar does.
-func MarshalBytes(b []byte) graphql.Marshaler { return Bytes(b) }
+func MarshalBytes(b []byte) graphql.Marshaler { return veloxgql.Bytes(b) }
 
 // UnmarshalBytes reads the Bytes scalar.
 func UnmarshalBytes(v any) ([]byte, error) {
-	var b Bytes
+	var b veloxgql.Bytes
 	err := b.UnmarshalGQL(v)
 	return b, err
 }
@@ -99,3 +100,22 @@ func UnmarshalFloat32(v any) (float32, error) {
 	}
 	return float32(f), nil
 }
+
+// veloxgql's scalars, the veloxgql.Cursor and the veloxgql.OrderDirection enum are gqlgen
+// marshalers. gqlgen calls the veloxgql.Cursor's context pair, which it prefers.
+var (
+	_ graphql.Marshaler          = (*veloxgql.Time)(nil)
+	_ graphql.Unmarshaler        = (*veloxgql.Time)(nil)
+	_ graphql.Marshaler          = (*veloxgql.UUID)(nil)
+	_ graphql.Unmarshaler        = (*veloxgql.UUID)(nil)
+	_ graphql.Marshaler          = (*veloxgql.Bytes)(nil)
+	_ graphql.Unmarshaler        = (*veloxgql.Bytes)(nil)
+	_ graphql.Marshaler          = (*veloxgql.JSON)(nil)
+	_ graphql.Unmarshaler        = (*veloxgql.JSON)(nil)
+	_ graphql.Marshaler          = (*veloxgql.Uint64)(nil)
+	_ graphql.Unmarshaler        = (*veloxgql.Uint64)(nil)
+	_ graphql.Marshaler          = (*veloxgql.OrderDirection)(nil)
+	_ graphql.Unmarshaler        = (*veloxgql.OrderDirection)(nil)
+	_ graphql.ContextMarshaler   = veloxgql.Cursor{}
+	_ graphql.ContextUnmarshaler = (*veloxgql.Cursor)(nil)
+)

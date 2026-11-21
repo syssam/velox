@@ -8,26 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql"
-
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// The scalars, the Cursor and the OrderDirection enum are gqlgen marshalers.
-var (
-	_ graphql.Marshaler   = (*Time)(nil)
-	_ graphql.Unmarshaler = (*Time)(nil)
-	_ graphql.Marshaler   = (*UUID)(nil)
-	_ graphql.Unmarshaler = (*UUID)(nil)
-	_ graphql.Marshaler   = (*Bytes)(nil)
-	_ graphql.Unmarshaler = (*Bytes)(nil)
-	_ graphql.Marshaler   = (*JSON)(nil)
-	_ graphql.Unmarshaler = (*JSON)(nil)
-	_ graphql.Marshaler   = (*Uint64)(nil)
-	_ graphql.Unmarshaler = (*Uint64)(nil)
-	_ graphql.Marshaler   = (*OrderDirection)(nil)
-	_ graphql.Unmarshaler = (*OrderDirection)(nil)
-)
+// The scalars and the OrderDirection enum have the methods MarshalGQL and
+// UnmarshalGQL, which gqlgen and graphql-go both call; package gqlgenx checks
+// that they are gqlgen's graphql.Marshaler and graphql.Unmarshaler.
 
 // Time is the Time scalar: an RFC 3339 string with nanoseconds and the zone
 // offset. The zero time is "0001-01-01T00:00:00Z", not null.

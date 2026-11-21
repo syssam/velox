@@ -1552,22 +1552,16 @@ const CodeUnauthenticated
 const GeneratedCodeIsVersion27
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
-func (*Extension) ExtensionName() string
-func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (any, error)
 func (b *Bytes) UnmarshalGQL(v any) error
 func (b Bytes) MarshalGQL(w io.Writer)
+func (c *Cursor) UnmarshalGQL(v any) error
 func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error
+func (c Cursor) MarshalGQL(w io.Writer)
 func (c Cursor) MarshalGQLContext(_ context.Context, w io.Writer) error
 func (d *OrderDirection) UnmarshalGQL(v any) error
 func (d OrderDirection) IsValid() bool
 func (d OrderDirection) MarshalGQL(w io.Writer)
 func (d OrderDirection) String() string
-func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler
-func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response
-func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error
-func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error
-func (e *Extension) NewContext(ctx context.Context) context.Context
-func (e *Extension) Validate(es graphql.ExecutableSchema) error
 func (j *JSON) UnmarshalGQL(v any) error
 func (j JSON) MarshalGQL(w io.Writer)
 func (t *Time) UnmarshalGQL(v any) error
@@ -1584,40 +1578,22 @@ func DBFromContext(ctx context.Context) (*velox.DB, error)
 func DecodeCursor(s string) (Cursor, error)
 func DefaultLimits() Limits
 func EncodeCursor(c Cursor) (string, error)
-func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
 func LimitsFromContext(ctx context.Context) Limits
-func MarshalBytes(b []byte) graphql.Marshaler
-func MarshalFloat32(f float32) graphql.Marshaler
-func MarshalInt64ID(id int64) graphql.Marshaler
-func MarshalTime(t time.Time) graphql.Marshaler
-func MarshalUUID(u uuid.UUID) graphql.Marshaler
-func MarshalUint(u uint) graphql.Marshaler
-func MarshalUint64(u uint64) graphql.Marshaler
-func NewExtension(db *velox.DB, opts ...Option) *Extension
-func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
-func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler
-func UnmarshalBytes(v any) ([]byte, error)
-func UnmarshalFloat32(v any) (float32, error)
-func UnmarshalInt64ID(v any) (int64, error)
-func UnmarshalTime(v any) (time.Time, error)
-func UnmarshalUUID(v any) (uuid.UUID, error)
-func UnmarshalUint(v any) (uint, error)
-func UnmarshalUint64(v any) (uint64, error)
+func NewConfig(opts ...Option) Config
+func Present(err error) (code, msg string)
 func WithBatchScope(f func(context.Context) any) Option
 func WithLimits(l Limits) Option
 func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option
 func WithTxOptions(opts ...velox.TxOption) Option
 type Bytes []byte
+type Config struct { Limits Limits TxOptions []velox.TxOption TxFilter func(ctx context.Context, op *ast.OperationDefinition) bool BatchScope func(context.Context) any }
 type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
-type Extension struct { }
 type JSON json.RawMessage
 type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int MaxResponseBytes int Timeout time.Duration }
 type Option struct { }
 type OrderDirection string
 type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }
-type PresenterOption struct { }
-type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
 type Time time.Time
 type UUID [16]byte
 type Uint64 uint64
@@ -1627,12 +1603,44 @@ var ErrFilterTooDeep
 var ErrFilterTooLarge
 var ErrFilterTooWide
 var ErrNoDB
+var ErrNoSelectionSource
 var ErrPageTooLarge
 var ErrRequestTooLarge
 var ErrResponseTooLarge
 var ErrTimeout
 var ErrTooCostly
 var ErrTooManyErrors
+
+package contrib/graphql/veloxgql/gqlgenx
+func (*Extension) ExtensionName() string
+func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (any, error)
+func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler
+func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response
+func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error
+func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error
+func (e *Extension) NewContext(ctx context.Context) context.Context
+func (e *Extension) Validate(es graphql.ExecutableSchema) error
+func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
+func MarshalBytes(b []byte) graphql.Marshaler
+func MarshalFloat32(f float32) graphql.Marshaler
+func MarshalInt64ID(id int64) graphql.Marshaler
+func MarshalTime(t time.Time) graphql.Marshaler
+func MarshalUUID(u uuid.UUID) graphql.Marshaler
+func MarshalUint(u uint) graphql.Marshaler
+func MarshalUint64(u uint64) graphql.Marshaler
+func NewExtension(db *velox.DB, opts ...veloxgql.Option) *Extension
+func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
+func Setup(srv Server, db *velox.DB, opts ...veloxgql.Option) http.Handler
+func UnmarshalBytes(v any) ([]byte, error)
+func UnmarshalFloat32(v any) (float32, error)
+func UnmarshalInt64ID(v any) (int64, error)
+func UnmarshalTime(v any) (time.Time, error)
+func UnmarshalUUID(v any) (uuid.UUID, error)
+func UnmarshalUint(v any) (uint, error)
+func UnmarshalUint64(v any) (uint64, error)
+type Extension struct { }
+type PresenterOption struct { }
+type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
 
 package contrib/veloxotel
 func Options(cfg Config) []velox.Option

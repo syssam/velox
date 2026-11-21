@@ -15,7 +15,7 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // rows is the number of rows of each table.
@@ -52,7 +52,7 @@ func benchServe(b *testing.B) func(q string, vars map[string]any) string {
 		b.Fatal(err)
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
 	srv.AddTransport(transport.POST{})
 	return func(q string, vars map[string]any) string {
 		body, _ := json.Marshal(map[string]any{"query": q, "variables": vars})

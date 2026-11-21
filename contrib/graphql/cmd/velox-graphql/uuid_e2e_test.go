@@ -132,7 +132,7 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 type reply struct {
@@ -159,8 +159,8 @@ func TestUUIDIDs(t *testing.T) {
 		}
 	}
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db).WithoutPolicy("test")))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
+	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db).WithoutPolicy("test")))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) reply {
 		t.Helper()
@@ -215,7 +215,7 @@ func TestUUIDIDs(t *testing.T) {
 
 // e2eUUIDGqlgen is e2eCollectGqlgen with ID bound to veloxgql.UUID, the
 // model of a schema whose keys are UUIDs.
-var e2eUUIDGqlgen = strings.Replace(e2eCollectGqlgen, "github.com/syssam/velox/contrib/graphql/veloxgql.Int64ID", "github.com/syssam/velox/contrib/graphql/veloxgql.UUID", 1)
+var e2eUUIDGqlgen = strings.Replace(e2eCollectGqlgen, "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.Int64ID", "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx.UUID", 1)
 
 // TestAppUUIDKeys generates an app whose keys are UUIDs, runs gqlgen over
 // it with ID bound to veloxgql.UUID, and serves it: a resolver takes the

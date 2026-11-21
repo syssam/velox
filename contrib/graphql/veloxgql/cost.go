@@ -65,7 +65,7 @@ import (
 // wrap the cost to a small or negative number. A named
 // fragment is costed once for each page size it is spread under, so the walk is
 // linear in the document. schema is the server's; op is a parsed and validated
-// operation. Cost is the sum of what Extension holds to two limits, before any
+// operation. Cost is the sum of what gqlgenx.Extension holds to two limits, before any
 // statement runs: the introspection part to Limits.MaxIntrospectionCost, and the
 // rest to Limits.MaxCost.
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int {

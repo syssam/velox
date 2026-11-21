@@ -15,7 +15,7 @@ import (
 )
 
 // MaxIDs is the most IDs one list field of an input may give: IDs refuses
-// more. The Extension's document limits bound a request's lists only
+// more. gqlgenx.Extension's document limits bound a request's lists only
 // loosely (Limits.MaxVariableNodes is 100000), and an input's Setters has no
 // context to read the Limits from, so the bound is fixed here.
 const MaxIDs = 1000
@@ -126,7 +126,7 @@ func ShowJSON(p *veloxgql.JSON) any {
 // "<input>.<name>: invalid value: <the validator's text>", wrapping err.
 // Every other error is returned as it is. So is a validation error joined
 // with another error (errors.Join): only err itself and the chain of errors
-// it wraps one by one are searched, so that ErrorPresenter still logs an
+// it wraps one by one are searched, so that gqlgenx.ErrorPresenter still logs an
 // internal error joined with the validation error.
 func writeError(err error, input, entity string, name func(goField string) string) error {
 	var v *velox.ValidationError

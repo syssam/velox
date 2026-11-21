@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
-// codeOf is the code err carries for veloxgql.ErrorPresenter, "" for none.
+// codeOf is the code err carries for gqlgenx.ErrorPresenter, "" for none.
 func codeOf(err error) string {
 	c, ok := errors.AsType[interface {
 		error

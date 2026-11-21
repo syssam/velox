@@ -286,8 +286,23 @@ func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error {
 	return nil
 }
 
+// MarshalGQL writes c as MarshalGQLContext does, for graphql-go, whose
+// scalar marshaler takes no context. gqlgen calls MarshalGQLContext, which
+// it prefers when a type has both. A cursor that does not encode (a value of
+// a type EncodeCursor refuses) writes null.
+func (c Cursor) MarshalGQL(w io.Writer) {
+	if err := c.MarshalGQLContext(context.Background(), w); err != nil {
+		_, _ = io.WriteString(w, "null")
+	}
+}
+
+// UnmarshalGQL decodes a cursor from v, as UnmarshalGQLContext does.
+func (c *Cursor) UnmarshalGQL(v any) error {
+	return c.UnmarshalGQLContext(context.Background(), v)
+}
+
 // PageInfo is the GraphQL type PageInfo of a connection, an object gqlgen
-// binds by its fields.
+// and graphql-go bind by its fields.
 type PageInfo struct {
 	HasNextPage     bool
 	HasPreviousPage bool

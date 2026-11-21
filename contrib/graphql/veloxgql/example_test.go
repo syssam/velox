@@ -9,19 +9,20 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // An ID is the entity's key. A client may send it as a string or as an
 // integer, and gets it back as a string, as the GraphQL specification says.
 func ExampleUnmarshalInt64ID() {
-	key, err := veloxgql.UnmarshalInt64ID("42")
+	key, err := gqlgenx.UnmarshalInt64ID("42")
 	fmt.Println(key, err)
-	key, err = veloxgql.UnmarshalInt64ID(json.Number("42"))
+	key, err = gqlgenx.UnmarshalInt64ID(json.Number("42"))
 	fmt.Println(key, err)
-	_, err = veloxgql.UnmarshalInt64ID(4.2)
+	_, err = gqlgenx.UnmarshalInt64ID(4.2)
 	fmt.Println(err)
 	var b strings.Builder
-	veloxgql.MarshalInt64ID(42).MarshalGQL(&b)
+	gqlgenx.MarshalInt64ID(42).MarshalGQL(&b)
 	fmt.Println(b.String())
 	// Output:
 	// 42 <nil>

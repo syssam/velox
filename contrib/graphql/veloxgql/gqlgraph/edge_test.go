@@ -15,6 +15,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	gqlcore "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/untyped"
@@ -278,7 +279,14 @@ func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, o
 	if errs != nil {
 		t.Fatal(errs)
 	}
-	ctx := gqlcore.WithTable(veloxgql.NewExtension(db, opts...).NewContext(context.Background()), schema, nil)
+	ext := gqlgenx.NewExtension(db, opts...)
+	if schema != nil {
+		// The server's schema, as its Use gives the extension.
+		if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := gqlcore.WithTable(ext.NewContext(context.Background()), nil)
 	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
 }
 

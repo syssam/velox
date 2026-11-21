@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlgenx_test
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // TestInt64IDMarshal: an int64 key is written as a JSON string of its
@@ -20,7 +21,7 @@ func TestInt64IDMarshal(t *testing.T) {
 		{math.MaxInt64, `"9223372036854775807"`}, {math.MinInt64, `"-9223372036854775808"`},
 	} {
 		var b strings.Builder
-		veloxgql.MarshalInt64ID(c.key).MarshalGQL(&b)
+		gqlgenx.MarshalInt64ID(c.key).MarshalGQL(&b)
 		if b.String() != c.want {
 			t.Errorf("MarshalInt64ID(%d) = %s, want %s", c.key, b.String(), c.want)
 		}
@@ -37,7 +38,7 @@ func TestInt64IDUnmarshal(t *testing.T) {
 		{"7", 7}, {"-7", -7}, {"9223372036854775807", math.MaxInt64},
 		{json.Number("8"), 8}, {int64(9), 9}, {10, 10}, {int32(11), 11},
 	} {
-		got, err := veloxgql.UnmarshalInt64ID(c.in)
+		got, err := gqlgenx.UnmarshalInt64ID(c.in)
 		if err != nil || got != c.want {
 			t.Errorf("UnmarshalInt64ID(%#v) = %d, %v, want %d", c.in, got, err, c.want)
 		}
@@ -46,7 +47,7 @@ func TestInt64IDUnmarshal(t *testing.T) {
 		"", "x7", "1.5", "9223372036854775808", "VXNlcjo0Mg", json.Number("1.5"),
 		1.5, true, nil, []any{"1"}, map[string]any{"id": "1"},
 	} {
-		_, err := veloxgql.UnmarshalInt64ID(in)
+		_, err := gqlgenx.UnmarshalInt64ID(in)
 		if err == nil {
 			t.Errorf("UnmarshalInt64ID(%#v): no error", in)
 			continue

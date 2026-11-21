@@ -17,12 +17,13 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // TestVariablesWeighWhatTheyTake: 13000 points of a GeoJSON, 39001 plain values, pass; the
 // objects of an input type weigh more, and as many of them do not.
 func TestVariablesWeighWhatTheyTake(t *testing.T) {
-	e := veloxgql.NewExtension(&velox.DB{})
+	e := gqlgenx.NewExtension(&velox.DB{})
 	points := make([]any, 13000)
 	for i := range points {
 		points[i] = []any{114.17, 22.32}
@@ -56,14 +57,14 @@ func TestMaxCostDefault(t *testing.T) {
 		t.Errorf("DefaultLimits().MaxCost = %d, want 150000", got)
 	}
 	db := &velox.DB{}
-	if got := veloxgql.LimitsFromContext(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())).MaxCost; got != 150000 {
+	if got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())).MaxCost; got != 150000 {
 		t.Errorf("a zero MaxCost became %d, want 150000", got)
 	}
-	if got := veloxgql.LimitsFromContext(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 5})).NewContext(context.Background())).MaxCost; got != 5 {
+	if got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 5})).NewContext(context.Background())).MaxCost; got != 5 {
 		t.Errorf("MaxCost 5 became %d", got)
 	}
-	const want = "veloxgql.NewExtension: Limits.MaxCost is -1, and a limit must not be negative (zero is the default)"
-	if err := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: -1})).Validate(nil); err == nil || err.Error() != want {
+	const want = "gqlgenx.NewExtension: Limits.MaxCost is -1, and a limit must not be negative (zero is the default)"
+	if err := gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: -1})).Validate(nil); err == nil || err.Error() != want {
 		t.Errorf("Validate: %v, want %q", err, want)
 	}
 }
@@ -73,27 +74,27 @@ func TestMaxCostDefault(t *testing.T) {
 func TestWithLimitsZeroIsDefault(t *testing.T) {
 	db := &velox.DB{}
 	ctx := context.Background()
-	got := veloxgql.LimitsFromContext(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(ctx))
+	got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(ctx))
 	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 5000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 100000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}); got != want {
 		t.Errorf("WithLimits(Limits{MaxPage: 2}): %+v, want %+v", got, want)
 	}
-	if got := veloxgql.LimitsFromContext(veloxgql.NewExtension(db).NewContext(ctx)); got != veloxgql.DefaultLimits() {
+	if got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db).NewContext(ctx)); got != veloxgql.DefaultLimits() {
 		t.Errorf("no WithLimits: %+v, want the defaults", got)
 	}
-	got = veloxgql.LimitsFromContext(veloxgql.NewExtension(db,
+	got = veloxgql.LimitsFromContext(gqlgenx.NewExtension(db,
 		veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2, MaxList: 3}),
 		veloxgql.WithLimits(veloxgql.Limits{MaxOrderTerms: 4, MaxCost: 150000}),
 	).NewContext(ctx))
 	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 5000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 100000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}); got != want {
 		t.Errorf("WithLimits twice: %+v, want the last's, %+v", got, want)
 	}
-	if d, err := veloxgql.DBFromContext(veloxgql.NewExtension(db).NewContext(ctx)); d != db || err != nil {
+	if d, err := veloxgql.DBFromContext(gqlgenx.NewExtension(db).NewContext(ctx)); d != db || err != nil {
 		t.Errorf("DBFromContext(Context) = %p, %v, want %p", d, err, db)
 	}
 }
 
-// TestNothingRunsAtStart pins the rule that nothing runs at program start:
-// no file of the package has an init function, and no package-level variable
+// TestNothingRunsAtStart pins the rule that nothing runs at program start, in
+// the core or in gqlgenx: no file of either has an init function, and no package-level variable
 // is initialised by a call or by a map literal (the compiler builds a map in
 // init). Two calls are allowed, because the compiler initialises them
 // statically (go build -gcflags=-S shows veloxgql's init empty, with the
@@ -107,6 +108,12 @@ func TestNothingRunsAtStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// gqlgen's adapter, which a gqlgen server links with the core.
+	adapter, err := filepath.Glob("gqlgenx/*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names = append(names, adapter...)
 	var srcs []source
 	for _, name := range names {
 		if strings.HasSuffix(name, "_test.go") {

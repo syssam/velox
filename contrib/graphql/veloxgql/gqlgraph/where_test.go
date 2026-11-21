@@ -10,6 +10,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -450,7 +451,7 @@ func TestFilterBudgetError(t *testing.T) {
 	}
 
 	// Under an extension's limits, at the top and in a nested input.
-	small := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterWidth: 2, MaxFilterDepth: 1, MaxFilterNodes: 5})).NewContext(ctx)
+	small := gqlgenx.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterWidth: 2, MaxFilterDepth: 1, MaxFilterNodes: 5})).NewContext(ctx)
 	if _, err := (&personWhere{NameIn: names(3)}).Pred(small); !errors.Is(err, veloxgql.ErrFilterTooWide) {
 		t.Errorf("3 values under MaxFilterWidth 2: %v, want ErrFilterTooWide", err)
 	}
@@ -491,7 +492,7 @@ func TestPredDepthFromContext(t *testing.T) {
 // the context gives, so a second call that spent the first's would fail.
 func TestPredTwiceOnOneContext(t *testing.T) {
 	limits := func(nodes int) context.Context {
-		return veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: nodes})).NewContext(context.Background())
+		return gqlgenx.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: nodes})).NewContext(context.Background())
 	}
 	in := func(n int) []int64 { return make([]int64, n) }
 	w := &personWhere{AgeIn: in(100), AgeNotIn: in(100), Or: []*personWhere{{AgeIn: in(100)}, {AgeIn: in(100)}, {AgeIn: in(100)}}}

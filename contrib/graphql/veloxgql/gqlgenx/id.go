@@ -1,4 +1,4 @@
-package veloxgql
+package gqlgenx
 
 import (
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 
 // MarshalInt64ID writes id, an int64 key, as the ID scalar: a JSON string of
 // its decimal digits, as the GraphQL specification serializes an ID and
-// gqlgen's graphql.IntID does. The model veloxgql.Int64ID in gqlgen.yml binds
+// gqlgen's graphql.IntID does. The model gqlgenx.Int64ID in gqlgen.yml binds
 // ID to it.
 func MarshalInt64ID(id int64) graphql.Marshaler {
 	return graphql.WriterFunc(func(w io.Writer) {

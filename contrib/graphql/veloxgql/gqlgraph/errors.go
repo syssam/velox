@@ -11,7 +11,7 @@ import (
 var errPanicked = errors.New("veloxgql: reading this connection panicked")
 
 // InputErrorf is an error in the client's input, which
-// veloxgql.ErrorPresenter shows the client with the code
+// gqlgenx.ErrorPresenter shows the client with the code
 // veloxgql.CodeBadUserInput: its text is "veloxgql: " and fmt.Sprintf of
 // format and args, %w included, and errors.Is finds what %w wraps. The
 // client sees the text without "veloxgql: ", so it must be safe to show:
