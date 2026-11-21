@@ -16,8 +16,8 @@ nothing queued work on one transaction from code inside it.
 
 ### AfterCommit
 
-`tx.AfterCommit(fn func(context.Context)) error` is a method of `DB`.
-`fn` runs once the outermost transaction has committed.
+`velox.AfterCommit(tx *DB, fn func(context.Context)) error` is a
+function. `fn` runs once the outermost transaction has committed.
 
 - The functions run in the order queued. They run after COMMIT succeeded,
   the `TxAround` hooks returned and the connection went back to the pool,
@@ -25,9 +25,13 @@ nothing queued work on one transaction from code inside it.
   query `db`.
   A `TxAround` hook that returns an error of its own after a successful
   commit does not undo the commit. The functions still run, and `Tx`
-  returns the hook's error. `txAround` keeps its state in one struct, so
-  the queue costs no allocation. `TestTxAroundAllocationBudget` failed at
-  10 allocations against 9 while the queue was a separate variable.
+  returns the hook's error. A hook that panics after the commit does not
+  skip them either. A deferred recover in `txAround` runs them, then
+  panics again with the hook's value; a panic of theirs is dropped for
+  the hook's, which came first. `txAround` keeps its state in one struct,
+  so the queue costs no allocation and the deferred recover none either.
+  `TestTxAroundAllocationBudget` failed at 10 allocations against 9 while
+  the queue was a separate variable.
 - `fn` gets the context given to `Tx`, through `context.WithoutCancel`:
   its values without its cancellation or deadline. That context has no
   transaction mark.
@@ -46,7 +50,7 @@ nothing queued work on one transaction from code inside it.
   - a nil `fn`;
   - a DB in no transaction, so the call fails instead of running `fn` at
     once;
-  - a transaction that has ended;
+  - a transaction that has ended, or whose end has taken the queue;
   - a UseTx DB (0066) and its savepoints. The caller commits that
     transaction, and velox never sees it end.
 
@@ -60,18 +64,28 @@ from the context's mark. velox takes the `*DB` instead:
   happened to carry.
 - With the DB, `fn` cannot reach a transaction the caller did not hold.
   Code that has a DB in no transaction gets an error, not a silent run.
-  In a hook inside `db.Tx`, `m.DB().AfterCommit(fn)` reaches the
+  In a hook inside `db.Tx`, `velox.AfterCommit(m.DB(), fn)` reaches the
   transaction. Outside one, `Mutation.DB` is the database's, even for a
   write that velox runs in a transaction of its own inside the hooks, such
   as a recorded write. So the call returns an error there.
 - It is veloxe's shape, `tx.OnCommit`, without the `Committer` chain.
 
-It is a method because `tx.AfterCommit` reads as veloxe's call does. Its
-signature mentions only `context.Context`. It cost each entity's package
-516 bytes (`entityDescUse` went from 770366 to 770882 bytes): a package
-that names `DB` carries its method declarations. `UseTx` and `Pool` are
-functions because `*sql.Tx` and `*sql.DB` cost 175 KB. `AfterCommit` costs
-nothing like that. The engine's `AfterCommit` is a function, as `UseTx` is.
+A mutex on the root frame guards the queue, the closed flag and the
+handoff. The commit takes the queue and closes it (`takeAfter`). A
+rollback drops it and closes it (`closeAfter`). A savepoint's mark and
+truncation take the lock too. So a call from another goroutine that races
+the end of the transaction either queues a function that runs, or returns
+an error; it is never lost. The godoc still asks for calls from the
+transaction's goroutine, as for its statements.
+
+It is a function, not a method of `DB`, as `UseTx` and `Pool` are. Every
+method of `DB` is compiled into each package of entities through the
+export data, even when unused and not generic. Measured with the method
+added back, `entityDescUse` took 771492 bytes against 771266 for the
+function: 226 bytes per package for nothing. The whole of this ADR took
+`entityDescUse` from 770366 to 771266 bytes, `entityDescHooks` from
+855484 to 856366 and `entityDescMixin` from 900776 to 901666. The rest of
+that growth is in the engine types an entity's package reaches.
 
 ### Values and IDs
 
@@ -96,7 +110,11 @@ nothing like that. The engine's `AfterCommit` is a function, as `UseTx` is.
   OrderBy, Limit and Offset, the Read policy, the scope, the interceptors,
   `WithFilter`, the Limit-or-AllowUnbounded rule and the row cap. They set
   the prepared statement's `Columns` to the one column and run it through
-  `DB.Run`. Columns, Omit and With are ignored. A join, a projection and an
+  `DB.Run`, as `Count` and the aggregates read. They do not go through
+  `Select` and `Rows`: a projection refuses `With` and `After`, which
+  Values keeps (With is ignored, After applies), and would scan through
+  `RawRow` by position. Columns, Omit and With are ignored. The result is
+  nil when no row matches. A join, a projection and an
   encoded column are refused before anything is sent. The generic bodies
   are a scan loop. The checks are the engine's `ColumnRead` and
   `KeyColumn`.
@@ -127,7 +145,22 @@ nothing like that. The engine's `AfterCommit` is a function, as `UseTx` is.
     changed them.
 
   An argument is printed only when velox has tied it to a column that is
-  not Sensitive, or computed it.
+  not Sensitive, or computed it. The arguments are masked before the
+  hook calls next, as a hook given after it may change them.
+- A driver's error message can echo a value. MySQL's 1062 says
+  "Duplicate entry 'x' for key …", and PostgreSQL's 22P02 says
+  "invalid input syntax for type uuid: \"x\"". So `err` is the error's
+  text only under `LogArgs` and when every argument was shown. Otherwise
+  it is redacted (`RedactedError`):
+  - for a constraint violation (a `*ConstraintError` in the chain, or a
+    driver error `dberr.Constraint` reads), the entity, the kind, the
+    constraint's name and the driver's code;
+  - for any other error, the Go types of its chain, the driver's code
+    when `dberr.DriverCode` has one, and whether a context's end or
+    velox's deadline caused it.
+
+  Each ends with "the message is hidden". A statement with no argument
+  under `LogArgs` counts as all shown.
 - Tracking costs one predictable branch per argument when it is off. The
   second write happens only under `LogArgs`, for a logger enabled at
   Debug.
@@ -137,7 +170,8 @@ nothing like that. The engine's `AfterCommit` is a function, as `UseTx` is.
 - `internal/apitest/aftercommit_test.go` covers order and timing, the
   context, the rollbacks, the savepoints, the refusals, the panics and a
   hook. `internal/engine/aftercommit_internal_test.go` covers a retried
-  attempt and the TxAround order.
+  attempt, the TxAround order, a TxAround hook that fails or panics after
+  the commit, and a call from another goroutine that races the end.
   `internal/integration/aftercommit_test.go` covers a failing statement's
   savepoint on PostgreSQL, MySQL and SQLite.
 - `internal/apitest/values_test.go` covers Values and IDs under a policy, a
@@ -145,7 +179,10 @@ nothing like that. The engine's `AfterCommit` is a function, as `UseTx` is.
   SQLite rows.
 - `internal/apitest/log_test.go` checks that no Sensitive value is printed
   in an update, an insert, a subquery on another entity, an Expr or raw
-  SQL, on every dialect, nor when a hook changed the arguments.
+  SQL, on every dialect, nor when a hook changed the arguments. It also
+  checks that a MySQL 1062 and a PostgreSQL 22P02 that echo a value are
+  redacted. `internal/integration/keys_test.go` reads `IDs` of a UUID key
+  and a string key.
 - veloxe's `Strings(ctx)`, `Ints(ctx)` and the like map to `Values` with
   the handle's `Key()`. `IDs(ctx)` maps to `velox.IDs[int64](ctx, q)`.
   `Debug()` maps to `WithLog(slog.Default())` with the logger at Debug.

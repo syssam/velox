@@ -1024,23 +1024,24 @@ on pgx's transactions ([ADR 0066](decisions/0066-use-tx.md)).
 
 ### After the commit
 
-`tx.AfterCommit(fn)` queues work that must not happen for a transaction
-that rolls back, such as publishing an event:
+`velox.AfterCommit(tx, fn)` queues work that must not happen for a
+transaction that rolls back, such as publishing an event:
 
 ```go
 err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 	if err := tx.Insert(&order).Exec(ctx); err != nil {
 		return err
 	}
-	return tx.AfterCommit(func(ctx context.Context) { publish(ctx, order.ID) })
+	return velox.AfterCommit(tx, func(ctx context.Context) { publish(ctx, order.ID) })
 })
 ```
 
 The functions run in the order queued, once the outermost transaction has
 committed and before `Tx` returns, on the `Tx` context without its
 cancellation. A rollback runs none. A nested `tx.Tx` that rolls back drops
-the ones queued while it ran. A hook inside `db.Tx` queues through
-`m.DB().AfterCommit`.
+the ones queued while it ran. A hook inside `db.Tx` queues with
+`velox.AfterCommit(m.DB(), fn)`. Call it from the goroutine that runs the
+transaction.
 Outside a transaction, and on a `UseTx` DB, whose commit velox never sees,
 `AfterCommit` returns an error. One function's panic does not stop the
 others: `Tx` panics again once all have run
@@ -1684,7 +1685,10 @@ conditions included.
 Debug: its SQL, duration, rows and error. With `LogArgs`, it logs the
 arguments too. A Sensitive column's argument is always `"<sensitive>"`.
 An argument velox cannot tie to a column, such as an `Expr`'s or raw
-SQL's, is `"<hidden>"`.
+SQL's, is `"<hidden>"`. A driver's error message can echo a value, so it
+is printed only with `LogArgs` and when every argument was shown;
+otherwise the record names the constraint, or the error's type, and the
+driver's code.
 
 ## GraphQL
 

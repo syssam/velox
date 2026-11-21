@@ -26,6 +26,12 @@ func LogArgs() LogOption { return engine.LogArgs() }
 // failed. Nothing is logged, and nothing more is done, while l does not
 // enable Debug for the statement's context.
 //
+// A driver's message can echo a value, as MySQL's "Duplicate entry 'x' for
+// key …" does, so err is the error's text only with LogArgs and when every
+// argument of the statement was shown. Otherwise it is redacted: a
+// constraint violation's entity, kind, constraint name and driver code, or
+// any other error's Go types and driver code, with "the message is hidden".
+//
 //	db, err := velox.Connect("postgres", dsn, velox.WithLog(slog.Default(), velox.LogArgs()))
 //
 // It is an Around hook, in the place it is given among WithAround's: one

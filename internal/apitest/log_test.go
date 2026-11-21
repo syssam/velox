@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -46,7 +48,8 @@ func argsOf(t *testing.T, rec map[string]any) []any {
 var DA = fixture.DAuthors
 
 // TestWithLogWithoutArgs: each statement is logged at Debug with its SQL,
-// duration and rows, and no arguments; a failed one with its error.
+// duration and rows, and no arguments; a failed one with its error,
+// redacted.
 func TestWithLogWithoutArgs(t *testing.T) {
 	l, records, _ := logged(t, slog.LevelDebug)
 	e := &fakeconn.Exec{Affected: 2}
@@ -72,7 +75,9 @@ func TestWithLogWithoutArgs(t *testing.T) {
 	if _, ok := r["err"]; ok {
 		t.Errorf("err on success: %v", r)
 	}
-	if !strings.Contains(rs[1]["err"].(string), "db down") {
+	// Without LogArgs a failed statement's error text is not printed: it
+	// may hold a value.
+	if got := rs[1]["err"].(string); strings.Contains(got, "db down") || !strings.Contains(got, "the message is hidden") {
 		t.Errorf("failed read: %v", rs[1])
 	}
 }
@@ -177,5 +182,65 @@ func TestWithLogMasksOnEveryDialect(t *testing.T) {
 		if got := argsOf(t, records()[0]); !slices.Equal(got, []any{"<sensitive>", "<sensitive>", "ada"}) {
 			t.Errorf("%v: %v", d, got)
 		}
+	}
+}
+
+// TestWithLogRedactsDriverErrors: a driver's message can echo a value, as
+// MySQL's 1062 and PostgreSQL's 22P02 do. Without LogArgs, or when an
+// argument is Sensitive or hidden, the record's err names the constraint or
+// the error's types and code, never the message. With LogArgs and every
+// argument shown, it is the error's text.
+func TestWithLogRedactsDriverErrors(t *testing.T) {
+	dup := &mysql.MySQLError{Number: 1062, Message: "Duplicate entry 'dup-secret@x' for key 'authors.email'"}
+	bad := &pgconn.PgError{Code: "22P02", Message: `invalid input syntax for type uuid: "pg-secret"`}
+	for _, c := range []struct {
+		name string
+		d    velox.Dialect
+		err  error
+		args bool
+		run  func(db *velox.DB) error
+		want string // in err
+	}{
+		{"mysql insert, no LogArgs", velox.MySQL, dup, false, func(db *velox.DB) error {
+			return db.Insert(&fixture.DAuthor{OrgID: 7, Name: "cy", Email: new("dup-secret@x")}).Exec(ctx)
+		}, "velox: fixture.DAuthor: unique constraint email violated (code 1062); the message is hidden"},
+		{"mysql insert, a Sensitive argument", velox.MySQL, dup, true, func(db *velox.DB) error {
+			return db.Insert(&fixture.DAuthor{OrgID: 7, Name: "cy", Email: new("dup-secret@x")}).Exec(ctx)
+		}, "unique constraint email violated (code 1062)"},
+		{"pg read, no LogArgs", velox.Postgres, bad, false, func(db *velox.DB) error {
+			_, err := db.Query[fixture.DAuthor]().Where(DA.Name.EQ("pg-secret")).Limit(1).All(ctx)
+			return err
+		}, "*pgconn.PgError (code 22P02); the message is hidden"},
+		{"pg read, an Expr argument", velox.Postgres, bad, true, func(db *velox.DB) error {
+			_, err := db.Query[fixture.DAuthor]().Where(velox.Expr[fixture.DAuthor]("? = ?", DA.Name, "pg-secret")).Limit(1).All(ctx)
+			return err
+		}, "(code 22P02); the message is hidden"},
+	} {
+		l, records, buf := logged(t, slog.LevelDebug)
+		e := &fakeconn.Exec{Err: c.err}
+		var opts []velox.LogOption
+		if c.args {
+			opts = append(opts, velox.LogArgs())
+		}
+		db := openFake(c.d, e, velox.WithLog(l, opts...))
+		if err := c.run(db); err == nil {
+			t.Fatalf("%s: no error", c.name)
+		}
+		if strings.Contains(buf.String(), "secret") {
+			t.Errorf("%s: a value was logged:\n%s", c.name, buf)
+		}
+		if got, _ := records()[0]["err"].(string); !strings.Contains(got, c.want) {
+			t.Errorf("%s: err %q, want %q in it", c.name, got, c.want)
+		}
+	}
+
+	// Every argument shown: the full text.
+	l, records, _ := logged(t, slog.LevelDebug)
+	db := openFake(velox.Postgres, &fakeconn.Exec{Err: bad}, velox.WithLog(l, velox.LogArgs()))
+	if _, err := db.Query[fixture.DAuthor]().Where(DA.Name.EQ("shown")).Limit(1).All(ctx); err == nil {
+		t.Fatal("no error")
+	}
+	if got, _ := records()[0]["err"].(string); !strings.Contains(got, "invalid input syntax") {
+		t.Errorf("every argument shown: err %q", got)
 	}
 }

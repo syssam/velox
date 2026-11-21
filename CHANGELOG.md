@@ -31,6 +31,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   with the tool's output byte for byte. `FieldOrder` orders each entity's
   declared fields and must return a permutation of them.
 - `tx.AfterCommit(fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
+- `velox.AfterCommit(tx, fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
   on the transaction, to run in order once the outermost transaction has
   committed, on the `Tx` context without its cancellation. A rollback, a
   failed COMMIT or a retried attempt runs none; a nested `Tx` that rolls
@@ -43,7 +44,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   at Debug with its SQL, duration, rows and error, and its arguments with
   `LogArgs`. A Sensitive column's argument is always `"<sensitive>"`.
   velox cannot tie some arguments to a column, such as an `Expr`'s or raw
-  SQL's, and those are `"<hidden>"`.
+  SQL's, and those are `"<hidden>"`. A driver's error text, which can echo a
+  value, is printed only with `LogArgs` and every argument shown; otherwise
+  the error is redacted to its constraint or type and driver code.
 - Hooks and row filters for every entity (ADR 0098), as ent's `client.Use`
   and `client.Intercept`: `velox.WithHooksAll(hooks...)` runs hooks on every
   entity's writes, before the schema's and `WithHooks[E]`'s, and

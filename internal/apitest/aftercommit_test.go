@@ -27,7 +27,7 @@ func TestAfterCommitRunsAfterTheCommit(t *testing.T) {
 			return err
 		}
 		for _, name := range []string{"first", "second"} {
-			if err := tx.AfterCommit(func(ctx context.Context) {
+			if err := velox.AfterCommit(tx, func(ctx context.Context) {
 				if ctx.Done() != nil || ctx.Value(afterKey{}) != "v" {
 					t.Errorf("%s: Done %v, value %v", name, ctx.Done(), ctx.Value(afterKey{}))
 				}
@@ -55,7 +55,7 @@ func TestAfterCommitNotOnRollback(t *testing.T) {
 	db := useTxDB(t)
 	ran := 0
 	queue := func(tx *velox.DB) {
-		if err := tx.AfterCommit(func(context.Context) { ran++ }); err != nil {
+		if err := velox.AfterCommit(tx, func(context.Context) { ran++ }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,7 +83,7 @@ func TestAfterCommitSavepoint(t *testing.T) {
 	db := useTxDB(t)
 	var got []string
 	q := func(tx *velox.DB, s string) {
-		if err := tx.AfterCommit(func(context.Context) { got = append(got, s) }); err != nil {
+		if err := velox.AfterCommit(tx, func(context.Context) { got = append(got, s) }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -133,27 +133,27 @@ func TestAfterCommitRefusals(t *testing.T) {
 	db := useTxDB(t)
 	ran := false
 	fn := func(context.Context) { ran = true }
-	if err := db.AfterCommit(fn); err == nil || !strings.Contains(err.Error(), "no transaction") {
+	if err := velox.AfterCommit(db, fn); err == nil || !strings.Contains(err.Error(), "no transaction") {
 		t.Errorf("outside a transaction: %v", err)
 	}
 	var kept *velox.DB
 	if err := db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
 		kept = tx
-		if err := tx.AfterCommit(nil); err == nil || !strings.Contains(err.Error(), "nil") {
+		if err := velox.AfterCommit(tx, nil); err == nil || !strings.Contains(err.Error(), "nil") {
 			t.Errorf("nil fn: %v", err)
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := kept.AfterCommit(fn); err == nil || !strings.Contains(err.Error(), "ended") {
+	if err := velox.AfterCommit(kept, fn); err == nil || !strings.Contains(err.Error(), "ended") {
 		t.Errorf("after the transaction: %v", err)
 	}
 	tx, vtx := beginUse(t, db)
-	if err := vtx.AfterCommit(fn); err == nil || !strings.Contains(err.Error(), "UseTx") {
+	if err := velox.AfterCommit(vtx, fn); err == nil || !strings.Contains(err.Error(), "UseTx") {
 		t.Errorf("UseTx: %v", err)
 	}
-	if err := vtx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { return sp.AfterCommit(fn) }); err == nil || !strings.Contains(err.Error(), "UseTx") {
+	if err := vtx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { return velox.AfterCommit(sp, fn) }); err == nil || !strings.Contains(err.Error(), "UseTx") {
 		t.Errorf("UseTx savepoint: %v", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -177,7 +177,7 @@ func TestAfterCommitPanics(t *testing.T) {
 				return err
 			}
 			for i := range 3 {
-				if err := tx.AfterCommit(func(context.Context) {
+				if err := velox.AfterCommit(tx, func(context.Context) {
 					got = append(got, i)
 					if i != 1 {
 						panic(i)
@@ -202,7 +202,7 @@ func TestAfterCommitFromAHook(t *testing.T) {
 	ran := 0
 	db := useTxDB(t)
 	hooked := velox.Open(velox.SQLite, velox.Pool(db), velox.WithHooks[testmodel.Invoice](velox.Before(func(_ context.Context, m *velox.Mutation) error {
-		return m.DB().AfterCommit(func(context.Context) { ran++ })
+		return velox.AfterCommit(m.DB(), func(context.Context) { ran++ })
 	}, velox.OpInsert))).WithoutPolicy("velox tests")
 	err := hooked.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		return tx.Insert(&testmodel.Invoice{OrgID: 1, Number: "a", Data: []byte{}}).Exec(ctx)

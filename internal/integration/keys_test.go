@@ -190,3 +190,37 @@ func TestNonIntegerKeys(t *testing.T) {
 		}
 	})
 }
+
+// TestIDsOfNonIntegerKeys: IDs reads a UUID key and a string key as their
+// own types, and refuses a K that is not the key field's type.
+func TestIDsOfNonIntegerKeys(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		keysTables(t, tg)
+		db := tg.db
+		a := testmodel.Paper{ID: bindtype.UUID{1}, Title: "A"}
+		b := testmodel.Paper{ID: bindtype.UUID{2}, Title: "B"}
+		for _, p := range []*testmodel.Paper{&a, &b} {
+			if err := db.Insert(p).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		ids, err := velox.IDs[bindtype.UUID](ctx, db.Query[testmodel.Paper]().OrderBy(P.Title.Asc()).Limit(5))
+		if err != nil || !slices.Equal(ids, []bindtype.UUID{a.ID, b.ID}) {
+			t.Errorf("paper IDs: %v, %v", ids, err)
+		}
+		if err := db.Insert(&testmodel.Topic{ID: "go", Name: "Go"}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		tids, err := velox.IDs[string](ctx, db.Query[testmodel.Topic]().Limit(5))
+		if err != nil || !slices.Equal(tids, []string{"go"}) {
+			t.Errorf("topic IDs: %v, %v", tids, err)
+		}
+		if _, err := velox.IDs[int64](ctx, db.Query[testmodel.Paper]().Limit(5)); err == nil {
+			t.Error("IDs[int64] of a UUID key: no error")
+		}
+		none, err := velox.IDs[bindtype.UUID](ctx, db.Query[testmodel.Paper]().Where(P.Title.EQ("none")).Limit(5))
+		if err != nil || none != nil {
+			t.Errorf("no rows: %v, %v", none, err)
+		}
+	})
+}

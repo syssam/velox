@@ -44,12 +44,28 @@ func (db *DB) newTxInfo(o txOptions, sh *shardConn) *TxInfo {
 // attempts sets through its second argument; it returns them with an error
 // too, as the transaction committed whatever a hook then returned. Its state
 // is one struct, so that the closure costs one allocation for all of it.
-func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.Context, *[]func(context.Context)) error) ([]func(context.Context), error) {
+//
+// A hook that panics after the commit does not skip the functions: they run
+// on caller, the context given to Tx, before the hook's panic goes on. A
+// panic of theirs is then dropped for the hook's, which came first.
+func (db *DB) txAround(caller, ctx context.Context, info *TxInfo, attempts func(context.Context, *[]func(context.Context)) error) ([]func(context.Context), error) {
 	var s struct {
 		called, returned bool
 		last             error // what attempts returned
 		after            []func(context.Context)
 	}
+	defer func() {
+		if len(s.after) == 0 {
+			return // nothing committed with functions queued: let any panic go
+		}
+		if r := recover(); r != nil {
+			func() {
+				defer func() { _ = recover() }()
+				runAfter(caller, s.after)
+			}()
+			panic(r)
+		}
+	}()
 	next := func(ctx context.Context) error {
 		if s.called {
 			return errors.New("velox: transaction: a TxAround hook called next twice")

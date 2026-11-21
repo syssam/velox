@@ -3,8 +3,14 @@ package engine
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"time"
+
+	"github.com/syssam/velox/internal/dberr"
 )
 
 // ArgShow is what a log may show of a statement's argument.
@@ -76,12 +82,14 @@ const (
 // MaskedArgs returns what a log prints for st's arguments: each one that
 // ShownArgs shows, SensitiveArg for a Sensitive column's and HiddenArg
 // for the rest.
-func MaskedArgs(d Dialect, st *Statement) []any {
-	shown := ShownArgs(d, st)
-	out := make([]any, len(st.Args))
-	for i, a := range st.Args {
+func MaskedArgs(d Dialect, st *Statement) []any { return masked(ShownArgs(d, st), st.Args) }
+
+// masked is args as shown says to print them; a nil shown hides them all.
+func masked(shown []ArgShow, args []any) []any {
+	out := make([]any, len(args))
+	for i, a := range args {
 		switch {
-		case shown == nil:
+		case shown == nil || i >= len(shown):
 			out[i] = HiddenArg
 		case shown[i] == ArgShown:
 			out[i] = a
@@ -118,19 +126,25 @@ func WithLog(l *slog.Logger, opts ...LogOption) Option {
 		if !l.Enabled(ctx, slog.LevelDebug) {
 			return next(ctx)
 		}
+		// The arguments are masked before next, as a hook given after this
+		// one may change them.
 		var args []any
+		all := false
 		if c.args {
-			args = MaskedArgs(st.Dialect, st)
+			shown := ShownArgs(st.Dialect, st)
+			args, all = masked(shown, st.Args), allShown(shown, len(st.Args))
 		}
 		start := time.Now()
 		err := next(ctx)
-		logStatement(ctx, l, st, args, time.Since(start)-st.Result.LoopBody, c.args, err)
+		logStatement(ctx, l, st, args, all, time.Since(start)-st.Result.LoopBody, c.args, err)
 		return err
 	})
 }
 
-// logStatement writes one statement's record.
-func logStatement(ctx context.Context, l *slog.Logger, st *Statement, args []any, d time.Duration, withArgs bool, err error) {
+// logStatement writes one statement's record. args are its arguments,
+// masked before it ran, and all says none was masked; withArgs says LogArgs
+// was given. err's text is printed only when withArgs and all hold.
+func logStatement(ctx context.Context, l *slog.Logger, st *Statement, args []any, all bool, d time.Duration, withArgs bool, err error) {
 	rows := st.Result.Affected
 	if rows < 0 {
 		rows = st.Result.Rows
@@ -142,7 +156,82 @@ func logStatement(ctx context.Context, l *slog.Logger, st *Statement, args []any
 	}
 	attrs = append(attrs, slog.Duration("duration", d), slog.Int64("rows", rows))
 	if err != nil {
-		attrs = append(attrs, slog.Any("err", err))
+		if withArgs && all {
+			attrs = append(attrs, slog.Any("err", err))
+		} else {
+			attrs = append(attrs, slog.String("err", RedactedError(st, err)))
+		}
 	}
 	l.LogAttrs(ctx, slog.LevelDebug, "velox: statement", attrs...)
+}
+
+// allShown reports whether shown shows every one of n arguments.
+func allShown(shown []ArgShow, n int) bool {
+	if len(shown) != n {
+		return false
+	}
+	for _, s := range shown {
+		if s != ArgShown {
+			return false
+		}
+	}
+	return true
+}
+
+// RedactedError is what WithLog prints for err, the error of statement st,
+// when it may not print err's text: a driver's message can echo a value,
+// as MySQL's "Duplicate entry 'x' for key …" and PostgreSQL's "invalid
+// input syntax for type uuid: \"x\"" do. For a constraint violation it
+// names the entity, the kind, the constraint and the driver's code; for
+// any other error, the Go types of its chain, the driver's code when it
+// has one, and whether a context's end or velox's deadline caused it.
+func RedactedError(st *Statement, err error) string {
+	entity := ""
+	if st.Entity != nil {
+		entity = st.Entity.Name
+	}
+	code, hasCode := dberr.DriverCode(err)
+	ce, ok := dberr.As[*ConstraintError](err)
+	if !ok {
+		ce = dberr.Constraint(entity, err)
+	}
+	var b strings.Builder
+	if ce != nil {
+		name := ce.Constraint
+		if name == "" {
+			name = "(unnamed)"
+		}
+		if ce.Entity != "" {
+			b.WriteString("velox: " + ce.Entity + ": ")
+		}
+		b.WriteString(ce.Kind.String() + " constraint " + name + " violated")
+	} else {
+		b.WriteString(errTypes(err))
+	}
+	if hasCode {
+		b.WriteString(" (code " + code + ")")
+	}
+	switch {
+	case dberr.Is(err, ErrTimeout):
+		b.WriteString(", velox's deadline passed")
+	case errors.Is(err, context.DeadlineExceeded):
+		b.WriteString(", context deadline exceeded")
+	case errors.Is(err, context.Canceled):
+		b.WriteString(", context canceled")
+	}
+	b.WriteString("; the message is hidden, as it may hold a value")
+	return b.String()
+}
+
+// errTypes is the Go types of err's chain of Unwrap() error, outermost
+// first, at most five, each once.
+func errTypes(err error) string {
+	var ts []string
+	for e := err; e != nil && len(ts) < 5; e = errors.Unwrap(e) {
+		t := fmt.Sprintf("%T", e)
+		if !slices.Contains(ts, t) {
+			ts = append(ts, t)
+		}
+	}
+	return strings.Join(ts, " > ")
 }

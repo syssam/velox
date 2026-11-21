@@ -59,7 +59,12 @@ func columnValues[E, V any](ctx context.Context, q Query[E], col int, what strin
 // It reads nothing else: q's Columns, Omit and With are ignored. A q that
 // joins, or is a projection (Select), fails with an error before anything
 // is sent; so does an encoded column, which a JSON handle is and which has
-// no Key. It is a function, not a method of Query, as Sum is (ADR 0022).
+// no Key. The result is nil when no row matches. It is a function, not a
+// method of Query, as Sum is (ADR 0022).
+//
+// It reads the column as Count reads, by setting the statement's one
+// column, not through Select and Rows: a projection refuses With and After,
+// which Values keeps, and would scan through RawRow by position.
 func Values[E, V any](ctx context.Context, q Query[E], key GroupKey[E, V]) ([]V, error) {
 	return columnValues[E, V](ctx, q, int(key.i), "Values")
 }
@@ -70,8 +75,9 @@ func Values[E, V any](ctx context.Context, q Query[E], key GroupKey[E, V]) ([]V,
 //
 //	ids, err := velox.IDs[int64](ctx, db.Query[veloxgen.User]().Where(U.Active.EQ(true)).AllowUnbounded())
 //
-// A K other than the key field's type, and an entity whose primary key has
-// more than one column, fail with an error before anything is sent.
+// The result is nil when no row matches. A K other than the key field's
+// type, and an entity whose primary key has more than one column, fail
+// with an error before anything is sent.
 func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error) {
 	if q.meta.Err != nil {
 		return nil, q.meta.Err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
@@ -59,5 +60,82 @@ func TestAfterCommitRunsWhenAHookFailsAfterTheCommit(t *testing.T) {
 	})
 	if !errors.Is(err, hookErr) || !ran {
 		t.Errorf("err %v, ran %v", err, ran)
+	}
+}
+
+// TestAfterCommitRunsWhenAHookPanicsAfterTheCommit: a TxAround hook that
+// panics once next committed does not skip the queued functions; they run,
+// then the hook's panic goes on. The allocation budgets
+// (TestTxAroundAllocationBudget) hold with the deferred recover.
+func TestAfterCommitRunsWhenAHookPanicsAfterTheCommit(t *testing.T) {
+	db := newDB(Postgres, &fakeconn.Exec{}, []Option{WithTxAround(func(ctx context.Context, _ *TxInfo, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		panic("hook")
+	})})
+	ran := 0
+	var rec any
+	func() {
+		defer func() { rec = recover() }()
+		_ = db.Tx(context.Background(), func(_ context.Context, tx *DB) error {
+			if err := AfterCommit(tx, func(context.Context) { ran++ }); err != nil {
+				return err
+			}
+			return AfterCommit(tx, func(context.Context) { ran++; panic("fn") })
+		})
+	}()
+	if rec != "hook" || ran != 2 {
+		t.Errorf("recovered %v, ran %d", rec, ran)
+	}
+
+	// A hook that panics before any commit lets the panic go, and runs nothing.
+	db = newDB(Postgres, &fakeconn.Exec{}, []Option{WithTxAround(func(context.Context, *TxInfo, func(context.Context) error) error {
+		panic("early")
+	})})
+	func() {
+		defer func() { rec = recover() }()
+		_ = db.Tx(context.Background(), func(context.Context, *DB) error { return nil })
+	}()
+	if rec != "early" {
+		t.Errorf("recovered %v", rec)
+	}
+}
+
+// TestAfterCommitConcurrentCallIsNeverLost: a call that races the end of
+// the transaction either is queued and runs, or returns an error.
+func TestAfterCommitConcurrentCallIsNeverLost(t *testing.T) {
+	for range 20 {
+		db := newDB(Postgres, &fakeconn.Exec{}, nil)
+		var mu sync.Mutex
+		queued, ran := 0, 0
+		done := make(chan struct{})
+		started := make(chan struct{})
+		err := db.Tx(context.Background(), func(_ context.Context, tx *DB) error {
+			go func() {
+				defer close(done)
+				close(started)
+				for {
+					err := AfterCommit(tx, func(context.Context) { mu.Lock(); ran++; mu.Unlock() })
+					if err != nil {
+						return
+					}
+					mu.Lock()
+					queued++
+					mu.Unlock()
+				}
+			}()
+			<-started
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		<-done
+		mu.Lock()
+		if queued != ran {
+			t.Errorf("queued %d, ran %d", queued, ran)
+		}
+		mu.Unlock()
 	}
 }

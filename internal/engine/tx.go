@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -319,7 +320,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		runAfter(ctx, after)
 		return err
 	}
-	after, err := db.txAround(tctx, info, func(ctx context.Context, after *[]func(context.Context)) error {
+	after, err := db.txAround(ctx, tctx, info, func(ctx context.Context, after *[]func(context.Context)) error {
 		return db.attempts(ctx, tctx, fn, o, deadline, cause, info, sh, after)
 	})
 	runAfter(ctx, after)
@@ -464,6 +465,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		}
 		if !committedOK {
 			f.unkeep(0) // rolled back, or a COMMIT that failed; and before a retry
+			f.closeAfter()
 		}
 	}()
 	if err := fn(&f.ctx, &f.db); err != nil {
@@ -522,7 +524,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	endTx(info, TxCommit)
 	committedOK = true
-	*after = f.after
+	*after = f.takeAfter()
 	return true, nil
 }
 
@@ -566,7 +568,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
-	mark, kmark, amark, poison := db.batch.len(), len(db.txRoot.kept), len(db.txRoot.after), db.batch.failed()
+	mark, kmark, amark, poison := db.batch.len(), len(db.txRoot.kept), db.txRoot.afterLen(), db.batch.failed()
 	finished := false
 	defer func() {
 		if !finished {
@@ -759,6 +761,11 @@ type txFrame struct {
 	// savepoint that rolls back drops those after its mark (unqueue), and
 	// they run once the transaction has committed (runAfter).
 	after []func(context.Context)
+	// afterMu guards after and afterClosed, which is set once the
+	// transaction's end has taken the queue (takeAfter, closeAfter): a later
+	// AfterCommit fails instead of queuing what nothing would run.
+	afterMu     sync.Mutex
+	afterClosed bool
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.
