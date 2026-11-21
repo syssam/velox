@@ -1817,13 +1817,26 @@ them too. The
 [graphql example](../examples/graphql) is a complete server, and its README
 walks through each step.
 
-The same generated code also serves
+The same runtime also serves
 [github.com/syssam/graphql-go](https://github.com/syssam/graphql-go), whose
-generator gqlc binds the SDL. Its adapter is `veloxgql/graphqlgo`, whose
-functions are graphql-go options:
+generator gqlc binds the SDL. Generate for it with `engine=graphql-go`, and
+gqlc binds every field but the root fields to the generated code:
+
+```sh
+go tool velox-gen -plugin velox-graphql:engine=graphql-go ./veloxschema
+go tool gqlc -config gqlc.yaml
+```
+
+The SDL then names each type's Go type with `@goModel`, and `gqlc.yaml`
+needs the keys the package documentation of `contrib/graphql` lists under
+"graphql-go and gqlc". gqlc does not read `@goField(name:)` yet, so
+velox-gen refuses a field or edge renamed with `graphql.FieldName` and a
+field read through a getter, naming it. The adapter is `veloxgql/graphqlgo`,
+whose functions are graphql-go options:
 
 ```go
-exec := graphql.NewExecutor(schema,
+s, err := graph.NewSchema(velox.Bindings(root), app.Bindings(root), graphqlgo.Scalars())
+exec := graphql.NewExecutor(s,
 	graphqlgo.With(db),
 	graphql.WithMaxDepth(12),
 	graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))

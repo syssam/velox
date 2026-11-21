@@ -455,7 +455,7 @@ func (fs *inputFields) add(f gqlField) error {
 func (w *writer) input(desc, name string, fields []gqlField) {
 	w.line()
 	w.desc("", desc)
-	w.line("input ", name, " {")
+	w.line("input ", name, w.gen(name), " {")
 	for _, f := range fields {
 		w.field(f)
 	}

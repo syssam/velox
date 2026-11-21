@@ -1,6 +1,7 @@
 package gogen
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox/plugin"
@@ -79,4 +80,31 @@ func named(name, gql string) string {
 		return name
 	}
 	return name + " (" + gql + ")"
+}
+
+// graphqlInitialisms are the words graphql-go writes in capitals in a Go
+// name and not in the GraphQL name it derives: UUID and GUID first, so that
+// each is one word.
+var graphqlInitialisms = strings.NewReplacer("UUID", "Uuid", "GUID", "Guid", "ID", "Id", "URL", "Url")
+
+// graphqlName is the GraphQL name graphql-go derives from an input struct's
+// untagged Go field name, as its exportedToGraphQL does: AuthorID is
+// authorId, IDNEQ is idNEQ and ImageURL is imageUrl. A field whose GraphQL
+// name differs gets a graphql tag (graphqlTag).
+func graphqlName(goName string) string {
+	if goName == "" {
+		return ""
+	}
+	n := graphqlInitialisms.Replace(goName)
+	return strings.ToLower(n[:1]) + n[1:]
+}
+
+// graphqlTag is the struct tag, after a space, of an input's Go field goName
+// whose GraphQL name is name, under engine=graphql-go: graphql:"name" when
+// graphql-go would derive another name, else "".
+func (r *renderer) graphqlTag(goName, name string) string {
+	if !r.graphqlGo || graphqlName(goName) == name {
+		return ""
+	}
+	return " `graphql:" + strconv.Quote(name) + "`"
 }

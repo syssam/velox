@@ -300,7 +300,7 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 				f.doc("\t", fmt.Sprintf("Predicates on the field %s.", named(e.Fields[w.Field].Name, w.On)))
 			}
 		}
-		f.p("\t%s %s", w.GoName, typ)
+		f.p("\t%s %s%s", w.GoName, typ, r.graphqlTag(w.GoName, w.Name))
 	}
 	f.p("}")
 	r.writePred(f, t)

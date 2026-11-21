@@ -43,7 +43,7 @@ func RenderConfig(m *plugin.Model, outPath, outPkg string, cfg sdl.Config) ([]pl
 		return nil, err
 	}
 	r := newRenderer(m, outPath, outPkg)
-	r.veloxe = cfg.Veloxe
+	r.veloxe, r.graphqlGo = cfg.Veloxe, cfg.GraphQLGo
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t
@@ -137,6 +137,7 @@ type renderer struct {
 	typeOf     map[string]*sdl.Type    // the GraphQL types by their entity's name
 	ents       map[string]*plugin.Entity
 	veloxe     bool // sdl.Config.Veloxe: veloxe's where semantics and Node
+	graphqlGo  bool // sdl.Config.GraphQLGo: inputs graphql-go binds by name
 }
 
 // reserve records the Go names velox-gen declares in the package that a name

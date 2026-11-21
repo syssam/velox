@@ -33,6 +33,9 @@ func (g *graph) fill(o *object) error {
 		where := "schema " + e.Name + ", field " + pk.Name
 		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, where: where}
 		if !strings.EqualFold(pk.GoName, "id") {
+			if err := g.nameBound(where, "the field id binds to the key's Go field "+pk.GoName, "name the key field id"); err != nil {
+				return err
+			}
 			id.dirs = []directive{bindTo(pk.GoName)}
 		}
 		if err := add(id, where); err != nil {
@@ -147,10 +150,17 @@ func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 		// converts the field's own. An empty blob of a Bytes! needs one too:
 		// modernc.org/sqlite reads it as nil, which gqlgen refuses in a T!.
 		gt := Getter{Field: i, Method: f.GoName + "GQL", Returns: v.getter, Pkg: v.getterPkg}
+		if err := g.nameBound(where, "the field is read through the method "+gt.Method+", which converts its Go type to its scalar's",
+			"give it graphql.Type naming a type the application binds to its Go type, or leave it out with graphql.Skip()"); err != nil {
+			return gqlField{}, false, err
+		}
 		o.getters = append(o.getters, gt)
 		dirs = append(dirs, bindTo(gt.Method))
 	case !strings.EqualFold(name, f.GoName):
 		// gqlgen binds a field to the Go field of its name, ignoring case.
+		if err := g.nameBound(where, renamed(name, a.FieldName, "Go field "+f.GoName), "drop the annotation"); err != nil {
+			return gqlField{}, false, err
+		}
 		dirs = append(dirs, bindTo(f.GoName))
 	}
 	ds, err := directives(a.Directives, where)
@@ -211,8 +221,34 @@ func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error)
 	if err != nil {
 		return gqlField{}, edgeField{}, false, err
 	}
+	if !gqlgenMatches(f.name, ed.GoName) {
+		if err := g.nameBound(where, renamed(f.name, a.FieldName, "method "+ed.GoName), "drop the annotation"); err != nil {
+			return gqlField{}, edgeField{}, false, err
+		}
+	}
 	f.dirs = append(edgeBind(f.name, ed.GoName, a.MaxList), ds...)
 	return f, ef, true, nil
+}
+
+// nameBound is, under Config.GraphQLGo, the error for the element where,
+// which gqlgen binds to Go through @goField(name:) for the reason why, with
+// fix, what the schema can do instead: gqlc does not read the argument
+// yet, and would bind the field to a Resolver stub. It is nil otherwise.
+func (g *graph) nameBound(where, why, fix string) error {
+	if !g.cfg.GraphQLGo {
+		return nil
+	}
+	return fmt.Errorf("%s: engine=graphql-go: %s through @goField(name:), and gqlc does not yet honour @goField(name:); %s", where, why, fix)
+}
+
+// renamed says why the GraphQL field name binds to the Go name what
+// ("Go field Name", "method Author"): the graphql.FieldName annotated, or
+// else the name itself.
+func renamed(name, annotated, what string) string {
+	if annotated != "" {
+		return fmt.Sprintf("graphql.FieldName(%q) binds it to its %s", annotated, what)
+	}
+	return fmt.Sprintf("its name %s binds it to its %s", name, what)
 }
 
 // edgeBind returns the @goField directive that binds the edge field name to
@@ -377,6 +413,9 @@ func (g *graph) enumType(o *object, f *plugin.Field, a graphql.Annotation, where
 		g.types.reserve(name, "the alias of the enum type "+f.Enum)
 	}
 	en := gqlEnum{name: name, values: values, field: f.Name}
+	if g.veloxEnum(f) {
+		en.goType = f.Enum
+	}
 	if !g.veloxEnum(f) && f.PkgPath != "" {
 		en.model = f.PkgPath + "." + f.Enum
 	}

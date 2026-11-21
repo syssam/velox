@@ -3,6 +3,7 @@ package gqlplugin
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -83,6 +84,21 @@ func TestRun(t *testing.T) {
 		t.Errorf("compat=veloxe: %+v", resp)
 	}
 
+	// engine: graphql-go's SDL binds User with @goModel and its Go is the
+	// same files; engine=gqlgen is the default's bytes; only=enums takes
+	// either.
+	gg := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"engine": "graphql-go"}, Model: m}))
+	if gg.Error != "" || len(gg.Files) != 2 || !strings.Contains(gg.Files[0].Content, "type User @goModel(model: \"example.com/app/gen.User\") {\n") || gg.Files[1].Path != "user_gql.go" {
+		t.Errorf("engine=graphql-go: %+v", gg)
+	}
+	def := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Model: m}))
+	if eg := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"engine": "gqlgen"}, Model: m})); !reflect.DeepEqual(eg, def) {
+		t.Errorf("engine=gqlgen: %+v, want the default's %+v", eg, def)
+	}
+	if en := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"only": "enums", "engine": "graphql-go"}, Model: em})); en.Error != "" || len(en.Files) != 1 {
+		t.Errorf("only=enums,engine=graphql-go: %+v", en)
+	}
+
 	for name, c := range map[string]struct{ in, want string }{
 		"compat and only":    {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "compat": "veloxe"}, Model: m}), "give one or the other"},
 		"whitelist and only": {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "where": "whitelist"}, Model: m}), "give one or the other"},
@@ -91,10 +107,16 @@ func TestRun(t *testing.T) {
 		"version":            {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":           {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed":          {"{", "request"},
-		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe and where=whitelist; it is given a, x=y"},
-		"only":               {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "types"}, Model: m}), "it is given only=types"},
-		"only and":           {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "x": ""}, Model: m}), "it is given only=enums, x"},
-		"enums":              {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums"}, Model: m}), "the request names no generated package"},
+		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, where=whitelist and engine=gqlgen or engine=graphql-go; it is given a, x=y"},
+		"engine":             {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"engine": "graphql-go-v2"}, Model: m}), "it is given engine=graphql-go-v2"},
+		"engine no package":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"engine": "graphql-go"}, Model: m}), "engine=graphql-go binds every type to the generated package, and the request names none"},
+		"engine refuses": {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"engine": "graphql-go"}, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+			Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
+			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", ElemType: "int64"}, {Name: "name", GoName: "Name", Type: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"displayName"}`)}}},
+		}}}}), "schema User, field name: engine=graphql-go: graphql.FieldName(\"displayName\") binds it to its Go field Name through @goField(name:), and gqlc does not yet honour @goField(name:)"},
+		"only":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "types"}, Model: m}), "it is given only=types"},
+		"only and": {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "x": ""}, Model: m}), "it is given only=enums, x"},
+		"enums":    {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums"}, Model: m}), "the request names no generated package"},
 		"render": {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "User", PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},

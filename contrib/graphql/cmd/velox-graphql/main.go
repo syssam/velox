@@ -56,7 +56,21 @@
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,where=whitelist ./veloxschema
 //
-// only=enums takes neither of the others. Any other option fails the run.
+// An application served by github.com/syssam/graphql-go, whose generator
+// gqlc binds the schema, asks for engine=graphql-go; engine=gqlgen is the
+// default:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,where=whitelist,engine=graphql-go ./veloxschema
+//
+// Every type of velox.graphql but Query then carries @goModel naming its Go
+// type, an input's field whose name graphql-go would not derive has a graphql
+// tag, and a field or edge gqlgen would bind with @goField(name:) is refused,
+// as gqlc does not read the argument yet. Package
+// github.com/syssam/velox/contrib/graphql, "graphql-go and gqlc", has the
+// gqlc.yaml it needs.
+//
+// only=enums takes neither compat nor where, and writes the same Go for
+// either engine. Any other option fails the run.
 package main
 
 import (

@@ -711,6 +711,59 @@
 // cannot hold (300 for an int8), and gqlgenx.ErrorPresenter shows the
 // client gqlgen's text with BAD_USER_INPUT.
 //
+// # graphql-go and gqlc
+//
+// With engine=graphql-go the plugin writes for github.com/syssam/graphql-go,
+// whose generator gqlc binds the SDL to the generated Go by autobind:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:engine=graphql-go ./veloxschema
+//
+// The Go is gqlgen's, with no graphql-go import: gqlc binds each field to the
+// struct field or the method of its name, ignoring case, and a connection's
+// arguments by their types. Every type velox.graphql declares but Query
+// carries @goModel naming its Go type, so gqlc binds it whatever else
+// autoBind lists: entities, enums, connections, edges, orders, where and
+// mutation inputs to the generated package's types, PageInfo and
+// OrderDirection to veloxgql's, and each scalar to the Go type entities
+// hold (Time to time.Time, UUID to uuid.UUID, Bytes to []byte, Uint64 to
+// uint64, Cursor and JSON to veloxgql's). An input's Go field whose GraphQL
+// name is not the one graphql-go derives (authorID, which it derives as
+// authorId) has a graphql tag naming it, and an optional list in a mutation
+// input is a slice, nil when not given. Root fields are the application's:
+// gqlc puts each on a Resolver, one line over the generated code, as in
+// "Mutations".
+//
+// gqlc does not read @goField(name:) yet, so velox-gen refuses, naming the
+// schema, the field and the reason, a field or edge that graphql.FieldName
+// renames, a field read through a <Field>GQL getter (a JSON field, a
+// non-null bytes field, a field of the application's own Go type) and a
+// key not named ID, and writes nothing. graphql.Type naming a type the
+// application binds to the field's Go type takes a getter's place; a bytes
+// field needs Nillable.
+//
+// gqlc.yaml needs these keys:
+//
+//	schema: [veloxgen/*.graphql, graph/*.graphql]
+//	autoBind: [<module>/veloxgen]
+//	models: { ID: int64 }
+//	modelDirective: { name: goModel, arg: model }
+//	fieldDirective: { name: goField, forceResolverArg: forceResolver }
+//	zeroForNullInputs: true   # where inputs' IsNil/NotNil and update inputs' clearX are bool
+//	inputListPointers: true   # []*XOrder, []*XWhereInput, as the methods take them
+//	inlineAccessors: true     # to-one edges answer from the batch
+//	groups: { trimPrefix: velox_ }
+//
+// Without inputListPointers a multi-order edge's method no longer fits its
+// arguments, and gqlc puts the field on a Resolver. The server adds
+// graphqlgo.Scalars() to the schema and graphqlgo.With to the executor, with
+// graphql-go's own limits:
+//
+//	s, err := graph.NewSchema(velox.Bindings(root), app.Bindings(root), graphqlgo.Scalars())
+//	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
+//
+// graphql-go writes a nil []byte, a NULL bytes field, as "" where gqlgen
+// writes null.
+//
 // # IDs
 //
 // A GraphQL ID is the entity's key, in the key's own Go type: id on a type,

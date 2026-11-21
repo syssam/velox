@@ -1,0 +1,345 @@
+package main
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/syssam/velox/internal/tempmod"
+)
+
+// gqlcSchema is a schema whose GraphQL surface engine=graphql-go writes in
+// full: every scalar velox binds but JSON, an enum, an Int field of a Go type
+// graphql-go does not bind to Int itself (int8), an optional list, unique,
+// connection and many-to-many edges, a multi-field order and mutation
+// inputs whose fields' Go names graphql-go would derive otherwise
+// (authorID, tagIDs).
+const gqlcSchema = `package schema
+
+import (
+	"github.com/google/uuid"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+)
+
+type User struct{ velox.Schema }
+
+func (User) Fields() []velox.Field {
+	return []velox.Field{
+		field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+		field.Enum("role").Values("admin", "member").Default("member").Annotations(graphql.WhereOps()),
+		field.Time("joined_at").Optional().Nillable(),
+		field.Uint64("quota").Optional().Default(0),
+		field.UUID("ref", uuid.UUID{}).Optional().Nillable(),
+		field.Bytes("blob").Optional().Nillable(),
+		field.Float("score").Optional().Default(0),
+		field.Bool("active").Default(true),
+	}
+}
+
+func (User) Edges() []velox.Edge {
+	return []velox.Edge{edge.To("posts", Post.Type).Annotations(graphql.WhereEdge())}
+}
+
+func (User) Annotations() []velox.Annotation {
+	return []velox.Annotation{graphql.QueryField("users")}
+}
+
+type Post struct{ velox.Schema }
+
+func (Post) Fields() []velox.Field {
+	return []velox.Field{
+		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
+		field.String("title").Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
+		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),
+		field.Int64("views").Optional().Default(0).Annotations(graphql.OrderField("VIEWS")),
+		field.Strings("keywords").Optional().Default([]string{}).Annotations(graphql.WhereOps(graphql.OpsJSONArray)),
+	}
+}
+
+func (Post) Edges() []velox.Edge {
+	return []velox.Edge{
+		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id"),
+		edge.To("tags", Tag.Type).Annotations(graphql.WhereEdge()),
+	}
+}
+
+func (Post) Annotations() []velox.Annotation {
+	return []velox.Annotation{graphql.QueryField("posts"), graphql.MultiOrder(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+}
+
+type Tag struct{ velox.Schema }
+
+func (Tag) Fields() []velox.Field {
+	return []velox.Field{
+		field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+		field.Int8("rank").Annotations(graphql.WhereOps()),
+	}
+}
+
+func (Tag) Edges() []velox.Edge {
+	return []velox.Edge{edge.From("posts", Post.Type).Ref("tags")}
+}
+
+func (Tag) Annotations() []velox.Annotation {
+	return []velox.Annotation{graphql.Type("Label"), graphql.QueryField("labels")}
+}
+`
+
+// gqlcApp is the application's own SDL: the mutations, which take the
+// inputs velox writes.
+const gqlcApp = `type Mutation {
+  createPost(input: CreatePostInput!): Post!
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+}
+`
+
+// gqlcConfig is gqlc.yaml with the keys the package documentation lists.
+const gqlcConfig = `schema: [gen/*.graphql, graph/*.graphql]
+output: graph
+package: example.com/app/graph
+autoBind: [./gen]
+models: { ID: int64 }
+modelDirective: { name: goModel, arg: model }
+fieldDirective: { name: goField, forceResolverArg: forceResolver }
+zeroForNullInputs: true
+inputListPointers: true
+inlineAccessors: true
+groups: { trimPrefix: velox_ }
+`
+
+// gqlcServe is a test of the application's module: the schema gqlc
+// generated, bound to velox's code and a resolver of the root fields, each
+// one line, serves a query and a mutation through graphqlgo.With on SQLite.
+const gqlcServe = `package app_test
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"testing"
+
+	_ "modernc.org/sqlite"
+
+	"example.com/app/gen"
+	"example.com/app/graph"
+	"example.com/app/graph/app"
+	vg "example.com/app/graph/velox"
+	"github.com/syssam/graphql-go"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
+)
+
+type root struct{}
+
+var (
+	_ vg.Resolver  = root{}
+	_ app.Resolver = root{}
+)
+
+func (root) Posts(ctx context.Context, a vg.PostsArgs) (*gen.PostConnection, error) {
+	return veloxgql.DB(ctx).Query[gen.Post]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithPostOrder(a.OrderBy), gen.WithPostFilter(a.Where))
+}
+
+func (root) Labels(ctx context.Context, a vg.LabelsArgs) (*gen.LabelConnection, error) {
+	return veloxgql.DB(ctx).Query[gen.Tag]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithLabelOrder(a.OrderBy), gen.WithLabelFilter(a.Where))
+}
+
+func (root) Users(ctx context.Context, a vg.UsersArgs) (*gen.UserConnection, error) {
+	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithUserOrder(a.OrderBy), gen.WithUserFilter(a.Where))
+}
+
+func (root) CreatePost(ctx context.Context, a app.CreatePostArgs) (*gen.Post, error) {
+	x := &gen.Post{}
+	return x, veloxgql.DB(ctx).Insert(x).SetInput(a.Input).Exec(ctx)
+}
+
+func (root) UpdatePost(ctx context.Context, a app.UpdatePostArgs) (*gen.Post, error) {
+	return veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(a.ID)).SetInput(a.Input).One(ctx)
+}
+
+const ddl = ` + "`" + `
+CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, joined_at DATETIME,
+	quota INTEGER NOT NULL, ref TEXT, blob BLOB, score REAL NOT NULL, active BOOLEAN NOT NULL);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL,
+	views INTEGER NOT NULL, keywords JSON NOT NULL);
+CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL, rank INTEGER NOT NULL);
+CREATE TABLE post_tags (post_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY (post_id, tag_id));
+INSERT INTO users VALUES (1, 'ann', 'admin', NULL, 7, NULL, NULL, 1.5, 1), (2, 'bob', 'member', NULL, 0, NULL, NULL, 0, 0);
+INSERT INTO posts VALUES (1, 1, 'a', 'published', 3, '["go"]'), (2, 1, 'b', 'draft', 0, '[]'), (3, 2, 'c', 'draft', 1, '[]'), (4, 1, 'd', 'draft', 0, '[]');
+INSERT INTO tags VALUES (1, 'x', 1), (2, 'y', -2);
+INSERT INTO post_tags VALUES (1, 1), (1, 2), (2, 2), (4, 1);
+` + "`" + `
+
+// TestServe runs queries and mutations. graphql-go writes a nil []byte, a
+// NULL blob, as "", where gqlgen writes null: Scalars binds Bytes to []byte,
+// and graphql-go hands a nil slice to the scalar.
+func TestServe(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	s, err := graph.NewSchema(vg.Bindings(root{}), app.Bindings(root{}), graphqlgo.Scalars())
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
+	for _, c := range []struct{ query, want string }{
+		{
+			` + "`" + `{ posts(first: 2, orderBy: [{field: TITLE, direction: DESC}], where: {authorID: 1, hasTags: true, keywordsIsEmpty: false}) {
+				totalCount pageInfo { hasNextPage }
+				edges { node { id title status views keywords
+					author { id name role quota ref blob score active joinedAt }
+					tags(first: 5, orderBy: {field: NAME}, where: {rankGTE: -2}) { totalCount edges { node { id name rank } } } } } } }` + "`" + `,
+			` + "`" + `{"data":{"posts":{"totalCount":1,"pageInfo":{"hasNextPage":false},"edges":[{"node":{"id":"1","title":"a","status":"PUBLISHED","views":3,"keywords":["go"],"author":{"id":"1","name":"ann","role":"ADMIN","quota":"7","ref":null,"blob":"","score":1.5,"active":true,"joinedAt":null},"tags":{"totalCount":2,"edges":[{"node":{"id":"1","name":"x","rank":1}},{"node":{"id":"2","name":"y","rank":-2}}]}}}]}}}` + "`" + `,
+		},
+		{
+			` + "`" + `{ labels(where: {rank: 1}) { edges { node { name posts(orderBy: [{field: VIEWS}]) { edges { node { id author { name } } } } } } } }` + "`" + `,
+			` + "`" + `{"data":{"labels":{"edges":[{"node":{"name":"x","posts":{"edges":[{"node":{"id":"4","author":{"name":"ann"}}},{"node":{"id":"1","author":{"name":"ann"}}}]}}}]}}}` + "`" + `,
+		},
+		{
+			` + "`" + `mutation { createPost(input: {title: "e", authorID: 2, keywords: ["q", "r"], tagIDs: [2]}) { id title keywords author { name } tags { totalCount } } }` + "`" + `,
+			` + "`" + `{"data":{"createPost":{"id":"5","title":"e","keywords":["q","r"],"author":{"name":"bob"},"tags":{"totalCount":1}}}}` + "`" + `,
+		},
+		{
+			` + "`" + `mutation { updatePost(id: 5, input: {status: PUBLISHED, keywords: [], addTagIDs: [1]}) { status keywords tags { totalCount } } }` + "`" + `,
+			` + "`" + `{"data":{"updatePost":{"status":"PUBLISHED","keywords":[],"tags":{"totalCount":2}}}}` + "`" + `,
+		},
+	} {
+		resp := exec.Execute(context.Background(), &graphql.Request{Query: c.query})
+		got, err := json.Marshal(resp)
+		resp.Release()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != c.want {
+			t.Errorf("%s\n got %s\nwant %s", c.query, got, c.want)
+		}
+	}
+}
+`
+
+// TestGqlcBinds is engine=graphql-go end to end: velox-gen writes the SDL
+// and the Go, gqlc of the graphql-go version this module requires (the one
+// nextapp pins) binds them with the keys the package documentation lists,
+// and its Resolvers hold the root fields alone: every other field is bound
+// to velox's struct fields and methods, every input and enum to velox's Go
+// types, and no model is generated. The application's module then builds
+// and serves a query and mutations through graphqlgo.With on SQLite.
+//
+// It builds three tools and a module, offline, from the module cache, as
+// the other end-to-end tests do, and is left out under -short.
+func TestGqlcBinds(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
+	if testing.Short() {
+		t.Skip("builds a module and gqlc")
+	}
+	dir, run := app(t, map[string]string{"schema/schema.go": gqlcSchema, "graph/app.graphql": gqlcApp, "gqlc.yaml": gqlcConfig, "serve_test.go": gqlcServe})
+	withGqlc(t, dir, run)
+
+	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:engine=graphql-go", "./schema"); err != nil {
+		t.Fatalf("velox-gen: %v\n%s", err, out)
+	}
+	if out, err := run("tool", "gqlc", "-config", "gqlc.yaml"); err != nil {
+		t.Fatalf("gqlc: %v\n%s", err, out)
+	}
+	for group, want := range map[string][]string{"velox": {"Labels", "Posts", "Users"}, "app": {"CreatePost", "UpdatePost"}} {
+		b, err := os.ReadFile(filepath.Join(dir, "graph", group, "generated.go"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resolverMethods(string(b)); !slices.Equal(got, want) {
+			t.Errorf("the %s group's Resolver has %v, want the root fields %v alone:\n%s", group, got, want, b)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "graph", "model")); !os.IsNotExist(err) {
+		t.Errorf("gqlc generated models (%v): a type is not bound to velox's Go", err)
+	}
+	if out, err := run("tool", "gqlc", "-config", "gqlc.yaml", "-check"); err != nil {
+		t.Errorf("gqlc -check: %v\n%s", err, out)
+	}
+	if out, err := run("test", "-count=1", "-run", "^TestServe$", "."); err != nil {
+		t.Fatalf("serve: %v\n%s", err, out)
+	}
+}
+
+// TestGraphQLGoRefusesThroughVeloxGen: velox-gen with engine=graphql-go
+// refuses a schema with a field graphql.FieldName renames, naming the
+// schema, the field and the reason, and writes nothing.
+func TestGraphQLGoRefusesThroughVeloxGen(t *testing.T) {
+	t.Parallel() // its own module, in its own directory
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir, run := app(t, map[string]string{"schema/schema.go": e2eSchema})
+	out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:engine=graphql-go", "./schema")
+	if err == nil || !strings.Contains(out, `schema User, field name: engine=graphql-go: graphql.FieldName("displayName") binds it to its Go field Name through @goField(name:), and gqlc does not yet honour @goField(name:)`) {
+		t.Fatalf("velox-gen: %v, want the refusal:\n%s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
+		t.Errorf("velox-gen wrote gen (%v)", err)
+	}
+}
+
+// resolverMethods are the names of the methods of the Resolver interface
+// in a group's generated.go, in order.
+func resolverMethods(src string) []string {
+	_, body, _ := strings.Cut(src, "type Resolver interface {\n")
+	body, _, _ = strings.Cut(body, "\n}\n")
+	var out []string
+	for _, m := range regexp.MustCompile(`(?m)^\t([A-Z]\w*)\(`).FindAllStringSubmatch(body, -1) {
+		out = append(out, m[1])
+	}
+	slices.Sort(out)
+	return out
+}
+
+// withGqlc makes gqlc a tool of the module in dir, at the version of
+// graphql-go contrib/graphql requires, with graphql-go's go.sum, which holds
+// gqlc's own dependencies.
+func withGqlc(t *testing.T, dir string, run func(args ...string) (string, error)) {
+	t.Helper()
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Version}} {{.Dir}}", "github.com/syssam/graphql-go")
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOTOOLCHAIN=local", "GOWORK=off")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list -m: %v\n%s%s", err, out, tempmod.Hint(string(out)))
+	}
+	version, modDir, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
+	sum, err := os.ReadFile(filepath.Join(modDir, "go.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, add := range map[string]string{
+		"go.mod": "\ntool github.com/syssam/graphql-go/cmd/gqlc\n\nrequire github.com/syssam/graphql-go " + version + "\n",
+		"go.sum": string(sum),
+	} {
+		f, err := os.OpenFile(filepath.Join(dir, name), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString(add); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := run("mod", "tidy", "-e"); err != nil {
+		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	}
+}

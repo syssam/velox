@@ -21,6 +21,21 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-graphql takes `engine=graphql-go` (ADR 0107), and so does
+  `graphqlgen.Plugin(opts)`: velox.graphql and the Go are for
+  github.com/syssam/graphql-go's generator gqlc, which binds every field but
+  the root fields to the generated code by autobind. Every type of the SDL
+  but Query carries `@goModel` naming its Go type, each scalar the Go type
+  entities hold; an input field whose name graphql-go would not derive has
+  a `graphql` tag, and an optional list in a mutation input is a slice. A
+  field or edge renamed by `graphql.FieldName`, a field read through a
+  getter and a key not named ID are refused, naming the schema and the
+  field, as gqlc does not read `@goField(name:)` yet. `engine=gqlgen` is the
+  default, and its output is unchanged. `graphqlgo.Scalars()` binds Int to
+  int8, int16, uint8, uint16 and uint32, and Uint64 to uint, as gqlgen.yml's
+  models do. `veloxgql.GeneratedCodeIsVersion27` stays: code generated
+  before runs as it did, and the new output needs nothing new of the
+  runtime.
 - Under velox-graphql's `compat=veloxe` (`gqlgraph.Type.Veloxe`), a
   connection behaves for clients as veloxe's did (ADR 0110). It takes a
   cursor veloxe wrote, so a list a client paged before the deploy pages

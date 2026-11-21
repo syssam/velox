@@ -94,7 +94,7 @@ func orderArg(t *object) string {
 func (w *writer) order(o *object) {
 	w.line()
 	w.line(`"""Ordering options for connections to `, o.name, `."""`)
-	w.line("input ", o.name, "Order {")
+	w.line("input ", o.name, "Order", w.gen(o.name+"Order"), " {")
 	w.line(`  """The direction of the order."""`)
 	w.line("  direction: OrderDirection! = ASC")
 	w.line(`  """The field to order by."""`)
@@ -102,7 +102,7 @@ func (w *writer) order(o *object) {
 	w.line("}")
 	w.line()
 	w.line(`"""The fields connections to `, o.name, ` can be ordered by."""`)
-	w.line("enum ", o.name, "OrderField {")
+	w.line("enum ", o.name, "OrderField", w.gen(o.name+"OrderField"), " {")
 	for i, v := range o.order.values {
 		w.at = o.order.wheres[i]
 		if k := o.order.edges[i] - 1; k >= 0 {

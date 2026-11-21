@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -45,13 +46,13 @@ func RenderConfig(m *plugin.Model, cfg Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	w := writer{app: true}
+	w := writer{app: true, cfg: cfg}
 	g.write(&w)
 	out := w.String()
 	if err := parse(out); err != nil {
 		return "", fmt.Errorf("velox-graphql wrote an SDL that does not parse, which is a bug: %w", err)
 	}
-	var own writer
+	own := writer{cfg: cfg}
 	g.write(&own)
 	// The application declares the types graphql.Type names that velox does
 	// not, as it declares its directives, and under compat=veloxe the
@@ -86,6 +87,7 @@ var jsonList = map[string]string{"[]string": "String", "[]int": "Int", "[]int64"
 type writer struct {
 	strings.Builder
 	app   bool     // write the application's directives too
+	cfg   Config   // the options: under GraphQLGo, @goModel on every type
 	at    string   // the element being written, "" for velox-graphql's own
 	where []string // the element of each line written so far
 }
@@ -96,6 +98,49 @@ func (w *writer) line(parts ...string) {
 	}
 	w.WriteByte('\n')
 	w.where = append(w.where, w.at)
+}
+
+// model is the @goModel directive, after a space, that binds a type to the
+// Go type goType ("time.Time") under Config.GraphQLGo; "" otherwise.
+func (w *writer) model(goType string) string {
+	if !w.cfg.GraphQLGo {
+		return ""
+	}
+	return " @goModel(model: " + quote(goType) + ")"
+}
+
+// gen is model of the Go type name in the generated package: velox-gen's
+// or velox-graphql's, and not an alias, as gqlc compares a binding's Go
+// types by name.
+func (w *writer) gen(name string) string { return w.model(w.cfg.Package + "." + name) }
+
+// vocabularyModels are the Go types velox's own types bind to under
+// Config.GraphQLGo: each scalar the Go type entities hold, which gqlc then
+// binds a field of to its struct field, and PageInfo and OrderDirection
+// veloxgql's.
+var vocabularyModels = map[string]string{
+	"scalar Time":         "time.Time",
+	"scalar UUID":         "github.com/google/uuid.UUID",
+	"scalar Bytes":        "[]byte",
+	"scalar JSON":         veloxgqlPath + ".JSON",
+	"scalar Uint64":       "uint64",
+	"scalar Cursor":       veloxgqlPath + ".Cursor",
+	"type PageInfo":       veloxgqlPath + ".PageInfo",
+	"enum OrderDirection": veloxgqlPath + ".OrderDirection",
+}
+
+// vocabularyLine is l, a line of the vocabulary, with its @goModel under
+// Config.GraphQLGo.
+func (w *writer) vocabularyLine(l string) string {
+	head, brace := strings.CutSuffix(l, " {")
+	goType, ok := vocabularyModels[head]
+	if !ok || !w.cfg.GraphQLGo {
+		return l
+	}
+	if l = head + w.model(goType); brace {
+		l += " {"
+	}
+	return l
 }
 
 // prelude are the directives GraphQL defines, which gqlparser declares; any
@@ -229,7 +274,7 @@ func (g *graph) write(w *writer) {
 			w.line()
 		}
 		for l := range strings.SplitSeq(block, "\n") {
-			w.line(l)
+			w.line(w.vocabularyLine(l))
 		}
 	}
 	g.writeNode(w)
@@ -251,7 +296,7 @@ func (g *graph) write(w *writer) {
 		g.writeObject(w, o)
 	}
 
-	if binds := g.types.introspectionBinds(); binds != "" {
+	if binds := g.types.introspectionBinds(); binds != "" && !g.cfg.GraphQLGo {
 		w.line()
 		w.line("# GraphQL's own types keep gqlgen's models: the generated package has a Go")
 		w.line("# type of each of these names, which gqlgen's autobind would bind instead.")
@@ -272,7 +317,9 @@ func (g *graph) writeObject(w *writer, o *object) {
 	w.line()
 	w.at = "schema " + o.ent.Name
 	w.desc("", o.ent.Comment)
-	w.line("type "+o.name+g.implementsNode(o), w.dirs(o.dirs), " {")
+	// The entity's own Go type, and not the alias of graphql.Type's name,
+	// which gqlc does not see through.
+	w.line("type "+o.name+g.implementsNode(o), w.gen(o.ent.Name), w.dirs(o.dirs), " {")
 	for _, f := range o.fields {
 		w.field(f)
 	}
@@ -287,7 +334,7 @@ func (g *graph) writeObject(w *writer, o *object) {
 		// @goModel is not one of w.dirs's: it is velox-graphql's own, and
 		// binds the type whether or not the application's directives are
 		// written.
-		var bind string
+		bind := w.gen(cmp.Or(en.goType, en.name)) // velox-gen's type, not an alias of it
 		if en.model != "" {
 			bind = " @goModel(model: " + quote(en.model) + ")"
 		}
@@ -330,7 +377,7 @@ func writeConnection(w *writer, o *object) {
 	}
 	w.line()
 	w.line(`"""A connection to a list of `, o.name, `."""`)
-	w.line("type ", o.name, "Connection {")
+	w.line("type ", o.name, "Connection", w.gen(o.name+"Connection"), " {")
 	w.line(`  """The edges of this page."""`)
 	w.line("  edges: [", o.name, "Edge", edges)
 	w.line(`  """Information about this page."""`)
@@ -340,7 +387,7 @@ func writeConnection(w *writer, o *object) {
 	w.line("}")
 	w.line()
 	w.line(`"""An edge in a connection to a list of `, o.name, `."""`)
-	w.line("type ", o.name, "Edge {")
+	w.line("type ", o.name, "Edge", w.gen(o.name+"Edge"), " {")
 	w.line(`  """The `, o.name, ` at the end of the edge."""`)
 	w.line("  node: ", o.name, node)
 	w.line(`  """The cursor of this edge, for paging."""`)

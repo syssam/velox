@@ -117,7 +117,7 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in string, fs []sdl.InputFie
 				f.doc("\t", fmt.Sprintf("%s removes every %s from the edge %s, before the IDs to remove and to add.", fi.GoName, fi.Target, e.Edges[fi.Edge].Name))
 			}
 		}
-		f.p("\t%s %s", fi.GoName, types[i])
+		f.p("\t%s %s%s", fi.GoName, types[i], r.graphqlTag(fi.GoName, fi.Name))
 	}
 	f.p("}")
 	if !sensitive {
@@ -278,7 +278,16 @@ func (s *setters) open(fi sdl.InputField) (indent, src string, end func()) {
 		return "\t", "in." + fi.GoName, func() {}
 	}
 	s.f.p("\tif v := in.%s; v != nil {", fi.GoName)
-	return "\t\t", "*v", func() { s.f.p("\t}") }
+	return "\t\t", s.deref(fi), func() { s.f.p("\t}") }
+}
+
+// deref is the value of the optional input field fi in v, given: *v, or v
+// for a slice (renderer.sliceValue).
+func (s *setters) deref(fi sdl.InputField) string {
+	if s.r.sliceValue(fi) {
+		return "v"
+	}
+	return "*v"
 }
 
 // pair is the index in s.fs of the field of kind that clears what fs[i]
@@ -318,7 +327,7 @@ func (s *setters) value(i int) error {
 		f.p("\tif in.%s {", s.fs[c].GoName)
 		s.add("\t\t", null)
 		f.p("\t} else if v := in.%s; v != nil {", fi.GoName)
-		indent, src, end = "\t\t", "*v", func() { f.p("\t}") }
+		indent, src, end = "\t\t", s.deref(fi), func() { f.p("\t}") }
 	} else {
 		indent, src, end = s.open(fi)
 	}

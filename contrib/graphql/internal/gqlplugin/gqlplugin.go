@@ -20,8 +20,10 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // gqlgen binds it to; or with only=enums, the enum marshalers alone. With
 // compat=veloxe, the API is the one veloxe's generator made (sdl.Config's
 // Veloxe); with where=whitelist, only fields with WhereInput filter
-// (sdl.Config's WhereWhitelist). It refuses any other option, as the plugin
-// protocol asks.
+// (sdl.Config's WhereWhitelist); with engine=graphql-go, the schema and the
+// Go are for graphql-go's gqlc (sdl.Config's GraphQLGo), and engine=gqlgen
+// is the default. only=enums writes the same Go for either engine. It
+// refuses any other option, as the plugin protocol asks.
 func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	var cfg sdl.Config
 	for k, v := range req.Options {
@@ -31,8 +33,11 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 			cfg.Veloxe, cfg.Package = true, req.OutPath
 		case k == "where" && v == "whitelist":
 			cfg.WhereWhitelist = true
+		case k == "engine" && v == "gqlgen":
+		case k == "engine" && v == "graphql-go":
+			cfg.GraphQLGo, cfg.Package = true, req.OutPath
 		default:
-			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe and where=whitelist; it is given %s", options(req.Options))
+			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, where=whitelist and engine=gqlgen or engine=graphql-go; it is given %s", options(req.Options))
 		}
 	}
 	if req.Options["only"] == "enums" {

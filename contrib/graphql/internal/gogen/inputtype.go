@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"path"
 	"slices"
+	"strings"
 
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/plugin"
@@ -82,7 +83,8 @@ func fkOf(e *plugin.Entity, ed *plugin.Edge, on *plugin.Entity) (*plugin.Field, 
 // inputType is the Go type of the input field fi: its GoType for a value,
 // the key's Go type of the edge's target for an ID, a slice of it for a list
 // of IDs and a bool for a clear; a pointer when it is not Required, but for
-// a list or a bool.
+// a list or a bool, and for a list value under engine=graphql-go
+// (sliceValue).
 func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, error) {
 	var typ string
 	switch fi.Kind {
@@ -106,10 +108,19 @@ func (r *renderer) inputType(f *file, t *sdl.Type, fi sdl.InputField) (string, e
 	default:
 		return "", fmt.Errorf("velox-graphql writes no mutation-input field of kind %d, which is a bug: schema %s, field %s", fi.Kind, t.Entity.Name, fi.Name)
 	}
-	if !fi.Required {
+	if !fi.Required && !r.sliceValue(fi) {
 		typ = "*" + typ
 	}
 	return typ, nil
+}
+
+// sliceValue reports whether the optional input field fi, a field's value,
+// is a slice and not a pointer to one, nil when it is not given: a list
+// value under engine=graphql-go, which binds a list to a slice of its
+// elements, or to a pointer to one element, and no pointer to a slice. A
+// list given empty is an empty slice, and not nil.
+func (r *renderer) sliceValue(fi sdl.InputField) bool {
+	return r.graphqlGo && fi.Kind == sdl.InputValue && !fi.Required && strings.HasPrefix(fi.Type, "[")
 }
 
 // idKey is the Go type of the IDs of a type: its key field's own, which

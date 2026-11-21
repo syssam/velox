@@ -34,6 +34,12 @@ func TestPluginAnswers(t *testing.T) {
 	if err != nil || resp.Error != "" || len(resp.Files) != 2 || resp.Files[0].Path != "velox.graphql" || resp.Files[1].Path != "user_gql.go" {
 		t.Fatalf("%v %+v", err, resp)
 	}
+	// engine=graphql-go reaches the generator: velox.graphql binds User.
+	req.Options = map[string]string{"engine": "graphql-go"}
+	resp, err = graphqlgen.Plugin(req.Options).Run(context.Background(), req)
+	if err != nil || resp.Error != "" || len(resp.Files) != 2 || !strings.Contains(resp.Files[0].Content, `type User @goModel(model: "example.com/app/gen.User")`) {
+		t.Fatalf("engine=graphql-go: %v %+v", err, resp)
+	}
 	req.Options = map[string]string{"x": "y"}
 	resp, err = graphqlgen.Plugin(req.Options).Run(context.Background(), req)
 	if err != nil || len(resp.Files) != 0 || !strings.Contains(resp.Error, "velox-graphql takes the options") {

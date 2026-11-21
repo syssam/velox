@@ -35,10 +35,19 @@ type Config struct {
 	// where=whitelist). It is what an application's codegen hook did under
 	// veloxe, so it is an option of its own, apart from Veloxe.
 	WhereWhitelist bool
+	// GraphQLGo writes the SDL for github.com/syssam/graphql-go, whose
+	// generator gqlc binds it to the generated Go (velox-graphql's option
+	// engine=graphql-go). Every type the SDL declares but Query carries
+	// @goModel naming its Go type in Package, or in veloxgql for PageInfo
+	// and OrderDirection; each scalar names the Go type velox entities hold;
+	// there are no introspection binds, which only gqlgen needs. gqlc does
+	// not read @goField(name:) yet, so a field or edge bound by it, renamed
+	// by graphql.FieldName or read through a getter, is an error.
+	GraphQLGo bool
 
 	// Package is the generated package's import path, which binds Node to
-	// its Noder with @goModel under Veloxe; velox-graphql gives the
-	// request's.
+	// its Noder with @goModel under Veloxe, and every type under
+	// GraphQLGo; velox-graphql gives the request's.
 	Package string
 }
 

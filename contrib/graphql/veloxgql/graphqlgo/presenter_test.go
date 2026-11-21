@@ -141,6 +141,80 @@ func TestScalars(t *testing.T) {
 	}
 }
 
+// ints holds the integer Go types velox entities hold beside graphql-go's
+// own int, int32 and int64, as inputs gqlc binds take them.
+type ints struct {
+	I8  *int8
+	I16 int16
+	U8  uint8
+	U16 uint16
+	U32 uint32
+	U   uint
+}
+
+// TestScalarsIntegers: Scalars binds Int to int8, int16, uint8, uint16 and
+// uint32, and Uint64 to uint, both ways and as inputs' fields: a value out
+// of the Go type's range, or of Int's, is the client's error, and so is a
+// fraction; a uint32 over Int's 32 bits is an error of its field.
+func TestScalarsIntegers(t *testing.T) {
+	const sdl = `
+scalar Time
+scalar UUID
+scalar Bytes
+scalar Uint64
+input In { i8: Int, i16: Int!, u8: Int!, u16: Int!, u32: Int!, u: Uint64! }
+type Query { echo(in: In!): Out! big: Out! }
+type Out { i8: Int, i16: Int!, u8: Int!, u16: Int!, u32: Int!, u: Uint64! }
+`
+	type echoArgs struct{ In ints }
+	s, err := graphql.NewSchema(graphql.SDL(sdl), graphqlgo.Scalars(),
+		graphql.Input[ints]("In"),
+		graphql.Query(
+			graphql.ResolveArgs("echo", func(_ context.Context, _ graphql.Root, a echoArgs) (*ints, error) { return &a.In, nil }),
+			graphql.Resolve("big", func(context.Context, graphql.Root) (*ints, error) { return &ints{U32: 1 << 31}, nil }),
+		),
+		graphql.Object[ints]("Out",
+			graphql.Field("i8", func(v *ints) *int8 { return v.I8 }),
+			graphql.Field("i16", func(v *ints) int16 { return v.I16 }),
+			graphql.Field("u8", func(v *ints) uint8 { return v.U8 }),
+			graphql.Field("u16", func(v *ints) uint16 { return v.U16 }),
+			graphql.Field("u32", func(v *ints) uint32 { return v.U32 }),
+			graphql.Field("u", func(v *ints) uint { return v.U }),
+		),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := executorServer(newExecutor(s, graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))
+	ctx := context.Background()
+	const q = `query($in: In!) { echo(in: $in) { i8 i16 u8 u16 u32 u } }`
+	in := map[string]any{"i8": -128, "i16": -32768, "u8": 255, "u16": 65535, "u32": 2147483647, "u": "18446744"}
+	if out, want := srv(t, ctx, q, map[string]any{"in": in}), `{"data":{"echo":{"i8":-128,"i16":-32768,"u8":255,"u16":65535,"u32":2147483647,"u":"18446744"}}}`; out != want {
+		t.Errorf("echo:\n got %s\nwant %s", out, want)
+	}
+	if out, want := srv(t, ctx, `{ echo(in: {i8: null, i16: 1, u8: 2, u16: 3, u32: 4, u: "5"}) { i8 i16 u8 u16 u32 u } }`, nil), `{"data":{"echo":{"i8":null,"i16":1,"u8":2,"u16":3,"u32":4,"u":"5"}}}`; out != want {
+		t.Errorf("literal:\n got %s\nwant %s", out, want)
+	}
+	if out := srv(t, ctx, `{ big { u32 } }`, nil); !contains([]string{out}, `"path":["big","u32"]`) || contains([]string{out}, `"u32":`) {
+		t.Errorf("a uint32 over Int written: %s", out)
+	}
+	for name, v := range map[string]map[string]any{
+		"an int8 over":    {"i8": 128},
+		"an int16 under":  {"i16": -32769},
+		"a uint8 under":   {"u8": -1},
+		"a uint16 over":   {"u16": 65536},
+		"a uint32 over":   {"u32": 2147483648},
+		"a fraction":      {"u8": 1.5},
+		"a uint negative": {"u": "-1"},
+	} {
+		bad := maps.Clone(in)
+		maps.Copy(bad, v)
+		if out := srv(t, ctx, q, map[string]any{"in": bad}); !contains([]string{out}, `"code":"BAD_USER_INPUT"`) || contains([]string{out}, `"echo":{`) {
+			t.Errorf("%s refused: %s", name, out)
+		}
+	}
+}
+
 // TestPresenterPanic: a resolver's panic, which graphql-go recovers and
 // logs with its stack, is shown as an internal error and not logged again.
 func TestPresenterPanic(t *testing.T) {

@@ -86,6 +86,7 @@ type gqlEnum struct {
 	values []string // nil for a String
 	field  string   // the field it is the type of
 	model  string   // the Go type @goModel binds the enum to: the application's own enum type; "" for velox-gen's, which gqlgen binds by name
+	goType string   // velox-gen's Go enum type, which name may be an alias of; "" for the application's
 	shared bool     // another field of the same Go enum type declares the enum
 }
 
@@ -130,6 +131,9 @@ func connArgs(t *object) string {
 func build(m *plugin.Model, cfg Config) (*graph, error) {
 	if m == nil {
 		return nil, errors.New("no model")
+	}
+	if cfg.GraphQLGo && cfg.Package == "" {
+		return nil, errors.New("velox-graphql: engine=graphql-go binds every type to the generated package, and the request names none")
 	}
 	g := newGraph(m)
 	g.cfg = cfg

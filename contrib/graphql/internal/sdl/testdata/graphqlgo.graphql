@@ -1,0 +1,460 @@
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
+
+"""A time, as an RFC 3339 string."""
+scalar Time @goModel(model: "time.Time")
+
+"""A UUID, as a string."""
+scalar UUID @goModel(model: "github.com/google/uuid.UUID")
+
+"""Bytes, as a base64 string."""
+scalar Bytes @goModel(model: "[]byte")
+
+"""A JSON value."""
+scalar JSON @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.JSON")
+
+"""An unsigned 64-bit integer, as a decimal string."""
+scalar Uint64 @goModel(model: "uint64")
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.Cursor")
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+
+"""Information about a page of a connection."""
+type PageInfo @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo") {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.OrderDirection") {
+  ASC
+  DESC
+}
+
+# The root query.
+
+type Query {
+  """The connection to the Category nodes, filtered by where, ordered by the key, and paged by the other arguments."""
+  categories(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
+  """The connection to the Group nodes, ordered by orderBy and then the key, and paged by the other arguments."""
+  groups(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: GroupOrder): GroupConnection!
+  """The connection to the Post nodes, filtered by where, ordered by orderBy and then the key, and paged by the other arguments."""
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+  """The connection to the Account nodes, filtered by where, ordered by the key, and paged by the other arguments."""
+  accounts(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
+}
+
+# Category
+
+"""A category of posts, in a tree."""
+type Category @goModel(model: "example.com/app/gen.Category") {
+  id: ID!
+  title: String!
+  """The subcategories."""
+  children(after: Cursor, first: Int, before: Cursor, last: Int, where: CategoryWhereInput): CategoryConnection!
+  parent: Category
+}
+
+"""A connection to a list of Category."""
+type CategoryConnection @goModel(model: "example.com/app/gen.CategoryConnection") {
+  """The edges of this page."""
+  edges: [CategoryEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Category."""
+type CategoryEdge @goModel(model: "example.com/app/gen.CategoryEdge") {
+  """The Category at the end of the edge."""
+  node: Category!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Filters Category nodes: a node matches when every predicate given holds."""
+input CategoryWhereInput @goModel(model: "example.com/app/gen.CategoryWhereInput") {
+  not: CategoryWhereInput
+  and: [CategoryWhereInput!]
+  or: [CategoryWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  hasParent: Boolean
+  hasParentWith: [CategoryWhereInput!]
+}
+
+"""The input that creates a Category."""
+input CreateCategoryInput @goModel(model: "example.com/app/gen.CreateCategoryInput") {
+  title: String!
+  """The IDs of the Category nodes the edge children leads to."""
+  childIDs: [ID!]
+  """The ID of the Category the edge parent leads to."""
+  parentID: ID
+}
+
+"""The input that updates a Category: a field not given is left as it is."""
+input UpdateCategoryInput @goModel(model: "example.com/app/gen.UpdateCategoryInput") {
+  title: String
+  """The IDs of Category nodes to add to the edge children."""
+  addChildIDs: [ID!]
+  """The IDs of Category nodes to remove from the edge children; an ID the edge does not lead to is ignored."""
+  removeChildIDs: [ID!]
+  """Removes every Category from the edge children, before the IDs to remove and to add."""
+  clearChildren: Boolean
+  """The ID of the Category the edge parent leads to."""
+  parentID: ID
+  """Unlinks the edge parent: it leads to no Category afterwards."""
+  clearParent: Boolean
+}
+
+# Group
+
+type Group @goModel(model: "example.com/app/gen.Group") {
+  id: ID!
+  name: String!
+  """Who can see the group; a String, as its enum is skipped."""
+  visibility: String!
+  users(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
+}
+
+"""A connection to a list of Group."""
+type GroupConnection @goModel(model: "example.com/app/gen.GroupConnection") {
+  """The edges of this page."""
+  edges: [GroupEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Group."""
+type GroupEdge @goModel(model: "example.com/app/gen.GroupEdge") {
+  """The Group at the end of the edge."""
+  node: Group!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Group."""
+input GroupOrder @goModel(model: "example.com/app/gen.GroupOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: GroupOrderField!
+}
+
+"""The fields connections to Group can be ordered by."""
+enum GroupOrderField @goModel(model: "example.com/app/gen.GroupOrderField") {
+  NAME
+}
+
+# Like
+
+"""A user's like of a post. Its key is two columns, so it has no ID."""
+type Like @goModel(model: "example.com/app/gen.Like") {
+  weight: Int!
+  createdAt: Time!
+  user: Account
+  post: Post
+}
+
+"""A connection to a list of Like."""
+type LikeConnection @goModel(model: "example.com/app/gen.LikeConnection") {
+  """The edges of this page."""
+  edges: [LikeEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Like."""
+type LikeEdge @goModel(model: "example.com/app/gen.LikeEdge") {
+  """The Like at the end of the edge."""
+  node: Like!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""The input that creates a Like."""
+input CreateLikeInput @goModel(model: "example.com/app/gen.CreateLikeInput") {
+  weight: Int
+  createdAt: Time
+  """The ID of the Account the edge user leads to."""
+  userID: ID!
+  """The ID of the Post the edge post leads to."""
+  postID: ID!
+}
+
+# Post
+
+type Post @goModel(model: "example.com/app/gen.Post") {
+  id: ID!
+  title: String!
+  slug: String!
+  status: PostStatus!
+  publishedAt: Time
+  tags: [String!]!
+  views: Int!
+  rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
+  """The user who wrote the post."""
+  author: Account
+  likes: [Like!]!
+  """Posts this post links to; a join of Post to itself."""
+  related(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+  relatedBy(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+}
+
+enum PostStatus @goModel(model: "example.com/app/gen.PostStatus") {
+  DRAFT
+  IN_REVIEW
+  LIVE
+}
+
+"""A connection to a list of Post."""
+type PostConnection @goModel(model: "example.com/app/gen.PostConnection") {
+  """The edges of this page."""
+  edges: [PostEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Post."""
+type PostEdge @goModel(model: "example.com/app/gen.PostEdge") {
+  """The Post at the end of the edge."""
+  node: Post!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Post."""
+input PostOrder @goModel(model: "example.com/app/gen.PostOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: PostOrderField!
+}
+
+"""The fields connections to Post can be ordered by."""
+enum PostOrderField @goModel(model: "example.com/app/gen.PostOrderField") {
+  TITLE
+  VIEWS
+  """Orders through author: leaves out each Post without one, or whose author the reader may not see."""
+  AUTHOR_NAME
+}
+
+"""Filters Post nodes: a node matches when every predicate given holds."""
+input PostWhereInput @goModel(model: "example.com/app/gen.PostWhereInput") {
+  not: PostWhereInput
+  and: [PostWhereInput!]
+  or: [PostWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  authorID: ID
+  authorIDNEQ: ID
+  authorIDIn: [ID!]
+  authorIDNotIn: [ID!]
+  title: String
+  titleNEQ: String
+  titleIn: [String!]
+  titleNotIn: [String!]
+  titleContains: String
+  titleHasPrefix: String
+  titleHasSuffix: String
+  titleEqualFold: String
+  titleContainsFold: String
+  slug: String
+  slugNEQ: String
+  slugIn: [String!]
+  slugNotIn: [String!]
+  status: PostStatus
+  statusNEQ: PostStatus
+  statusIn: [PostStatus!]
+  statusNotIn: [PostStatus!]
+  publishedAt: Time
+  publishedAtNEQ: Time
+  publishedAtIn: [Time!]
+  publishedAtNotIn: [Time!]
+  publishedAtGT: Time
+  publishedAtGTE: Time
+  publishedAtLT: Time
+  publishedAtLTE: Time
+  publishedAtIsNil: Boolean
+  publishedAtNotNil: Boolean
+  hasAuthor: Boolean
+  hasAuthorWith: [AccountWhereInput!]
+}
+
+"""The input that creates a Post."""
+input CreatePostInput @goModel(model: "example.com/app/gen.CreatePostInput") {
+  title: String!
+  slug: String!
+  status: PostStatus
+  publishedAt: Time
+  tags: [String!]
+  rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
+  """The ID of the Account the edge author leads to."""
+  authorID: ID!
+  """The IDs of the Post nodes the edge related leads to."""
+  relatedIDs: [ID!]
+  """The IDs of the Post nodes the edge related_by leads to."""
+  relatedByIDs: [ID!]
+}
+
+"""The input that updates a Post: a field not given is left as it is."""
+input UpdatePostInput @goModel(model: "example.com/app/gen.UpdatePostInput") {
+  title: String
+  status: PostStatus
+  publishedAt: Time
+  """Sets the field published_at to NULL."""
+  clearPublishedAt: Boolean
+  tags: [String!]
+  views: Int
+  rating: Float
+  """Sets the field rating to NULL."""
+  clearRating: Boolean
+  """The ID of the Account the edge author leads to."""
+  authorID: ID
+  """The IDs of Post nodes to add to the edge related."""
+  addRelatedIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related; an ID the edge does not lead to is ignored."""
+  removeRelatedIDs: [ID!]
+  """Removes every Post from the edge related, before the IDs to remove and to add."""
+  clearRelated: Boolean
+  """The IDs of Post nodes to add to the edge related_by."""
+  addRelatedByIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related_by; an ID the edge does not lead to is ignored."""
+  removeRelatedByIDs: [ID!]
+  """Removes every Post from the edge related_by, before the IDs to remove and to add."""
+  clearRelatedBy: Boolean
+}
+
+# User, as the type Account
+
+"""
+User is a person who writes posts.
+Its GraphQL type is Account.
+"""
+type Account @goModel(model: "example.com/app/gen.User") {
+  id: ID!
+  createdAt: Time!
+  updatedAt: Time!
+  """The display name."""
+  name: String!
+  email: String!
+  role: UserRole!
+  nickname: String @deprecated(reason: "Use \"displayName\".")
+  bio: String
+  age: Int
+  score: Float!
+  externalID: UUID!
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean!
+  """The posts the user wrote."""
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  groups: [Group!]!
+  likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection!
+}
+
+enum UserRole @goModel(model: "example.com/app/gen.UserRole") {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+"""A connection to a list of Account."""
+type AccountConnection @goModel(model: "example.com/app/gen.AccountConnection") {
+  """The edges of this page."""
+  edges: [AccountEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Account."""
+type AccountEdge @goModel(model: "example.com/app/gen.AccountEdge") {
+  """The Account at the end of the edge."""
+  node: Account!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Filters Account nodes: a node matches when every predicate given holds."""
+input AccountWhereInput @goModel(model: "example.com/app/gen.AccountWhereInput") {
+  not: AccountWhereInput
+  and: [AccountWhereInput!]
+  or: [AccountWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  name: String
+  nameNEQ: String
+  nameIn: [String!]
+  nameNotIn: [String!]
+  nameContains: String
+  nameHasPrefix: String
+  nameHasSuffix: String
+  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+}
+
+"""The input that creates an Account."""
+input CreateAccountInput @goModel(model: "example.com/app/gen.CreateAccountInput") {
+  createdAt: Time
+  updatedAt: Time
+  """The display name."""
+  name: String!
+  email: String!
+  role: UserRole
+  nickname: String @deprecated(reason: "Use \"displayName\".")
+  bio: String
+  age: Int
+  passwordHash: String!
+  score: Float
+  externalID: UUID
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean
+  settings: JSON
+  """The IDs of the Group nodes the edge groups leads to."""
+  groupIDs: [ID!]
+  """The ID of the Account the edge best_friend leads to."""
+  bestFriendID: ID
+}
