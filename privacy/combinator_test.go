@@ -142,3 +142,23 @@ func TestWithTrace(t *testing.T) {
 		t.Errorf("untraced: %v, %v", err, got)
 	}
 }
+
+// TestNotKeepsConditions: Not over a rule that narrows inverts its decision
+// and keeps its condition, not negated, so the rows stay narrowed.
+func TestNotKeepsConditions(t *testing.T) {
+	var ran []string
+	f := &recFilter{}
+	if err := privacy.Not(step(&ran, "f", privacy.Deny)).EvalQuery(context.Background(), recQuery{f}); err != privacy.Allow { //nolint:errorlint // identity
+		t.Errorf("Not(Deny): %v, want Allow", err)
+	}
+	if f.n != 1 {
+		t.Errorf("Not over a filter rule: %d conditions, want its 1 kept", f.n)
+	}
+	m := recMutation{velox.OpUpdate, &recFilter{}}
+	if err := privacy.Not(step(&ran, "f", privacy.Skip)).EvalMutation(context.Background(), m); err != privacy.Skip { //nolint:errorlint // identity
+		t.Errorf("Not(Skip): %v, want Skip", err)
+	}
+	if m.f.n != 1 {
+		t.Errorf("Not over a filter rule on a write: %d conditions, want 1", m.f.n)
+	}
+}

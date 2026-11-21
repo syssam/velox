@@ -812,14 +812,19 @@ the groups count only rows the caller may see, which `Raw` does not give.
 policies too. A projection needs a `Limit` or `AllowUnbounded()`. It cannot be
 read with `All`, `Count` and the rest, nor combined with `Columns`, `With`,
 `Join`, `After` or a lock, and an aggregate of an aggregate is refused. A
-`Calc` may be a window function, such as `COUNT(*) OVER ()` beside a
-`GroupBy` and `Limit` for a page of groups and their total; it is a result
-column or an ordering, never a condition ([sql.md](sql.md#a-value-calc-and-selectraw)). A
 value that is not a column handle or a term of the entity (a string, another
 entity's handle) fails the statement before anything is sent. An ordering by
-an expression cannot be a keyset cursor. `UNION`, CTEs and window functions
-are not in the builder; use [raw SQL](#raw-sql) for those
+an expression cannot be a keyset cursor. `UNION` and CTEs are not in the
+builder; use [raw SQL](#raw-sql) for those
 ([ADR 0074](decisions/0074-projection.md), [ADR 0022](decisions/0022-group-by.md)).
+
+A `Calc` or `SelectRaw` may be a window function, such as `COUNT(*) OVER ()`
+beside a `GroupBy` and `Limit` for a page of groups and their total. It is
+a result column or an ordering, never a condition
+([sql.md](sql.md#a-value-calc-and-selectraw),
+[ADR 0101](decisions/0101-window-terms-soft-delete-options.md)).
+
+### Distinct
 
 `Distinct()` reads each distinct row once, `SELECT DISTINCT`, for a
 projection and for `velox.Values`:
@@ -1235,7 +1240,8 @@ statement for each entity and op, except where a relation loops back
 ([ADR 0091](decisions/0091-policy-cycles-and-text-keys.md)). The op is the
 statement's own for its own entity (`OpSelect`, `OpUpdate`, `OpDelete`, or
 `OpInsert` for an upsert's update branch; `OpUpdate` for a `Writable` read,
-as for an update) and `OpSelect` for each entity a
+as for an update; `OpDelete` for a soft delete, which sends an UPDATE) and
+`OpSelect` for each entity a
 `With`, `Join`, `Has` or `HasWith` reaches. It reaches what an interceptor
 reaches, and `WithoutPolicy` does not lift it.
 
@@ -1573,6 +1579,13 @@ db.Delete[veloxgen.Invoice]().
 
 The filter is an interceptor, so `WithoutPolicy` still hides deleted rows.
 A soft delete does not trigger `ON DELETE CASCADE`.
+
+A soft delete is a delete to a `WithFilter` filter, which is given
+`OpDelete`, and an update to the entity's policies. A `WithHooksAll` hook,
+which runs outside the mixin, sees it twice: as the delete (`OpDelete`),
+then as the mixin's update inside it (`OpUpdate`), whose
+`m.Value(softdelete.Column)` is a time. A restore's is nil. The entity's own
+delete hooks run inside the mixin and see only hard deletes.
 
 Two options change it. `Assign` sets more columns in the same UPDATE, read
 from the delete's context, such as who deleted the row; its error fails the

@@ -57,6 +57,17 @@ asked for both at run time.
   context, and that update would match 0 rows and fail silently. So a
   filter that narrows reads only returns `NoFilter()` when op is not
   `OpSelect`. The fail-closed rules do not depend on op.
+- A soft delete (`schema/mixin/softdelete`) sends an UPDATE, which
+  `engine.MarkSoftDelete` marks. `scope()` gives the filter `OpDelete` for
+  it, so a filter that restricts deletes is not bypassed by a soft delete,
+  which as `OpUpdate` it would be: that failed open. The entity's policies
+  still see `OpUpdate`, as the mixin's godoc says, and a restore stays
+  `OpUpdate`. A read-only filter is unaffected.
+- A `WithHooksAll` hook runs outside the mixin's hook, so a soft delete
+  reaches it twice: as the delete (`OpDelete`), then as the mixin's update
+  inside it (`OpUpdate`). That is how hooks compose with a mixin that
+  issues its own write, and it stays. `m.Op()` tells the two apart; the
+  inner update's `m.Value("deleted_at")` is a time, a restore's is nil.
 - The filter is given the statement's context. It runs at most once per
   statement for each entity and op, except where a relation loops back
   (0091). `RowCond`'s per-statement memo is keyed by entity and op, so a
@@ -72,15 +83,15 @@ asked for both at run time.
   join-row writes of `Rel.Add`, `Remove`, `Clear`), and not inside a `Has`
   through it, which reads it through its two sides. A filter that returns
   `NoFilter` for names it does not know keeps the interceptor rule that a
-  join entity is read through its sides; the godoc asks for it. An interceptor on a join entity
-  stays refused: a schema can be checked when it is built, a run-time
-  filter only when it runs.
+  join entity is read through its sides; the godoc asks for it. An
+  interceptor on a join entity stays refused: a schema can be checked when
+  it is built, a run-time filter only when it runs.
 - MySQL's `ON DUPLICATE KEY UPDATE` takes no condition. An upsert that
   updates is refused there with `ErrPolicyUpsert` when a filter returns a
-  condition for its entity under `OpInsert`, and runs when every filter returns `NoFilter`.
-  An interceptor or a Read/Write policy still refuses it without asking
-  the filters. A multi-row upsert on a DB with filters runs in a
-  transaction, as one on an entity with an interceptor does.
+  condition for its entity under `OpInsert`, and runs when every filter
+  returns `NoFilter`. An interceptor or a Read/Write policy still refuses
+  it without asking the filters. A multi-row upsert on a DB with filters
+  runs in a transaction, as one on an entity with an interceptor does.
 
 ## Consequences
 

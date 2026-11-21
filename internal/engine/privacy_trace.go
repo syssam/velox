@@ -10,10 +10,15 @@ import (
 // TraceEntry is one privacy rule's decision, which PrivacyTraceContext's
 // function is given.
 type TraceEntry struct {
-	Rule     string // the rule's Go type, e.g. "privacy.QueryRuleFunc"
-	Index    int    // its place in the list or combinator that ran it, from 0
-	Entity   string // the statement's entity, e.g. "gen.Doc"; "" for a statement velox did not build
-	Op       Op     // OpSelect for a read; OpInsert, OpUpdate or OpDelete for a write
+	Rule  string // the rule's Go type, e.g. "privacy.QueryRuleFunc"
+	Index int    // its place in the list or combinator that ran it, from 0
+	// Entity is the statement's entity as Filter and Mutation.Entity name
+	// it, e.g. "Doc"; "" for a statement velox did not build.
+	Entity string
+	// Op is the kind of the rule list that ran the rule: OpSelect for a
+	// Query rule, so also for one an update's Read policy runs; the write's
+	// OpInsert, OpUpdate or OpDelete for a Mutation rule.
+	Op       Op
 	Decision string // "allow", "deny" or "skip", as the list reads Err
 	Err      error  // what the rule returned: a Decision, nil or another error
 }
@@ -42,7 +47,7 @@ func EvalQueryRule(ctx context.Context, r QueryRule, q PrivacyQuery, i int) erro
 	if privacyTracing.Load() {
 		entity := ""
 		if pq, ok := q.(privacyQuery); ok {
-			entity = pq.f.in.Name
+			entity = EntityName(pq.f.in)
 		}
 		trace(ctx, r, i, entity, OpSelect, err)
 	}
@@ -56,7 +61,7 @@ func EvalMutationRule(ctx context.Context, r MutationRule, m PrivacyMutation, i 
 	if privacyTracing.Load() {
 		entity := ""
 		if pm, ok := m.(privacyMutation); ok {
-			entity = pm.in.Name
+			entity = EntityName(pm.in)
 		}
 		trace(ctx, r, i, entity, m.Op(), err)
 	}

@@ -34,10 +34,10 @@ import (
 //
 // AfterCommit returns an error, and queues nothing, for a nil fn, on a DB in
 // no transaction, on one whose transaction has ended or is ending, on a
-// nested Tx's DB once that Tx has returned, and on a UseTx DB, whose commit is your code's: velox never sees it. Call it from
-// the goroutine that runs the transaction's fn, as for tx's statements; a
-// call that races the end of the transaction returns an error and is never
-// lost.
+// nested Tx's DB once that Tx has returned, and on a UseTx DB, whose
+// commit is your code's: velox never sees it. Call it from the goroutine
+// that runs the transaction's fn, as for tx's statements; a call that races
+// the end of the transaction returns an error and is never lost.
 //
 // It is a function, not a method of DB: every method of DB is compiled into
 // each package of entities, used or not.

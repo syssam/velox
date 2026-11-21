@@ -45,8 +45,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   does not fire (ADR 0017).
 - `privacy.And`, `privacy.Or` and `privacy.Not` (ADR 0102), with veloxe's
   semantics, except that an `Or` none of whose rules allows returns a
-  failing rule's error rather than a later `Skip`; and `privacy.WithTrace(ctx, func(privacy.TraceEntry))`, which
-  reports each rule's decision with the rule, entity and op.
+  failing rule's error rather than a later `Skip`; and
+  `privacy.WithTrace(ctx, func(privacy.TraceEntry))`, which reports each
+  rule's decision with the rule, the entity (`"Doc"`) and the rule list's
+  op.
 - Window functions in `Calc` and `SelectRaw` (ADR 0101): `COUNT(*) OVER ()`,
   `ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)` and the like, as a result
   column or an ordering. Beside `GroupBy` and `Limit`, `COUNT(*) OVER ()`
@@ -59,12 +61,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   UPDATE; an error from it fails the delete. `Reads: softdelete.Unfiltered`
   leaves deleted rows visible to reads and updates, while a delete stays
   soft and marks live rows only. The zero `Mixin` behaves as before.
-- `velox.AfterCommit(tx, fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
-  on the transaction, to run in order once the outermost transaction has
-  committed, on the `Tx` context without its cancellation. A rollback, a
-  failed COMMIT or a retried attempt runs none; a nested `Tx` that rolls
-  back drops what was queued while it ran. Outside a transaction and on a
-  UseTx DB it returns an error.
+- `velox.AfterCommit(tx, fn)` (ADR 0100), as veloxe's `tx.OnCommit`:
+  queues `fn` on the transaction, to run in order once the outermost
+  transaction has committed, on the `Tx` context without its cancellation.
+  A rollback, a failed COMMIT or a retried attempt runs none; a nested `Tx`
+  that rolls back drops what was queued while it ran. Outside a transaction
+  and on a `UseTx` DB it returns an error.
 - `velox.Values(ctx, q, I.Number.Key())` and `velox.IDs[int64](ctx, q)`
   (ADR 0100) read one column, or the key, of the rows `q` reads, under the
   Read policy, the scope, the interceptors, `WithFilter` and the Limit rule.
@@ -82,7 +84,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   entity's writes, before the schema's and `WithHooks[E]`'s, and
   `Mutation.Entity()` names the entity. `velox.WithFilter(f)` adds a row
   filter, `func(ctx, entity string, op velox.Op) (velox.Predicate, error)`,
-  given the statement's op (`OpSelect` for related entities), with an
+  given the statement's op (`OpSelect` for related entities, `OpDelete` for
+  a soft delete), with an
   interceptor's reach: reads, writes, loads, joins, `Has`/`HasWith`, counts
   and aggregates. `WithoutPolicy` does not lift it; an error, the zero
   `Predicate` or an unknown column fails the statement, and

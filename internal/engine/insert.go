@@ -492,10 +492,10 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 // ConditionedUpsert predicts, before the scope runs, whether the update
 // branch of an InsertAll of n rows of entity in may get a condition: its
 // interceptors', a WithFilter filter's, its policy's Read or Write, or a
-// Rewrite hook's. A row those conditions hide fails the upsert once the statement has written the
-// others, and a returned row that matches no entity fails it too
-// (placeUpserted), so such an InsertAll of several rows runs in a
-// transaction, which the failure rolls back. The scope conditions an
+// Rewrite hook's. A row those conditions hide fails the upsert once the
+// statement has written the others, and a returned row that matches no
+// entity fails it too (placeUpserted), so such an InsertAll of several rows
+// runs in a transaction, which the failure rolls back. The scope conditions an
 // upsert that updates, on any dialect but MySQL (which refuses it), of an
 // entity with a Read or Write policy, unless WithoutPolicy; a DB with a
 // Rewrite hook may condition any, which matters when the rows read values

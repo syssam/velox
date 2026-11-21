@@ -464,8 +464,13 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	pol := InfoPolicy(in)
 	if sc.filtered(in) || (sc.conditions(pol) && sc.PolicyOn()) {
 		fop := st.Op
-		if st.Writable {
+		switch {
+		case st.Writable:
 			fop = OpUpdate // a Writable SELECT reads the rows an update changes
+		case st.softDelete:
+			// A soft delete is a delete to a filter, so that one restricting
+			// deletes is not bypassed; its policy still sees an update.
+			fop = OpDelete
 		}
 		if read, err = sc.RowCond(in, st.Op, fop); err != nil {
 			return err

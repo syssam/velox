@@ -28,6 +28,13 @@
 //   - The entity's own delete hooks see only hard deletes, as the mixin's
 //     hook runs before them and does not call them. A soft delete reaches
 //     its update hooks.
+//   - A velox.WithHooksAll hook runs before the mixin's, so it sees a soft
+//     delete twice: as the delete (OpDelete), then as the mixin's update
+//     inside it (OpUpdate). That update's m.Value(Column) is a time; a
+//     restore's is nil.
+//   - A velox.WithFilter filter is given OpDelete for the soft delete's
+//     update, so one that restricts deletes restricts it too. The entity's
+//     policies see an update.
 //   - SQL(ctx) of a soft delete fails with velox.ErrDryRun: there is no
 //     DELETE to render.
 //   - ON DELETE CASCADE does not fire. A child row stays; a hook that wants

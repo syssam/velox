@@ -155,7 +155,8 @@ func TestRecordHardDelete(t *testing.T) {
 // new ones it stores (owner and invoice_id, which the update branch leaves
 // alone, keep their stored values, not the ones sent), and the new row as
 // an insert with the key the database gave it. An upsert that changes
-// nothing, and one DoNothing keeps, report nothing.
+// nothing, one DoNothing keeps and one Ignore keeps (every Update column's
+// setter skipped) report nothing.
 func TestRecordUpsert(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		var rec velox.Recorder
@@ -196,8 +197,16 @@ func TestRecordUpsert(t *testing.T) {
 		if err := rdb.Insert(&kept).OnConflict(Tk.OrgID, Tk.Title).DoNothing().Exec(zed); err != nil {
 			t.Fatal(err)
 		}
+		// Every Update column skipped: Ignore's no-op update keeps the row.
+		ignored := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "A2", Done: false} // stored: true
+		if err := rdb.Insert(&ignored).Set(Tk.Done.SetPtr(nil)).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(zed); err != nil {
+			t.Fatal(err)
+		}
+		if ignored.ID == 0 {
+			t.Error("Ignore read no key back")
+		}
 		if rec.Len() != 0 {
-			t.Errorf("an unchanged and a kept row were reported: %+v", slices.Collect(rec.All()))
+			t.Errorf("an unchanged, a kept and an ignored row were reported: %+v", slices.Collect(rec.All()))
 		}
 		back := testmodel.Ticket{OrgID: 1, Owner: "zed", Title: "A1", Done: false}
 		if err := rdb.Insert(&back).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(zed); err != nil {

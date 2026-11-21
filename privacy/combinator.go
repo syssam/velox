@@ -59,6 +59,10 @@ func Or(rules ...QueryMutationRule) QueryMutationRule { return orRule(rules) }
 // A wrapped Deny stays a denial: a rule reports a refusal to decide, such
 // as no viewer in the context, that way, and inverting it would allow. A
 // rule meant to be inverted returns the bare Deny for its "no".
+//
+// Not inverts only decisions. The conditions a rule adds with its Filter's
+// Where, as a FilterFunc does, are kept as they are, not negated: they
+// narrow the rows, so Not over such a rule fails closed.
 func Not(rule QueryMutationRule) QueryMutationRule { return notRule{rule} }
 
 type andRule []QueryMutationRule
@@ -156,9 +160,10 @@ func invert(err error) error {
 
 // TraceEntry is one rule's decision, which WithTrace's function is given:
 // the rule's Go type and its place in the list or combinator that ran it,
-// the statement's entity and kind (velox.OpSelect for a read), the
-// decision as the list reads it ("allow", "deny" or "skip") and what the
-// rule returned.
+// the statement's entity as velox.Mutation.Entity names it ("Doc"), the
+// kind of the rule's list (velox.OpSelect for a Query rule, even one an
+// update's Read policy runs), the decision as the list reads it ("allow",
+// "deny" or "skip") and what the rule returned.
 type TraceEntry = engine.TraceEntry
 
 // WithTrace returns ctx carrying fn, which each privacy rule run under it

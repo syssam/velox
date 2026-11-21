@@ -1278,6 +1278,58 @@ type Result struct { Written []string Removed []string Stale []string Warnings [
 var ErrInterrupted
 var ErrStale
 
+package privacy
+Decision.Error() string
+MutationPolicy is []MutationRule
+MutationPolicy.EvalMutation(ctx context.Context, m PrivacyMutation) error
+MutationRule is interface { EvalMutation(ctx context.Context, m PrivacyMutation) error }
+QueryPolicy is []QueryRule
+QueryPolicy.EvalQuery(ctx context.Context, q PrivacyQuery) error
+QueryRule is interface { EvalQuery(ctx context.Context, q PrivacyQuery) error }
+TraceEntry.Decision string
+TraceEntry.Entity string
+TraceEntry.Err error
+TraceEntry.Index int
+TraceEntry.Op Op
+TraceEntry.Rule string
+func (f FilterFunc) EvalMutation(ctx context.Context, m Mutation) error
+func (f FilterFunc) EvalQuery(ctx context.Context, q Query) error
+func (f MutationRuleFunc) EvalMutation(ctx context.Context, m Mutation) error
+func (f QueryRuleFunc) EvalQuery(ctx context.Context, q Query) error
+func Allowf(format string, a ...any) error
+func AlwaysAllowRule() QueryMutationRule
+func AlwaysDenyRule() QueryMutationRule
+func And(rules ...QueryMutationRule) QueryMutationRule
+func ContextQueryMutationRule(eval func(context.Context) error) QueryMutationRule
+func DecisionContext(parent context.Context, decision error) context.Context
+func DecisionFromContext(ctx context.Context) (error, bool)
+func DenyMutationOperationRule(op velox.Op) MutationRule
+func Denyf(format string, a ...any) error
+func IsDecision(err error) bool
+func Not(rule QueryMutationRule) QueryMutationRule
+func OnMutationOperation(rule MutationRule, op velox.Op) MutationRule
+func Or(rules ...QueryMutationRule) QueryMutationRule
+func Skipf(format string, a ...any) error
+func WithTrace(ctx context.Context, fn func(TraceEntry)) context.Context
+type Decision = engine.Decision
+type Filter = engine.PrivacyFilter
+type FilterFunc func(context.Context, Filter) error
+type Filterable interface { Filter() Filter }
+type Mutation = engine.PrivacyMutation
+type MutationPolicy = engine.MutationPolicy
+type MutationRule = engine.MutationRule
+type MutationRuleFunc func(context.Context, Mutation) error
+type Policy = velox.Policy
+type Query = engine.PrivacyQuery
+type QueryMutationRule interface { QueryRule MutationRule }
+type QueryPolicy = engine.QueryPolicy
+type QueryRule = engine.QueryRule
+type QueryRuleFunc func(context.Context, Query) error
+type TraceEntry = engine.TraceEntry
+var Allow
+var Deny
+var Skip
+
 package scope
 func (k *Key[V]) From(ctx context.Context) (V, bool)
 func (k *Key[V]) Match(ctx context.Context, v any) error
@@ -1291,6 +1343,121 @@ var ErrNoScope
 package scope/scopetest
 func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E) (err error)
 func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E)
+
+package untyped
+PredOp is uint8
+Table.Assign(col int, v any) (Assignment, error)
+Table.Convert(col int, v any) (any, error)
+Table.Err() error
+Table.Field(row any, col int) any
+Table.Fill(owner any, edge int, target Table, row any) error
+Table.Filled(owner any, edge int, target Table) (any, bool)
+Table.Has(edge int, target Table, ps ...Predicate) Predicate
+Table.HasRowFilter() bool
+Table.Info() *EntityInfo
+Table.New() any
+Table.NewRows(n int) TableRows
+Table.Of(edge int, target Table, owners ...any) Predicate
+Table.Pred(col int, op PredOp, v any) Predicate
+Table.SetField(row any, col int, v any) error
+Table.Validate(row any, cols ...int) error
+Table.ValidateSet(set ...Assignment) error
+Table.Value(row any, col int) any
+TableDelete.All() TableDelete
+TableDelete.Exec(ctx context.Context) (int64, error)
+TableDelete.SQL(ctx context.Context) (string, []any, error)
+TableDelete.Where(ps ...Predicate) TableDelete
+TableInsert.DoNothing() TableInsert
+TableInsert.Exec(ctx context.Context) error
+TableInsert.OnConflict(cols ...int) TableInsert
+TableInsert.SQL(ctx context.Context) (string, []any, error)
+TableInsert.Update(cols ...int) TableInsert
+TableQuery.After(row any) TableQuery
+TableQuery.All(ctx context.Context) (TableRows, error)
+TableQuery.AllowUnbounded() TableQuery
+TableQuery.Columns(cs ...int) TableQuery
+TableQuery.Count(ctx context.Context) (int64, error)
+TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)
+TableQuery.Exists(ctx context.Context) (bool, error)
+TableQuery.First(ctx context.Context) (any, error)
+TableQuery.ForShare() TableQuery
+TableQuery.ForUpdate() TableQuery
+TableQuery.GroupBy(ts ...Term) TableQuery
+TableQuery.Having(ps ...Predicate) TableQuery
+TableQuery.Join(edge int, target Table) TableQuery
+TableQuery.LeftJoin(edge int, target Table) TableQuery
+TableQuery.Limit(n int) TableQuery
+TableQuery.LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]TableRows, error)
+TableQuery.MaxRows(n int) TableQuery
+TableQuery.Offset(n int) TableQuery
+TableQuery.One(ctx context.Context) (any, error)
+TableQuery.OrderBy(os ...OrderTerm) TableQuery
+TableQuery.Ordered() bool
+TableQuery.Rows(ctx context.Context) RawRows
+TableQuery.SQL(ctx context.Context) (string, []any, error)
+TableQuery.Select(ts ...Term) TableQuery
+TableQuery.Selects(cs ...int) bool
+TableQuery.Table() Table
+TableQuery.Where(ps ...Predicate) TableQuery
+TableQuery.Writable() TableQuery
+TableUpdate.All() TableUpdate
+TableUpdate.Assign(as ...Assignment) TableUpdate
+TableUpdate.Exec(ctx context.Context) (int64, error)
+TableUpdate.KeepDefaults(cols ...int) TableUpdate
+TableUpdate.SQL(ctx context.Context) (string, []any, error)
+TableUpdate.Set(col int, v any) TableUpdate
+TableUpdate.SetNull(col int) TableUpdate
+TableUpdate.Where(ps ...Predicate) TableUpdate
+const PredContains
+const PredContainsFold
+const PredEQ
+const PredEqualFold
+const PredGT
+const PredGTE
+const PredHasPrefix
+const PredHasSuffix
+const PredIn
+const PredIsNull
+const PredJSONEmpty
+const PredJSONHas
+const PredLT
+const PredLTE
+const PredNEQ
+const PredNotIn
+const PredNotNull
+func And(ps ...velox.Predicate) velox.Predicate
+func Assignments[E any](set []velox.Setter[E]) []velox.Assignment
+func Avg(t Term) Term
+func Calc(text string, args ...any) Term
+func Col(col int) Term
+func Count(t Term) Term
+func CountAll() Term
+func CountDistinct(t Term) Term
+func Delete(db *velox.DB, t Table) TableDelete
+func Expr(text string, args ...any) velox.Predicate
+func FromQuery[E any](q velox.Query[E]) TableQuery
+func Insert(db *velox.DB, t Table, row any) TableInsert
+func InsertRows(db *velox.DB, t Table, rows Rows) TableInsert
+func Max(t Term) Term
+func Min(t Term) Term
+func MutationTable(m *velox.Mutation) Table
+func Not(p velox.Predicate) velox.Predicate
+func Or(ps ...velox.Predicate) velox.Predicate
+func OrderByTerm(t Term, desc bool) velox.OrderTerm
+func Query(db *velox.DB, t Table) TableQuery
+func RowsOf[E any](r Rows) []E
+func SetExpr(col int, text string, args ...any) velox.Assignment
+func Sum(t Term) Term
+func TableOf[E any]() Table
+func Update(db *velox.DB, t Table) TableUpdate
+type PredOp = engine.PredOp
+type Rows = engine.TableRows
+type Table = engine.Table
+type TableDelete = engine.TableDelete
+type TableInsert = engine.TableInsert
+type TableQuery = engine.TableQuery
+type TableUpdate = engine.TableUpdate
+type Term = engine.Term
 
 package contrib/graphql
 const MutationCreate MutationKind

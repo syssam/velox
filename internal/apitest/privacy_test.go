@@ -270,8 +270,8 @@ func TestPrivacyWithTrace(t *testing.T) {
 	}
 	pvTitles(trace(pvAs("admin", "ann")), t, db)
 	want := []entry{
-		{"privacy.contextRule", "apitest.pvDoc", "skip", velox.OpSelect},
-		{"privacy.FilterFunc", "apitest.pvDoc", "allow", velox.OpSelect},
+		{"privacy.contextRule", "pvDoc", "skip", velox.OpSelect},
+		{"privacy.FilterFunc", "pvDoc", "allow", velox.OpSelect},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("read\n got %v\nwant %v", got, want)
@@ -280,9 +280,9 @@ func TestPrivacyWithTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	want = []entry{
-		{"privacy.MutationRuleFunc", "apitest.pvDoc", "skip", velox.OpUpdate}, // OnMutationOperation's
-		{"privacy.MutationRuleFunc", "apitest.pvDoc", "skip", velox.OpUpdate},
-		{"privacy.FilterFunc", "apitest.pvDoc", "skip", velox.OpUpdate},
+		{"privacy.MutationRuleFunc", "pvDoc", "skip", velox.OpUpdate}, // OnMutationOperation's
+		{"privacy.MutationRuleFunc", "pvDoc", "skip", velox.OpUpdate},
+		{"privacy.FilterFunc", "pvDoc", "skip", velox.OpUpdate},
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("update\n got %v\nwant %v", got, want)

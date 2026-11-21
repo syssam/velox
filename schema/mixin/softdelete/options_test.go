@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -240,5 +241,36 @@ func TestUnfiltered(t *testing.T) {
 	}
 	if _, del := by(t, raw, "u_docs", 1); del {
 		t.Error("row 1 still deleted after the restore")
+	}
+}
+
+// TestRecordAssign: through a recording handle, a soft delete's Change, a
+// delete marked Soft, holds the row after the update, whose Assign columns
+// differ from the row before it beside deleted_at. Change.Diff is nil for a
+// delete, so velox.Diff compares the two rows.
+func TestRecordAssign(t *testing.T) {
+	db, _, _ := openDocs(t)
+	var rec velox.Recorder
+	if n, err := db.Record(&rec).Delete[adoc]().Where(aID.EQ(1)).Exec(asUser(7)); err != nil || n != 1 {
+		t.Fatalf("Delete: %d, %v", n, err)
+	}
+	cs := slices.Collect(rec.All())
+	if len(cs) != 1 || cs[0].Op != velox.OpDelete || !cs[0].Soft || cs[0].Key != int64(1) {
+		t.Fatalf("Changes %+v, want one soft delete of row 1", cs)
+	}
+	old, cur, ok := velox.RowsOf[adoc](cs[0])
+	if !ok || old == nil || cur == nil {
+		t.Fatalf("rows %v, %v, %v; want both", old, cur, ok)
+	}
+	var names []string
+	for _, f := range velox.Diff(old, cur) {
+		names = append(names, f.Name)
+		if f.Name == "deleted_by" && (f.Old != nil || f.New != int64(7)) {
+			t.Errorf("deleted_by: %v -> %v, want nil -> 7", f.Old, f.New)
+		}
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"deleted_at", "deleted_by"}) {
+		t.Errorf("changed fields %v, want deleted_at and deleted_by", names)
 	}
 }

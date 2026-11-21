@@ -48,8 +48,9 @@ func (l *sqlLog) last() string {
 
 // open returns a SQLite DB with owners 1 (pinned doc 2) and 2 (pinned doc
 // 4), and docs, all live: (id: org, owner, title) 1: 1, 1, a; 2: 1, 1, b;
-// 3: 1, 2, c; 4: 2, 2, d. raw reads the tables without velox.
-func open(t *testing.T) (db *velox.DB, raw *sql.DB, log *sqlLog) {
+// 3: 1, 2, c; 4: 2, 2, d. raw reads the tables without velox. opts are
+// the DB's options after its WithAround.
+func open(t *testing.T, opts ...velox.Option) (db *velox.DB, raw *sql.DB, log *sqlLog) {
 	t.Helper()
 	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "soft.db"))
 	if err != nil {
@@ -66,7 +67,7 @@ func open(t *testing.T) (db *velox.DB, raw *sql.DB, log *sqlLog) {
 		}
 	}
 	log = &sqlLog{}
-	return velox.Open(velox.SQLite, raw, velox.WithAround(log.around)), raw, log
+	return velox.Open(velox.SQLite, raw, append([]velox.Option{velox.WithAround(log.around)}, opts...)...), raw, log
 }
 
 // org returns a context in organization id.

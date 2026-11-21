@@ -72,7 +72,10 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 //
 // op is the statement's own for its own entity: OpSelect for a read,
 // OpUpdate for an update, a Save or a Writable read, OpDelete for a delete,
-// and OpInsert for the update branch of an upsert. It is OpSelect for every
+// and OpInsert for the update branch of an upsert. A soft delete (package
+// softdelete) is OpDelete, though it sends an UPDATE, so a filter that
+// restricts deletes restricts it too; a restore is OpUpdate. The entity's
+// policies still see the soft delete as an update. It is OpSelect for every
 // entity the statement reaches: by a With load, a Join, Has, HasWith or a
 // subquery. A filter that should narrow reads only, as ent's interceptors
 // do, returns NoFilter() when op is not OpSelect.

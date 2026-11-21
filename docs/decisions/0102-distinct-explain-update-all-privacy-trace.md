@@ -86,9 +86,11 @@ and veloxe's `privacy.And`, `Or`, `Not` and rule trace (#104, #106).
   - Each rule of a `Query` or `Mutation` list and each rule a combinator
     runs is reported after it returns, inner rules before the combinator
     or nested list.
-  - An entry holds the rule's Go type, its index in its list, the entity,
-    the op (`OpSelect` for a read), "allow"/"deny"/"skip" and the raw
-    result.
+  - An entry holds the rule's Go type, its index in its list, the entity
+    by the bare name `Filter` and `Mutation.Entity` use (`"Doc"`), the op,
+    "allow"/"deny"/"skip" and the raw result. The op is the kind of the
+    rule's list: `OpSelect` for a Query rule, even one an update's Read
+    policy runs, and the write's op for a Mutation rule.
   - `DecisionContext` replaces the rules, so nothing is reported under it.
   - The entry type is `TraceEntry`, veloxe's name, since `Decision` is
     already the verdict type.
