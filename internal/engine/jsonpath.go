@@ -96,7 +96,7 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.colRef(i)
 			for _, k := range p.Keys {
 				w.str(", ")
-				w.arg(k)
+				w.argOf(i, k)
 			}
 			w.str(")")
 		}
@@ -127,7 +127,7 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str("JSON_EXTRACT(")
 			w.colRef(i)
 			w.str(", ")
-			w.arg(p.quotedPath())
+			w.argOf(i, p.quotedPath())
 			w.str(")")
 		}
 		switch p.Kind {
@@ -157,7 +157,7 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str(fn + "(")
 			w.colRef(i)
 			w.str(", ")
-			w.arg(p.quotedPath())
+			w.argOf(i, p.quotedPath())
 			w.str(")")
 		}
 		switch p.Kind {

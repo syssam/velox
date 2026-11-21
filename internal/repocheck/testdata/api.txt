@@ -425,6 +425,7 @@ func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E]
+func (db *DB) AfterCommit(fn func(context.Context)) error
 func (db *DB) Close() error
 func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E]
 func (db *DB) Dialect() Dialect
@@ -599,6 +600,7 @@ func FieldNotNull(name string) Predicate
 func GoType(c ColumnInfo) reflect.Type
 func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
+func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error)
 func IsConstraintError(err error) bool
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
@@ -606,6 +608,7 @@ func IsNotSingular(err error) bool
 func IsValidationError(err error) bool
 func LinkEntity[T any, PT Entity[T]](name, table string) EntityLink
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
+func LogArgs() LogOption
 func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func MaxNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
@@ -643,6 +646,7 @@ func TxTimeout(d time.Duration) TxOption
 func UseTx(db *DB, tx *sql.Tx) (*DB, error)
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
+func Values[E, V any](ctx context.Context, q Query[E], key GroupKey[E, V]) ([]V, error)
 func WithAround(a Around) Option
 func WithCallerSkip(pkgPath ...string) Option
 func WithCallers() Option
@@ -650,6 +654,7 @@ func WithDeadlines(d Deadlines) Option
 func WithFilter(f Filter) Option
 func WithHooksAll(hs ...Hook) Option
 func WithHooks[E any, PE Entity[E]](hs ...Hook) Option
+func WithLog(l *slog.Logger, opts ...LogOption) Option
 func WithMaxLimit(n int) Option
 func WithMaxRows(n int) Option
 func WithPinWindow(d time.Duration) Option
@@ -712,6 +717,7 @@ type JoinClause = engine.JoinClause
 type Lazy[T any] interface{ *T }
 type Lock = veloxtype.Lock
 type LockWait = veloxtype.LockWait
+type LogOption = engine.LogOption
 type Many[T any] struct { }
 type MetaOnce[E any] struct { }
 type Meta[E any] struct { }

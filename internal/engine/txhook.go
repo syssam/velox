@@ -39,36 +39,43 @@ func (db *DB) newTxInfo(o txOptions, sh *shardConn) *TxInfo {
 	return info
 }
 
-// txAround runs attempts through db.Cfg.txArounds, the first given outermost.
-func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.Context) error) error {
-	called, returned := false, false
-	var last error // what attempts returned
+// txAround runs attempts through db.Cfg.txArounds, the first given outermost,
+// and returns the AfterCommit functions of the attempt that committed, which
+// attempts sets through its second argument; it returns them with an error
+// too, as the transaction committed whatever a hook then returned. Its state
+// is one struct, so that the closure costs one allocation for all of it.
+func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.Context, *[]func(context.Context)) error) ([]func(context.Context), error) {
+	var s struct {
+		called, returned bool
+		last             error // what attempts returned
+		after            []func(context.Context)
+	}
 	next := func(ctx context.Context) error {
-		if called {
+		if s.called {
 			return errors.New("velox: transaction: a TxAround hook called next twice")
 		}
-		called = true
-		last = attempts(ctx)
-		returned = true
-		return last
+		s.called = true
+		s.last = attempts(ctx, &s.after)
+		s.returned = true
+		return s.last
 	}
 	for _, v := range slices.Backward(db.Cfg.TxArounds) {
 		h, inner := v, next
 		next = func(ctx context.Context) error { return h(ctx, info, inner) }
 	}
 	if err := next(ctx); err != nil {
-		return err
+		return s.after, err
 	}
-	if !called {
-		return errors.New("velox: transaction: a TxAround hook returned without calling next")
+	if !s.called {
+		return nil, errors.New("velox: transaction: a TxAround hook returned without calling next")
 	}
-	if !returned {
+	if !s.returned {
 		// attempts panicked and a hook recovered the panic: velox rolled the
 		// transaction back, so Tx must not report success.
-		return errors.New("velox: transaction: a TxAround hook recovered a panic from next")
+		return nil, errors.New("velox: transaction: a TxAround hook recovered a panic from next")
 	}
-	if last != nil {
-		return errors.New("velox: transaction: a TxAround hook discarded the error from next")
+	if s.last != nil {
+		return nil, errors.New("velox: transaction: a TxAround hook discarded the error from next")
 	}
-	return nil
+	return s.after, nil
 }

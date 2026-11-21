@@ -506,6 +506,22 @@ for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).AllowUnboun
 `Count` and `Exists` need no `Limit`, as they return one value. A DB can also
 cap every read with `velox.WithMaxLimit` and `velox.WithMaxRows`.
 
+### Reading one column: Values and IDs
+
+`velox.Values` reads one column of the rows a query reads, and `velox.IDs`
+reads their primary keys. They are functions, as `velox.Sum` is. The column
+is a handle's `Key()`, as for `CountBy`, so the result's type is the
+column's: a pointer for a nullable column, nil for NULL. `IDs` takes the
+key's type, which `E` does not say:
+
+```go
+numbers, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100), I.Number.Key())
+ids, err := velox.IDs[int64](ctx, db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).AllowUnbounded())
+```
+
+They read as `All` does: the policies, the scope, the filters, `Limit`,
+`Offset` and the order apply, and they need a `Limit` or `AllowUnbounded`.
+
 ### Choosing columns
 
 `Columns(I.ID, I.Number)` reads only the named columns, and `Omit(...)` reads
@@ -1005,6 +1021,30 @@ is a savepoint. It retries nothing, takes no option, and runs no `TxAround`
 hook, which wraps a `Tx` call that this is not. `UseTx` refuses a sharded DB,
 a DB that is in a transaction already, and `veloxpgx`, whose connection runs
 on pgx's transactions ([ADR 0066](decisions/0066-use-tx.md)).
+
+### After the commit
+
+`tx.AfterCommit(fn)` queues work that must not happen for a transaction
+that rolls back, such as publishing an event:
+
+```go
+err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+	if err := tx.Insert(&order).Exec(ctx); err != nil {
+		return err
+	}
+	return tx.AfterCommit(func(ctx context.Context) { publish(ctx, order.ID) })
+})
+```
+
+The functions run in the order queued, once the outermost transaction has
+committed and before `Tx` returns, on the `Tx` context without its
+cancellation. A rollback runs none. A nested `tx.Tx` that rolls back drops
+the ones queued while it ran. A hook inside `db.Tx` queues through
+`m.DB().AfterCommit`.
+Outside a transaction, and on a `UseTx` DB, whose commit velox never sees,
+`AfterCommit` returns an error. One function's panic does not stop the
+others: `Tx` panics again once all have run
+([ADR 0100](decisions/0100-after-commit-values-and-log.md)).
 
 See the [tx example](../examples/tx).
 
@@ -1639,6 +1679,12 @@ in your code, and metrics. See the [otel example](../examples/otel).
 For something lighter, `velox.WithAround` runs your function around every
 statement, and `Query.SQL(ctx)` shows what a query would send, policy
 conditions included.
+
+`velox.WithLog(slog.Default(), velox.LogArgs())` logs every statement at
+Debug: its SQL, duration, rows and error. With `LogArgs`, it logs the
+arguments too. A Sensitive column's argument is always `"<sensitive>"`.
+An argument velox cannot tie to a column, such as an `Expr`'s or raw
+SQL's, is `"<hidden>"`.
 
 ## GraphQL
 

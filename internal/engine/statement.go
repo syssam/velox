@@ -25,7 +25,8 @@ type ConflictClause struct {
 	// own value, as ent's Ignore does: the conflicting row is returned, and
 	// its key read back, as after an update, and the branch gets the
 	// policy's conditions as one does. velox sets it on an upsert whose
-	// every Update column had its setter skipped (a SetPtr of nil).
+	// every Update column had its setter skipped (a SetPtr of nil). A
+	// Rewrite or Around hook that rebuilds the clause must copy Ignore.
 	Ignore bool
 }
 

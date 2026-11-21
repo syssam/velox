@@ -35,6 +35,12 @@ type writer struct {
 	// encode, or a condition comparing a JSON column. The text and
 	// arguments are then not used.
 	err error
+	// track says the writer records in shown, for each argument, what a log
+	// may show of it (ShownArgs); next is the next argument's, which argOf,
+	// plainArg and colArg set and arg resets to ArgHidden.
+	track bool
+	shown []ArgShow
+	next  ArgShow
 }
 
 func (w *writer) fail(err error) {
@@ -82,6 +88,10 @@ func (w *writer) colRef(i int32) {
 
 func (w *writer) arg(v any) {
 	w.args = append(w.args, v)
+	if w.track {
+		w.shown = append(w.shown, w.next)
+		w.next = ArgHidden
+	}
 	if !w.argsOnly {
 		placeholder(w.d, &w.b, len(w.args))
 	}
@@ -106,6 +116,25 @@ func (w *writer) colArg(col int, v any) {
 		if bs, ok := b.([]byte); ok && textArg(w.d, bs) {
 			v = string(bs)
 		}
+	}
+	if w.track {
+		w.next = showOf(&w.in.Columns[col])
+	}
+	w.arg(v)
+}
+
+// argOf binds v, a value compared with column col of the current entity.
+func (w *writer) argOf(col int32, v any) {
+	if w.track {
+		w.next = showOf(&w.in.Columns[col])
+	}
+	w.arg(v)
+}
+
+// plainArg binds v, a value velox computed, such as a limit.
+func (w *writer) plainArg(v any) {
+	if w.track {
+		w.next = ArgShown
 	}
 	w.arg(v)
 }
@@ -400,7 +429,7 @@ func (w *writer) selectTail(st *Statement) {
 		if w.d == SQLite {
 			w.str(strconv.Itoa(st.Limit))
 		} else {
-			w.arg(st.Limit)
+			w.plainArg(st.Limit)
 		}
 	}
 	if st.Offset > 0 {
@@ -409,7 +438,7 @@ func (w *writer) selectTail(st *Statement) {
 			w.str(noLimit(w.d))
 		}
 		w.str(" OFFSET ")
-		w.arg(st.Offset)
+		w.plainArg(st.Offset)
 	}
 	if st.Lock != 0 {
 		w.str(lockSQL[st.Lock])
@@ -491,7 +520,7 @@ func (w *writer) eachSelect(st *Statement) {
 		w.str(" WHERE ")
 		w.ident(eachRank)
 		w.str(" <= ")
-		w.arg(c.Limit)
+		w.plainArg(c.Limit)
 		w.str(" ORDER BY ")
 		w.ident(eachRank)
 	} else {
@@ -614,6 +643,15 @@ func (w *writer) eachKeys(c *EachClause, key func()) {
 		if i > 0 {
 			w.str(", ")
 		}
+		if w.track {
+			// The owners' keys are values of the join entity's owner column, or
+			// of the statement's entity's column c.Column.
+			if c.Join != nil {
+				w.next = showOf(&c.Join.Columns[c.JoinOwner])
+			} else {
+				w.next = showOf(&w.in.Columns[c.Column])
+			}
+		}
 		w.arg(k)
 	}
 	w.str(")")
@@ -692,7 +730,7 @@ func (w *writer) pred(n Node) {
 	case OpEQ, OpNEQ, OpGT, OpGTE, OpLT, OpLTE:
 		w.predCol(n.Col)
 		w.str(cmpText[n.Op])
-		w.arg(n.V)
+		w.argOf(n.Col, n.V)
 	case OpIn, OpNotIn:
 		vs := n.V.([]any)
 		if len(vs) == 0 {
@@ -713,19 +751,19 @@ func (w *writer) pred(n Node) {
 			if i > 0 {
 				w.str(", ")
 			}
-			w.arg(v)
+			w.argOf(n.Col, v)
 		}
 		w.str(")")
 	case OpBetween:
 		w.predCol(n.Col)
 		w.str(" BETWEEN ")
-		w.arg(n.V)
+		w.argOf(n.Col, n.V)
 		w.str(" AND ")
-		w.arg(n.W)
+		w.argOf(n.Col, n.W)
 	case OpLike:
 		w.predCol(n.Col)
 		w.str(" LIKE ")
-		w.arg(n.V)
+		w.argOf(n.Col, n.V)
 		// ! escapes on every dialect: a backslash would read differently
 		// under MySQL's NO_BACKSLASH_ESCAPES and PostgreSQL's
 		// standard_conforming_strings, and ! means the same under both.
@@ -734,13 +772,13 @@ func (w *writer) pred(n Node) {
 		w.str("LOWER(")
 		w.predCol(n.Col)
 		w.str(") = LOWER(")
-		w.arg(n.V)
+		w.argOf(n.Col, n.V)
 		w.str(")")
 	case OpLikeFold:
 		w.str("LOWER(")
 		w.predCol(n.Col)
 		w.str(") LIKE LOWER(")
-		w.arg(n.V)
+		w.argOf(n.Col, n.V)
 		w.str(") ESCAPE '!'")
 	case OpIsNull:
 		w.predCol(n.Col)
@@ -816,7 +854,7 @@ func (w *writer) rowIn(n Node) {
 			if i > 0 {
 				w.str(", ")
 			}
-			w.arg(v)
+			w.argOf(int32(cols[i]), v)
 		}
 		w.str(")")
 	}

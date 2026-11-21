@@ -107,7 +107,7 @@ func (w *writer) jsonHas(n Node) {
 		w.str(") = 'array' AND ")
 		w.colRef(n.Col)
 		w.str(" @> ")
-		w.arg(e.text)
+		w.argOf(n.Col, e.text)
 		w.str("::jsonb)")
 	case MySQL:
 		w.str("(JSON_TYPE(")
@@ -115,7 +115,7 @@ func (w *writer) jsonHas(n Node) {
 		w.str(") = 'ARRAY' AND JSON_CONTAINS(")
 		w.colRef(n.Col)
 		w.str(", ")
-		w.arg(e.text)
+		w.argOf(n.Col, e.text)
 		w.str("))")
 	default: // SQLite
 		w.str("CASE WHEN json_type(")
@@ -126,13 +126,13 @@ func (w *writer) jsonHas(n Node) {
 		switch e.kind {
 		case JSONKindText:
 			w.str("je.type = 'text' AND je.value = ")
-			w.arg(e.v)
+			w.argOf(n.Col, e.v)
 		case JSONKindNumber:
 			w.str("je.type IN ('integer', 'real') AND je.value = ")
-			w.arg(e.v)
+			w.argOf(n.Col, e.v)
 		default: // a boolean: the type says it, so the value is not compared
 			w.str("je.type = ")
-			w.arg(e.text)
+			w.argOf(n.Col, e.text)
 		}
 		w.str(") WHEN ")
 		w.colRef(n.Col)

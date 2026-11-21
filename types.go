@@ -190,7 +190,8 @@ type Assignment = veloxtype.Assignment
 //	// through an update branch that assigns the first conflict column its
 //	// own value (ent's Ignore): the row is returned and its key read back as
 //	// after an update. velox sets it when every Update column's setter was
-//	// skipped.
+//	// skipped. A Rewrite or Around hook that rebuilds the clause must copy
+//	// Ignore.
 //	Ignore bool
 type ConflictClause = engine.ConflictClause
 

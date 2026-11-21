@@ -460,7 +460,7 @@ func TestUpsertPolicyFlagIsTheStatements(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 0}
 	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		c := st.Conflict
-		st.Conflict = &velox.ConflictClause{Columns: slices.Clone(c.Columns), Update: slices.Clone(c.Update), Where: slices.Clone(c.Where)}
+		st.Conflict = &velox.ConflictClause{Columns: slices.Clone(c.Columns), Update: slices.Clone(c.Update), Where: slices.Clone(c.Where), Ignore: c.Ignore}
 		return next(ctx)
 	}))
 	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}

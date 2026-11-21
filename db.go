@@ -249,6 +249,37 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 	return (*DB)(unsafe.Pointer(e)), nil
 }
 
+// AfterCommit queues fn on tx's transaction, to run once the outermost
+// transaction has committed, as for an event that must not go out for work
+// that rolls back:
+//
+//	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+//		if err := tx.Insert(&order).Exec(ctx); err != nil {
+//			return err
+//		}
+//		return tx.AfterCommit(func(ctx context.Context) { publish(ctx, order.ID) })
+//	})
+//
+// tx is the DB a Tx gives its fn, a nested Tx's, or Mutation.DB inside
+// one. Outside db.Tx, Mutation.DB is the database's, even for a write that
+// velox runs in a transaction of its own, inside the hooks, such as a
+// recorded one. The queued functions run in the order queued,
+// after COMMIT has succeeded and Tx's connection is back in the pool,
+// before Tx returns, on the context given to Tx without its cancellation or
+// deadline, even when a TxAround hook then returns an error of its own.
+// They never run when the transaction rolls back, nor when its COMMIT
+// fails; a retried attempt's are dropped with it. A nested Tx that
+// rolls back drops the functions queued while it ran, through its tx or any
+// other of the transaction's.
+//
+// A panic in one does not stop the others: once all have run, Tx panics
+// again with the first panic's value, the transaction committed.
+//
+// AfterCommit returns an error, and queues nothing, for a nil fn, on a DB in
+// no transaction, on one whose transaction has ended, and on a UseTx DB,
+// whose commit is your code's: velox never sees it.
+func (db *DB) AfterCommit(fn func(context.Context)) error { return engine.AfterCommit(&db.e, fn) }
+
 // WithoutPolicy returns a DB like db whose statements skip every entity's
 // policy, as do the transactions it begins and a write's hooks through
 // Mutation.DB. Interceptors still apply. The bypass is the DB's, not a

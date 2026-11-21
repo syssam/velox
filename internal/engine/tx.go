@@ -308,14 +308,22 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		cause = ErrTimeout
 	}
 	info := db.newTxInfo(o, sh)
+	// after is the committed attempt's AfterCommit functions, which run once
+	// Tx's work is done: the TxAround hooks have returned and the
+	// connection is back in the pool.
 	if len(db.Cfg.TxArounds) == 0 {
 		// No closure here: one passed to the hooks escapes, and would cost
 		// a DB with nothing configured an allocation per transaction.
-		return db.attempts(tctx, tctx, fn, o, deadline, cause, info, sh)
+		var after []func(context.Context)
+		err = db.attempts(tctx, tctx, fn, o, deadline, cause, info, sh, &after)
+		runAfter(ctx, after)
+		return err
 	}
-	return db.txAround(tctx, info, func(ctx context.Context) error {
-		return db.attempts(ctx, tctx, fn, o, deadline, cause, info, sh)
+	after, err := db.txAround(tctx, info, func(ctx context.Context, after *[]func(context.Context)) error {
+		return db.attempts(ctx, tctx, fn, o, deadline, cause, info, sh, after)
 	})
+	runAfter(ctx, after)
+	return err
 }
 
 // attempts runs fn in a transaction on ctx, and again after a retryable
@@ -323,8 +331,9 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 // one the TxAround hooks passed on (tctx when there are none); cause is
 // ErrTimeout when the deadline is velox's. info, when not nil, is updated
 // before each attempt and each retry. sh is the shard the transaction runs
-// on; nil on a DB without a router.
-func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, sh *shardConn) error {
+// on; nil on a DB without a router. after gets the AfterCommit functions of
+// the attempt that committed.
+func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, sh *shardConn, after *[]func(context.Context)) error {
 	for attempt := 1; ; attempt++ {
 		if info != nil {
 			info.Attempt = attempt
@@ -333,7 +342,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if db.Rt != nil {
 			wrote = new(atomic.Bool) // one per attempt: a retry forgets a rolled back write
 		}
-		committed, err := db.transaction(ctx, fn, o, deadline, cause, info, wrote, sh)
+		committed, err := db.transaction(ctx, fn, o, deadline, cause, info, wrote, sh, after)
 		if committed && wrote != nil && wrote.Load() {
 			// A COMMIT that failed has an unknown outcome, as a write's that
 			// reached the database: it pins too.
@@ -429,7 +438,8 @@ func waitRetry(ctx, tctx context.Context, d time.Duration) bool {
 // returns, after the commit or the rollback.
 //
 // committed reports whether COMMIT was sent, whether or not it then failed.
-func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shardConn) (committed bool, _ error) {
+// after gets the AfterCommit functions fn queued, once COMMIT has succeeded.
+func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shardConn, after *[]func(context.Context)) (committed bool, _ error) {
 	primary := db.Ex
 	var txShard *shardConn // its statements check their shard against it
 	if sh != nil {
@@ -512,6 +522,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	endTx(info, TxCommit)
 	committedOK = true
+	*after = f.after
 	return true, nil
 }
 
@@ -555,12 +566,13 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
-	mark, kmark, poison := db.batch.len(), len(db.txRoot.kept), db.batch.failed()
+	mark, kmark, amark, poison := db.batch.len(), len(db.txRoot.kept), len(db.txRoot.after), db.batch.failed()
 	finished := false
 	defer func() {
 		if !finished {
 			db.batch.restore(poison)
 			db.txRoot.unkeep(kmark)
+			db.txRoot.unqueue(amark)
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
@@ -570,6 +582,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		db.batch.truncate(mark)
 		db.batch.restore(poison) // a write that failed in it took no effect
 		db.txRoot.unkeep(kmark)
+		db.txRoot.unqueue(amark)
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
 		rerr := db.undoSavepoint(ctx, name)
@@ -587,6 +600,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		db.batch.truncate(mark)
 		db.batch.restore(poison)
 		db.txRoot.unkeep(kmark)
+		db.txRoot.unqueue(amark)
 		rerr := db.undoSavepoint(ctx, name)
 		db.breakOn(rerr)
 		if rerr != nil && !ended(rerr) && !db.pastTxDeadline() {
@@ -739,8 +753,12 @@ type txFrame struct {
 	kept []keptRow
 	// adopted is set, on the root, for a transaction the caller began
 	// (UseTx): velox never sees it end, so a Recorder's rows go to it
-	// through Sink, and nothing is kept to drop.
+	// through Sink, and nothing is kept to drop. AfterCommit refuses it.
 	adopted bool
+	// after is, on the root, the functions AfterCommit queued, in order: a
+	// savepoint that rolls back drops those after its mark (unqueue), and
+	// they run once the transaction has committed (runAfter).
+	after []func(context.Context)
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.
