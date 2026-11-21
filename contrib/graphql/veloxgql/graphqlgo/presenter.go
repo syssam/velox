@@ -38,23 +38,9 @@ import (
 // graphql-go's default presenter shows every error's text.
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter {
 	if log == nil {
-		return loggerPresenter(nil)
+		return presenter(slogInternal, slogCanceled)
 	}
 	return presenter(log, func(context.Context, error) {})
-}
-
-// loggerPresenter is ErrorPresenter logging to l, slog's default logger
-// at the time of the log when l is nil.
-func loggerPresenter(l *slog.Logger) graphql.ErrorPresenter {
-	return presenter(slogInternal(l), slogCanceled(l))
-}
-
-// orDefault is l, or slog's default logger when l is nil.
-func orDefault(l *slog.Logger) *slog.Logger {
-	if l == nil {
-		return slog.Default()
-	}
-	return l
 }
 
 // presenter is ErrorPresenter with log for internal errors and canceled for
@@ -100,18 +86,13 @@ func recoveredPanic(err error) bool {
 	return false
 }
 
-// slogInternal is ErrorPresenter's log, on l (nil: slog's default), when
-// it is given none.
-func slogInternal(l *slog.Logger) func(context.Context, error) {
-	return func(ctx context.Context, err error) {
-		orDefault(l).ErrorContext(ctx, "veloxgql: internal error", "path", graphql.PathFrom(ctx).String(), "err", err)
-	}
+// slogInternal is ErrorPresenter's log when it is given none.
+func slogInternal(ctx context.Context, err error) {
+	slog.ErrorContext(ctx, "veloxgql: internal error", "path", graphql.PathFrom(ctx).String(), "err", err)
 }
 
-// slogCanceled is what ErrorPresenter records, on l, of a canceled request
-// when it is given no log.
-func slogCanceled(l *slog.Logger) func(context.Context, error) {
-	return func(ctx context.Context, err error) {
-		orDefault(l).DebugContext(ctx, "veloxgql: request canceled", "path", graphql.PathFrom(ctx).String(), "err", err)
-	}
+// slogCanceled is what ErrorPresenter records of a canceled request when it
+// is given no log.
+func slogCanceled(ctx context.Context, err error) {
+	slog.DebugContext(ctx, "veloxgql: request canceled", "path", graphql.PathFrom(ctx).String(), "err", err)
 }

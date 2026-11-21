@@ -26,10 +26,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   graphql-go's own option types: `graphqlgo.With(db)` is the executor
   option that puts the DB and graphql-go's selection source in each
   operation's context, so generated code reads only the selected columns
-  and batches its edges, as under gqlgen. `MutationTx` (a mutation in one
-  transaction; `TxOptions`, `TxFilter`, `ErrorLog`) is an opt-in executor
-  option, in any order with With; `Scalars` binds `Time`, `UUID`, `Bytes`
-  and `Uint64`; `ErrorPresenter` shows `veloxgql.Present`'s codes. The
+  and batches its edges, as under gqlgen; a mutation runs in no
+  transaction, and a resolver opens one where it needs it; `Scalars`
+  binds `Time`, `UUID`, `Bytes` and `Uint64`; `ErrorPresenter` shows
+  `veloxgql.Present`'s codes. The
   limits of a request are graphql-go's own options; velox's page, list
   and filter bounds are fixed at `veloxgql.DefaultLimits()`.
   contrib/graphql requires graphql-go v0.0.0-20261029022150-3e0050be7462.

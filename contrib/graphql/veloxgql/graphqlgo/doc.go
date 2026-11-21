@@ -13,7 +13,6 @@
 //	s, err := graph.NewSchema(post.Bindings(h), user.Bindings(h), graphqlgo.Scalars())
 //	exec := graphql.NewExecutor(s,
 //		graphqlgo.With(db),
-//		graphqlgo.MutationTx(),
 //		graphql.WithMaxDepth(12),
 //		graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
 //
@@ -21,9 +20,8 @@
 // source in each operation's context, with a new table of rows per
 // operation and per event of a subscription. Without it, generated code
 // fails with veloxgql.ErrNoDB and veloxgql.ErrNoSelectionSource, before any
-// statement. MutationTx, off by default and in any order with With, runs
-// each mutation in one transaction (TxOptions, TxFilter and ErrorLog
-// configure it).
+// statement. A mutation runs in no transaction: a resolver that needs one
+// opens it (db.Tx, velox.UseTx).
 //
 // # Selections
 //

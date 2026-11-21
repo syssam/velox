@@ -1,20 +1,14 @@
 package graphqlgo_test
 
 import (
-	"bytes"
 	"context"
-	"database/sql"
 	"errors"
-	"log/slog"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/syssam/graphql-go"
-	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -88,53 +82,35 @@ func TestNoWith(t *testing.T) {
 	}
 }
 
-// TestOptionPanics: With refuses a nil DB,
-// MutationTx a retrying transaction and a nil option, and each refuses
-// being given twice to one executor.
-func TestOptionPanics(t *testing.T) {
-	db, _ := modelDB(t)
-	s := graphqlgoSchema(t)
-	for name, c := range map[string]struct {
-		f    func()
-		want string
-	}{
-		"nil DB":     {func() { graphqlgo.With(nil) }, "graphqlgo.With: nil DB"},
-		"retry":      {func() { graphqlgo.MutationTx(graphqlgo.TxOptions(velox.TxRetrySerializable(2))) }, "TxRetrySerializable(2)"},
-		"nil option": {func() { graphqlgo.MutationTx(nil) }, "graphqlgo.MutationTx: a nil option"},
-		"With twice": {func() { newExecutor(s, graphqlgo.With(db), graphqlgo.With(db)) }, "graphqlgo.With: given twice"},
-		"tx twice":   {func() { newExecutor(s, graphqlgo.MutationTx(), graphqlgo.MutationTx()) }, "graphqlgo.MutationTx: given twice"},
-	} {
-		func() {
-			defer func() {
-				if p := recover(); p == nil || !strings.Contains(panicText(p), c.want) {
-					t.Errorf("%s: panic %v, want %q", name, p, c.want)
-				}
-			}()
-			c.f()
+// TestWith: With refuses a nil DB; given twice, it serves with the later
+// one's state, and a mutation runs in a velox session, in no transaction:
+// a resolver that fails after its insert keeps the row.
+func TestWith(t *testing.T) {
+	func() {
+		defer func() {
+			if p := recover(); p == nil || !strings.Contains(panicText(p), "graphqlgo.With: nil DB") {
+				t.Errorf("nil DB: panic %v", p)
+			}
 		}()
-	}
-}
-
-// TestOptionsAnyOrder: With and MutationTx configure one executor in any
-// order, mixed with graphql-go's own options, and one option value serves
-// several executors, each with its own state.
-func TestOptionsAnyOrder(t *testing.T) {
+		graphqlgo.With(nil)
+	}()
+	other, _ := modelDB(t)
 	db, log := modelDB(t)
+	srv := executorServer(newExecutor(graphqlgoSchema(t), graphqlgo.With(other), graphqlgo.With(db), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))
 	ctx := context.Background()
-	with, tx := graphqlgo.With(db), graphqlgo.MutationTx(graphqlgo.TxOptions(), graphqlgo.TxFilter(nil), graphqlgo.ErrorLog(nil))
-	for name, opts := range map[string][]graphql.ExecutorOption{
-		"With first": {with, graphql.WithMaxErrors(5), tx},
-		"With last":  {tx, graphql.WithMaxErrors(5), with},
-	} {
-		srv := executorServer(newExecutor(graphqlgoSchema(t), opts...))
-		if out := srv(t, ctx, `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
-			t.Errorf("%s: query: %s", name, out)
-		}
-		log.take()
-		out := srv(t, ctx, `mutation { addPost(author: 1, title: "x") { title } }`, nil)
-		if _, txs := log.take(); out != `{"data":{"addPost":{"title":"x"}}}` || !slices.Equal(txs, []string{"commit"}) {
-			t.Errorf("%s: %s, transactions %q; want a commit", name, out, txs)
-		}
+	if out := srv(t, ctx, `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
+		t.Errorf("query: %s", out)
+	}
+	if st, _ := log.take(); len(st) != 1 {
+		t.Errorf("the later With's DB sent %q, want the count", st)
+	}
+	out := srv(t, ctx, `mutation { failPost(author: 1, title: "kept") { title } }`, nil)
+	st, txs := log.take()
+	if !strings.Contains(out, `"data":{"failPost":null}`) || len(txs) != 0 || len(st) != 1 || strings.HasSuffix(st[0], " in tx") {
+		t.Errorf("mutation: %s, statements %q, transactions %q; want the insert outside a transaction", out, st, txs)
+	}
+	if n := postCount(t, db, log); n != 7 {
+		t.Errorf("%d posts, want the insert kept", n)
 	}
 }
 
@@ -158,110 +134,6 @@ func TestLimitsFromContext(t *testing.T) {
 	out := graphqlgoServer(t, db)(t, context.Background(), `{ authors(first: 101) { totalCount } }`, nil)
 	if !strings.Contains(out, "BAD_USER_INPUT") || !strings.Contains(out, "100") {
 		t.Errorf("first: 101: %s", out)
-	}
-}
-
-// TestTxOptions: TxOptions reach each mutation's db.Tx.
-func TestTxOptions(t *testing.T) {
-	var info []sql.IsolationLevel
-	var mu sync.Mutex
-	db, _ := modelDB(t, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
-		mu.Lock()
-		info = append(info, tx.Isolation)
-		mu.Unlock()
-		return next(ctx)
-	}))
-	srv := graphqlgoServer(t, db, graphqlgo.MutationTx(graphqlgo.TxOptions(velox.TxIsolation(sql.LevelSerializable))))
-	srv(t, context.Background(), `mutation { addPost(author: 1, title: "x") { title } }`, nil)
-	if !slices.Equal(info, []sql.IsolationLevel{sql.LevelSerializable}) {
-		t.Errorf("transactions' isolation %v, want [Serializable]", info)
-	}
-}
-
-// TestMutationTxNoWith: MutationTx without With fails a mutation before
-// any resolver runs, with veloxgql.ErrNoDB, logged naming graphqlgo.With.
-func TestMutationTxNoWith(t *testing.T) {
-	db, log := modelDB(t)
-	var buf bytes.Buffer
-	tx := graphqlgo.MutationTx(graphqlgo.ErrorLog(slog.New(slog.NewTextHandler(&buf, nil))))
-	srv := executorServer(newExecutor(graphqlgoSchema(t), tx, graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))
-	out := srv(t, context.Background(), `mutation { addPost(author: 1, title: "x") { title } }`, nil)
-	if !strings.Contains(out, `"data":null`) || !strings.Contains(out, "INTERNAL_SERVER_ERROR") || !strings.Contains(buf.String(), "give the executor graphqlgo.With(db)") {
-		t.Errorf("mutation: %s, logged %q", out, buf.String())
-	}
-	if st, txs := log.take(); len(st) != 0 || len(txs) != 0 {
-		t.Errorf("sent %q %q", st, txs)
-	}
-	if n := postCount(t, db, log); n != 6 {
-		t.Errorf("%d posts, want none added", n)
-	}
-}
-
-// panicText is a recovered value's text.
-func panicText(p any) string {
-	if err, ok := p.(error); ok {
-		return err.Error()
-	}
-	s, _ := p.(string)
-	return s
-}
-
-// TestMutationPlain: without MutationTx a mutation runs with no
-// transaction: a resolver that fails after its insert keeps the row. Under
-// MutationTx, a mutation TxFilter leaves out does the same.
-func TestMutationPlain(t *testing.T) {
-	ctx := context.Background()
-	for name, opts := range map[string][]graphql.ExecutorOption{
-		"default":   nil,
-		"filtered":  {graphqlgo.MutationTx(graphqlgo.TxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))},
-		"filter on": {graphqlgo.MutationTx(graphqlgo.TxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name == "tx" }))},
-	} {
-		db, log := modelDB(t)
-		out := graphqlgoServer(t, db, opts...)(t, ctx, `mutation plain { failPost(author: 1, title: "kept") { title } }`, nil)
-		st, txs := log.take()
-		if !strings.Contains(out, `"data":{"failPost":null}`) || len(txs) != 0 || len(st) != 1 || strings.HasSuffix(st[0], " in tx") {
-			t.Errorf("%s: %s, statements %q, transactions %q; want the insert outside a transaction", name, out, st, txs)
-		}
-		if n := postCount(t, db, log); n != 7 {
-			t.Errorf("%s: %d posts, want the insert kept", name, n)
-		}
-	}
-}
-
-// TestMutationSerial: under MutationTx a mutation's fields run one at a
-// time, as a field interceptor after MutationTx's sees them; a query's do
-// not wait on each other.
-func TestMutationSerial(t *testing.T) {
-	db, _ := modelDB(t)
-	var cur, most atomic.Int32
-	count := graphql.FieldInterceptorFunc(func(ctx context.Context, _ *graphql.FieldContext, next graphql.FieldHandler) (any, error) {
-		n := cur.Add(1)
-		defer cur.Add(-1)
-		for {
-			m := most.Load()
-			if n <= m || most.CompareAndSwap(m, n) {
-				break
-			}
-		}
-		time.Sleep(time.Millisecond)
-		return next(ctx)
-	})
-	srv := executorServer(newExecutor(graphqlgoSchema(t), graphqlgo.With(db), graphqlgo.MutationTx(), graphql.WithFieldInterceptor(count)))
-	const sel = `author { name posts(first: 9) { edges { node { title author { name } tags { name } } } } }`
-	out := srv(t, context.Background(), `mutation { addPost(author: 2, title: "t") { title `+sel+` } }`, nil)
-	if !strings.Contains(out, `"title":"t"`) || strings.Contains(out, "errors") {
-		t.Fatal(out)
-	}
-	if n := most.Load(); n != 1 {
-		t.Errorf("mutation: at most %d fields in flight, want 1", n)
-	}
-	most.Store(0)
-	out = srv(t, context.Background(), `{ node(id: "11") { ... on Post { a: `+sel+` b: `+sel+` } } }`, nil)
-	if strings.Contains(out, "errors") {
-		t.Fatal(out)
-	}
-	if n := most.Load(); n < 2 {
-		t.Errorf("query: at most %d fields in flight, want more than 1", n)
 	}
 }
 
@@ -290,28 +162,6 @@ func TestWaitParks(t *testing.T) {
 	}
 	// Outside an operation, Wait does nothing.
 	src.Wait(context.Background())()
-}
-
-// TestMutationTxErrorLog: a transaction that fails after the resolvers
-// succeed nulls the data and adds an internal error, logged to ErrorLog's
-// logger.
-func TestMutationTxErrorLog(t *testing.T) {
-	refuse := velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
-		if err := next(ctx); err != nil {
-			return err
-		}
-		return errors.New("the transaction was refused")
-	})
-	db, _ := modelDB(t, refuse)
-	var buf bytes.Buffer
-	srv := graphqlgoServer(t, db, graphqlgo.MutationTx(graphqlgo.ErrorLog(slog.New(slog.NewTextHandler(&buf, nil)))))
-	out := srv(t, context.Background(), `mutation { addPost(author: 1, title: "x") { title } }`, nil)
-	if out != `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}` {
-		t.Errorf("a failed transaction: %s", out)
-	}
-	if !strings.Contains(buf.String(), "veloxgql: internal error") || !strings.Contains(buf.String(), "the transaction was refused") {
-		t.Errorf("logged %q, want the transaction's error", buf.String())
-	}
 }
 
 // tick is an event of the subscription of TestSubscription.
@@ -373,4 +223,13 @@ type Tick { authors(first: Int): AuthorConnection }
 	if st, _ := log.take(); len(st) != 4 {
 		t.Errorf("%d statements, want two per event: %q", len(st), st)
 	}
+}
+
+// panicText is a recovered value's text.
+func panicText(p any) string {
+	if err, ok := p.(error); ok {
+		return err.Error()
+	}
+	s, _ := p.(string)
+	return s
 }

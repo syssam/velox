@@ -1643,14 +1643,9 @@ type PresenterOption struct { }
 type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
 
 package contrib/graphql/veloxgql/graphqlgo
-func ErrorLog(l *slog.Logger) MutationTxOption
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter
-func MutationTx(opts ...MutationTxOption) graphql.ExecutorOption
 func Scalars() graphql.SchemaOption
-func TxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) MutationTxOption
-func TxOptions(opts ...velox.TxOption) MutationTxOption
 func With(db *velox.DB) graphql.ExecutorOption
-type MutationTxOption func(*txConfig)
 
 package contrib/veloxotel
 func Options(cfg Config) []velox.Option

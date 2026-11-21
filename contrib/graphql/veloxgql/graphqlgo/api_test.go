@@ -14,13 +14,8 @@ import (
 // publicAPI is the exported API of package graphqlgo, sorted. Every change to
 // the API edits this list.
 var publicAPI = []string{
-	"ErrorLog",
 	"ErrorPresenter",
-	"MutationTx",
-	"MutationTxOption",
 	"Scalars",
-	"TxFilter",
-	"TxOptions",
 	"With",
 }
 

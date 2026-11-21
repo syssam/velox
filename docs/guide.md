@@ -1825,7 +1825,6 @@ functions are graphql-go options:
 ```go
 exec := graphql.NewExecutor(schema,
 	graphqlgo.With(db),
-	graphqlgo.MutationTx(),
 	graphql.WithMaxDepth(12),
 	graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
 ```
@@ -1835,7 +1834,8 @@ and reads are projected as under gqlgen, and `graphqlgo.Scalars()` binds
 velox's scalars in the schema. graphql-go's own options limit a request's
 size, depth, complexity and cost; velox keeps only its fixed bounds on a
 page (100 rows), a list edge (1000) and a where filter. A mutation runs
-in one transaction only with `graphqlgo.MutationTx()`.
+in no transaction: a resolver that needs one opens it with `db.Tx` or
+`velox.UseTx`.
 
 ## Where to go next
 

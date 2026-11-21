@@ -202,7 +202,9 @@
 // edge may set under the limit, lowers that and what the edge costs, and a request
 // refused for a list edge's cost names the edge and these two ways out: it or a connection. The limits are
 // veloxgql.LimitsFromContext(ctx): the ones given to gqlgenx.NewExtension with
-// veloxgql.WithLimits, or veloxgql.DefaultLimits(), which graphqlgo always uses.
+// veloxgql.WithLimits, or veloxgql.DefaultLimits(), which graphqlgo always uses;
+// under graphqlgo velox's cost is not applied, and the server bounds a
+// request with graphql.WithQueryCost and graphql-go's other limits.
 //
 // Every one of these limits bounds one argument or one edge, not a request;
 // see "The cost limit" below. A mutation's transaction does not cover @defer
@@ -535,7 +537,9 @@
 // the cost of the whole request: veloxgql.Limits.MaxCost, 150000 by default.
 // veloxgql.Cost computes it, and gqlgenx.Extension refuses a request over it,
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
-// COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
+// COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement. Under
+// graphqlgo velox's cost is not applied: the server sets graphql-go's own,
+// graphql.WithQueryCost.
 //
 // A cost has two parts, added. The rows: a field costs 1 plus its children's cost
 // times its multiplier. A connection's edges multiply by its first or last, or

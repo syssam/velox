@@ -8,7 +8,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
+	"github.com/vektah/gqlparser/v2/ast"
+
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // parityCase is a request both servers answer.
@@ -116,29 +118,29 @@ func TestParity(t *testing.T) {
 	}
 }
 
-// TestParityMutation: a mutation in a transaction, gqlgenx's by default and
-// graphqlgo's under MutationTx, sends the same statements in it and
-// commits; one whose resolver fails after its insert rolls back on both,
-// with data null and the same error.
+// TestParityMutation: a mutation outside a transaction, gqlgenx's with
+// veloxgql.WithTxFilter leaving it out and graphqlgo's, sends the same
+// statements; one whose resolver fails after its insert keeps the row on
+// both, with the same data and error.
 func TestParityMutation(t *testing.T) {
 	ctx := context.Background()
 	gdb, glog := modelDB(t)
 	qdb, qlog := modelDB(t)
+	noTx := veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false })
 	servers := []struct {
 		name string
 		srv  server
 		log  *stmtLog
 	}{
-		{"gqlgenx", gqlgenServer(t, gdb), glog},
-		{"graphqlgo", graphqlgoServer(t, qdb, graphqlgo.MutationTx()), qlog},
+		{"gqlgenx", gqlgenServer(t, gdb, noTx), glog},
+		{"graphqlgo", graphqlgoServer(t, qdb), qlog},
 	}
 	for _, c := range []struct {
 		query, want string
-		txs         []string
 		posts       int
 	}{
-		{`mutation { addPost(author: 2, title: "new") { title author { name posts(first: 5) { totalCount } } tags { name } } }`, `{"data":{"addPost":{"title":"new","author":{"name":"bob","posts":{"totalCount":4}},"tags":[]}}}`, []string{"commit"}, 7},
-		{`mutation { failPost(author: 2, title: "lost") { title } }`, `"data":null`, []string{"rollback"}, 7},
+		{`mutation { addPost(author: 2, title: "new") { title author { name posts(first: 5) { totalCount } } tags { name } } }`, `{"data":{"addPost":{"title":"new","author":{"name":"bob","posts":{"totalCount":4}},"tags":[]}}}`, 7},
+		{`mutation { failPost(author: 2, title: "kept") { title } }`, `"data":{"failPost":null}`, 8},
 	} {
 		var got []string
 		var stmts [][]string
@@ -148,13 +150,8 @@ func TestParityMutation(t *testing.T) {
 			if !strings.Contains(out, c.want) {
 				t.Errorf("%s: %s, want it to hold %s", s.name, out, c.want)
 			}
-			if !slices.Equal(txs, c.txs) {
-				t.Errorf("%s: transactions %q, want %q", s.name, txs, c.txs)
-			}
-			for _, x := range st {
-				if !strings.HasSuffix(x, " in tx") {
-					t.Errorf("%s: %q ran outside the transaction", s.name, x)
-				}
+			if len(txs) != 0 {
+				t.Errorf("%s: transactions %q, want none", s.name, txs)
 			}
 			got, stmts = append(got, out), append(stmts, st)
 		}
