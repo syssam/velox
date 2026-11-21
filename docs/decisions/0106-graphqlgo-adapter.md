@@ -140,4 +140,4 @@ no selection source for veloxe, so projection and batching never ran.
   `TestSubscription`, `TestErrorPresenter`, `TestPresenterPanic`,
   `TestScalars`, `TestPublicAPI`.
 - `contrib/graphql/deps_test.go`: `TestGraphqlgoImportsNoGqlgen`.
-- `contrib/graphql/veloxgql/internal/request`: `TestCostError`.
+- `contrib/graphql/veloxgql/gqlgenx/internal/request`: `TestCostError`.

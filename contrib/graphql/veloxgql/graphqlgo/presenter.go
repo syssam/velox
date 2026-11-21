@@ -41,8 +41,8 @@ import (
 // (graphql.Subscribe's fn) reaches a client as its text. graphql-go makes it
 // a *graphql.Error of the text alone, dropping the error itself, before any
 // presenter or interceptor sees it, so neither this presenter nor With can
-// tell it from graphql-go's own. A source function returns an error whose
-// text a client may read, or a *graphql.Error with a code.
+// tell it from graphql-go's own, and a *graphql.Error loses its code too.
+// A source function returns only errors whose text a client may read.
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter {
 	if log == nil {
 		return presenter(slogInternal, slogCanceled)

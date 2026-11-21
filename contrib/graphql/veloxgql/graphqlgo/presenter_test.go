@@ -306,8 +306,9 @@ func decodeMoney(v any) (int64, error) {
 // TestSubscribeSourceError pins what a client sees of a subscription
 // source function's error under ErrorPresenter: its text, with no code, as
 // graphql-go drops the error before the presenter sees it (ADR 0106; ask
-// GA6). If graphql-go keeps the error, this test fails, and the presenter
-// shows "internal error" instead.
+// GA6). Once graphql-go keeps the error, the presenter needs a rule that
+// sends a code-less *graphql.Error with a foreign Err through
+// veloxgql.Present, and this test changes with it.
 func TestSubscribeSourceError(t *testing.T) {
 	quiet(t)
 	db, _ := modelDB(t)

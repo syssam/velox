@@ -578,7 +578,8 @@ and the default engine (tasks 5 and 8, parked) take the next free numbers.
 - GA5. A tag before velox 1.0 (N-G1).
 - GA6. Keep `Err` on subscription source errors: subscribe's
   `Errorf("%v", serr)` drops the source's error, so a presenter shows its
-  text and cannot mask it (0106).
+  text and cannot mask it, and a `*graphql.Error`'s code and extensions
+  are lost (0106). Keep the error itself.
 - (GA3, input-field directives, is not needed: see 0.4.)
 
 nextapp must move its pin past 3e0050b to 5d906e7 for the binding-flip
