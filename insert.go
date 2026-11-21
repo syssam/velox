@@ -91,7 +91,10 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 
 // Set adds setters. A column setter, a column handle's Set or SetNull,
 // stores its value in each entity before the insert, so it wins over the
-// field; Add and Sub fail the insert. An edge setter, a relation handle's
+// field; Add and Sub fail the insert. A SetPtr given a nil pointer is
+// skipped: the field stays as it is, and a column of an upsert's Update
+// that no other setter sets is not updated (with none left, the upsert
+// keeps the existing row, as DoNothing). An edge setter, a relation handle's
 // Add, Remove or Clear, is written after the insert, with each entity's key:
 //
 //	err := db.Insert(&post).Set(veloxgen.Posts.Tags.Add(1, 2)).Exec(ctx)
@@ -192,6 +195,7 @@ func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E] {
 // nothing and returns nil under any context, a dry run's or another
 // transaction's included: its hooks do not run.
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
+	q.conflict = q.set.Upsert(q.conflict)
 	if err := q.check(); err != nil {
 		return err
 	}
@@ -228,6 +232,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // the setters are checked as Exec checks them.
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
+	q.conflict = q.set.Upsert(q.conflict)
 	if err := q.check(); err != nil {
 		return "", nil, err
 	}

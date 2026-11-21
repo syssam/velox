@@ -126,11 +126,24 @@ func checkAssignedOnce(info *EntityInfo, set []Assignment) error {
 }
 
 // withUpdateDefaults appends an assignment for every column with an
-// UpdateDefault that set does not assign.
-func withUpdateDefaults(info *EntityInfo, set []Assignment) []Assignment {
-	named := make(map[int]bool, len(set))
+// UpdateDefault that set does not assign and keep does not name. A column
+// of keep without an UpdateDefault is an error, which names it.
+func withUpdateDefaults(info *EntityInfo, set []Assignment, keep []int) ([]Assignment, error) {
+	named := make(map[int]bool, len(set)+len(keep))
 	for _, a := range set {
 		named[a.Column] = true
+	}
+	for _, c := range keep {
+		if c < 0 {
+			return nil, fmt.Errorf("velox: %s: KeepDefaults names a nil column", info.Name)
+		}
+		if c >= len(info.Columns) {
+			return nil, fmt.Errorf("velox: %s: KeepDefaults names column %d, which the entity does not have", info.Name, c)
+		}
+		if info.Columns[c].UpdateDefault == nil {
+			return nil, fmt.Errorf("velox: %s: KeepDefaults names %s, which has no UpdateDefault", info.Name, info.Columns[c].Field)
+		}
+		named[c] = true
 	}
 	out := slices.Clip(set)
 	for i := range info.Columns {
@@ -138,7 +151,7 @@ func withUpdateDefaults(info *EntityInfo, set []Assignment) []Assignment {
 			out = append(out, Assignment{Column: i, Op: AssignSet, Value: f()})
 		}
 	}
-	return out
+	return out, nil
 }
 
 // SetElem stores v where p points: nil as the zero value, a value of the
@@ -236,7 +249,11 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 	}
 	if st.Op == OpUpdate {
 		in := st.Entity
-		st.Set = withUpdateDefaults(in, st.Set)
+		set, err := withUpdateDefaults(in, st.Set, st.keep)
+		if err != nil {
+			return err
+		}
+		st.Set = set
 		if err := checkAssignedOnce(in, st.Set); err != nil {
 			return err
 		}

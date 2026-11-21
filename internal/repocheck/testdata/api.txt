@@ -144,6 +144,7 @@ func (c Col[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c Col[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
 func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
@@ -154,6 +155,7 @@ func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E]
 func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c JSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
@@ -175,6 +177,7 @@ func (c NullCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
 func (c NullJSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
@@ -190,6 +193,7 @@ func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c NullJSONCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullJSONCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullJSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
 func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
@@ -220,6 +224,7 @@ func (c NullNumberCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullNumberCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullNumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullNumberCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sum[_ Lazy[V]]() Term[E]
@@ -249,6 +254,7 @@ func (c NullOtherCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullOtherCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullOtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullOtherCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullOtherCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullOtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -282,6 +288,7 @@ func (c NullStringCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullStringCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullStringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullStringCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullTimeCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullTimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -309,6 +316,7 @@ func (c NullTimeCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullTimeCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NullTimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullTimeCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullTimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullTimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
@@ -333,6 +341,7 @@ func (c NumberCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c NumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c NumberCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sum[_ Lazy[V]]() Term[E]
@@ -357,6 +366,7 @@ func (c OtherCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c OtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c OtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c OtherCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c OtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -385,6 +395,7 @@ func (c StringCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c StringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c StringCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c TimeCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c TimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
@@ -407,6 +418,7 @@ func (c TimeCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c TimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V
 func (c TimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
+func (c TimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
@@ -519,6 +531,7 @@ func (r Rel[E, T]) Set[_ Lazy[T]](key any) Setter[E]
 func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T]
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
+func (s SaveQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) SaveQuery[E]
 func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
 func (s Setter[E]) Column[_ Lazy[E]]() int
@@ -538,6 +551,7 @@ func (t Term[E]) Min[_ Lazy[E]]() Term[E]
 func (t Term[E]) Sum[_ Lazy[E]]() Term[E]
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
+func (u UpdateQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E]
@@ -584,8 +598,11 @@ func FieldNotNull(name string) Predicate
 func GoType(c ColumnInfo) reflect.Type
 func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
+func IsConstraintError(err error) bool
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
+func IsNotSingular(err error) bool
+func IsValidationError(err error) bool
 func LinkEntity[T any, PT Entity[T]](name, table string) EntityLink
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
 func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)

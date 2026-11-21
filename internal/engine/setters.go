@@ -11,25 +11,67 @@ import (
 // setters that does not depend on the entity's type, so that it is compiled
 // once, not in every entity's instantiation.
 
+// AssignSkip is the Op of the Assignment a column handle's SetPtr makes of
+// a nil pointer: the builders drop it, so no column is written. Like
+// AssignEdge it is no operator of an UPDATE, and no statement holds it.
+const AssignSkip AssignOp = 0xfe
+
 // Setters are a write's setters: its column assignments and its edge
-// setters, apart.
+// setters, apart, and the columns of the skipped setters (AssignSkip).
 type Setters struct {
-	Set   []Assignment
-	Edges []*EdgeSet
+	Set     []Assignment
+	Edges   []*EdgeSet
+	Skipped []int
 }
 
 // Add returns s with the setters ss, each in its list. s's lists are not
 // changed.
 func (s Setters) Add(ss []Assignment) Setters {
-	s.Set, s.Edges = slices.Clip(s.Set), slices.Clip(s.Edges)
+	s.Set, s.Edges, s.Skipped = slices.Clip(s.Set), slices.Clip(s.Edges), slices.Clip(s.Skipped)
 	for _, a := range ss {
-		if e := EdgeOf(a); e != nil {
+		switch e := EdgeOf(a); {
+		case a.Op == AssignSkip:
+			s.Skipped = append(s.Skipped, a.Column)
+		case e != nil:
 			s.Edges = append(s.Edges, e)
-		} else {
+		default:
 			s.Set = append(s.Set, a)
 		}
 	}
 	return s
+}
+
+// Unskipped returns as without its skipped setters (AssignSkip): as itself
+// when it has none.
+func Unskipped(as []Assignment) []Assignment {
+	if !slices.ContainsFunc(as, isSkip) {
+		return as
+	}
+	return slices.DeleteFunc(slices.Clone(as), isSkip)
+}
+
+func isSkip(a Assignment) bool { return a.Op == AssignSkip }
+
+// Upsert returns cf without the columns of its update branch whose setters
+// were all skipped: a column a skipped setter names, and no other setter
+// sets, is not updated. With none left the upsert keeps the existing row,
+// as DoNothing. It returns cf itself when nothing changes.
+func (s Setters) Upsert(cf *ConflictClause) *ConflictClause {
+	if cf == nil || len(s.Skipped) == 0 || len(cf.Update) == 0 {
+		return cf
+	}
+	drop := func(c int) bool {
+		return slices.Contains(s.Skipped, c) && !slices.ContainsFunc(s.Set, func(a Assignment) bool { return a.Column == c })
+	}
+	if !slices.ContainsFunc(cf.Update, drop) {
+		return cf
+	}
+	out := *cf
+	out.Update = slices.DeleteFunc(slices.Clone(cf.Update), drop)
+	if len(out.Update) == 0 {
+		out.Update, out.DoNothing = nil, true
+	}
+	return &out
 }
 
 // Empty reports whether s holds no setter.

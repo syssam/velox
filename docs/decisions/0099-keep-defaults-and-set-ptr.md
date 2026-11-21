@@ -1,0 +1,79 @@
+# 99. KeepDefaults, SetPtr and ent's error helpers
+
+Status: accepted, 2026-11-21.
+
+## Context
+
+nextapp, the veloxe application being ported, calls `SkipDefault(updated_at)`
+36 times, `SetNillableX(p)` 2,829 times and `IsConstraintError` 109 times.
+The gap analysis (`docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md`
+§2.1 items 4 to 6) asked for each. velox had none of them.
+
+A test first answered the open question of item 4: an update that assigns
+an `UpdateDefault` column already writes the assigned value, and the
+`UpdateDefault` does not fire (`TestExplicitSetWinsOverUpdateDefault`).
+`Set(U.UpdatedAt, current)` therefore already kept the column's value. But
+it writes a value, and needs the current one. `SkipDefault` writes nothing
+to the column.
+
+## Decision
+
+- `UpdateQuery.KeepDefaults(cols ...Column[E])` and
+  `SaveQuery.KeepDefaults(cols ...Column[E])`, and
+  `untyped.TableUpdate.KeepDefaults(cols ...int)`. The named columns'
+  `UpdateDefault` does not fire, so nothing is written to them. A column
+  the update assigns is still written as assigned. The columns are kept in
+  an unexported field of the `Statement`, which the core reads where it
+  adds the `UpdateDefault` assignments (`writeCore`). Hooks do not see the
+  field, and the public `Statement` does not change.
+- `KeepDefaults` fails closed. A column without an `UpdateDefault`, or a nil
+  column, fails `Exec`, `One` and `SQL` before anything is sent, and the
+  error names the column. An upsert's update branch never fires an
+  `UpdateDefault` (0017), so it needs no `KeepDefaults`.
+- `SetPtr(p *V) Setter[E]` on every handle kind that has `Set`, written by
+  `internal/handlegen`. It is a lazy generic method like the others (0022),
+  so a handle that never calls it costs nothing (`TestGenericTypesCompileSmall`
+  measured no growth on any handle). `SetPtr` takes a pointer to the type
+  `Set` takes: the element type on a Null kind, an enum's or a JSON
+  field's own type on theirs. It reads `*p` when called.
+- A nil `p` gives a setter whose `Op` is `engine.AssignSkip`, an internal
+  operator like `AssignEdge`. `InsertQuery.Set`, `UpdateQuery.Set`,
+  `SetInput` and `TableUpdate.Assign` drop it, so no `Statement`, hook or
+  Rewrite ever holds it. The zero `Setter` stays what it was, and is not
+  a skip.
+- What skipping means:
+  - **Update:** the column is not assigned. An update whose every setter
+    was skipped has no `Set`: `Exec` fails as without one, and `One` sends
+    nothing and returns the row.
+  - **Insert:** the field stays as the caller left it. A zero field whose
+    column has a declared database default is left to the database, and
+    skips its validators, as 0093 says.
+  - **Upsert:** a column `Update` names, whose setters were all skipped, is
+    not updated. With no column left, the upsert keeps the existing row, as
+    `DoNothing`.
+  - **Null kinds:** a nil `p` skips too, as ent's `SetNillableX` does.
+    `SetNull()` is how to write NULL, and the godoc says so.
+- `Save` takes columns, not setters, so it has no `SetPtr`. A caller names
+  only the columns it changed.
+- `velox.IsConstraintError(err)` is true when err holds a
+  `*ConstraintError`, or a driver error that `internal/dberr` reads as a
+  unique, foreign key, CHECK or NOT NULL violation (0053). This holds on
+  PostgreSQL, MySQL and SQLite; `internal/integration` tests each kind on
+  each dialect. `velox.IsValidationError(err)` is true when err holds a
+  `*ValidationError`. `velox.IsNotSingular(err)` is true for
+  `ErrNotSingular`, which `One`, raw `One` and `UpdateQuery.One` already
+  returned when they matched more than one row. All three walk the error
+  tree as `IsNotFound` does, so a typed nil cannot make them panic.
+- velox adds no `OpCreate`, `OpUpdateOne` or `OpDeleteOne`. It keeps one
+  name per op, and phase D's migration guide maps them.
+
+## Consequences
+
+- `SetNillableX(p)` becomes `X.SetPtr(p)`, `SkipDefault(c)` becomes
+  `KeepDefaults(c)`, and `ent.IsConstraintError` becomes
+  `velox.IsConstraintError`.
+- An entity package that runs `Insert`, `Save` and `Update` grows by about
+  1.6 KB, under its recorded bound (`entityDescUse` went from 773,616 to
+  775,252 bytes). The growth is the upsert check in `InsertQuery.Exec` and
+  `Save`'s kept columns.
+- No change to generated code. `handles.go` is velox's own file.

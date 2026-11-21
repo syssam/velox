@@ -28,7 +28,9 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 
 // Set adds setters: assignments, made by the column handles' Set, SetNull,
 // Add and Sub, and edge setters, made by the relation handles' Add, Remove
-// and Clear. An update of only edge setters sends no UPDATE.
+// and Clear. An update of only edge setters sends no UPDATE. A SetPtr given
+// a nil pointer is skipped: an update whose every setter is skipped has no
+// Set, and Exec fails as it does without one.
 //
 // The edges are written for each row the update matches, in one
 // transaction with the UPDATE, a savepoint inside one: the update first
@@ -56,6 +58,31 @@ func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E] {
 		return u
 	}
 	return u.Set(ss...)
+}
+
+// KeepDefaults stops the UpdateDefault of each named column from firing, so
+// the update writes nothing to it, as veloxe's SkipDefault does: a system
+// write that must not move an updated_at column. A column the update
+// assigns is still written as assigned; an assignment already won over the
+// UpdateDefault, but it writes a value, where KeepDefaults writes nothing.
+// A column without an UpdateDefault fails Exec, One and SQL with an error
+// that names it, before anything is sent.
+func (u UpdateQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) UpdateQuery[E] {
+	engine.KeepDefaults(&u.st, keepIndexes(cols))
+	return u
+}
+
+// keepIndexes is the index of each column of cols, -1 for a nil one, which
+// the update then refuses.
+func keepIndexes[E any](cols []Column[E]) []int {
+	out := make([]int, len(cols))
+	for i, c := range cols {
+		out[i] = -1
+		if c != nil {
+			out[i] = int(c.column(nil))
+		}
+	}
+	return out
 }
 
 // Where adds conditions; all of them must hold.
@@ -252,6 +279,7 @@ type SaveQuery[E any] struct {
 	meta  *metaState[E]
 	x     *E
 	cols  []Column[E]
+	keep  []int // KeepDefaults' columns
 	where []Pred[E]
 }
 
@@ -286,6 +314,14 @@ func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E] {
 	return s
 }
 
+// KeepDefaults stops the UpdateDefault of each named column from firing, as
+// UpdateQuery.KeepDefaults does: the Save writes nothing to it, and leaves
+// its field in *x as it is. A column Save names is still written.
+func (s SaveQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) SaveQuery[E] {
+	s.keep = append(slices.Clip(s.keep), keepIndexes(cols)...)
+	return s
+}
+
 // statement is the UPDATE Exec and SQL give the hooks: the named columns of
 // *x, where the key and the conditions hold.
 func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
@@ -304,6 +340,7 @@ func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 		i := int(c.column(nil))
 		st.Set = append(st.Set, Assignment{Column: i, Op: AssignSet, Value: fieldValue(s.meta, s.x, i)})
 	}
+	engine.KeepDefaults(&st, s.keep)
 	for _, k := range in.PrimaryKey {
 		st.Where = append(st.Where, ColumnEQ(k, fieldValue(s.meta, s.x, k)))
 	}

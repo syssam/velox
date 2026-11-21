@@ -270,7 +270,8 @@ type TableInsert = engine.TableInsert
 //
 //	Set(col int, v any) TableUpdate // Table.Assign's assignment; a wrong type fails Exec
 //	SetNull(col int) TableUpdate
-//	Assign(as ...velox.Assignment) TableUpdate // assignments made elsewhere (Assignments)
+//	Assign(as ...velox.Assignment) TableUpdate // assignments made elsewhere (Assignments); a skipped SetPtr is dropped
+//	KeepDefaults(cols ...int) TableUpdate // UpdateQuery.KeepDefaults, by column index
 //	Where(ps ...velox.Predicate) TableUpdate
 //	All() TableUpdate
 //	Exec(ctx context.Context) (int64, error)

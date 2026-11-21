@@ -40,6 +40,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   and aggregates. `WithoutPolicy` does not lift it; an error, the zero
   `Predicate` or an unknown column fails the statement, and
   `velox.NoFilter()` restricts nothing.
+- `SetPtr(p)` on every column handle with `Set` (ADR 0099), as ent's
+  `SetNillableX`: a nil `p` gives a setter the builders skip, a non-nil one
+  sets `*p`; on a nullable column a nil `p` skips too, and `SetNull()`
+  writes NULL. In an upsert, a column `Update` names whose only setter was
+  skipped is not updated. `UpdateQuery.KeepDefaults(cols...)`,
+  `SaveQuery.KeepDefaults(cols...)` and `untyped.TableUpdate.KeepDefaults`
+  stop the named columns' `UpdateDefault` from firing, as veloxe's
+  `SkipDefault`; a column without one fails the statement.
+  `velox.IsConstraintError`, `IsValidationError` and `IsNotSingular`, as
+  ent's, safe with a typed nil.
 - A `field.Other` field in a decimal column (its `SchemaType` names
   `numeric` or `decimal`, on MySQL also `dec` or `fixed`, for every dialect
   it lists), such as a `decimal.Decimal`, has a `NumberCol` (`NullNumberCol`

@@ -867,6 +867,36 @@ columns, written as `Expr`'s text is, and keeps the policies:
 `UpdateQuery.One(ctx)` updates exactly one row and returns it, read back by
 its key ([ADR 0048](decisions/0048-update-one.md)).
 
+### Optional values and UpdateDefault
+
+Every handle with `Set` has `SetPtr(p)`, ent's `SetNillableX`. A nil `p`
+writes nothing; a non-nil one sets `*p`. A patch from an API then needs no
+`if` per field:
+
+```go
+_, err := db.Update[veloxgen.Invoice]().
+	Set(I.Customer.SetPtr(in.Customer), I.TotalCents.SetPtr(in.TotalCents)).
+	Where(I.ID.EQ(id)).
+	Exec(ctx)
+```
+
+On a nullable column a nil `p` still writes nothing: `SetNull()` writes
+NULL. An update whose every setter was skipped has no `Set` and fails as
+one without it. In an insert, a skipped setter leaves the field as it is,
+so a zero field still gets its declared database default. In an upsert, a
+column `Update` names is not updated when its only setter was skipped.
+
+`KeepDefaults(cols...)`, on an update and on `Save`, stops the named
+columns' `UpdateDefault` from firing, as veloxe's `SkipDefault` does: a
+system write that must not move `updated_at`. Nothing is written to them.
+Setting the column yourself already wins over its `UpdateDefault`, but
+writes a value. A column without an `UpdateDefault` fails the statement
+([ADR 0099](decisions/0099-keep-defaults-and-set-ptr.md)):
+
+```go
+err := db.Save(&inv, I.Status).KeepDefaults(I.UpdatedAt).Exec(ctx)
+```
+
 ### A write needs a Where
 
 An `Update` or `Delete` without `Where` fails with `velox.ErrNoWhere`. If you
@@ -1130,7 +1160,8 @@ with the statement's context, the entity's name and an op, at most once per
 statement for each entity and op, except where a relation loops back
 ([ADR 0091](decisions/0091-policy-cycles-and-text-keys.md)). The op is the
 statement's own for its own entity (`OpSelect`, `OpUpdate`, `OpDelete`, or
-`OpInsert` for an upsert's update branch) and `OpSelect` for each entity a
+`OpInsert` for an upsert's update branch; `OpUpdate` for a `Writable` read,
+as for an update) and `OpSelect` for each entity a
 `With`, `Join`, `Has` or `HasWith` reaches. It reaches what an interceptor
 reaches, and `WithoutPolicy` does not lift it.
 
@@ -1549,6 +1580,10 @@ if ce, ok := errors.AsType[*velox.ConstraintError](err); ok && ce.Kind == velox.
 	// ce.Constraint names the violated constraint
 }
 ```
+
+`velox.IsConstraintError`, `IsValidationError` and `IsNotSingular` are the
+same tests by ent's names. Like `IsNotFound`, a driver's typed-nil error
+cannot make them panic.
 
 The ones you will meet most:
 

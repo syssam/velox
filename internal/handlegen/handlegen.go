@@ -63,6 +63,11 @@ var (
 	set = []method{
 		{"Set", "sets the column to v.", "(v V) Setter[E]",
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}"},
+		setPtr(""),
+	}
+	nullSet = []method{
+		set[0],
+		setPtr(" A nil p does not write NULL: SetNull does."),
 	}
 	values = []method{
 		{"Old", "returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.", "(ch Change) V",
@@ -138,6 +143,12 @@ var (
 	}
 )
 
+// setPtr is the SetPtr method of every handle kind, its doc ending with more.
+func setPtr(more string) method {
+	return method{"SetPtr", "sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it." + more, "(p *V) Setter[E]",
+		"if p == nil { return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}} }; return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: *p}}"}
+}
+
 // newValue is the New method of every handle kind.
 var newValue = method{"New", "returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.", "(ch Change) V",
 	"return changeValue[E, V](ch, ch.row.New, c.I)"}
@@ -153,13 +164,13 @@ var kinds = []kind{
 	{"OtherCol", "[E, V any]", "is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database.", [][]method{base, key, ordered, count, extremes, set, values}},
 	{"NumberCol", "[E, V any]", "is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal.", [][]method{base, key, ordered, count, extremes, sums, set, arith, values}},
 	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, count, extremes, text, set, values}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, set, null, nullValues, ptrs}},
-	{"NullTimeCol", "[E, V any]", "is TimeCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, set, null, nullValues, ptrs}},
-	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, set, null, nullValues, ptrs}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, set, arith, null, nullValues, ptrs}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, set, null, nullValues, ptrs}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, nullSet, null, nullValues, ptrs}},
+	{"NullTimeCol", "[E, V any]", "is TimeCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs}},
+	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, nullSet, null, nullValues, ptrs}},
 	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, jsonPaths, values}},
-	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, jsonPaths, null, nullValues, ptrs}},
+	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{nullSet, jsonPaths, null, nullValues, ptrs}},
 }
 
 // Generate returns the source of handles.go.

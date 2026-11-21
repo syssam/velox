@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 )
 
 // lockSQL and lockWaitSQL are the clauses, after LIMIT and OFFSET.
@@ -165,6 +166,16 @@ type Statement struct {
 	// bidi is set on a statement of a bidirectional one-to-one write, whose
 	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
 	bidi *bidiStep
+	// keep holds the columns of an UPDATE whose UpdateDefault does not fire
+	// (KeepDefaults).
+	keep []int
+}
+
+// KeepDefaults adds cols to the columns of st, an UPDATE, whose UpdateDefault
+// does not fire: the update writes nothing to them unless it assigns them.
+// A column without an UpdateDefault fails the update when it runs.
+func KeepDefaults(st *Statement, cols []int) {
+	st.keep = append(slices.Clip(st.keep), cols...)
 }
 
 // recordState is the part of a Statement that says how velox reads back

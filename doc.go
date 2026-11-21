@@ -295,9 +295,9 @@
 // with errors.Is, for a violated constraint (ConstraintUnique,
 // ConstraintForeignKey, ConstraintNotNull and ConstraintCheck) with errors.As
 // to a *ConstraintError, and for a refused value with errors.As to a
-// *ValidationError. IsNotFound is the only such helper: where ent has
-// IsConstraintError and IsValidationError, velox has errors.As on its typed
-// errors, and helpers for them would be an addition. DriverCode returns
+// *ValidationError. IsConstraintError, IsValidationError and IsNotSingular
+// are those tests by ent's names, as safe with a typed nil as IsNotFound
+// is. DriverCode returns
 // the database's own code for an error that came from it, such as
 // PostgreSQL's SQLSTATE, for logs and traces; it is not for an end user.
 //

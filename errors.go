@@ -113,6 +113,32 @@ var (
 // driver wraps does not panic. ent's IsNotFound is the precedent.
 func IsNotFound(err error) bool { return engine.IsNotFound(err) }
 
+// IsNotSingular reports whether err is, or wraps, ErrNotSingular: a One that
+// found more than one row. It walks err's tree as IsNotFound does, a typed
+// nil skipped.
+func IsNotSingular(err error) bool { return dberr.Is(err, ErrNotSingular) }
+
+// IsConstraintError reports whether err is, or wraps, a violated unique,
+// foreign key, CHECK or NOT NULL constraint: a *ConstraintError, which velox
+// makes of the driver's error, or a driver's error velox reads as one on
+// PostgreSQL, MySQL or SQLite. It walks err's tree as errors.As does, a
+// typed nil skipped. ent's IsConstraintError is the precedent.
+func IsConstraintError(err error) bool {
+	if _, ok := dberr.As[*ConstraintError](err); ok {
+		return true
+	}
+	return dberr.Constraint("", err) != nil
+}
+
+// IsValidationError reports whether err is, or wraps, a *ValidationError: a
+// value a column's validators refused, or a missing required edge, before
+// anything was sent. It walks err's tree as errors.As does, a typed nil
+// skipped. ent's IsValidationError is the precedent.
+func IsValidationError(err error) bool {
+	_, ok := dberr.As[*ValidationError](err)
+	return ok
+}
+
 // SchemaError reports a mistake in an entity's generated metadata.
 type SchemaError = veloxtype.SchemaError
 

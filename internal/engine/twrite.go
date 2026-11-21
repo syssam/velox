@@ -567,9 +567,16 @@ func (u TableUpdate) Set(col int, v any) TableUpdate {
 // SetNull adds the assignment of NULL to column col, a nullable column.
 func (u TableUpdate) SetNull(col int) TableUpdate { return u.Set(col, nil) }
 
-// Assign adds assignments made elsewhere, as by a column handle's Set.
+// Assign adds assignments made elsewhere, as by a column handle's Set. The
+// assignment of a SetPtr given a nil pointer is skipped.
 func (u TableUpdate) Assign(as ...Assignment) TableUpdate {
-	u.st.Set = append(slices.Clip(u.st.Set), as...)
+	u.st.Set = append(slices.Clip(u.st.Set), Unskipped(as)...)
+	return u
+}
+
+// KeepDefaults is UpdateQuery.KeepDefaults, by column index.
+func (u TableUpdate) KeepDefaults(cols ...int) TableUpdate {
+	KeepDefaults(&u.st, cols)
 	return u
 }
 
