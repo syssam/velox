@@ -112,6 +112,9 @@ func AggTerm(fn TermFn, of Term) Term {
 	case termAgg:
 		return InvalidTerm(errors.New("velox: an aggregate of an aggregate: SUM(MAX(x)) is not allowed in one statement"))
 	}
+	if hasWindow(of) {
+		return InvalidTerm(errors.New("velox: an aggregate of a window function: SQL computes windows after aggregates"))
+	}
 	return Term{kind: termAgg, fn: fn, of: &of}.seal()
 }
 
@@ -318,6 +321,9 @@ func checkProject(st *Statement, who string) error {
 		return fmt.Errorf("velox: %s: a projection cannot take a lock; GROUP BY and a lock do not mix", name)
 	case len(p.Terms) == 0:
 		return fmt.Errorf("velox: %s: a projection has no terms", name)
+	}
+	if slices.ContainsFunc(p.GroupBy, hasWindow) {
+		return fmt.Errorf("velox: %s: GroupBy holds a window function, which SQL computes after GROUP BY; group by its terms and select the window with Calc", name)
 	}
 	bad := func(c int) error { return badColumn(st, who, c) }
 	for _, ts := range [][]Term{p.Terms, p.GroupBy} {

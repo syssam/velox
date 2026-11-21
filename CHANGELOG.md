@@ -31,6 +31,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   with the tool's output byte for byte. `FieldOrder` orders each entity's
   declared fields and must return a permutation of them.
 - `tx.AfterCommit(fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
+- Window functions in `Calc` and `SelectRaw` (ADR 0101): `COUNT(*) OVER ()`,
+  `ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)` and the like, as a result
+  column or an ordering. Beside `GroupBy` and `Limit`, `COUNT(*) OVER ()`
+  counts every group. A subquery or a refused function inside `OVER` stays
+  refused, and a window function in an `Expr` (`Where`, `Having`), in
+  `GroupBy`, under an aggregate or in `SetExpr` fails the statement before
+  anything is sent.
+- `softdelete.Mixin{Assign: ...}` (ADR 0101) sets more columns, such as
+  `deleted_by_id`, from the delete's context, in the soft delete's one
+  UPDATE; an error from it fails the delete. `Reads: softdelete.Unfiltered`
+  leaves deleted rows visible to reads and updates, while a delete stays
+  soft and marks live rows only. The zero `Mixin` behaves as before.
 - `velox.AfterCommit(tx, fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
   on the transaction, to run in order once the outermost transaction has
   committed, on the `Tx` context without its cancellation. A rollback, a

@@ -812,6 +812,9 @@ the groups count only rows the caller may see, which `Raw` does not give.
 policies too. A projection needs a `Limit` or `AllowUnbounded()`. It cannot be
 read with `All`, `Count` and the rest, nor combined with `Columns`, `With`,
 `Join`, `After` or a lock, and an aggregate of an aggregate is refused. A
+`Calc` may be a window function, such as `COUNT(*) OVER ()` beside a
+`GroupBy` and `Limit` for a page of groups and their total; it is a result
+column or an ordering, never a condition ([sql.md](sql.md#a-value-calc-and-selectraw)). A
 value that is not a column handle or a term of the entity (a string, another
 entity's handle) fails the statement before anything is sent. An ordering by
 an expression cannot be a keyset cursor. `UNION`, CTEs and window functions
@@ -1525,6 +1528,25 @@ db.Delete[veloxgen.Invoice]().
 
 The filter is an interceptor, so `WithoutPolicy` still hides deleted rows.
 A soft delete does not trigger `ON DELETE CASCADE`.
+
+Two options change it. `Assign` sets more columns in the same UPDATE, read
+from the delete's context, such as who deleted the row; its error fails the
+delete. `Reads: softdelete.Unfiltered` installs no filter: reads and updates
+see deleted rows, a restore is a plain update, and a delete stays soft and
+marks live rows only:
+
+```go
+softdelete.Mixin{
+	Assign: func(ctx context.Context) ([]softdelete.Set, error) {
+		u, err := auth.User(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return []softdelete.Set{{Column: "deleted_by_id", Value: u.ID}}, nil
+	},
+	Reads: softdelete.Unfiltered,
+}
+```
 
 ## Raw SQL
 

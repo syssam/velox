@@ -54,6 +54,9 @@ func checkSetExpr(st *Statement, who string, a Assignment) error {
 	if hasAgg(t) {
 		return fmt.Errorf("velox: %s: the expression assigned to %s holds an aggregate, which an UPDATE cannot compute", in.Name, in.Columns[a.Column].Field)
 	}
+	if hasWindow(t) {
+		return fmt.Errorf("velox: %s: the expression assigned to %s holds a window function, which an UPDATE cannot compute", in.Name, in.Columns[a.Column].Field)
+	}
 	if in.Columns[a.Column].Codec {
 		return errCodecSetExpr(in, a.Column)
 	}
@@ -71,6 +74,18 @@ func hasAgg(t Term) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// hasWindow reports whether t is or holds a window function: an expression
+// whose text holds OVER.
+func hasWindow(t Term) bool {
+	switch t.kind {
+	case termExpr:
+		return exprHasWindow(t.x)
+	case termAgg:
+		return t.of != nil && hasWindow(*t.of)
 	}
 	return false
 }

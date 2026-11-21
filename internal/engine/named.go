@@ -442,3 +442,25 @@ func article(t reflect.Type) string {
 	}
 	return "a " + s
 }
+
+// NamedAssignment is the assignment of v to in's column of the given name,
+// v converted as Mutation.Set converts it, and nil for SetNull on a
+// nullable column. An unknown name or a value of another type is an error.
+func NamedAssignment(in *EntityInfo, name string, v any) (Assignment, error) {
+	i, ok := in.names[name]
+	if !ok {
+		return Assignment{}, fmt.Errorf("velox: %s: no column %q", in.Name, name)
+	}
+	c := &in.Columns[i]
+	if v == nil {
+		if !c.Nullable {
+			return Assignment{}, fmt.Errorf("velox: %s: %s is not nullable", in.Name, name)
+		}
+		return Assignment{Column: int(i), Op: AssignSet}, nil
+	}
+	cv, err := namedValue(c, v)
+	if err != nil {
+		return Assignment{}, fmt.Errorf("velox: %s: %s: %w", in.Name, name, err)
+	}
+	return Assignment{Column: int(i), Op: AssignSet, Value: cv}, nil
+}

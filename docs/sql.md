@@ -101,6 +101,24 @@ A projection is read with `Rows`, by position. An entity query ordered by
 an expression cannot be paged with `After` or a cursor. See
 [ADR 0074](decisions/0074-projection.md).
 
+A `Calc` or `SelectRaw` may hold a window function: `COUNT(*) OVER ()`,
+`ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)`, `RANK`, `DENSE_RANK`, and
+`SUM`, `AVG`, `MIN`, `MAX` with `OVER`. Beside `GroupBy` and `Limit`,
+`COUNT(*) OVER ()` counts every group, so one statement reads a page of a
+report and its total:
+
+```go
+db.Query[veloxgen.Invoice]().
+	Select(I.OrgID, I.TotalCents.Sum(), velox.Calc[veloxgen.Invoice]("COUNT(*) OVER ()")).
+	GroupBy(I.OrgID).OrderBy(I.OrgID.Asc()).Limit(20).Offset(40).Rows(ctx)
+```
+
+Inside `OVER (...)` the text is checked as the rest is: a subquery and the
+refused functions stay refused. A window function is a result column or an
+ordering only. velox refuses one in `Expr` (a `Where` or a `Having`), in
+`GroupBy`, under an aggregate and in `SetExpr`, as SQL computes windows
+after all of those (ADR 0101). MySQL 8 and SQLite 3.25 have windows.
+
 ## A column set to an expression: SetExpr
 
 ```go

@@ -61,8 +61,9 @@ func (q Query[E]) Select[_ Lazy[E]](ts ...Selectable[E]) Query[E] {
 // SelectRaw is Select(Calc(text, args...)): one expression of SQL text as a
 // result column, written as Expr's text is, so a ? is a column handle, a Term
 // or a bound value. Unlike Raw, it is guarded and keeps the Read policy, the
-// scope and the interceptors: the text can hold a function, an operator and
-// CASE, and not a subquery or the end of the statement.
+// scope and the interceptors: the text can hold a function, an operator,
+// CASE and a window function (OVER), and not a subquery or the end of the
+// statement.
 //
 //	db.Query[veloxgen.Invoice]().Limit(10).
 //		SelectRaw("EXTRACT(MONTH FROM ?)", I.CreatedAt).Rows(ctx)

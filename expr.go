@@ -31,7 +31,9 @@ import (
 //
 // A ? outside a literal is always an argument's place, so PostgreSQL's jsonb
 // ? operator is written jsonb_exists. A wrong number of arguments, a column
-// of another entity and an encoded (JSON) column fail the statement. The
+// of another entity and an encoded (JSON) column fail the statement. So
+// does a window function (OVER), in the text or a Term: SQL computes windows
+// after WHERE and HAVING, so one belongs in Calc, as a result column. The
 // arguments are bound as given: no codec encodes them.
 //
 // The refusals guard against a policy bypass by mistake. They are not a

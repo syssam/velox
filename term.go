@@ -46,6 +46,13 @@ func termOf[E any](s Selectable[E]) engine.Term {
 // for what the text may hold.
 //
 //	velox.Calc[veloxgen.Invoice]("EXTRACT(MONTH FROM ?)", I.CreatedAt)
+//
+// It may be a window function, such as COUNT(*) OVER () or ROW_NUMBER()
+// OVER (PARTITION BY ? ORDER BY ?), as a result column or an ordering.
+// Beside GroupBy and Limit, COUNT(*) OVER () counts every group, not only
+// the page's. A window function in an Expr (a Where or a Having), in
+// GroupBy, under an aggregate or in SetExpr fails the statement, as SQL
+// computes windows after them.
 func Calc[E any](text string, args ...any) Term[E] {
 	slots, vals, err := slotsOf[E](text, args)
 	if err != nil {

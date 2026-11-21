@@ -332,6 +332,16 @@ its own check: run it with `Check: true` in CI, where it returns
 `generate.ErrStale` when a file is out of date. `velox-gen -check` knows
 neither.
 
+## Refused by design
+
+- **Not built: back-references (no reader in nextapp).** ent's and veloxe's
+  load can fill each loaded child's inverse edge with its parent, so that
+  `child.Edges.Parent` is set after `parent.With(children)`. velox does not:
+  a child's to-one edge is set only when that edge is loaded, with
+  `With(C.Parent)` on the child's query. The one application ported from
+  veloxe reads no back-reference: each of its `child.Edges.Parent` reads
+  follows a `With` of that edge (ADR 0101).
+
 ## GraphQL (contrib/graphql, compared with entgql)
 
 - **Inputs, not mutations, as in entgql.** velox-graphql writes

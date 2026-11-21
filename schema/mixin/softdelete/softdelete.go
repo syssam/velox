@@ -35,6 +35,20 @@
 //   - Through a recording handle (velox.DB.Record), each row is reported as
 //     a delete with Soft set, and with the row before and after the update.
 //
+// # Options
+//
+// Assign sets more columns in the soft delete's UPDATE, read from the
+// delete's context, such as who deleted the rows; its error fails the
+// delete. Reads: Unfiltered installs no interceptor, so reads and updates
+// see deleted rows, while a delete stays soft and marks live rows only:
+//
+//	softdelete.Mixin{
+//		Assign: func(ctx context.Context) ([]softdelete.Set, error) {
+//			return []softdelete.Set{{Column: "deleted_by_id", Value: auth.UserID(ctx)}}, nil
+//		},
+//		Reads: softdelete.Unfiltered,
+//	}
+//
 // # Skip
 //
 // [Skip] returns a context under which the mixin does nothing: reads see
@@ -66,6 +80,7 @@ package softdelete
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/syssam/velox"
@@ -80,8 +95,51 @@ import (
 const Column = "deleted_at"
 
 // Mixin adds deleted_at, and the interceptor and hook that use it. List it
-// in a schema's Mixin method.
-type Mixin struct{ mixin.Schema }
+// in a schema's Mixin method. Its zero value filters reads and sets only
+// deleted_at; Assign and Reads change that.
+type Mixin struct {
+	mixin.Schema
+	// Assign, when not nil, returns more columns for a soft delete to set,
+	// read from the delete's context, such as who deleted the rows:
+	//
+	//	softdelete.Mixin{Assign: func(ctx context.Context) ([]softdelete.Set, error) {
+	//		return []softdelete.Set{{Column: "deleted_by_id", Value: auth.UserID(ctx)}}, nil
+	//	}}
+	//
+	// It runs once per delete, in the hook, and its columns go into the
+	// same UPDATE as deleted_at. An error from it, an unknown column, a value
+	// Mutation.Set would refuse, or deleted_at among them fails the delete,
+	// and nothing is sent. It does not run under Skip, whose delete removes
+	// the rows.
+	Assign func(ctx context.Context) ([]Set, error)
+	// Reads says whether reads hide deleted rows: Filtered, the zero value,
+	// or Unfiltered.
+	Reads ReadMode
+}
+
+// Set is a column a soft delete sets beside deleted_at, by the column's
+// name, as velox.FieldEQ names it, and its value, converted as
+// Mutation.Set converts it; nil sets NULL.
+type Set struct {
+	Column string
+	Value  any
+}
+
+// ReadMode says whether the mixin hides deleted rows.
+type ReadMode uint8
+
+// The read modes.
+const (
+	// Filtered hides deleted rows from every read and write: the mixin's
+	// interceptor ANDs deleted_at IS NULL into each statement.
+	Filtered ReadMode = iota
+	// Unfiltered installs no interceptor: reads, updates and Saves see
+	// deleted rows, which the application tells apart by deleted_at, and a
+	// restore is a plain update. A delete stays soft, and sets deleted_at on
+	// live rows only, so a second delete affects 0 rows and keeps the first
+	// one's time.
+	Unfiltered
+)
 
 // Fields returns deleted_at, NULL while the row is live.
 func (Mixin) Fields() []schema.Field {
@@ -106,8 +164,11 @@ func Skipped(ctx context.Context) bool {
 }
 
 // Interceptors returns the interceptor that hides rows whose deleted_at is
-// set, but under Skip.
-func (Mixin) Interceptors() []velox.Interceptor {
+// set, but under Skip; none when Reads is Unfiltered.
+func (sd Mixin) Interceptors() []velox.Interceptor {
+	if sd.Reads == Unfiltered {
+		return nil
+	}
 	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
 		if Skipped(ctx) {
 			return velox.Allow(), nil
@@ -117,14 +178,14 @@ func (Mixin) Interceptors() []velox.Interceptor {
 }
 
 // Hooks returns the hook that makes a delete an update that sets
-// deleted_at, but under Skip.
-func (Mixin) Hooks() []velox.Hook {
+// deleted_at, and Assign's columns, but under Skip.
+func (sd Mixin) Hooks() []velox.Hook {
 	return []velox.Hook{velox.On(func(next velox.Mutator) velox.Mutator {
 		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 			if Skipped(ctx) {
 				return next.Mutate(ctx, m)
 			}
-			n, err := softDelete(ctx, m, time.Now())
+			n, err := sd.softDelete(ctx, m, time.Now())
 			m.SetAffected(n)
 			return err
 		})
@@ -132,23 +193,46 @@ func (Mixin) Hooks() []velox.Hook {
 }
 
 // softDelete updates the rows the delete would remove to set deleted_at to
-// now, or every row when where is empty: an empty where is the delete's
-// All, as velox refused a delete with neither a Where nor All before the
-// hooks ran.
-func softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, error) {
+// now, and Assign's columns, or every row when where is empty: an empty
+// where is the delete's All, as velox refused a delete with neither a Where
+// nor All before the hooks ran. Under Unfiltered, where no interceptor
+// hides deleted rows, it ANDs deleted_at IS NULL itself.
+func (sd Mixin) softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, error) {
 	t := untyped.MutationTable(m)
-	col, ok := t.Info().Column(Column)
+	in := t.Info()
+	col, ok := in.Column(Column)
 	if !ok {
-		return 0, fmt.Errorf("velox/softdelete: %s has no column %s", t.Info().Name, Column)
+		return 0, fmt.Errorf("velox/softdelete: %s has no column %s", in.Name, Column)
 	}
 	set, err := t.Assign(col, now)
 	if err != nil {
 		return 0, err
 	}
+	sets := []engine.Assignment{set}
+	if sd.Assign != nil {
+		extra, err := sd.Assign(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("velox/softdelete: %s: Assign: %w", in.Name, err)
+		}
+		for _, s := range extra {
+			a, err := engine.NamedAssignment(in, s.Column, s.Value)
+			if err != nil {
+				return 0, fmt.Errorf("velox/softdelete: Assign: %w", err)
+			}
+			if a.Column == col {
+				return 0, fmt.Errorf("velox/softdelete: %s: Assign sets %s, which the mixin sets", in.Name, Column)
+			}
+			sets = append(sets, a)
+		}
+	}
 	// Marked a soft delete, so that a recording handle reports its rows as
 	// deletes, Soft; it sends the same statement.
-	u := engine.MarkSoftDelete(untyped.Update(m.DB(), t)).Assign(set)
-	if cs := m.Predicates(); len(cs) > 0 {
+	u := engine.MarkSoftDelete(untyped.Update(m.DB(), t)).Assign(sets...)
+	cs := slices.Clip(m.Predicates())
+	if sd.Reads == Unfiltered {
+		cs = append(cs, velox.FieldIsNull(Column))
+	}
+	if len(cs) > 0 {
 		u = u.Where(cs...)
 	} else {
 		u = u.All()

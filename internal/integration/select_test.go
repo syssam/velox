@@ -129,6 +129,25 @@ func TestSelect(t *testing.T) {
 	})
 }
 
+// TestWindowOnRealDatabases: a window function in a Calc or SelectRaw, on
+// every dialect (MySQL 8 and SQLite 3.25 have windows). COUNT(*) OVER ()
+// beside GroupBy and Limit counts every group, not only the page's. The
+// invoices are TestSelect's.
+func TestWindowOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		type inv = testmodel.Invoice
+		wantRows(t, "count over a page of groups", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(I.OrgID, velox.CountAll[inv](), velox.Calc[inv]("COUNT(*) OVER ()")).
+			GroupBy(I.OrgID).OrderBy(I.OrgID.Asc()).Limit(1), 3),
+			[]string{"1 4 2"})
+		wantRows(t, "row number per org", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(I.ID).
+			SelectRaw("ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ? DESC)", I.OrgID, I.Total).
+			OrderBy(I.ID.Asc()).Limit(10), 2),
+			[]string{"1 4", "2 3", "3 2", "4 1", "5 1"})
+	})
+}
+
 // TestSelectKeepsPolicy: a grouped read of tickets, on a policied DB, counts
 // only the caller's own rows, in each org, and not the other caller's.
 func TestSelectKeepsPolicy(t *testing.T) {

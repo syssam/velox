@@ -1130,12 +1130,16 @@ type UpdateTime struct { Schema }
 
 package schema/mixin/softdelete
 const Column
+const Filtered ReadMode
+const Unfiltered
 func (Mixin) Fields() []schema.Field
-func (Mixin) Hooks() []velox.Hook
-func (Mixin) Interceptors() []velox.Interceptor
+func (sd Mixin) Hooks() []velox.Hook
+func (sd Mixin) Interceptors() []velox.Interceptor
 func Skip(ctx context.Context) context.Context
 func Skipped(ctx context.Context) bool
-type Mixin struct { mixin.Schema }
+type Mixin struct { mixin.Schema Assign func(ctx context.Context) ([]Set, error) Reads ReadMode }
+type ReadMode uint8
+type Set struct { Column string Value any }
 
 package migrate
 const Destructive

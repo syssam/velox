@@ -22,6 +22,9 @@ type exprData struct {
 	slots []ExprSlot // what fills each ?
 	args  []any      // the values of the slots that are neither, in order
 	shape string     // what shapes it in the render cache's key: see seal
+	// window says the text holds the word OVER: a window function, which
+	// only a result column or an ordering may hold (hasWindow).
+	window bool
 }
 
 // seal sets d's shape from its text pieces and what each slot holds. The
@@ -106,23 +109,44 @@ func exprWordBanned(w string) bool {
 // unbalanced parenthesis, and no word that starts a subquery or names a
 // function that reads past the row (exprWordBanned). A condition on another
 // table is HasWith or InSelect, whose target's policies apply.
+//
+// A condition holds no window function, in its text or a term's: SQL
+// computes windows after WHERE and HAVING, and refuses one there.
 func ExprNode(text string, slots []ExprSlot, args []any) Node {
 	d, err := newExpr(text, slots, args)
+	if err == nil && exprHasWindow(d) {
+		err = fmt.Errorf("velox: Expr %q holds a window function (OVER): SQL computes windows after WHERE and HAVING; select it with Calc, or filter on it in an outer query with Raw", text)
+	}
 	if err != nil {
 		return Node{Op: OpInvalid, V: err}
 	}
 	return Node{Op: OpExpr, V: d}
 }
 
+// exprHasWindow reports whether d's text, or a term among its slots, holds
+// a window function.
+func exprHasWindow(d *exprData) bool {
+	if d.window {
+		return true
+	}
+	for _, s := range d.slots {
+		if s.Term != nil && hasWindow(*s.Term) {
+			return true
+		}
+	}
+	return false
+}
+
 // newExpr checks text and makes the expression of it and its slots.
 func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
-	if err := checkExprText(text); err != nil {
+	window, err := checkExprText(text)
+	if err != nil {
 		return nil, err
 	}
 	if n := strings.Count(text, "?"); n != len(slots) {
 		return nil, fmt.Errorf("velox: Expr %q has %d ?, and %d arguments", text, n, len(slots))
 	}
-	return (&exprData{parts: strings.Split(text, "?"), slots: slots, args: args}).seal(), nil
+	return (&exprData{parts: strings.Split(text, "?"), slots: slots, args: args, window: window}).seal(), nil
 }
 
 // checkExprText refuses text that could name another table, end the
@@ -133,12 +157,18 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 // scanned for words, comments or parentheses. Outside a literal the text may
 // hold no other quote, semicolon, backslash, $ or #, no comment, no
 // unbalanced parenthesis and no word exprWordBanned refuses.
-func checkExprText(text string) error {
+//
+// window reports whether the text holds the word OVER outside a literal: a
+// window function, such as COUNT(*) OVER () or ROW_NUMBER() OVER
+// (PARTITION BY ? ORDER BY ?). What its parentheses hold is checked as the
+// rest of the text is, so a subquery or a refused function inside OVER is
+// refused too.
+func checkExprText(text string) (window bool, err error) {
 	bad := func(what string) error {
 		return fmt.Errorf("velox: Expr %q: %s: write a value as an argument, and a condition on another table as HasWith or InSelect", text, what)
 	}
 	if strings.TrimSpace(text) == "" {
-		return errors.New("velox: Expr: the text is empty")
+		return false, errors.New("velox: Expr: the text is empty")
 	}
 	depth := 0
 	for i := 0; i < len(text); {
@@ -147,7 +177,7 @@ func checkExprText(text string) error {
 		case c == '\'':
 			end, why := exprLiteral(text, i)
 			if why != "" {
-				return bad("a string literal " + why + " (it is 'x' with no quote, backslash, ? or control character inside; pass anything else as an argument)")
+				return false, bad("a string literal " + why + " (it is 'x' with no quote, backslash, ? or control character inside; pass anything else as an argument)")
 			}
 			i = end
 		case isIdentStart(c):
@@ -156,20 +186,21 @@ func checkExprText(text string) error {
 				j++
 			}
 			if exprWordBanned(text[i:j]) {
-				return bad(fmt.Sprintf("the word %s is not allowed", text[i:j]))
+				return false, bad(fmt.Sprintf("the word %s is not allowed", text[i:j]))
 			}
+			window = window || strings.EqualFold(text[i:j], "OVER")
 			i = j
 		default:
 			if err := exprChar(text, i, &depth, bad); err != nil {
-				return err
+				return false, err
 			}
 			i++
 		}
 	}
 	if depth != 0 {
-		return bad("a parenthesis is never closed")
+		return false, bad("a parenthesis is never closed")
 	}
-	return nil
+	return window, nil
 }
 
 // exprChar checks the byte of text at i, outside a literal and not a word's:
