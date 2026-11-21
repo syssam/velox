@@ -34,7 +34,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   and `client.Intercept`: `velox.WithHooksAll(hooks...)` runs hooks on every
   entity's writes, before the schema's and `WithHooks[E]`'s, and
   `Mutation.Entity()` names the entity. `velox.WithFilter(f)` adds a row
-  filter, `func(ctx, entity string) (velox.Predicate, error)`, with an
+  filter, `func(ctx, entity string, op velox.Op) (velox.Predicate, error)`,
+  given the statement's op (`OpSelect` for related entities), with an
   interceptor's reach: reads, writes, loads, joins, `Has`/`HasWith`, counts
   and aggregates. `WithoutPolicy` does not lift it; an error, the zero
   `Predicate` or an unknown column fails the statement, and

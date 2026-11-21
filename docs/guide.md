@@ -1126,26 +1126,38 @@ refund := velox.On(func(next velox.Mutator) velox.Mutator {
 ```
 
 `velox.WithFilter(f)` adds a row filter for every entity. velox calls it
-with the statement's context and the entity's name, once per statement for
-each entity the statement reads: its own, and each one a `With`, `Join`,
-`Has` or `HasWith` reaches. It reaches what an interceptor reaches, writes
-included, and `WithoutPolicy` does not lift it:
+with the statement's context, the entity's name and an op, at most once per
+statement for each entity and op, except where a relation loops back
+([ADR 0091](decisions/0091-policy-cycles-and-text-keys.md)). The op is the
+statement's own for its own entity (`OpSelect`, `OpUpdate`, `OpDelete`, or
+`OpInsert` for an upsert's update branch) and `OpSelect` for each entity a
+`With`, `Join`, `Has` or `HasWith` reaches. It reaches what an interceptor
+reaches, and `WithoutPolicy` does not lift it.
+
+This soft-delete filter narrows reads only:
 
 ```go
 db, err := velox.Connect("postgres", dsn, velox.WithFilter(
-	func(ctx context.Context, entity string) (velox.Predicate, error) {
-		if !softDeleted[entity] || includeDeleted(ctx) {
+	func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
 			return velox.NoFilter(), nil
 		}
 		return velox.FieldIsNull("deleted_at"), nil
 	}))
 ```
 
+It leaves writes alone for two reasons. ent's and veloxe's interceptors
+wrap queries only, so a port keeps their behaviour. And a restore must
+reach a deleted row: code that reads it with the deleted included and then
+clears `deleted_at` under the plain context would otherwise update 0 rows
+and say nothing.
+
 A filter fails closed. It returns `velox.NoFilter()` for an entity it does
-not restrict. The zero `velox.Predicate{}`, an error, or a column the
-entity lacks fails the statement, and an error is not a denial.
-`velox.Not(velox.NoFilter())` matches no row, for a caller who may see
-none. Several filters AND, in the order given.
+not restrict, the join entities of many-to-many edges included: restricting
+one makes `With` loads and `Has` disagree. The zero `velox.Predicate{}`, an
+error, or a column the entity lacks fails the statement, and an error is
+not a denial. `velox.Not(velox.NoFilter())` matches no row, for a caller who
+may see none. Several filters AND, in the order given.
 
 ## Recording changes
 

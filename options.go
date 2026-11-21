@@ -63,12 +63,23 @@ type Option = engine.Option
 func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)) }
 
 // Filter is a row filter for every entity, which WithFilter adds. Given
-// the statement's context and an entity's name (as Mutation.Entity gives
-// it, "Invoice"), it returns that entity's row condition, by column name as
-// an Interceptor's Filter does: FieldEQ and the like. It returns NoFilter()
-// for an entity it does not restrict. Its zero Predicate fails the
-// statement, and so does an error, which is not a denial.
-type Filter func(ctx context.Context, entity string) (Predicate, error)
+// the statement's context, an entity's name (as Mutation.Entity gives it,
+// "Invoice") and the op the entity is read for, it returns that entity's
+// row condition, by column name as an Interceptor's Filter does: FieldEQ
+// and the like. It returns NoFilter() for an entity it does not restrict.
+// Its zero Predicate fails the statement, and so does an error, which is
+// not a denial.
+//
+// op is the statement's own for its own entity: OpSelect for a read,
+// OpUpdate for an update, a Save or a Writable read, OpDelete for a delete,
+// and OpInsert for the update branch of an upsert. It is OpSelect for every
+// entity the statement reaches: by a With load, a Join, Has, HasWith or a
+// subquery. A filter that should narrow reads only, as ent's interceptors
+// do, returns NoFilter() when op is not OpSelect.
+//
+// Return NoFilter() for the join entities of many-to-many edges: restricting
+// one makes With loads and Has disagree.
+type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
 // Tx and shard it opens, as ent's client.Intercept adds an interceptor for
@@ -78,28 +89,29 @@ type Filter func(ctx context.Context, entity string) (Predicate, error)
 // WithoutPolicy does not lift it: f offers its own way to be skipped, such
 // as a context value it reads.
 //
-//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, entity string) (velox.Predicate, error) {
-//		if !softDeleted[entity] || includeDeleted(ctx) {
+//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+//		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
 //			return velox.NoFilter(), nil
 //		}
 //		return velox.FieldIsNull("deleted_at"), nil
 //	}))
 //
-// The scope calls f once per statement for each entity the statement reads
-// or writes, the statement's own and each one a Has, HasWith or Join of it
-// reaches, with the statement's context; velox keeps nothing between
-// statements. f's conditions come before the entity's interceptors' and
-// its Read policy's in the WHERE, and several WithFilter filters AND in the
-// order given. A column f names that the entity lacks fails the statement.
-// A Filter that reads a context value records it with WithScopeValue, so
+// The scope calls f with the statement's context, at most once per
+// statement for each entity and op, except where a relation loops back
+// (ADR 0091): for the statement's own entity and for each one a Has,
+// HasWith or Join of it reaches. velox keeps nothing between statements.
+// f's conditions come before the entity's interceptors' and its Read
+// policy's in the WHERE, and several WithFilter filters AND in the order
+// given. A column f names that the entity lacks fails the statement. A
+// Filter that reads a context value records it with WithScopeValue, so
 // that the GraphQL batcher keeps callers apart.
 //
 // A join entity of a many-to-many edge is an entity too: f is called for it
 // where its rows are read or written as its own, as a With load through it
 // and Rel.Add and the like do, and is not called for it inside a Has
 // through it, which reads it through its two sides. On MySQL, an upsert that
-// updates an entity f returns a condition for is refused with
-// ErrPolicyUpsert. A nil f panics.
+// updates an entity f returns a condition for (given OpInsert) is refused
+// with ErrPolicyUpsert. A nil f panics.
 func WithFilter(f Filter) Option {
 	if f == nil {
 		panic("velox: WithFilter(nil)")

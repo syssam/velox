@@ -18,7 +18,7 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 	var err error
 	// The entity's own conditions first, as in scope.
 	if sc.filtered(in) || (policy && in.policy.Read != nil) {
-		if read, err = sc.RowCond(in, OpUpdate); err != nil {
+		if read, err = sc.RowCond(in, OpUpdate, OpInsert); err != nil {
 			return err
 		}
 	}
@@ -65,7 +65,7 @@ type Scoper struct {
 	Entity string // the statement's entity, which every error names
 	Skip   string // the DB's WithoutPolicy reason; "" when none
 	// Filters are the DB's WithFilter filters, which every entity's row
-	// condition gets before its interceptors'.
+	// condition gets before its interceptors', given the op (RowCond).
 	Filters []EntityFilterFn
 	// Reads is set for a statement that reads only (a SELECT that is not
 	// Writable): the policies' Query conditions apply to it, and to every
@@ -79,9 +79,11 @@ type Scoper struct {
 	cut       int           // the outermost place (from 1) in computing that the condition being made was cut at; 0 for none
 }
 
-// readCond is an entity's row condition, made once per statement.
+// readCond is an entity's row condition, made once per statement for each
+// op its WithFilter filters are given (always OpSelect on a DB with none).
 type readCond struct {
 	entity *EntityInfo
+	fop    Op
 	p      Predicate
 }
 
@@ -107,9 +109,12 @@ func (sc *Scoper) PolicyOn() bool {
 
 // RowCond returns entity t's row condition: the AND of the WithFilter
 // filters' conditions, then its interceptors', in order, then its Read
-// policy's unless WithoutPolicy. It calls them the first time only, once per
-// statement. A denial of the policy is a *PolicyError for op; a filter's or
-// an interceptor's error fails the statement and is not a denial. The EXISTS
+// policy's unless WithoutPolicy. The filters are given fop: the statement's
+// own op for its own entity, OpSelect for an entity it reaches. It makes the
+// condition the first time only, at most once per statement for each entity
+// and fop, except where a condition loops back (below). A denial of the
+// policy is a *PolicyError for op; a filter's or an interceptor's error
+// fails the statement and is not a denial. The EXISTS
 // in the condition get their targets' row conditions in turn.
 //
 // A condition that reaches t's own again, directly or through other
@@ -119,9 +124,12 @@ func (sc *Scoper) PolicyOn() bool {
 // applies t's in full, and every other entity's applies inside. A condition
 // made below such a cut depends on where it was reached, so it is not kept
 // for reuse: only t's own, whose cut is its own looping occurrence, is.
-func (sc *Scoper) RowCond(t *EntityInfo, op Op) (Predicate, error) {
+func (sc *Scoper) RowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
+	if len(sc.Filters) == 0 {
+		fop = OpSelect // no filter sees it: one condition per entity
+	}
 	for _, r := range sc.reads {
-		if r.entity == t {
+		if r.entity == t && r.fop == fop {
 			return r.p, nil
 		}
 	}
@@ -133,7 +141,7 @@ func (sc *Scoper) RowCond(t *EntityInfo, op Op) (Predicate, error) {
 	saved := sc.cut
 	sc.cut = 0
 	sc.computing = append(sc.computing, t)
-	p, err := sc.rowCond(t, op)
+	p, err := sc.rowCond(t, op, fop)
 	sc.computing = sc.computing[:len(sc.computing)-1]
 	cut := sc.cut
 	sc.cut = saved
@@ -144,7 +152,7 @@ func (sc *Scoper) RowCond(t *EntityInfo, op Op) (Predicate, error) {
 		return Predicate{}, err
 	}
 	if cut == 0 || cut >= depth {
-		sc.reads = append(sc.reads, readCond{t, p})
+		sc.reads = append(sc.reads, readCond{t, fop, p})
 	}
 	return p, nil
 }
@@ -158,12 +166,12 @@ func (sc *Scoper) markCut(at int) {
 }
 
 // rowCond makes RowCond's condition.
-func (sc *Scoper) rowCond(t *EntityInfo, op Op) (Predicate, error) {
+func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 	var kids []Node
 	if len(sc.Filters) > 0 {
 		name := EntityName(t)
 		for i, f := range sc.Filters {
-			p, err := f(sc.Ctx, name)
+			p, err := f(sc.Ctx, name, fop)
 			c, err := sc.filterCond(t, "filter", i, p, err)
 			if err != nil {
 				return Predicate{}, err
@@ -393,7 +401,7 @@ func (sc *Scoper) target(t *EntityInfo) (Predicate, error) {
 		return Predicate{}, nil
 	}
 	// An EXISTS reads its target, whatever the statement's kind.
-	return sc.RowCond(t, OpSelect)
+	return sc.RowCond(t, OpSelect, OpSelect)
 }
 
 // inExists returns err, an error from inside an EXISTS on t (from the EXISTS
@@ -455,7 +463,11 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	var err error
 	pol := InfoPolicy(in)
 	if sc.filtered(in) || (sc.conditions(pol) && sc.PolicyOn()) {
-		if read, err = sc.RowCond(in, st.Op); err != nil {
+		fop := st.Op
+		if st.Writable {
+			fop = OpUpdate // a Writable SELECT reads the rows an update changes
+		}
+		if read, err = sc.RowCond(in, st.Op, fop); err != nil {
 			return err
 		}
 	}
@@ -554,7 +566,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 func (sc *Scoper) mysqlUpsert(in *EntityInfo, conditioned bool) error {
 	refuse := conditioned || len(in.filters) > 0
 	if !refuse && len(sc.Filters) > 0 {
-		p, err := sc.RowCond(in, OpUpdate)
+		p, err := sc.RowCond(in, OpUpdate, OpInsert)
 		if err != nil {
 			return err
 		}

@@ -168,9 +168,9 @@ func WithAllHooks(hs []HookFn) Option {
 }
 
 // EntityFilterFn is a filter WithFilter adds, as the engine runs it: given
-// the statement's context and an entity's name (EntityName), it returns the
-// entity's row condition.
-type EntityFilterFn func(ctx context.Context, entity string) (Predicate, error)
+// the statement's context, an entity's name (EntityName) and the op it is
+// read for (RowCond's fop), it returns the entity's row condition.
+type EntityFilterFn func(ctx context.Context, entity string, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for every DB the
 // option configures and every Tx and shard it opens. The scope calls it

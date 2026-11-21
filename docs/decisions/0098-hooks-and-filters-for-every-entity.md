@@ -28,7 +28,7 @@ asked for both at run time.
   (`"Invoice"`), as ent's `Mutation.Type` gives. Mutation had no name of
   its own; `untyped.MutationTable` gives a Table, not a name.
 - `velox.WithFilter(f Filter) Option`, with
-  `type Filter func(ctx context.Context, entity string) (Predicate, error)`
+  `type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)`
   and the same entity name. The engine keeps the filters in the DB's
   config, shared by its Tx and shards, and the scope calls them in
   `RowCond`, where it calls an entity's interceptors, before them. Every
@@ -45,10 +45,26 @@ asked for both at run time.
   closed; a column the entity lacks fails it; `velox.NoFilter()` is no
   condition. `NoFilter` is `Allow` by the name a filter reads best with:
   a function, as `Allow` is, so no one can reassign it.
-- The filter is given the statement's context and runs once per statement
-  for each entity whose row condition the statement needs (`RowCond`'s
-  per-statement memo); velox keeps nothing across statements, so a filter
-  that reads the context is right in every call.
+- The filter is given the op. For the statement's own entity it is the
+  statement's op: `OpSelect`, `OpUpdate` (an update, a Save, a Writable
+  read), `OpDelete`, and `OpInsert` for an upsert's update branch. It is
+  `OpSelect` for every entity the statement reaches as a target: With,
+  Join, `Has`, `HasWith`, subqueries. Without it a filter could not keep
+  veloxe's behaviour: veloxe's interceptors wrap queries only, and nextapp's
+  permission interceptor reads its read conditions. A soft-delete filter
+  over every op breaks a restore: nextapp's email handler reads a deleted
+  user with the deleted included, then clears `deleted_at` under the plain
+  context, and that update would match 0 rows and fail silently. So a
+  filter that narrows reads only returns `NoFilter()` when op is not
+  `OpSelect`. The fail-closed rules do not depend on op.
+- The filter is given the statement's context. It runs at most once per
+  statement for each entity and op, except where a relation loops back
+  (0091). `RowCond`'s per-statement memo is keyed by entity and op, so a
+  self-relation UPDATE with an EXISTS on its own entity gets both
+  conditions, the update's on the row and the read's inside the EXISTS. On
+  a DB with no filters the key is the entity alone, as before. velox keeps
+  nothing across statements, so a filter that reads the context is right
+  in every call.
 - Several filters AND, in registration order; their conditions come before
   the interceptors' and the Read policy's.
 - A join entity of a many-to-many edge is an entity: the filter is called
@@ -56,12 +72,12 @@ asked for both at run time.
   join-row writes of `Rel.Add`, `Remove`, `Clear`), and not inside a `Has`
   through it, which reads it through its two sides. A filter that returns
   `NoFilter` for names it does not know keeps the interceptor rule that a
-  join entity is read through its sides. An interceptor on a join entity
+  join entity is read through its sides; the godoc asks for it. An interceptor on a join entity
   stays refused: a schema can be checked when it is built, a run-time
   filter only when it runs.
 - MySQL's `ON DUPLICATE KEY UPDATE` takes no condition. An upsert that
   updates is refused there with `ErrPolicyUpsert` when a filter returns a
-  condition for its entity, and runs when every filter returns `NoFilter`.
+  condition for its entity under `OpInsert`, and runs when every filter returns `NoFilter`.
   An interceptor or a Read/Write policy still refuses it without asking
   the filters. A multi-row upsert on a DB with filters runs in a
   transaction, as one on an entity with an interceptor does.
@@ -70,8 +86,9 @@ asked for both at run time.
 
 - ent's client-wide hooks and interceptors port one to one, with the
   entity name to dispatch on. velox's filter is a row filter, not query
-  middleware: it reaches writes as well as reads (ent's interceptors reach
-  queries only), and it cannot add an ORDER BY or a LIMIT.
+  middleware: it is asked for writes as well as reads, and narrows reads
+  only when it returns `NoFilter()` for other ops, as ent's query-only
+  interceptors do. It cannot add an ORDER BY or a LIMIT.
 - `Meta.HasRowFilter` and `untyped.Table.HasRowFilter` are about the
   schema: they know no DB, so they do not see `WithFilter`. velox-graphql's
   where filter, which reads them to treat a foreign key whose target is

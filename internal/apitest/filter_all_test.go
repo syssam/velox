@@ -11,6 +11,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // allFilterMode is what allFilter does for INote under a context.
@@ -50,7 +51,7 @@ func (l *allFilterLog) reset() {
 // allFilter hides the note "a" from every statement, as the context's mode
 // says, and restricts no other entity.
 func allFilter(log *allFilterLog) velox.Filter {
-	return func(ctx context.Context, entity string) (velox.Predicate, error) {
+	return func(ctx context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
 		log.mu.Lock()
 		log.seen = append(log.seen, entity)
 		log.mu.Unlock()
@@ -279,7 +280,7 @@ func TestFiltersAndInOrder(t *testing.T) {
 	var calls []string
 	type key struct{}
 	f := func(name, body string) velox.Filter {
-		return func(ctx context.Context, entity string) (velox.Predicate, error) {
+		return func(ctx context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
 			calls = append(calls, name+":"+entity+":"+ctx.Value(key{}).(string))
 			if entity != "INote" {
 				return velox.NoFilter(), nil
@@ -359,7 +360,9 @@ func TestFilterUpsertOnMySQL(t *testing.T) {
 	if err := ow.Exec(context.Background()); err != nil {
 		t.Errorf("an upsert of IOwner: %v", err)
 	}
-	r := velox.WithFilter(func(context.Context, string) (velox.Predicate, error) { return velox.FieldEQ("name", "o"), nil })
+	r := velox.WithFilter(func(context.Context, string, velox.Op) (velox.Predicate, error) {
+		return velox.FieldEQ("name", "o"), nil
+	})
 	rdb := openPolicied(velox.MySQL, e, r)
 	err := rdb.Insert(&fixture.IOwner{ID: 1, Name: "o"}).OnConflict(fixture.IOwners.ID).Update(fixture.IOwners.Name).Exec(context.Background())
 	if !errors.Is(err, velox.ErrPolicyUpsert) {
@@ -434,4 +437,171 @@ func TestHooksAllPanicsOnNil(t *testing.T) {
 		}
 	}()
 	velox.WithHooksAll(nil)
+}
+
+// sdUser is a user that a soft-delete filter hides once deleted_at is set.
+type sdUser struct {
+	ID        int64
+	Name      string
+	DeletedAt *int64
+}
+
+var sdUsers = struct {
+	ID        velox.NumberCol[sdUser, int64]
+	Name      velox.StringCol[sdUser, string]
+	DeletedAt velox.NullNumberCol[sdUser, int64]
+}{velox.NumberCol[sdUser, int64]{I: 0}, velox.StringCol[sdUser, string]{I: 1}, velox.NullNumberCol[sdUser, int64]{I: 2}}
+
+var sdUserMeta velox.MetaOnce[sdUser]
+
+func (*sdUser) VeloxMeta() *velox.Meta[sdUser] {
+	return sdUserMeta.Load(func() velox.Descriptor[sdUser] {
+		return velox.Descriptor[sdUser]{
+			Table:      "sd_users",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "DeletedAt", Name: "deleted_at"}},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *sdUser, i int) any {
+				return [...]any{&x.ID, &x.Name, &x.DeletedAt}[i]
+			},
+		}
+	})
+}
+
+type includeDeletedKey struct{}
+
+// softDelete is the guide's soft-delete filter: it hides deleted users from
+// reads, unless the context includes them, and leaves writes alone, as
+// veloxe's query-only interceptor did.
+func softDelete(readsOnly bool) velox.Filter {
+	return func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+		if entity != "sdUser" || readsOnly && op != velox.OpSelect || ctx.Value(includeDeletedKey{}) != nil {
+			return velox.NoFilter(), nil
+		}
+		return velox.FieldIsNull("deleted_at"), nil
+	}
+}
+
+func sdUserDB(t *testing.T, f velox.Filter) *velox.DB {
+	t.Helper()
+	db := interceptorDB(t, velox.WithFilter(f))
+	for _, q := range []string{
+		`CREATE TABLE "sd_users" ("id" integer PRIMARY KEY, "name" text NOT NULL, "deleted_at" integer)`,
+		`INSERT INTO "sd_users" VALUES (1, 'ann', 100)`,
+	} {
+		if _, err := db.Exec(context.Background(), "test setup", q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return db
+}
+
+// TestFilterRestoreDeleted: a restore that reads a deleted user with the
+// deleted included, then clears deleted_at under the plain context, as
+// nextapp's email handler does, changes the row when the filter narrows
+// reads only. A filter that narrows every op hides the row from the update,
+// which then changes nothing.
+func TestFilterRestoreDeleted(t *testing.T) {
+	plain := context.Background()
+	include := context.WithValue(plain, includeDeletedKey{}, true)
+	db := sdUserDB(t, softDelete(true))
+	if _, err := db.Query[sdUser]().Where(sdUsers.ID.EQ(1)).One(plain); !errors.Is(err, velox.ErrNotFound) {
+		t.Fatalf("the deleted user under the plain context: %v", err)
+	}
+	u, err := db.Query[sdUser]().Where(sdUsers.ID.EQ(1)).One(include)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := db.Update[sdUser]().Set(sdUsers.DeletedAt.SetNull()).Where(sdUsers.ID.EQ(u.ID)).Exec(plain)
+	if err != nil || n != 1 {
+		t.Fatalf("restore: %d, %v; want 1", n, err)
+	}
+	if _, err := db.Query[sdUser]().Where(sdUsers.ID.EQ(1)).One(plain); err != nil {
+		t.Errorf("the restored user: %v", err)
+	}
+
+	every := sdUserDB(t, softDelete(false))
+	n, err = every.Update[sdUser]().Set(sdUsers.DeletedAt.SetNull()).Where(sdUsers.ID.EQ(1)).Exec(plain)
+	if err != nil || n != 0 {
+		t.Errorf("restore under a filter of every op: %d, %v; want 0", n, err)
+	}
+}
+
+// opCall is one call of a filter: the entity and the op.
+type opCall struct {
+	entity string
+	op     velox.Op
+}
+
+// opLog returns a filter that restricts nothing and records its calls.
+func opLog(calls *[]opCall) velox.Filter {
+	return func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+		*calls = append(*calls, opCall{entity, op})
+		return velox.NoFilter(), nil
+	}
+}
+
+// TestFilterSeesTheOp: the filter is given the statement's op for its own
+// entity (OpUpdate for a Writable read and a Save), OpInsert for an upsert's update branch, and OpSelect for an
+// entity a With, Has or Join reaches.
+func TestFilterSeesTheOp(t *testing.T) {
+	var calls []opCall
+	db := interceptorDB(t, velox.WithFilter(opLog(&calls)))
+	ctx := context.Background()
+	check := func(what string, want ...opCall) {
+		t.Helper()
+		if !slices.Equal(calls, want) {
+			t.Errorf("%s: calls %v, want %v", what, calls, want)
+		}
+		calls = nil
+	}
+	if _, err := db.Query[fixture.IOwner]().Where(fixture.IOwners.Notes.Has()).Join(fixture.IOwners.Pinned).AllowUnbounded().All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	check("select", opCall{"IOwner", velox.OpSelect}, opCall{"INote", velox.OpSelect})
+	if _, err := db.Update[fixture.IOwner]().Set(fixture.IOwners.Name.Set("x")).Where(fixture.IOwners.Notes.Has()).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	check("update", opCall{"IOwner", velox.OpUpdate}, opCall{"INote", velox.OpSelect})
+	if _, err := db.Query[fixture.IOwner]().Writable().AllowUnbounded().All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	check("writable read", opCall{"IOwner", velox.OpUpdate})
+	if err := db.Save(&fixture.IOwner{ID: 1, Name: "s"}, fixture.IOwners.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	check("save", opCall{"IOwner", velox.OpUpdate})
+	if _, err := db.Delete[fixture.IOwner]().Where(fixture.IOwners.ID.EQ(9)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	check("delete", opCall{"IOwner", velox.OpDelete})
+	if err := db.Insert(&fixture.IOwner{ID: 1, Name: "o"}).OnConflict(fixture.IOwners.ID).Update(fixture.IOwners.Name).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	check("upsert", opCall{"IOwner", velox.OpInsert})
+}
+
+// TestFilterSelfRelationUpdate: an update of Sample whose condition reaches
+// Sample again through Has calls the filter for both ops, and ANDs both
+// conditions: the update's on the row, the read's inside the EXISTS.
+func TestFilterSelfRelationUpdate(t *testing.T) {
+	var calls []opCall
+	f := func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+		calls = append(calls, opCall{entity, op})
+		if op == velox.OpSelect {
+			return velox.FieldNEQ("name", "read"), nil
+		}
+		return velox.FieldNEQ("name", "write"), nil
+	}
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e, velox.WithFilter(f))
+	S := testmodel.Samples
+	if _, err := db.Update[testmodel.Sample]().Set(S.Name.Set("n")).Where(S.Children.Has()).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := []opCall{{"Sample", velox.OpUpdate}, {"Sample", velox.OpSelect}}; !slices.Equal(calls, want) {
+		t.Errorf("calls %v, want %v", calls, want)
+	}
+	if !slices.Contains(e.Args, any("read")) || !slices.Contains(e.Args, any("write")) {
+		t.Errorf("the update lacks a condition: %s %v", e.SQL, e.Args)
+	}
 }

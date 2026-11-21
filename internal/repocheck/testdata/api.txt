@@ -677,7 +677,7 @@ type EntityTable = engine.EntityTable
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type Field = schema.Field
 type FieldChange = veloxtype.FieldChange
-type Filter func(ctx context.Context, entity string) (Predicate, error)
+type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type Hook func(next Mutator) Mutator
