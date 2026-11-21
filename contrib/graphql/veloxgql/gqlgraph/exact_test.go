@@ -1,18 +1,14 @@
 package gqlgraph_test
 
 import (
-	"context"
 	"encoding/json"
 	"math"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
-	"github.com/syssam/velox/internal/apitest/fixture"
-	"github.com/syssam/velox/untyped"
 )
 
 // TestFromJSONNumbers: a number in an any is the float64 a hook expects when that says
@@ -151,113 +147,5 @@ func TestFromJSONExact(t *testing.T) {
 	_, err = gqlgraph.FromJSON[tagged](at, veloxgql.JSON(`{"nope":1}`))
 	if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), `the key "nope"`) || strings.Contains(err.Error(), "gqlgraph_test") {
 		t.Errorf("an unknown key: %v", err)
-	}
-}
-
-// open has no Read policy, guarded's metadata has one, and intercepted's has
-// an interceptor and no policy, for TestFKScoped. A Policy method alone is
-// not enough: generated entities have none, as the schema declares it, so
-// gqlgraph reads the policy from the metadata.
-type (
-	open        struct{ ID int64 }
-	guarded     struct{ ID int64 }
-	intercepted struct{ ID int64 }
-)
-
-var (
-	openMeta        velox.MetaOnce[open]
-	guardedMeta     velox.MetaOnce[guarded]
-	interceptedMeta velox.MetaOnce[intercepted]
-)
-
-func (*intercepted) VeloxMeta() *velox.Meta[intercepted] {
-	return interceptedMeta.Load(func() velox.Descriptor[intercepted] {
-		return velox.Descriptor[intercepted]{
-			Table: "intercepteds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
-				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) {
-					return velox.Allow(), nil
-				}}}
-			}}},
-			FieldPtr: func(x *intercepted, _ int) any { return &x.ID },
-		}
-	})
-}
-
-func (*open) VeloxMeta() *velox.Meta[open] {
-	return openMeta.Load(func() velox.Descriptor[open] {
-		return velox.Descriptor[open]{
-			Table: "opens", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			FieldPtr: func(x *open, _ int) any { return &x.ID },
-		}
-	})
-}
-
-func (*guarded) VeloxMeta() *velox.Meta[guarded] {
-	return guardedMeta.Load(func() velox.Descriptor[guarded] {
-		return velox.Descriptor[guarded]{
-			Table: "guardeds", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
-			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
-				return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
-			}}},
-			FieldPtr: func(x *guarded, _ int) any { return &x.ID },
-		}
-	})
-}
-
-// TestFKScoped: with no Read policy or interceptor on the target a foreign
-// key's predicate is the column's alone, and with either it holds the
-// edge's EXISTS too. person
-// has no relations, so a statement that holds an EXISTS on one fails to
-// render: that tells the two apart. person's key stands in for the foreign
-// key; it is not nullable, so NotNil's column predicate fails too, but with
-// another error. TestForeignKeyFilterHidden and
-// TestForeignKeyFilterOtherScope (cmd/velox-graphql) serve it.
-func TestFKScoped(t *testing.T) {
-	db, _ := peopleDB(t)
-	ctx := context.Background()
-	id := int64(1)
-	yes := true
-	for _, c := range []struct {
-		name   string
-		target untyped.Table
-		exists bool
-	}{
-		{"open", untyped.TableOf[open](), false},
-		{"guarded", untyped.TableOf[guarded](), true},
-		{"intercepted", untyped.TableOf[intercepted](), true},
-	} {
-		target := &gqlgraph.Type{Name: "Owner", Table: func() untyped.Table { return c.target }}
-		for _, h := range []struct {
-			name string
-			add  func(f *gqlgraph.Filter)
-			col  string // the error of the column's predicate alone; "" for none
-		}{
-			{"EQ", func(f *gqlgraph.Filter) {
-				gqlgraph.EdgeIDField(f, "ownerID", 0, 0, target, gqlgraph.Ops[int64]{EQ: &id})
-			}, ""},
-			{"In", func(f *gqlgraph.Filter) {
-				gqlgraph.EdgeIDField(f, "ownerID", 0, 0, target, gqlgraph.Ops[int64]{In: []int64{id}})
-			}, ""},
-			{"NotNil", func(f *gqlgraph.Filter) {
-				gqlgraph.EdgeIDField(f, "ownerID", 0, 0, target, gqlgraph.Ops[int64]{NotNil: &yes})
-			}, "not nullable"},
-		} {
-			f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[person]("Person"))
-			h.add(f)
-			p, err := f.Pred()
-			if err != nil {
-				t.Fatalf("%s %s: %v", c.name, h.name, err)
-			}
-			_, _, err = untyped.Query(db, untyped.TableOf[person]()).Where(p).Limit(1).SQL(ctx)
-			switch {
-			case c.exists && (err == nil || h.col != "" && strings.Contains(err.Error(), h.col)):
-				t.Errorf("%s %s: %v, want the EXISTS's error", c.name, h.name, err)
-			case !c.exists && h.col == "" && err != nil:
-				t.Errorf("%s %s: %v", c.name, h.name, err)
-			case !c.exists && h.col != "" && (err == nil || !strings.Contains(err.Error(), h.col)):
-				t.Errorf("%s %s: %v, want %q", c.name, h.name, err, h.col)
-			}
-		}
 	}
 }

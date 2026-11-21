@@ -331,6 +331,9 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		if !n.Deep {
 			return n, false, nil // no EXISTS in it: nothing to scope
 		}
+		if isScopedKey(n) {
+			return sc.scopeKey(n)
+		}
 	case OpExists:
 	default:
 		return n, false, nil
@@ -392,6 +395,61 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	}
 	n.Kids = kids // n is a copy
 	return n, true, nil
+}
+
+// scopedKey marks the V of the And or Or that scopedKeyNode makes: its kids
+// are p and the edge's Has (for an Or, the Has negated). Rendered as it is,
+// where no scope runs, it means what p means on a target with no row
+// condition: a key with no target row is not one the relation has.
+type scopedKey struct{}
+
+// scopedKeyNode is Table.ScopedKey's node, of p and has, the edge's EXISTS.
+func scopedKeyNode(p, has Node) Node {
+	var n Node
+	if p.Op == OpIsNull {
+		n = Group(OpOr, []Node{p, Group(OpNot, []Node{has})})
+	} else {
+		n = Group(OpAnd, []Node{p, has})
+	}
+	n.V = scopedKey{}
+	return n
+}
+
+// isScopedKey reports whether n is a node scopedKeyNode made.
+func isScopedKey(n Node) bool {
+	_, ok := n.V.(scopedKey)
+	return ok && (n.Op == OpAnd || n.Op == OpOr) && len(n.Kids) == 2
+}
+
+// scopeKey returns Table.ScopedKey's n as the scope decides it: p alone
+// when the edge's target gets no row condition on this statement, else p
+// with the edge's Has, both scoped.
+func (sc *Scoper) scopeKey(n Node) (Node, bool, error) {
+	p, has := n.Kids[0], n.Kids[1]
+	if n.Op == OpOr {
+		has = has.Kids[0]
+	}
+	l, err := existsLink(has)
+	if err != nil {
+		return n, false, err
+	}
+	read, err := sc.target(l.Target)
+	if err != nil {
+		return n, false, sc.inExists(l.Target, err)
+	}
+	var out Node
+	switch {
+	case read.n.Op == opZero:
+		out = p
+	case p.Op == OpIsNull:
+		out = Group(OpNot, []Node{has})
+	case p.Op == OpNotNull:
+		out = has
+	default:
+		out = Group(OpAnd, []Node{p, has})
+	}
+	out, _, err = sc.Node(out)
+	return out, true, err
 }
 
 // target returns what an EXISTS on entity t gets: t's row condition (zero for

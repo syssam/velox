@@ -475,7 +475,8 @@ func checkValue(in *EntityInfo, c *ColumnInfo, want reflect.Type, v any) error {
 
 // HasRowFilter reports whether the entity's rows are filtered for reads, by
 // an interceptor or a Read policy, which the schema declares or a scope
-// adds: Meta.HasRowFilter. A WithFilter filter does not count.
+// adds: Meta.HasRowFilter. A WithFilter filter does not count: it is the
+// DB's, and ScopedKey asks the statement's DB when it renders.
 func (t Table) HasRowFilter() bool {
 	s := t.state()
 	if s.info == nil {
@@ -506,6 +507,26 @@ func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {
 		byName = byName || named(kids[i])
 	}
 	return NewPredicate(Node{Op: OpExists, ByName: byName, Col: int32(edge), V: RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, Kids: kids})
+}
+
+// ScopedKey is p, a condition on the foreign key of relation edge, read as
+// the relation lets the statement see its target: a row whose target the
+// target's row condition hides reads as having a null key. With a row
+// condition on target (a WithFilter filter's, an interceptor's or a Read
+// policy's), p IS NULL is the edge's Has negated, p IS NOT NULL is the
+// Has, and any other p is p AND the Has. With none, it is p alone, and
+// there is no EXISTS. The choice is made when the statement renders, on
+// the DB that runs it, so a condition built before the DB is known is
+// right on each DB it runs on (ADR 0103).
+func (t Table) ScopedKey(p Predicate, edge int, target Table) Predicate {
+	if err := PredErr(PredNode(p)); err != nil {
+		return NewPredicate(Node{Op: OpInvalid, V: err})
+	}
+	has := t.Has(edge, target)
+	if has.n.Op == OpInvalid {
+		return has
+	}
+	return NewPredicate(scopedKeyNode(p.n, has.n))
 }
 
 // Of is true for the rows of target related through relation edge to any of

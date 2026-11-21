@@ -1359,6 +1359,7 @@ Table.New() any
 Table.NewRows(n int) TableRows
 Table.Of(edge int, target Table, owners ...any) Predicate
 Table.Pred(col int, op PredOp, v any) Predicate
+Table.ScopedKey(p Predicate, edge int, target Table) Predicate
 Table.SetField(row any, col int, v any) error
 Table.Validate(row any, cols ...int) error
 Table.ValidateSet(set ...Assignment) error

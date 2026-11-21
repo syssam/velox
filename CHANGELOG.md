@@ -1122,6 +1122,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A GraphQL filter on a foreign key (`xIDIsNil`, `xIDNotNil`, `xID`,
+  `xIDIn` and the rest) reads a key whose target a `velox.WithFilter`
+  filter hides as null, as `hasX` does; before, only an interceptor or a
+  Read policy on the target counted. The statement decides, on the DB that
+  runs it, with the new `untyped.Table.ScopedKey` (ADR 0103). A target with
+  no row condition keeps the column's predicate alone, with no EXISTS.
 - `Having` with a relation (`Has`, `HasWith`, `HasEdge`) or a column
   subquery no longer panics while rendering: the statement fails with an
   error that points to `Where`. A condition by name in `Having`

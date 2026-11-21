@@ -84,6 +84,7 @@ func ownerOf[E any]() (*engine.EntityInfo, error) {
 //	Pred(col int, op PredOp, v any) velox.Predicate // a condition on column col
 //	Has(edge int, target Table, ps ...velox.Predicate) velox.Predicate // Rel.HasWith
 //	Of(edge int, target Table, owners ...any) velox.Predicate // Rel.Of
+//	ScopedKey(p velox.Predicate, edge int, target Table) velox.Predicate // p on edge's foreign key, a hidden target's key read as null
 //	HasRowFilter() bool // Meta.HasRowFilter
 //	Convert(col int, v any) (any, error) // v as column col's Go type, from one of the same kind
 //	NewRows(n int) Rows // n new zero rows, for InsertRows

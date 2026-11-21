@@ -517,12 +517,13 @@ func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
 // EdgeIDField is IDField of a foreign key, on column col, which holds the keys
 // of target's type, through the relation edge, and its IsNil and NotNil. Its
 // predicates are scoped to what the relation lets the reader see, the
-// target's interceptors and Read policy: a row they hide reads as null, to
-// the edge and so to every predicate of its key, or a filter would say which
-// hidden row another row links to. With a row filter on target, a
-// predicate on IDs is the key's predicate and the edge's Has, IsNil is the
-// edge's Has negated and NotNil the edge's Has; with none, each is the
-// column's alone, and there is no EXISTS.
+// target's WithFilter filters, interceptors and Read policy: a row they
+// hide reads as null, to the edge and so to every predicate of its key, or
+// a filter would say which hidden row another row links to. With a row
+// condition on target, a predicate on IDs is the key's predicate and the
+// edge's Has, IsNil is the edge's Has negated and NotNil the edge's Has;
+// with none, each is the column's alone, and there is no EXISTS. Which it
+// is the statement decides, on the DB that runs it (Table.ScopedKey).
 //
 // A WithRewrite in the application's own query is not known here, nor is it
 // to the edge's Has.
@@ -572,28 +573,22 @@ func idList[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V, fk
 	f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), fk))
 }
 
-// fkNull is null of a foreign key: with a row filter on fk's target (an
-// interceptor or a Read policy), IsNil is the edge's Has negated, and NotNil
-// the edge's Has, as a hidden target counts as none.
+// fkNull is null of a foreign key, scoped by fk: with a row condition on
+// fk's target, IsNil is the edge's Has negated, and NotNil the edge's Has,
+// as a hidden target counts as none.
 func (f *Filter) fkNull(field name, col int, op untyped.PredOp, b *bool, fk fkScope) {
 	if f.err != nil || b == nil || !*b && f.veloxe {
 		return
 	}
-	p := f.t.Pred(col, op, nil)
-	if fk.target.HasRowFilter() {
-		p = f.t.Has(fk.edge, fk.target)
-		if op == untyped.PredIsNull {
-			p = untyped.Not(p)
-		}
-	}
-	f.is(field, *b, p)
+	f.is(field, *b, f.scoped(f.t.Pred(col, op, nil), fk))
 }
 
-// scoped is p, a predicate on the key of fk's relation, and with a row
-// filter on its target (an interceptor or a Read policy) the edge's Has too.
+// scoped is p, a predicate on the key of fk's relation, read as the relation
+// lets the statement see its target (Table.ScopedKey): with a row condition
+// on the target, on the DB the statement runs on, the edge's Has decides.
 func (f *Filter) scoped(p velox.Predicate, fk fkScope) velox.Predicate {
-	if !fk.on || !fk.target.HasRowFilter() {
+	if !fk.on {
 		return p
 	}
-	return untyped.And(p, f.t.Has(fk.edge, fk.target))
+	return f.t.ScopedKey(p, fk.edge, fk.target)
 }
