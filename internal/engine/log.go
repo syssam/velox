@@ -198,6 +198,7 @@ func RedactedError(st *Statement, err error) string {
 		ce = dberr.Constraint(entity, err)
 	}
 	var b strings.Builder
+	safe := ""
 	if ce != nil {
 		name := ce.Constraint
 		if name == "" {
@@ -207,7 +208,7 @@ func RedactedError(st *Statement, err error) string {
 			b.WriteString("velox: " + ce.Entity + ": ")
 		}
 		b.WriteString(ce.Kind.String() + " constraint " + name + " violated")
-	} else if safe := safeError(entity, err); safe != "" {
+	} else if safe = safeError(entity, err); safe != "" {
 		b.WriteString(safe)
 	} else {
 		b.WriteString(errTypes(err))
@@ -217,7 +218,10 @@ func RedactedError(st *Statement, err error) string {
 	}
 	switch {
 	case dberr.Is(err, ErrTimeout):
-		b.WriteString(", velox's deadline passed")
+		// safeError's text names ErrTimeout already; a constraint's does not.
+		if safe == "" {
+			b.WriteString(", velox's deadline passed")
+		}
 	case errors.Is(err, context.DeadlineExceeded):
 		b.WriteString(", context deadline exceeded")
 	case errors.Is(err, context.Canceled):

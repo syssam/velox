@@ -1,6 +1,6 @@
 // Package softdelete is the mixin that makes an entity's delete set
 // deleted_at, and hides rows whose deleted_at is set from every read and
-// write. An entity lists it in its Mixin method:
+// write (by default; see Options). An entity lists it in its Mixin method:
 //
 //	func (Invoice) Mixin() []schema.Mixin {
 //		return []schema.Mixin{mixin.Time{}, softdelete.Mixin{}}
@@ -108,9 +108,9 @@ type Mixin struct {
 	//
 	// It runs once per delete, in the hook, and its columns go into the
 	// same UPDATE as deleted_at. An error from it, an unknown column, a value
-	// Mutation.Set would refuse, or deleted_at among them fails the delete,
-	// and nothing is sent. It does not run under Skip, whose delete removes
-	// the rows.
+	// Mutation.Set would refuse, or deleted_at or a primary-key column among
+	// them fails the delete, and nothing is sent. It does not run under Skip,
+	// whose delete removes the rows.
 	Assign func(ctx context.Context) ([]Set, error)
 	// Reads says whether reads hide deleted rows: Filtered, the zero value,
 	// or Unfiltered.
@@ -221,6 +221,9 @@ func (sd Mixin) softDelete(ctx context.Context, m *velox.Mutation, now time.Time
 			}
 			if a.Column == col {
 				return 0, fmt.Errorf("velox/softdelete: %s: Assign sets %s, which the mixin sets", in.Name, Column)
+			}
+			if slices.Contains(in.PrimaryKey, a.Column) {
+				return 0, fmt.Errorf("velox/softdelete: %s: Assign sets %s, a primary-key column", in.Name, s.Column)
 			}
 			sets = append(sets, a)
 		}

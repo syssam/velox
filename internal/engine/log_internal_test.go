@@ -57,6 +57,7 @@ func TestShownArgsUnknown(t *testing.T) {
 // any wrapping, a multi-wrap included; never the wrapper's text, which
 // carries the secret here. ValidationError names its field alone, EdgeError
 // its edge alone, and ErrOutOfRange and ErrNoShard fall back to the types.
+// ErrTimeout is named once, by its own text.
 func TestRedactedErrorNamesSafeErrors(t *testing.T) {
 	st := &Statement{Entity: &EntityInfo{Name: "gen.Invoice"}}
 	wrap := func(e error) error { return fmt.Errorf("velox: value 'the-secret': %w", e) }
@@ -84,8 +85,12 @@ func TestRedactedErrorNamesSafeErrors(t *testing.T) {
 			"velox: gen.Post: edge tags; " + ErrNotFound.Error() + ";"},
 		{"out of range", wrap(ErrOutOfRange), "*fmt.wrapError > *errors.errorString;"},
 		{"no shard", wrap(ErrNoShard), "*fmt.wrapError > *errors.errorString;"},
+		{"timeout", wrap(ErrTimeout), "velox: gen.Invoice: " + ErrTimeout.Error() + "; the message"},
 	} {
 		got := RedactedError(st, c.err)
+		if strings.Contains(got, "velox's deadline passed") {
+			t.Errorf("%s: names the timeout twice: %q", c.name, got)
+		}
 		if !strings.HasPrefix(got, c.want) {
 			t.Errorf("%s: got %q, want prefix %q", c.name, got, c.want)
 		}

@@ -154,8 +154,8 @@ func TestAssignInTheSameUpdate(t *testing.T) {
 	}
 }
 
-// TestAssignFailsTheDelete: an error from Assign, an unknown column and
-// deleted_at among its columns each fail the delete before anything is
+// TestAssignFailsTheDelete: an error from Assign, an unknown column, and
+// deleted_at or the key among its columns each fail the delete before anything is
 // sent. Under Skip, Assign does not run and the row goes.
 func TestAssignFailsTheDelete(t *testing.T) {
 	db, raw, log := openDocs(t)
@@ -176,6 +176,7 @@ func TestAssignFailsTheDelete(t *testing.T) {
 		{softdelete.Set{Column: "nope", Value: 1}, `no column "nope"`},
 		{softdelete.Set{Column: softdelete.Column, Value: time.Now()}, "which the mixin sets"},
 		{softdelete.Set{Column: "title", Value: nil}, "not nullable"},
+		{softdelete.Set{Column: "id", Value: 99}, "a primary-key column"},
 	} {
 		override = []softdelete.Set{c.set}
 		_, err := db.Delete[adoc]().Where(aID.EQ(1)).Exec(asUser(7))
