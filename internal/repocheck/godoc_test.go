@@ -222,6 +222,7 @@ func TestExportedMethodsHaveDocs(t *testing.T) {
 	add("generate", false)
 	add("schema", true)
 	add("contrib/graphql", false)
+	add("contrib/graphql/graphqlgen", false)
 	add("contrib/graphql/veloxgql", false)
 	add("contrib/graphql/veloxgql/gqlgraph", false)
 	add("contrib/veloxotel", false)

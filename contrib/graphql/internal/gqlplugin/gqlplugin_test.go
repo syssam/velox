@@ -1,4 +1,4 @@
-package main
+package gqlplugin
 
 import (
 	"bytes"
@@ -9,13 +9,10 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// supports is what main passes plugin.Main.
-var supports = plugin.Supports{Protocol: 2, Model: 3}
-
 func respond(t *testing.T, in string) plugin.Response {
 	t.Helper()
 	var out bytes.Buffer
-	if err := plugin.Run(supports, strings.NewReader(in), &out, generate); err != nil {
+	if err := plugin.Run(Supports, strings.NewReader(in), &out, Generate); err != nil {
 		t.Fatal(err)
 	}
 	var resp plugin.Response
@@ -38,8 +35,8 @@ func request(t *testing.T, r plugin.Request) string {
 }
 
 func TestSupportsThisVelox(t *testing.T) {
-	if supports.Protocol != plugin.ProtocolVersion || supports.Model != plugin.ModelVersion {
-		t.Errorf("velox-graphql is written for protocol %d and model %d; velox has %d and %d: update it", supports.Protocol, supports.Model, plugin.ProtocolVersion, plugin.ModelVersion)
+	if Supports.Protocol != plugin.ProtocolVersion || Supports.Model != plugin.ModelVersion {
+		t.Errorf("velox-graphql is written for protocol %d and model %d; velox has %d and %d: update it", Supports.Protocol, Supports.Model, plugin.ProtocolVersion, plugin.ModelVersion)
 	}
 }
 

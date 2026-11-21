@@ -20,7 +20,8 @@
 # measured value minus 1.0 here; the checker prints it. A new package needs a line.
 #
 # Packages at 0.0 have no tests of their own: generated code (*/gen, */schema,
-# graphql/graph), the demo schemas and the committed golden helpers; they are
+# graphql/graph), the demo schemas, the committed golden helpers and
+# cmd/velox-graphql, whose main is one call into internal/gqlplugin; they are
 # outside the root module, exercised only by other packages' tests, which
 # -coverprofile without -coverpkg does not count. internal/integration and internal/apitest
 # have no statements and no line.
@@ -77,9 +78,11 @@ github.com/syssam/velox/contrib/veloxotel 95.8
 
 # contrib/graphql
 github.com/syssam/velox/contrib/graphql 99.0
-github.com/syssam/velox/contrib/graphql/cmd/velox-graphql 89.9
+github.com/syssam/velox/contrib/graphql/cmd/velox-graphql 0.0
+github.com/syssam/velox/contrib/graphql/graphqlgen 71.7
 github.com/syssam/velox/contrib/graphql/internal/english 99.0
 github.com/syssam/velox/contrib/graphql/internal/gogen 93.2
+github.com/syssam/velox/contrib/graphql/internal/gqlplugin 99.0
 # modeltest is test support for gogen and sdl: no tests of its own, and the packages that use it
 # do not count it (no -coverpkg), so it is exempt at 0.0.
 github.com/syssam/velox/contrib/graphql/internal/modeltest 0.0

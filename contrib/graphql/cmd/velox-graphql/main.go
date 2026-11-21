@@ -12,6 +12,10 @@
 // package github.com/syssam/velox/plugin). velox-gen writes them, with the
 // generated-file header, and owns them from then on.
 //
+// A program that generates with package github.com/syssam/velox/generate
+// runs it in the process, with no tool to build, as
+// graphqlgen.Plugin(opts) from github.com/syssam/velox/contrib/graphql/graphqlgen.
+//
 // It takes these options, separated by commas. An application that writes
 // its own SDL and binds it with gqlgen's autobind asks for only the
 // marshalers of velox-gen's enum types, with no velox.graphql and no other
@@ -52,65 +56,10 @@
 package main
 
 import (
-	"fmt"
-	"maps"
-	"slices"
-	"strings"
-
-	"github.com/syssam/velox/contrib/graphql/internal/gogen"
-	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/contrib/graphql/internal/gqlplugin"
 	"github.com/syssam/velox/plugin"
 )
 
 func main() {
-	plugin.Main(plugin.Supports{Protocol: 2, Model: 3}, generate)
-}
-
-// generate answers a request: the schema, velox.graphql, and the Go files
-// gqlgen binds it to; or with only=enums, the enum marshalers alone. With
-// compat=veloxe, the API is the one veloxe's generator made (sdl.Config's
-// Veloxe); with where=whitelist, only fields with WhereInput filter
-// (sdl.Config's WhereWhitelist). It refuses any other option, as the plugin
-// protocol asks.
-func generate(req *plugin.Request) ([]plugin.File, []string, error) {
-	var cfg sdl.Config
-	for k, v := range req.Options {
-		switch {
-		case k == "only" && v == "enums":
-		case k == "compat" && v == "veloxe":
-			cfg.Veloxe, cfg.Package = true, req.OutPath
-		case k == "where" && v == "whitelist":
-			cfg.WhereWhitelist = true
-		default:
-			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe and where=whitelist; it is given %s", options(req.Options))
-		}
-	}
-	if req.Options["only"] == "enums" {
-		if cfg.Veloxe || cfg.WhereWhitelist {
-			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe and where=whitelist shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
-		}
-		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
-		return files, nil, err
-	}
-	s, err := sdl.RenderConfig(req.Model, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	gofiles, err := gogen.RenderConfig(req.Model, req.OutPath, req.OutPackage, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	return append([]plugin.File{{Path: "velox.graphql", Content: s}}, gofiles...), nil, nil
-}
-
-// options are opts as written, in key order: key=value, or key alone.
-func options(opts map[string]string) string {
-	var out []string
-	for _, k := range slices.Sorted(maps.Keys(opts)) {
-		if v := opts[k]; v != "" {
-			k += "=" + v
-		}
-		out = append(out, k)
-	}
-	return strings.Join(out, ", ")
+	plugin.Main(gqlplugin.Supports, gqlplugin.Generate)
 }

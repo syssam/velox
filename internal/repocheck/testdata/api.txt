@@ -1333,6 +1333,9 @@ type SkipMode uint16
 type ViaOrder struct { Field string Value string }
 type WhereOp uint32
 
+package contrib/graphql/graphqlgen
+func Plugin(opts map[string]string) generate.Plugin
+
 package contrib/graphql/veloxgql
 const CodeBadUserInput
 const CodeForbidden
