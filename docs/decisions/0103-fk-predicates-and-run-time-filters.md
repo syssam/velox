@@ -39,6 +39,12 @@ check can be right.
   without never share an entry. Where no scope runs (velox's own reads by
   key), the node renders as it is, which means `p` on a target that hides
   nothing.
+- `edge` must be a to-one relation whose foreign key is the owner's
+  column, keyed by the target's primary key, and `p` a comparison on that
+  column. Anything else (another column, an And or Or, a to-many or
+  many-to-many relation, a key on the target) is an invalid condition,
+  which fails the statement: the rewrite to the `Has` is right only for a
+  key the relation reads.
 - gqlgraph's `EdgeIDField` uses it for its IDs predicates and its IsNil
   and NotNil. `Table.HasRowFilter` stays, and still reads the metadata
   alone.
@@ -50,14 +56,20 @@ only where its target is filtered: a predicate on an edge the entity lacks
 fails the statement. gqlgraph's `TestFKScoped`, which used a relation that
 did not exist to tell the two forms apart, is replaced. A target whose
 policy or interceptor returns `Allow()` for the context gets no EXISTS,
-where before it got one. Generated code does not change.
+where before it got one. Where foreign keys are not enforced, a key with
+no target row then reads as the key it holds, not as null: the same as an
+unfiltered target always did. A target whose Read policy denies the
+statement, or fails, fails it, as any EXISTS on the target does. Generated
+code does not change.
 
 ## Evidence
 
 - `internal/apitest/scopedkey_test.go`: `TestScopedKey`, a WithFilter
   filter, an interceptor and a Read policy, `WithoutPolicy`, IS NULL, IS
   NOT NULL, EQ, In and NotIn, each run on one DB under contexts that
-  differ, twice in turn, on the plain path and the hooked one.
+  differ, twice in turn, on the plain path and the hooked one;
+  `TestScopedKeyDenied`, a target's Read policy that denies or fails;
+  `TestScopedKeyChecks`, the conditions and relations it refuses.
 - `contrib/graphql/veloxgql/gqlgraph/scopedkey_test.go`:
   `TestForeignKeyRunTimeFilter`, `ownerIDIsNil`, `ownerIDNotNil`,
   `ownerID`, `ownerIDNEQ`, `ownerIDIn` and `ownerIDNotIn` agree with

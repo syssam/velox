@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -518,6 +519,11 @@ func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {
 // there is no EXISTS. The choice is made when the statement renders, on
 // the DB that runs it, so a condition built before the DB is known is
 // right on each DB it runs on (ADR 0103).
+//
+// edge must be a to-one relation whose foreign key is the owner's column,
+// keyed by the target's primary key, and p a comparison (Pred's EQ, NEQ,
+// In, NotIn, GT, GTE, LT, LTE, IsNull or NotNull) on that column. Anything
+// else is an invalid condition, which fails the statement.
 func (t Table) ScopedKey(p Predicate, edge int, target Table) Predicate {
 	if err := PredErr(PredNode(p)); err != nil {
 		return NewPredicate(Node{Op: OpInvalid, V: err})
@@ -526,7 +532,31 @@ func (t Table) ScopedKey(p Predicate, edge int, target Table) Predicate {
 	if has.n.Op == OpInvalid {
 		return has
 	}
+	if err := t.scopedKeyCheck(p.n, has.n); err != nil {
+		return NewPredicate(Node{Op: OpInvalid, V: err})
+	}
 	return NewPredicate(scopedKeyNode(p.n, has.n))
+}
+
+// scopedKeyCheck reports what makes p and has, the edge's EXISTS, no
+// ScopedKey: a relation that is not a to-one with its foreign key on the
+// owner, or a p that is not a comparison on that key.
+func (t Table) scopedKeyCheck(p, has Node) error {
+	l, err := existsLink(has)
+	if err != nil {
+		return err
+	}
+	in := t.state().info
+	if l.Many || l.Join != nil || len(l.Target.PrimaryKey) != 1 || l.Target.PrimaryKey[0] != l.TargetCol || slices.Contains(in.PrimaryKey, l.OwnerCol) {
+		return fmt.Errorf("velox: %s: ScopedKey of relation %s, which is not a to-one relation whose foreign key is %s's", in.Name, l.Name, in.Name)
+	}
+	switch p.Op {
+	case OpEQ, OpNEQ, OpIn, OpNotIn, OpGT, OpGTE, OpLT, OpLTE, OpIsNull, OpNotNull:
+		if p.W == in && int(p.Col) == l.OwnerCol {
+			return nil
+		}
+	}
+	return fmt.Errorf("velox: %s: ScopedKey of relation %s takes a comparison on its foreign key %s", in.Name, l.Name, in.Columns[l.OwnerCol].Field)
 }
 
 // Of is true for the rows of target related through relation edge to any of

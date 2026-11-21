@@ -2,6 +2,7 @@ package apitest
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -134,5 +135,61 @@ func TestScopedKey(t *testing.T) {
 	}
 	if _, err := untyped.Query(bare, notes).Where(notes.ScopedKey(notes.Pred(int(fixture.INotes.OwnerID.I), untyped.PredEQ, int64(1)), 7, owners)).Limit(1).All(plain); err == nil || !strings.Contains(err.Error(), "relation 7") {
 		t.Errorf("ScopedKey of no relation: %v", err)
+	}
+}
+
+// TestScopedKeyDenied: a target whose Read policy denies the statement, or
+// fails, fails a statement that holds a ScopedKey to it, on the plain path
+// and the hooked one, as it fails any EXISTS on the target.
+func TestScopedKeyDenied(t *testing.T) {
+	notes, owners := untyped.TableOf[fixture.INote](), untyped.TableOf[fixture.IOwner]()
+	pinned := owners.ScopedKey(owners.Pred(int(fixture.IOwners.PinnedID.I), untyped.PredNotNull, nil), int(fixture.IOwners.Pinned.I), notes)
+	plain := context.Background()
+	hooked := interceptorDB(t, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		return next(ctx)
+	}))
+	bare := interceptorDB(t)
+	for _, db := range []*velox.DB{hooked, bare} {
+		_, err := untyped.Query(db, owners).Where(pinned).Limit(5).All(fixture.WithPolicyMode(plain, fixture.PolicyDeny))
+		var pe *velox.PolicyError
+		if !errors.Is(err, velox.ErrDenied) || !errors.As(err, &pe) || !strings.Contains(err.Error(), "INote") {
+			t.Errorf("a denied target: %v", err)
+		}
+		_, err = untyped.Query(db, owners).Where(pinned).Limit(5).All(fixture.WithPolicyMode(plain, fixture.PolicyFail))
+		if !errors.Is(err, fixture.ErrPolicy) || !strings.Contains(err.Error(), "INote") {
+			t.Errorf("a failing target policy: %v", err)
+		}
+		// The default mode reads, so the denial is the mode's.
+		if _, err := untyped.Query(db, owners).Where(pinned).Limit(5).All(plain); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestScopedKeyChecks: ScopedKey takes a comparison on the foreign key of a
+// to-one relation whose key is the owner's; anything else fails the
+// statement, never reads.
+func TestScopedKeyChecks(t *testing.T) {
+	notes, owners := untyped.TableOf[fixture.INote](), untyped.TableOf[fixture.IOwner]()
+	db := interceptorDB(t)
+	noteOwner, ownerPinned := int(fixture.INotes.Owner.I), int(fixture.IOwners.Pinned.I)
+	cases := []struct {
+		name  string
+		table untyped.Table
+		p     velox.Predicate
+		want  string
+	}{
+		{"another column", notes, notes.ScopedKey(notes.Pred(int(fixture.INotes.ID.I), untyped.PredEQ, int64(1)), noteOwner, owners), "foreign key OwnerID"},
+		{"not a comparison", notes, notes.ScopedKey(velox.Or(notes.Pred(int(fixture.INotes.OwnerID.I), untyped.PredEQ, int64(1))), noteOwner, owners), "foreign key OwnerID"},
+		{"a text condition", owners, owners.ScopedKey(owners.Pred(int(fixture.IOwners.Name.I), untyped.PredHasPrefix, "o"), ownerPinned, notes), "foreign key PinnedID"},
+		{"another table's column", owners, owners.ScopedKey(notes.Pred(int(fixture.INotes.OwnerID.I), untyped.PredEQ, int64(2)), ownerPinned, notes), "foreign key PinnedID"},
+		{"a to-many relation", owners, owners.ScopedKey(owners.Pred(int(fixture.IOwners.PinnedID.I), untyped.PredNotNull, nil), int(fixture.IOwners.Notes.I), notes), "not a to-one"},
+		{"a many-to-many relation", owners, owners.ScopedKey(owners.Pred(int(fixture.IOwners.PinnedID.I), untyped.PredNotNull, nil), int(fixture.IOwners.Tagged.I), notes), "not a to-one"},
+	}
+	for _, c := range cases {
+		_, err := untyped.Query(db, c.table).Where(c.p).Limit(5).All(context.Background())
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", c.name, err, c.want)
+		}
 	}
 }

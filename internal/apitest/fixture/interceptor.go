@@ -124,11 +124,40 @@ func (*INote) Interceptors() []velox.Interceptor {
 	}}}
 }
 
+// PolicyMode is what INote's Read policy does under a context, set with
+// WithPolicyMode.
+type PolicyMode int
+
+// The modes of INote's Read policy.
+const (
+	PolicyHide PolicyMode = iota // hide the body "secret": the default
+	PolicyDeny                   // deny the statement
+	PolicyFail                   // return ErrPolicy
+)
+
+// ErrPolicy is the error of INote's Read policy under PolicyFail.
+var ErrPolicy = errors.New("policy failed")
+
+type policyModeKey struct{}
+
+// WithPolicyMode returns ctx under which INote's Read policy does m.
+func WithPolicyMode(ctx context.Context, m PolicyMode) context.Context {
+	return velox.WithScopeValue(context.WithValue(ctx, policyModeKey{}, m), "policy", int(m))
+}
+
 // Policy hides the body "secret" from reads and the body "locked" from
-// writes.
+// writes; a context's PolicyMode can make Read deny or fail instead.
 func (*INote) Policy() velox.Policy {
 	return velox.Policy{
-		Read:  func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("body", "secret"), nil },
+		Read: func(ctx context.Context) (velox.Predicate, error) {
+			switch m, _ := ctx.Value(policyModeKey{}).(PolicyMode); m {
+			case PolicyDeny:
+				return velox.Predicate{}, velox.Deny("notes are closed")
+			case PolicyFail:
+				return velox.Predicate{}, ErrPolicy
+			}
+			return velox.FieldNEQ("body", "secret"), nil
+		},
 		Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("body", "locked"), nil },
 	}
 }
