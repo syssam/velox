@@ -106,14 +106,14 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	if err != nil {
 		return fail(err)
 	}
-	gm, err := genrun.LoadModel(dir, pattern, out, pkg, env, nil)
+	gm, err := genrun.LoadModel(context.Background(), dir, pattern, out, pkg, env, nil)
 	if err != nil {
 		return fail(err)
 	}
 	if fi, err := os.Stat(out); err != nil || !fi.IsDir() {
 		return fail(fmt.Errorf("%s is not a directory; run velox-gen to generate it first", genrun.RelPath(dir, out)))
 	}
-	mod, err := genrun.ModuleDir(dir, out, env)
+	mod, err := genrun.ModuleDir(context.Background(), dir, out, env)
 	if err != nil {
 		return fail(err)
 	}

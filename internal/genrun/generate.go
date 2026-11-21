@@ -82,7 +82,12 @@ func SchemaPackage(dir string, patterns, env []string) (string, error) {
 	if len(patterns) == 1 {
 		pattern = patterns[0]
 	}
-	importPath, _, schemas, err := codegen.Inspect(dir, pattern, env)
+	return schemaPackage(context.Background(), dir, pattern, env)
+}
+
+// schemaPackage is SchemaPackage for the pattern, whose go list ctx stops.
+func schemaPackage(ctx context.Context, dir, pattern string, env []string) (string, error) {
+	importPath, _, schemas, err := codegen.InspectContext(ctx, dir, pattern, env)
 	if err != nil {
 		return "", RelErrors(dir, err)
 	}
@@ -140,8 +145,8 @@ type Model struct {
 // chain. A behaviour method of a shape velox-gen does not bind, such as an
 // older velox's typed one, may not compile: when schemas, the schemas'
 // names, are known, the reason names the shape velox-gen binds.
-func ExplainLoad(dir, pattern, out string, env []string, err error, schemas []string) error {
-	genPath, perr := DirImportPath(out, env)
+func ExplainLoad(ctx context.Context, dir, pattern, out string, env []string, err error, schemas []string) error {
+	genPath, perr := DirImportPath(ctx, out, env)
 	if perr != nil {
 		return err
 	}
@@ -167,14 +172,14 @@ type FieldOrder func(entity string, fields []string) []string
 // LoadModel loads and builds the schema package at pattern, puts each
 // entity's fields in the order order gives (when it is not nil), and lowers
 // the graph to the names of its generated entities.
-func LoadModel(dir, pattern, out, pkg string, env []string, order FieldOrder) (*Model, error) {
-	importPath, name, schemas, err := codegen.Inspect(dir, pattern, env)
+func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string, order FieldOrder) (*Model, error) {
+	importPath, name, schemas, err := codegen.InspectContext(ctx, dir, pattern, env)
 	if err != nil {
-		return nil, ExplainLoad(dir, pattern, out, env, RelErrors(dir, err), nil)
+		return nil, ExplainLoad(ctx, dir, pattern, out, env, RelErrors(dir, err), nil)
 	}
 	m, err := codegen.Load(dir, pattern, env)
 	if err != nil {
-		return nil, ExplainLoad(dir, pattern, out, env, RelErrors(dir, err), schemas)
+		return nil, ExplainLoad(ctx, dir, pattern, out, env, RelErrors(dir, err), schemas)
 	}
 	g, err := codegen.Build(m)
 	if err != nil {
@@ -282,9 +287,9 @@ func (l *Log) pluginWarn(name, text string) {
 // behaviour names (codegen.CheckBehaviour), whose warnings go to log
 // with codegen.SoftDeleteWarnings' and codegen.DefaultWarnings'.
 // UserDoc is left for the caller.
-func genConfig(gm *Model, dir, pattern, out, pkg string, env []string, log *Log) (codegen.Config, error) {
+func genConfig(ctx context.Context, gm *Model, dir, pattern, out, pkg string, env []string, log *Log) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.ImportPath, SchemaName: gm.Name}
-	genPath, err := DirImportPath(out, env)
+	genPath, err := DirImportPath(ctx, out, env)
 	if err != nil {
 		return cfg, err
 	}
@@ -327,7 +332,7 @@ type Output struct {
 // the user's in out are checked against what velox-gen writes. Nothing is
 // written.
 func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir, out, pkg string, env []string, log *Log) (*Output, error) {
-	cfg, err := genConfig(gm, dir, pattern, out, pkg, env, log)
+	cfg, err := genConfig(ctx, gm, dir, pattern, out, pkg, env, log)
 	if err != nil {
 		return nil, err
 	}
@@ -399,14 +404,14 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return done(err)
 	}
-	if _, err := SchemaPackage(dir, []string{pattern}, c.Env); err != nil {
-		return done(ExplainLoad(dir, pattern, out, c.Env, err, nil))
+	if _, err := schemaPackage(ctx, dir, pattern, c.Env); err != nil {
+		return done(ExplainLoad(ctx, dir, pattern, out, c.Env, err, nil))
 	}
 	pkg, err := PackageName(out, c.Package)
 	if err != nil {
 		return done(err)
 	}
-	gm, err := LoadModel(dir, pattern, out, pkg, c.Env, c.FieldOrder)
+	gm, err := LoadModel(ctx, dir, pattern, out, pkg, c.Env, c.FieldOrder)
 	if err != nil {
 		return done(err)
 	}
@@ -493,8 +498,8 @@ func relFileError(dir string, err error) error {
 }
 
 // ModuleDir is the directory of the module that holds the package at pattern.
-func ModuleDir(dir, pattern string, env []string) (string, error) {
-	cmd := exec.Command("go", "list", "-f", "{{.Module.Dir}}", pattern)
+func ModuleDir(ctx context.Context, dir, pattern string, env []string) (string, error) {
+	cmd := exec.CommandContext(ctx, "go", "list", "-f", "{{.Module.Dir}}", pattern)
 	cmd.Dir = dir
 	if env != nil {
 		cmd.Env = env

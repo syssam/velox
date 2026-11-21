@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,7 +49,12 @@ const listFields = "-json=ImportPath,Name,Dir,GoFiles,IgnoredGoFiles,Module,Erro
 // embeds schema.Schema and that no type embeds. A package that has no
 // candidates is not an error: schemas is empty. name is the package's name.
 func Inspect(dir, pattern string, env []string) (importPath, name string, schemas []string, err error) {
-	pkg, names, err := inspect(dir, pattern, env)
+	return InspectContext(context.Background(), dir, pattern, env)
+}
+
+// InspectContext is Inspect, whose go commands ctx stops.
+func InspectContext(ctx context.Context, dir, pattern string, env []string) (importPath, name string, schemas []string, err error) {
+	pkg, names, err := inspectContext(ctx, dir, pattern, env)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -60,7 +66,12 @@ func Inspect(dir, pattern string, env []string) (importPath, name string, schema
 // model for every build. A file no build includes, such as one behind
 // //go:build ignore, and a _test.go file are not read.
 func inspect(dir, pattern string, env []string) (*listed, []string, error) {
-	pkg, err := list(dir, pattern, env)
+	return inspectContext(context.Background(), dir, pattern, env)
+}
+
+// inspectContext is inspect, whose go commands ctx stops.
+func inspectContext(ctx context.Context, dir, pattern string, env []string) (*listed, []string, error) {
+	pkg, err := listContext(ctx, dir, pattern, env)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -192,11 +203,16 @@ func decodeModel(b []byte) (*loadjson.Model, error) {
 
 // list runs go list for pattern and returns the one package it names.
 func list(dir, pattern string, env []string) (*listed, error) {
-	out, stderr, err := run(dir, env, "list", listFields, pattern)
+	return listContext(context.Background(), dir, pattern, env)
+}
+
+// listContext is list, whose go commands ctx stops.
+func listContext(ctx context.Context, dir, pattern string, env []string) (*listed, error) {
+	out, stderr, err := runContext(ctx, dir, env, "list", listFields, pattern)
 	if err != nil {
 		msg := strings.TrimSpace(stderr)
 		switch {
-		case !inModule(dir, env):
+		case !inModule(ctx, dir, env):
 			return nil, errors.New("the schema package must be in a module")
 		case strings.Contains(pattern, "..."):
 			// Several packages, or none: velox-gen reads exactly one.
@@ -227,8 +243,8 @@ func list(dir, pattern string, env []string) (*listed, error) {
 }
 
 // inModule reports whether the go command in dir runs in a module.
-func inModule(dir string, env []string) bool {
-	out, _, err := run(dir, env, "env", "GOMOD")
+func inModule(ctx context.Context, dir string, env []string) bool {
+	out, _, err := runContext(ctx, dir, env, "env", "GOMOD")
 	mod := strings.TrimSpace(out)
 	return err != nil || (mod != "" && mod != os.DevNull)
 }
@@ -236,8 +252,13 @@ func inModule(dir string, env []string) bool {
 // run runs go with args in dir and returns what it wrote to stdout and
 // stderr. A nil env means os.Environ().
 func run(dir string, env []string, args ...string) (stdout, stderr string, err error) {
+	return runContext(context.Background(), dir, env, args...)
+}
+
+// runContext is run, whose command ctx stops.
+func runContext(ctx context.Context, dir string, env []string, args ...string) (stdout, stderr string, err error) {
 	var so, se bytes.Buffer
-	cmd := exec.Command("go", args...)
+	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Dir, cmd.Stdout, cmd.Stderr = dir, &so, &se
 	if env != nil {
 		cmd.Env = env

@@ -94,6 +94,7 @@ type Plugin struct {
 	// protocol.
 	// Its Protocol is not checked, as the plugin is built with this velox.
 	// An error it returns fails the run, naming Tool.
+	// A panic in it fails the run as "plugin <Tool>: panic: <value>".
 	Run func(context.Context, *plugin.Request) (*plugin.Response, error)
 }
 
@@ -134,6 +135,13 @@ var ErrInterrupted = genrun.ErrInterrupted
 // It writes, rewrites and removes only files that start with velox-gen's
 // header.
 // An error names files relative to dir.
+//
+// ctx stops the go list commands that find the schema package, its module
+// and the generated package's import path, and the tool plugins.
+// Run also checks ctx before it loads the schema and before it writes.
+// ctx is given to an in-process Plugin.Run.
+// The build and run of the program that loads the schema, and velox-gen's
+// checks of the schema's behaviour, do not see ctx.
 func Run(ctx context.Context, dir string, cfg Config) (Result, error) {
 	plugins := make([]genrun.Plugin, len(cfg.Plugins))
 	for i, p := range cfg.Plugins {

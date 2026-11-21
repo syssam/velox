@@ -125,7 +125,7 @@ func callPlugin(ctx context.Context, spec Plugin, body []byte, log *Log) (*plugi
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, err
 	}
-	resp, err := spec.Run(ctx, &req)
+	resp, err := callRun(ctx, spec, &req)
 	switch {
 	case err != nil:
 		return nil, err
@@ -133,6 +133,18 @@ func callPlugin(ctx context.Context, spec Plugin, body []byte, log *Log) (*plugi
 		return nil, errors.New("it returned no response")
 	}
 	return answer(spec.Name, resp, log)
+}
+
+// callRun is spec.Run(ctx, req), with a panic in it recovered into the
+// error "panic: " and its value, as a tool built on package plugin answers
+// one.
+func callRun(ctx context.Context, spec Plugin, req *plugin.Request) (resp *plugin.Response, err error) {
+	defer func() {
+		if v := recover(); v != nil {
+			resp, err = nil, fmt.Errorf("panic: %v", v)
+		}
+	}()
+	return spec.Run(ctx, req)
 }
 
 // runPlugin runs one plugin and decodes its response, and prints its
@@ -326,7 +338,7 @@ func pluginFiles(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir,
 	}
 	var mod string
 	if slices.ContainsFunc(plugins, func(p Plugin) bool { return p.Run == nil }) {
-		if mod, err = ModuleDir(dir, pattern, env); err != nil {
+		if mod, err = ModuleDir(ctx, dir, pattern, env); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -345,7 +357,7 @@ func pluginFiles(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir,
 
 // DirImportPath is the import path of the directory out, which need not exist
 // yet: its path below the module that holds it, joined to the module's path.
-func DirImportPath(out string, env []string) (string, error) {
+func DirImportPath(ctx context.Context, out string, env []string) (string, error) {
 	base, rest := out, ""
 	for {
 		if fi, err := os.Stat(base); err == nil && fi.IsDir() {
@@ -360,7 +372,7 @@ func DirImportPath(out string, env []string) (string, error) {
 	if r, err := filepath.EvalSymlinks(base); err == nil {
 		base = r
 	}
-	cmd := exec.Command("go", "list", "-m", "-f", "{{.Path}}\t{{.Dir}}")
+	cmd := exec.CommandContext(ctx, "go", "list", "-m", "-f", "{{.Path}}\t{{.Dir}}")
 	cmd.Dir = base
 	if env != nil {
 		cmd.Env = env

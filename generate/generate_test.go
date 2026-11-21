@@ -261,7 +261,7 @@ func TestRunInProcessPlugin(t *testing.T) {
 }
 
 // A plugin's failure fails the run, naming the plugin, and writes nothing:
-// an error it returns, an error it reports, no response, a path the
+// an error it returns, an error it reports, no response, a panic, a path the
 // protocol refuses; a plugin with no Tool is refused first.
 func TestRunPluginErrors(t *testing.T) {
 	t.Parallel()
@@ -273,9 +273,12 @@ func TestRunPluginErrors(t *testing.T) {
 		p    generate.Plugin
 		want string
 	}{
-		"returned":     {generate.Plugin{Tool: "p", Run: answer(nil, errors.New("boom"))}, "plugin p: boom"},
-		"reported":     {generate.Plugin{Tool: "p", Run: answer(&plugin.Response{Error: "bad input"}, nil)}, "plugin p: bad input"},
-		"nil":          {generate.Plugin{Tool: "p", Run: answer(nil, nil)}, "plugin p: it returned no response"},
+		"returned": {generate.Plugin{Tool: "p", Run: answer(nil, errors.New("boom"))}, "plugin p: boom"},
+		"reported": {generate.Plugin{Tool: "p", Run: answer(&plugin.Response{Error: "bad input"}, nil)}, "plugin p: bad input"},
+		"nil":      {generate.Plugin{Tool: "p", Run: answer(nil, nil)}, "plugin p: it returned no response"},
+		"panic": {generate.Plugin{Tool: "p", Run: func(context.Context, *plugin.Request) (*plugin.Response, error) {
+			panic("out of cheese")
+		}}, "plugin p: panic: out of cheese"},
 		"path":         {generate.Plugin{Tool: "p", Run: answer(&plugin.Response{Files: []plugin.File{{Path: "../x.go", Content: "package x\n"}}}, nil)}, `plugin p: invalid path "../x.go"`},
 		"collision":    {generate.Plugin{Tool: "p", Run: answer(&plugin.Response{Files: []plugin.File{{Path: "user.go", Content: "package veloxgen\n"}}}, nil)}, "plugin p: veloxgen/user.go collides with veloxgen/user.go, which velox-gen writes"},
 		"no tool":      {generate.Plugin{Run: answer(&plugin.Response{}, nil)}, "plugin 1 has no Tool"},

@@ -278,6 +278,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -369,19 +370,21 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 		}
 	})
 	f := genFlags{out: *outDir, pkg: *pkgName, plugins: plugins, rerun: append(rerun, patterns...)}
-	pattern, err := genrun.SchemaPackage(dir, patterns, env)
-	if err != nil {
-		if pattern = genrun.DefaultSchema; len(patterns) == 1 {
-			pattern = patterns[0]
-		}
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.ExplainLoad(dir, pattern, f.outDir(dir), env, err, nil))
+	pattern := genrun.DefaultSchema
+	if len(patterns) == 1 {
+		pattern = patterns[0]
+	}
+	if !verify {
+		// generate.Run reads the schema package, and explains a failure,
+		// as verify does below.
+		f.check = *checkOnly
+		return runGenerate(f, pattern, dir, env, stdout, stderr)
+	}
+	if _, err := genrun.SchemaPackage(dir, patterns, env); err != nil {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.ExplainLoad(context.Background(), dir, pattern, f.outDir(dir), env, err, nil))
 		return 1
 	}
-	if verify {
-		return runGenerateVerify(f, pattern, dir, env, stdout, stderr)
-	}
-	f.check = *checkOnly
-	return runGenerate(f, pattern, dir, env, stdout, stderr)
+	return runGenerateVerify(f, pattern, dir, env, stdout, stderr)
 }
 
 // newFlagSet is the flag set of one subcommand, whose usage lists its flags.

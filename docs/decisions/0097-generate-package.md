@@ -72,6 +72,9 @@ that `velox-gen -check` and `verify` no longer prove the package current.
   plugins' Go files and would report a reordered file stale.
 - FieldOrder shapes the generated code and the plugins' model. velox-gen
   migrate reads the schema, so new columns are planned in declaration order.
+- CREATE TABLE keeps the schema's declaration order: FieldOrder is cosmetic,
+  as velox compares columns by name. For a physical order, declare the
+  fields in that order.
 - An error about `Package` names the flag, `-package`, as the command's
   does: the message is shared.
 - cmd/velox-graphql is one line over `internal/gqlplugin`, which holds its

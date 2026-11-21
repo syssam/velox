@@ -78,6 +78,7 @@ github.com/syssam/velox/contrib/veloxotel 95.8
 
 # contrib/graphql
 github.com/syssam/velox/contrib/graphql 99.0
+# cmd/velox-graphql: main stays a single call into internal/gqlplugin, whose tests cover it.
 github.com/syssam/velox/contrib/graphql/cmd/velox-graphql 0.0
 github.com/syssam/velox/contrib/graphql/graphqlgen 71.7
 github.com/syssam/velox/contrib/graphql/internal/english 99.0
