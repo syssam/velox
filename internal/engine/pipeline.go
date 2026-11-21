@@ -636,6 +636,9 @@ func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows)
 	// Count the rows only when something reads the count: an Around hook
 	// reads Result.Rows, and the cap needs it. Wrapping them allocates.
 	n := db.rowCap(st)
+	if st.explain {
+		n = 0 // the plan's rows are not the statement's
+	}
 	var counted *countedRows
 	if n > 0 || len(db.Cfg.Arounds) > 0 {
 		counted = &countedRows{Rows: r, Left: n, Capped: n > 0}

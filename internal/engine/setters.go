@@ -131,16 +131,20 @@ func (s Setters) CheckInsert(in *EntityInfo) error {
 
 // CheckInsertQuery is InsertQuery's check of an insert into in with the
 // setters s and the conflict clause cf, of the row one (nil for an
-// InsertAll); nilOne says Insert was given a nil pointer. It refuses what
-// cannot be built, and returns the clause the insert sends: cf as
+// InsertAll); nilOne says Insert was given a nil pointer, and all says
+// UpdateAll. It refuses what cannot be built, and returns the clause the
+// insert sends: cf with UpdateAll's columns (resolveUpdateAll), as
 // Setters.Upsert makes it. It is not generic, so that every entity's
 // InsertQuery shares it.
-func CheckInsertQuery(in *EntityInfo, s Setters, cf *ConflictClause, one unsafe.Pointer, nilOne bool) (*ConflictClause, error) {
+func CheckInsertQuery(in *EntityInfo, s Setters, cf *ConflictClause, one unsafe.Pointer, nilOne, all bool) (*ConflictClause, error) {
 	if nilOne {
 		return nil, fmt.Errorf("velox: %s: Insert of a nil pointer", in.Name)
 	}
 	if err := s.CheckInsert(in); err != nil {
 		return nil, err
+	}
+	if all {
+		cf = resolveUpdateAll(in, cf)
 	}
 	cf = s.Upsert(cf)
 	if cf != nil {

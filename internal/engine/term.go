@@ -187,6 +187,9 @@ func (w *writer) terms(ts []Term) {
 func (w *writer) projectStmt(st *Statement) {
 	p := st.Project
 	w.str("SELECT ")
+	if st.Distinct {
+		w.str("DISTINCT ")
+	}
 	w.terms(p.Terms)
 	w.str(" FROM ")
 	w.table()

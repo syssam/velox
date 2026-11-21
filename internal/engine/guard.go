@@ -87,6 +87,9 @@ func (db *DB) guard(st *Statement) error {
 	if err := guardJoins(st); err != nil {
 		return err
 	}
+	if st.Distinct && !distinctReads(st) {
+		return fmt.Errorf("velox: %s: Distinct applies to a projection (Select, Calc, Rows) or Values; a read of entities, Count, Exists or an aggregate is refused, as its rows are distinct by key (count distinct values with CountDistinct)", st.Entity.Name)
+	}
 	if st.Op == OpSelect && !st.Count && !st.Exists && st.Aggregate == 0 && st.Columns != nil && len(st.Columns) == 0 {
 		return fmt.Errorf("velox: %s: the query selects no columns", st.Entity.Name)
 	}
@@ -127,6 +130,13 @@ func (db *DB) guard(st *Statement) error {
 		}
 	}
 	return nil
+}
+
+// distinctReads reports whether st may be a SELECT DISTINCT: a projection,
+// or a read of one column (Values, IDs).
+func distinctReads(st *Statement) bool {
+	return st.Op == OpSelect && st.Each == nil && !st.Count && !st.Exists && st.Aggregate == 0 &&
+		(st.Project != nil || st.columnRead)
 }
 
 // guardLock checks a locking read: it needs a lock to wait on, a database

@@ -40,8 +40,8 @@ does not, and whether nextapp reads such a back-reference was unknown.
     `velox.FieldEQ` does, and its value is converted as `Mutation.Set`
     converts it (`engine.NamedAssignment`). The delete fails, and nothing
     is sent, on an error from `Assign`, an unknown column, a value that
-    does not convert, or `deleted_at` among the columns. It does not run
-    under `Skip`, whose delete removes the rows.
+    does not convert, or `deleted_at` or a primary-key column among the
+    columns. It does not run under `Skip`, whose delete removes the rows.
   - `Reads: softdelete.Unfiltered` installs no interceptor. Reads, updates
     and Saves see deleted rows, and a restore is a plain update. The
     delete hook ANDs `deleted_at IS NULL` itself, so a second delete

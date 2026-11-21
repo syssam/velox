@@ -20,7 +20,7 @@ func ColumnRead(st *Statement, col int, what string) error {
 	if st.Entity.Columns[col].Codec {
 		return fmt.Errorf("velox: %s: %s cannot read column %s, an encoded column, whose stored bytes are not its value; read the entities", st.Entity.Name, what, st.Entity.Columns[col].Name)
 	}
-	st.Columns = []int{col}
+	st.Columns, st.columnRead = []int{col}, true
 	return nil
 }
 

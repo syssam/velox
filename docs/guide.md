@@ -821,6 +821,18 @@ an expression cannot be a keyset cursor. `UNION`, CTEs and window functions
 are not in the builder; use [raw SQL](#raw-sql) for those
 ([ADR 0074](decisions/0074-projection.md), [ADR 0022](decisions/0022-group-by.md)).
 
+`Distinct()` reads each distinct row once, `SELECT DISTINCT`, for a
+projection and for `velox.Values`:
+
+```go
+orgs, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Distinct().Limit(100), I.OrgID.Key())
+```
+
+A read of entities is by key, so its rows are distinct already: `All`,
+`Count`, `Exists` and an aggregate with `Distinct` fail before anything is
+sent. Count distinct values with a handle's `CountDistinct`
+([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
+
 ## Writing
 
 ### Insert
@@ -863,6 +875,17 @@ err := db.Insert(&inv).
 The update branch writes only the columns you name; `updated_at` and other
 `UpdateDefault` columns do not fire there
 ([ADR 0017](decisions/0017-upsert-skips-updatedefault.md)).
+
+`UpdateAll()`, ent's `UpdateNewValues`, writes every column of the inserted
+row instead. It leaves out the key, the `OnConflict` columns, `Immutable`
+columns, the `Version` column (which an upsert bumps) and a column whose
+`SetPtr` was skipped. `updated_at` takes the inserted row's value, its
+`Default`, since its `UpdateDefault` still does not fire
+([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)):
+
+```go
+err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).UpdateAll().Exec(ctx)
+```
 
 ### Update and Delete
 
@@ -1237,6 +1260,23 @@ one makes `With` loads and `Has` disagree. The zero `velox.Predicate{}`, an
 error, or a column the entity lacks fails the statement, and an error is
 not a denial. `velox.Not(velox.NoFilter())` matches no row, for a caller who
 may see none. Several filters AND, in the order given.
+
+A schema written for veloxe keeps its `privacy` rules
+([ADR 0089](decisions/0089-veloxe-privacy-shape.md)). `privacy.And`, `Or` and
+`Not` combine rules with veloxe's semantics: `And` returns the first result
+that is not `Allow`, `Or` allows at the first `Allow`, and `Not` turns
+`Allow` into `Deny` and only the bare `Deny` into `Allow`. To see why a
+statement was allowed or denied, `privacy.WithTrace` reports each rule's
+decision:
+
+```go
+ctx = privacy.WithTrace(ctx, func(e privacy.TraceEntry) {
+	log.Printf("%s %v: rule %d (%s): %s", e.Entity, e.Op, e.Index, e.Rule, e.Decision)
+})
+```
+
+Until a process first calls it, a rule costs one atomic load more
+([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
 
 ## Recording changes
 
@@ -1701,7 +1741,11 @@ in your code, and metrics. See the [otel example](../examples/otel).
 
 For something lighter, `velox.WithAround` runs your function around every
 statement, and `Query.SQL(ctx)` shows what a query would send, policy
-conditions included.
+conditions included. `velox.Explain(ctx, q)` returns the database's plan
+for it: PostgreSQL's `EXPLAIN`, MySQL's `EXPLAIN FORMAT=TREE` or SQLite's
+`EXPLAIN QUERY PLAN`, policies and filters applied. It runs no `ANALYZE`, so
+nothing is executed
+([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
 
 `velox.WithLog(slog.Default(), velox.LogArgs())` logs every statement at
 Debug: its SQL, duration, rows and error. With `LogArgs`, it logs the

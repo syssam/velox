@@ -185,6 +185,9 @@ func (w *writer) selectStmt(st *Statement) {
 		}
 		w.str(")")
 	default:
+		if st.Distinct {
+			w.str("DISTINCT ")
+		}
 		w.selectColumns(st.Columns, joined)
 		w.joinColumns()
 	}
@@ -967,6 +970,9 @@ func RenderStmt(d Dialect, st *Statement) (string, []any, error) {
 
 // statement writes a statement of any kind.
 func (w *writer) statement(st *Statement) {
+	if st.explain {
+		w.str(explainSQL[w.d])
+	}
 	switch st.Op {
 	case OpSelect:
 		w.selectStmt(st)

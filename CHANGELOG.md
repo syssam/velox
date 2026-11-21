@@ -31,6 +31,21 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   with the tool's output byte for byte. `FieldOrder` orders each entity's
   declared fields and must return a permutation of them.
 - `tx.AfterCommit(fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
+- `Query.Distinct()` (ADR 0102): `SELECT DISTINCT` for a projection and for
+  `velox.Values` and `velox.IDs`. A read of entities, `Count`, `Exists` or
+  an aggregate with it fails before anything is sent.
+- `velox.Explain(ctx, q)` (ADR 0102) returns the database's plan for the
+  statement `All` or `Rows` would send, policies and filters applied:
+  PostgreSQL's `EXPLAIN`, MySQL's `EXPLAIN FORMAT=TREE` or SQLite's
+  `EXPLAIN QUERY PLAN`, its lines joined by newlines. `WithLog` masks its
+  arguments as any statement's.
+- `InsertQuery.UpdateAll()` (ADR 0102), ent's `UpdateNewValues`: an upsert
+  that updates every column but the key, the conflict columns, `Immutable`
+  and `Version` columns and skipped `SetPtr` columns. `UpdateDefault` still
+  does not fire (ADR 0017).
+- `privacy.And`, `privacy.Or` and `privacy.Not` (ADR 0102), with veloxe's
+  semantics, and `privacy.WithTrace(ctx, func(privacy.TraceEntry))`, which
+  reports each rule's decision with the rule, entity and op.
 - Window functions in `Calc` and `SelectRaw` (ADR 0101): `COUNT(*) OVER ()`,
   `ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)` and the like, as a result
   column or an ordering. Beside `GroupBy` and `Limit`, `COUNT(*) OVER ()`

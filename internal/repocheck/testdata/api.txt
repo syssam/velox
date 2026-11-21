@@ -66,6 +66,7 @@ Statement.Columns []int
 Statement.Conflict *ConflictClause
 Statement.Count bool
 Statement.Dialect Dialect
+Statement.Distinct bool
 Statement.DryRun bool
 Statement.Each *EachClause
 Statement.Entity *EntityInfo
@@ -474,12 +475,14 @@ func (q InsertQuery[E]) OnConflict[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E]
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E]
+func (q InsertQuery[E]) UpdateAll[_ Lazy[E]]() InsertQuery[E]
 func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E]
 func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q Query[E]) AllowUnbounded[_ Lazy[E]]() Query[E]
 func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E]
 func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error)
+func (q Query[E]) Distinct[_ Lazy[E]]() Query[E]
 func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error)
 func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error)
 func (q Query[E]) ForShare[_ Lazy[E]]() Query[E]
@@ -580,6 +583,7 @@ func DriverCode(err error) (string, bool)
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
+func Explain[E any](ctx context.Context, q Query[E]) (string, error)
 func Expr[E any](text string, args ...any) Pred[E]
 func FieldContains(name, s string) Predicate
 func FieldContainsFold(name, s string) Predicate

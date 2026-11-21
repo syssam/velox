@@ -14,6 +14,7 @@ type InsertQuery[E any] struct {
 	meta     *metaState[E]
 	one      *E
 	single   bool // made by Insert, so a nil one is a mistake, not an empty InsertAll
+	all      bool // UpdateAll, which check resolves into conflict's Update
 	many     []E
 	conflict *ConflictClause
 	set      engine.Setters // Set's setters
@@ -73,7 +74,25 @@ func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E] {
 		cf = *q.conflict
 	}
 	cf.Update, cf.DoNothing = columnIndexes(cols), false
-	q.conflict = &cf
+	q.conflict, q.all = &cf, false
+	return q
+}
+
+// UpdateAll overwrites every column of the existing row with the inserted
+// values when the insert conflicts, as ent's UpdateNewValues does, but the
+// primary key's, OnConflict's columns, the Immutable columns, the Version
+// column and a column whose SetPtr setter was skipped:
+//
+//	db.Insert(&user).OnConflict(veloxgen.Users.Email).UpdateAll().Exec(ctx)
+//
+// An UpdateDefault, such as updated_at's, does not fire, as for Update
+// (ADR 0017): its column takes the inserted row's value, which is its
+// Default unless the row sets it. A column UpdateAll writes is sent with the
+// row's value, never left to the database's default. With no column left,
+// the upsert keeps the existing row. Update or DoNothing after it replaces
+// it.
+func (q InsertQuery[E]) UpdateAll[_ Lazy[E]]() InsertQuery[E] {
+	q.all = true
 	return q
 }
 
@@ -84,7 +103,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 		cf = *q.conflict
 	}
 	cf.Update, cf.DoNothing = nil, true
-	q.conflict = &cf
+	q.conflict, q.all = &cf, false
 	return q
 }
 
@@ -345,7 +364,7 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() (*ConflictClause, error) {
 	if q.err != nil {
 		return nil, q.err
 	}
-	return engine.CheckInsertQuery(q.meta.Info, q.set, q.conflict, unsafe.Pointer(q.one), q.single && q.one == nil)
+	return engine.CheckInsertQuery(q.meta.Info, q.set, q.conflict, unsafe.Pointer(q.one), q.single && q.one == nil, q.all)
 }
 
 // generatedKey is the index of a single integer primary key column holding

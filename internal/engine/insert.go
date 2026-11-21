@@ -61,6 +61,31 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 	return nil
 }
 
+// resolveUpdateAll is cf, a new clause when nil, with UpdateAll's columns
+// in Update and DoNothing cleared: every column of in but the primary
+// key's, the conflict columns, the Immutable columns and the Version
+// column, in the entity's order. With none left, the branch is Ignore's,
+// which keeps the existing row.
+func resolveUpdateAll(in *EntityInfo, cf *ConflictClause) *ConflictClause {
+	var out ConflictClause
+	if cf != nil {
+		out = *cf
+	}
+	v, hasVersion := in.VersionColumn()
+	out.DoNothing, out.Update = false, nil
+	for i := range in.Columns {
+		switch {
+		case slices.Contains(in.PrimaryKey, i), slices.Contains(out.Columns, i), in.Columns[i].Immutable, hasVersion && i == v:
+			continue
+		}
+		out.Update = append(out.Update, i)
+	}
+	if len(out.Update) == 0 {
+		out.Ignore = true
+	}
+	return &out
+}
+
 // FillDefault sets the field that ptr points to as column c's Default or
 // DefaultFunc says. A DefaultFunc returns the element type of a pointer field
 // (velox-gen's Nillable), which is stored through a new pointer. It is not

@@ -43,6 +43,8 @@ type rewriteSnapshot struct {
 	op             Op
 	writable, inTx bool
 	count, exists  bool
+	distinct       bool
+	explain        bool
 	group          int
 	agg            Aggregate
 	lock           Lock
@@ -65,7 +67,7 @@ type rewriteSnapshot struct {
 func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 	return rewriteSnapshot{
 		entity: st.Entity, op: st.Op, writable: st.Writable, inTx: st.InTx,
-		count: st.Count, exists: st.Exists, group: st.GroupBy, agg: st.Aggregate,
+		count: st.Count, exists: st.Exists, distinct: st.Distinct, explain: st.explain, group: st.GroupBy, agg: st.Aggregate,
 		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins, project: st.Project,
 		was: st.Each, returning: len(st.Returning) > 0,
 		bidi: stmtBidi(st), pin: stmtPin(st), iter: st.iter, loaded: st.loaded,
@@ -79,7 +81,7 @@ func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	setStmtBidi(st, s.bidi)
 	setStmtPin(st, s.pin)
-	st.iter, st.loaded, st.recordState = s.iter, s.loaded, s.rec
+	st.iter, st.loaded, st.recordState, st.explain = s.iter, s.loaded, s.rec, s.explain
 	name := s.entity.Name
 	changed := func(what string) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's %s", name, what)
@@ -105,6 +107,10 @@ func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	if st.Exists != s.exists {
 		// The scan depends on it: Exists reads no column.
 		return changed("Exists")
+	}
+	if st.Distinct != s.distinct {
+		// The guard checked it.
+		return changed("Distinct")
 	}
 	if st.Aggregate != s.agg {
 		return errAggregateChanged(name)

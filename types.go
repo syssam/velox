@@ -268,6 +268,7 @@ type JoinClause = engine.JoinClause
 //	Entity *EntityInfo // shared and read-only: replace it, never edit it
 //	Count bool // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
 //	Exists bool // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
+//	Distinct bool // SELECT DISTINCT: Query.Distinct, of a projection or a read of one column (Values) only; a Rewrite hook may not change it
 //	Aggregate Aggregate // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
 //	GroupBy int // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
 //	Joins []JoinClause // SELECT: to-one relations joined in, each by Join or LeftJoin; a Rewrite hook may not change them
