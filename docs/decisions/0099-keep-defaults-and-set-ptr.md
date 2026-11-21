@@ -42,17 +42,42 @@ to the column.
   Rewrite ever holds it. The zero `Setter` stays what it was, and is not
   a skip.
 - What skipping means:
-  - **Update:** the column is not assigned. An update whose every setter
-    was skipped has no `Set`: `Exec` fails as without one, and `One` sends
-    nothing and returns the row.
+  - **Update:** the column is not assigned. An update given setters that
+    were all skipped, with no edge setter, sends nothing. `Exec` and
+    `TableUpdate.Exec` return (0, nil) and `SQL` returns "", once the guard
+    (a Where or All) and the KeepDefaults columns are checked. No hook
+    runs, no `UpdateDefault` fires and nothing is recorded. This differs
+    from ent, whose `UpdateOne` with nothing set still runs its hooks and
+    sets `updated_at`: a patch whose fields are all absent changes nothing
+    here. `One` reads the row as `Writable`, as for an update with no
+    setter. An update given no setter at all still fails with "Update has
+    no Set": that is a mistake, not an empty patch.
   - **Insert:** the field stays as the caller left it. A zero field whose
     column has a declared database default is left to the database, and
     skips its validators, as 0093 says.
   - **Upsert:** a column `Update` names, whose setters were all skipped, is
-    not updated. With no column left, the upsert keeps the existing row, as
-    `DoNothing`.
+    not updated. With no column left, velox sets the new exported field
+    `ConflictClause.Ignore`, ent's `Ignore()`. The update branch assigns
+    the first conflict column its own value (`SET org_id =
+    invoices.org_id`; on MySQL `ON DUPLICATE KEY UPDATE`, the same text as
+    its keep path). So the conflicting row is returned and its key read
+    back as after an update, where `DoNothing` would read nothing. It is an
+    update branch in every other respect: it gets the policy's Read and
+    Write conditions, and MySQL refuses it with `ErrPolicyUpsert` where a
+    policy or filter would condition it. It adds 1 to no Version column
+    and writes no column but that key. The field is exported, not hidden,
+    because `ConflictClause` keeps no state a hook's copy could lose
+    (`TestUpsertPolicyFlagIsTheStatements`).
   - **Null kinds:** a nil `p` skips too, as ent's `SetNillableX` does.
     `SetNull()` is how to write NULL, and the godoc says so.
+- A skipped setter never reaches a statement. The builders drop it;
+  `ValidateSetters` (so `velox.ValidateSet` and `Table.ValidateSet`) passes
+  over it, so a nil `SetPtr` of an Immutable column is not refused;
+  velox-graphql's create-input check builds its row from Set values only.
+  Rendering refuses one that a Rewrite hook puts in an UPDATE.
+- `KeepDefaults`' columns are checked whether or not an UPDATE is sent: a
+  `One` with no setter, an update of only edge setters, and one of only
+  skipped setters fail on a column without an `UpdateDefault` too.
 - `Save` takes columns, not setters, so it has no `SetPtr`. A caller names
   only the columns it changed.
 - `velox.IsConstraintError(err)` is true when err holds a
@@ -72,8 +97,8 @@ to the column.
 - `SetNillableX(p)` becomes `X.SetPtr(p)`, `SkipDefault(c)` becomes
   `KeepDefaults(c)`, and `ent.IsConstraintError` becomes
   `velox.IsConstraintError`.
-- An entity package that runs `Insert`, `Save` and `Update` grows by about
-  1.6 KB, under its recorded bound (`entityDescUse` went from 773,616 to
-  775,252 bytes). The growth is the upsert check in `InsertQuery.Exec` and
-  `Save`'s kept columns.
+- An entity package that runs `Insert`, `Save` and `Update` is smaller than
+  before: `entityDescUse` went from 773,616 to 770,386 bytes. The insert's
+  checks and the update's setter handling moved into non-generic engine
+  functions (`CheckInsertQuery`, `UpdateSet`, `CheckUpdateSet`).
 - No change to generated code. `handles.go` is velox's own file.

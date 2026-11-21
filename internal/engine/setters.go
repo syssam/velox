@@ -41,6 +41,42 @@ func (s Setters) Add(ss []Assignment) Setters {
 	return s
 }
 
+// UpdateSet adds the setters ss to st, an UPDATE, and edges, its edge
+// setters, as UpdateQuery.Set does, and returns the edge setters. A skipped
+// setter (AssignSkip) is dropped, and marks st as given one.
+func UpdateSet(st *Statement, edges []*EdgeSet, ss []Assignment) []*EdgeSet {
+	set := Setters{Set: st.Set, Edges: edges}.Add(ss)
+	st.Set = set.Set
+	st.skipped = st.skipped || len(set.Skipped) > 0
+	return set.Edges
+}
+
+// CheckUpdateSet refuses st, an UPDATE with edges edge setters, that was
+// given no setter at all: "Update has no Set". One whose every setter was
+// skipped passes, and sends nothing (skippedUpdate).
+func CheckUpdateSet(st *Statement, edges int) error {
+	if len(st.Set) == 0 && edges == 0 && !st.skipped {
+		return fmt.Errorf("velox: %s: Update has no Set", st.Entity.Name)
+	}
+	return nil
+}
+
+// skippedOnly reports whether st, an UPDATE with edges edge setters, was
+// given setters that were all skipped, so that it sends nothing.
+func skippedOnly(st *Statement, edges int) bool {
+	return len(st.Set) == 0 && edges == 0 && st.skipped
+}
+
+// skippedUpdate is the work of an UPDATE whose every setter was skipped:
+// it checks the KeepDefaults columns and runs the guard, and sends nothing.
+// No hook runs, no UpdateDefault fires, and nothing is recorded.
+func skippedUpdate(db *DB, st *Statement) error {
+	if err := checkKeep(st.Entity, st.keep); err != nil {
+		return err
+	}
+	return db.guard(st)
+}
+
 // Unskipped returns as without its skipped setters (AssignSkip): as itself
 // when it has none.
 func Unskipped(as []Assignment) []Assignment {
@@ -54,8 +90,10 @@ func isSkip(a Assignment) bool { return a.Op == AssignSkip }
 
 // Upsert returns cf without the columns of its update branch whose setters
 // were all skipped: a column a skipped setter names, and no other setter
-// sets, is not updated. With none left the upsert keeps the existing row,
-// as DoNothing. It returns cf itself when nothing changes.
+// sets, is not updated. With none left the update branch assigns the first
+// conflict column its own value (ConflictClause.Ignore), as ent's Ignore
+// does, so the conflicting row's key is read back as after an update. It
+// returns cf itself when nothing changes.
 func (s Setters) Upsert(cf *ConflictClause) *ConflictClause {
 	if cf == nil || len(s.Skipped) == 0 || len(cf.Update) == 0 {
 		return cf
@@ -69,7 +107,7 @@ func (s Setters) Upsert(cf *ConflictClause) *ConflictClause {
 	out := *cf
 	out.Update = slices.DeleteFunc(slices.Clone(cf.Update), drop)
 	if len(out.Update) == 0 {
-		out.Update, out.DoNothing = nil, true
+		out.Update, out.Ignore = nil, true
 	}
 	return &out
 }
@@ -89,6 +127,28 @@ func (s Setters) CheckInsert(in *EntityInfo) error {
 		}
 	}
 	return nil
+}
+
+// CheckInsertQuery is InsertQuery's check of an insert into in with the
+// setters s and the conflict clause cf, of the row one (nil for an
+// InsertAll); nilOne says Insert was given a nil pointer. It refuses what
+// cannot be built, and returns the clause the insert sends: cf as
+// Setters.Upsert makes it. It is not generic, so that every entity's
+// InsertQuery shares it.
+func CheckInsertQuery(in *EntityInfo, s Setters, cf *ConflictClause, one unsafe.Pointer, nilOne bool) (*ConflictClause, error) {
+	if nilOne {
+		return nil, fmt.Errorf("velox: %s: Insert of a nil pointer", in.Name)
+	}
+	if err := s.CheckInsert(in); err != nil {
+		return nil, err
+	}
+	cf = s.Upsert(cf)
+	if cf != nil {
+		if err := CheckConflict(in, cf, one); err != nil {
+			return nil, err
+		}
+	}
+	return cf, nil
 }
 
 // PrepareInsert resolves s's edge setters for an insert of rows of in (an
@@ -152,6 +212,12 @@ func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsaf
 // Update runs st, an update, with the edge setters edges, as UpdateEdges
 // says; with none, it is Write's.
 func Update(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (int64, error) {
+	if skippedOnly(st, len(edges)) {
+		return 0, skippedUpdate(db, st)
+	}
+	if err := checkKeep(st.Entity, st.keep); err != nil {
+		return 0, err
+	}
 	if len(edges) == 0 {
 		n, _, _, err := Write(ctx, db, st, false, false)
 		return n, err
@@ -167,6 +233,12 @@ func Update(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (int64
 // UpdateSQL is UpdateQuery.SQL's work for st with the edge setters edges:
 // the statement and arguments, "" for an update of only edge setters.
 func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (string, []any, error) {
+	if skippedOnly(st, len(edges)) {
+		return "", nil, skippedUpdate(db, st)
+	}
+	if err := checkKeep(st.Entity, st.keep); err != nil {
+		return "", nil, err
+	}
 	if len(edges) > 0 {
 		p, err := PlanEdges(st.Entity, edges)
 		if err != nil {
@@ -204,6 +276,9 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		return nil, fmt.Errorf("velox: %s: One needs a primary key to read the row back", in.Name)
 	}
 	if err := checkKeyAssigned(in, st.Set); err != nil {
+		return nil, err
+	}
+	if err := checkKeep(in, st.keep); err != nil {
 		return nil, err
 	}
 	var p EdgePlan

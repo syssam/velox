@@ -29,8 +29,11 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 // Set adds setters: assignments, made by the column handles' Set, SetNull,
 // Add and Sub, and edge setters, made by the relation handles' Add, Remove
 // and Clear. An update of only edge setters sends no UPDATE. A SetPtr given
-// a nil pointer is skipped: an update whose every setter is skipped has no
-// Set, and Exec fails as it does without one.
+// a nil pointer is skipped. An update whose every setter was skipped sends
+// nothing: Exec returns 0 and SQL "", once the guard and KeepDefaults'
+// check pass. No hook runs and no UpdateDefault fires, unlike ent, whose
+// UpdateOne would still set updated_at. One reads the row as Writable. An
+// update given no setter at all fails with "Update has no Set".
 //
 // The edges are written for each row the update matches, in one
 // transaction with the UPDATE, a savepoint inside one: the update first
@@ -39,8 +42,7 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 // sends the UPDATE, then writes each edge for each row, as InsertQuery.Set
 // says. The entity's hooks see the UPDATE alone, without the edges.
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E] {
-	set := engine.Setters{Set: u.st.Set, Edges: u.edges}.Add(assignments(ss))
-	u.st.Set, u.edges = set.Set, set.Edges
+	u.edges = engine.UpdateSet(&u.st, u.edges, assignments(ss))
 	return u
 }
 
@@ -66,7 +68,9 @@ func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E] {
 // assigns is still written as assigned; an assignment already won over the
 // UpdateDefault, but it writes a value, where KeepDefaults writes nothing.
 // A column without an UpdateDefault fails Exec, One and SQL with an error
-// that names it, before anything is sent.
+// that names it, before anything is sent, even when no UPDATE would be: a
+// One with no setter, an update of only edge setters or of only skipped
+// ones. A hook that assigns the column writes it.
 func (u UpdateQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) UpdateQuery[E] {
 	engine.KeepDefaults(&u.st, keepIndexes(cols))
 	return u
@@ -115,8 +119,8 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if u.err != nil {
 		return Statement{}, u.err
 	}
-	if len(u.st.Set) == 0 && len(u.edges) == 0 {
-		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.meta.Info.Name)
+	if err := engine.CheckUpdateSet(&u.st, len(u.edges)); err != nil {
+		return Statement{}, err
 	}
 	return engine.CloneStatement(&u.st), nil
 }

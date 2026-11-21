@@ -14,6 +14,7 @@ ColumnInfo.UpdateDefault func() any
 ColumnInfo.Version bool
 ConflictClause.Columns []int
 ConflictClause.DoNothing bool
+ConflictClause.Ignore bool
 ConflictClause.Update []int
 ConflictClause.Where []Predicate
 EachClause.Column int

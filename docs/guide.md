@@ -881,10 +881,14 @@ _, err := db.Update[veloxgen.Invoice]().
 ```
 
 On a nullable column a nil `p` still writes nothing: `SetNull()` writes
-NULL. An update whose every setter was skipped has no `Set` and fails as
-one without it. In an insert, a skipped setter leaves the field as it is,
-so a zero field still gets its declared database default. In an upsert, a
-column `Update` names is not updated when its only setter was skipped.
+NULL. An update whose every setter was skipped sends nothing and returns
+0: no hook runs and `updated_at` does not move, unlike ent. An update given
+no setter at all still fails. In an insert, a skipped setter leaves the
+field as it is, so a zero field still gets its declared database default.
+In an upsert, a column `Update` names is not updated when its only setter
+was skipped. With no column left, the update branch assigns the first
+conflict column its own value (`ConflictClause.Ignore`, ent's `Ignore()`),
+so the existing row is kept and its key still read back.
 
 `KeepDefaults(cols...)`, on an update and on `Save`, stops the named
 columns' `UpdateDefault` from firing, as veloxe's `SkipDefault` does: a

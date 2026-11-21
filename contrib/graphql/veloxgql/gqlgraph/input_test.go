@@ -159,3 +159,20 @@ func TestCheckedUpdate(t *testing.T) {
 		t.Errorf("the row = %+v, %v; want client, 2: the failed update wrote nothing", got, err)
 	}
 }
+
+// TestCheckedSkipsSetPtrNil: a SetPtr of a nil pointer sets nothing, so a
+// create input does not store and validate the zero value, and an update
+// input does not refuse it on an immutable column.
+func TestCheckedSkipsSetPtrNil(t *testing.T) {
+	c := gqlgraph.InputType[item]("Item", int(items.ID.I), itemInputGQL)
+	if _, err := gqlgraph.Validate("CreateItemInput", c, []velox.Setter[item]{items.Name.Set("ok"), items.Code.SetPtr(nil)}); err != nil {
+		t.Errorf("create with a nil SetPtr: %v", err)
+	}
+	if _, err := gqlgraph.Validate("UpdateItemInput", c, []velox.Setter[item]{items.Code.SetPtr(nil), items.Age.Set(1)}); err != nil {
+		t.Errorf("update with a nil SetPtr of an immutable column: %v", err)
+	}
+	code := "x"
+	if _, err := gqlgraph.Validate("UpdateItemInput", c, []velox.Setter[item]{items.Code.SetPtr(&code)}); !errors.Is(err, velox.ErrImmutable) {
+		t.Errorf("update with a SetPtr of an immutable column: %v", err)
+	}
+}

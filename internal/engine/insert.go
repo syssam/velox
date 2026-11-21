@@ -45,7 +45,7 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 	if err := refuseBidiUpsert(in, cf); err != nil {
 		return err
 	}
-	if len(cf.Update) > 0 && in.bidi {
+	if (len(cf.Update) > 0 || cf.ignores()) && in.bidi {
 		return errBidiUpdate(in)
 	}
 	if in.immutable {
@@ -476,12 +476,12 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 // Rewrite hook may condition any, which matters when the rows read values
 // back (reads: a generated key, or a column with a declared default).
 func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int, reads bool) bool {
-	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.D != MySQL &&
+	return n > 1 && cf != nil && !keepsRow(cf) && db.D != MySQL &&
 		(len(in.filters) > 0 || len(db.Cfg.Filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
 			InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
 }
 
-// keepsRow reports whether cf keeps a conflicting row as it is: DoNothing,
-// or an update branch that writes no column, which MySQL renders as a no-op
-// assignment.
-func keepsRow(cf *ConflictClause) bool { return cf.DoNothing || len(cf.Update) == 0 }
+// keepsRow reports whether cf keeps a conflicting row as it is with no
+// update branch: DoNothing, or an empty Update without Ignore, which MySQL
+// renders as a no-op assignment. Ignore's branch is an update branch.
+func keepsRow(cf *ConflictClause) bool { return cf.DoNothing || len(cf.Update) == 0 && !cf.ignores() }

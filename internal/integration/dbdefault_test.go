@@ -280,3 +280,32 @@ func TestUpsertConflictWhereFillsByKey(t *testing.T) {
 		}
 	}, rw)
 }
+
+// TestUpsertOfOnlySkippedColumns: an upsert whose every Update column had
+// its setter skipped keeps the existing row through a no-op update of the
+// conflict column (ConflictClause.Ignore), and reads its key back, on each
+// database.
+func TestUpsertOfOnlySkippedColumns(t *testing.T) {
+	score := velox.NumberCol[gadget, int64]{I: 3}
+	name := velox.StringCol[gadget, string]{I: 1}
+	each(t, func(t *testing.T, tg target) {
+		tg.exec(t, "DROP TABLE IF EXISTS gadgets")
+		tg.exec(t, gadgetDDL(tg.d))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS gadgets") })
+		a := gadget{Name: "a", Score: 3}
+		if err := tg.db.Insert(&a).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		x := gadget{Name: "a", Score: 9}
+		if err := tg.db.Insert(&x).Set(score.SetPtr(nil)).OnConflict(name).Update(score).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if x.ID != a.ID {
+			t.Errorf("key read back %d, want %d", x.ID, a.ID)
+		}
+		got, err := tg.db.Query[gadget]().Where(name.EQ("a")).One(ctx)
+		if err != nil || got.Score != 3 {
+			t.Errorf("row %+v, %v; want it kept", got, err)
+		}
+	})
+}

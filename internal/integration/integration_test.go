@@ -300,6 +300,7 @@ func TestRebind(t *testing.T) {
 // (2, 1, B, 0), (3, 2, C, 5). The tickets are in seedTickets.
 func setup(t testing.TB, tg target) {
 	t.Helper()
+	tg.exec(t, "DROP TABLE IF EXISTS eh_rows") // its foreign key names invoices (errorhelpers_test.go)
 	tg.exec(t, "DROP TABLE IF EXISTS tickets")
 	tg.exec(t, "DROP TABLE IF EXISTS items")
 	tg.exec(t, "DROP TABLE IF EXISTS invoices")

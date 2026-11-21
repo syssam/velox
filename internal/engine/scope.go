@@ -538,7 +538,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	if pol != nil && pol.Insert != nil {
 		sc.PolicyOn() // records a WithoutPolicy that InsertAllowed obeyed
 	}
-	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
+	if cf := st.Conflict; cf != nil && !keepsRow(cf) {
 		conditioned := pol != nil && (pol.Read != nil || pol.Write != nil) && sc.PolicyOn()
 		if db.D == MySQL {
 			if err := sc.mysqlUpsert(in, conditioned); err != nil {

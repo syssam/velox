@@ -190,7 +190,7 @@ func (db *DB) checkRewritten(st *Statement, s rewriteSnapshot) error {
 		switch {
 		case db.D == MySQL:
 			return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition; MySQL's ON DUPLICATE KEY UPDATE takes none", s.entity.Name)
-		case cf.DoNothing || len(cf.Update) == 0:
+		case keepsRow(cf):
 			// Rendering would drop it: there is no update branch.
 			return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition, but the upsert keeps the existing row and has no update branch to apply it to", s.entity.Name)
 		}

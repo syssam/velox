@@ -44,7 +44,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `SetNillableX`: a nil `p` gives a setter the builders skip, a non-nil one
   sets `*p`; on a nullable column a nil `p` skips too, and `SetNull()`
   writes NULL. In an upsert, a column `Update` names whose only setter was
-  skipped is not updated. `UpdateQuery.KeepDefaults(cols...)`,
+  skipped is not updated; with none left, `ConflictClause.Ignore` keeps
+  the row by a no-op update of the conflict key and reads its key back. An
+  update whose every setter was skipped sends nothing and returns 0.
+  `UpdateQuery.KeepDefaults(cols...)`,
   `SaveQuery.KeepDefaults(cols...)` and `untyped.TableUpdate.KeepDefaults`
   stop the named columns' `UpdateDefault` from firing, as veloxe's
   `SkipDefault`; a column without one fails the statement.

@@ -449,8 +449,8 @@ func ticketColumn(t *testing.T, st *velox.Statement, name string) int {
 // hook that replaces the clause with its own copy keeps the hidden-row check.
 func TestUpsertPolicyFlagIsTheStatements(t *testing.T) {
 	cf := reflect.TypeFor[velox.ConflictClause]()
-	if cf.NumField() != 4 {
-		t.Errorf("ConflictClause has %d fields, want 4", cf.NumField())
+	if cf.NumField() != 5 {
+		t.Errorf("ConflictClause has %d fields, want 5", cf.NumField())
 	}
 	for f := range cf.Fields() {
 		if !f.IsExported() {

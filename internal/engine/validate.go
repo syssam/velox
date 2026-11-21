@@ -58,8 +58,10 @@ func validateRow(in *EntityInfo, p unsafe.Pointer, cols []int, skip func(col int
 }
 
 // ValidateSetters refuses an Immutable column among set, and a nil AssignSet of
-// a RequiredEdge's key, then checks every AssignSet value that is not nil.
+// a RequiredEdge's key, then checks every AssignSet value that is not nil. A
+// skipped setter (AssignSkip) is passed over: it writes nothing.
 func ValidateSetters(in *EntityInfo, set []Assignment) error {
+	set = Unskipped(set)
 	for _, a := range set {
 		if err := checkCol(in, a.Column); err != nil {
 			return err

@@ -129,20 +129,14 @@ func checkAssignedOnce(info *EntityInfo, set []Assignment) error {
 // UpdateDefault that set does not assign and keep does not name. A column
 // of keep without an UpdateDefault is an error, which names it.
 func withUpdateDefaults(info *EntityInfo, set []Assignment, keep []int) ([]Assignment, error) {
+	if err := checkKeep(info, keep); err != nil {
+		return nil, err
+	}
 	named := make(map[int]bool, len(set)+len(keep))
 	for _, a := range set {
 		named[a.Column] = true
 	}
 	for _, c := range keep {
-		if c < 0 {
-			return nil, fmt.Errorf("velox: %s: KeepDefaults names a nil column", info.Name)
-		}
-		if c >= len(info.Columns) {
-			return nil, fmt.Errorf("velox: %s: KeepDefaults names column %d, which the entity does not have", info.Name, c)
-		}
-		if info.Columns[c].UpdateDefault == nil {
-			return nil, fmt.Errorf("velox: %s: KeepDefaults names %s, which has no UpdateDefault", info.Name, info.Columns[c].Field)
-		}
 		named[c] = true
 	}
 	out := slices.Clip(set)
@@ -152,6 +146,23 @@ func withUpdateDefaults(info *EntityInfo, set []Assignment, keep []int) ([]Assig
 		}
 	}
 	return out, nil
+}
+
+// checkKeep refuses a column of keep, KeepDefaults' columns, that is nil
+// (-1), that info lacks, or that has no UpdateDefault, naming it.
+func checkKeep(info *EntityInfo, keep []int) error {
+	for _, c := range keep {
+		if c < 0 {
+			return fmt.Errorf("velox: %s: KeepDefaults names a nil column", info.Name)
+		}
+		if c >= len(info.Columns) {
+			return fmt.Errorf("velox: %s: KeepDefaults names column %d, which the entity does not have", info.Name, c)
+		}
+		if info.Columns[c].UpdateDefault == nil {
+			return fmt.Errorf("velox: %s: KeepDefaults names %s, which has no UpdateDefault", info.Name, info.Columns[c].Field)
+		}
+	}
+	return nil
 }
 
 // SetElem stores v where p points: nil as the zero value, a value of the

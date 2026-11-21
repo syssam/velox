@@ -20,6 +20,18 @@ type ConflictClause struct {
 	// conflicting row it rejects is neither updated nor replaced. PostgreSQL
 	// and SQLite render it; velox refuses it on MySQL.
 	Where []Predicate
+	// Ignore, with an empty Update and no DoNothing, keeps the existing row
+	// through an update branch that assigns the first conflict column its
+	// own value, as ent's Ignore does: the conflicting row is returned, and
+	// its key read back, as after an update, and the branch gets the
+	// policy's conditions as one does. velox sets it on an upsert whose
+	// every Update column had its setter skipped (a SetPtr of nil).
+	Ignore bool
+}
+
+// ignores reports whether cf's update branch is Ignore's no-op assignment.
+func (cf *ConflictClause) ignores() bool {
+	return cf.Ignore && !cf.DoNothing && len(cf.Update) == 0 && len(cf.Columns) > 0
 }
 
 // EachClause makes a SELECT read, or count, the rows of each owner apart: the
@@ -169,6 +181,9 @@ type Statement struct {
 	// keep holds the columns of an UPDATE whose UpdateDefault does not fire
 	// (KeepDefaults).
 	keep []int
+	// skipped says the UPDATE was given a setter that was skipped (a SetPtr
+	// of a nil pointer): with no other setter left it sends nothing.
+	skipped bool
 }
 
 // KeepDefaults adds cols to the columns of st, an UPDATE, whose UpdateDefault

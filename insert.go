@@ -2,7 +2,6 @@ package velox
 
 import (
 	"context"
-	"fmt"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -195,10 +194,11 @@ func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E] {
 // nothing and returns nil under any context, a dry run's or another
 // transaction's included: its hooks do not run.
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
-	q.conflict = q.set.Upsert(q.conflict)
-	if err := q.check(); err != nil {
+	cf, err := q.check()
+	if err != nil {
 		return err
 	}
+	q.conflict = cf
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
@@ -232,10 +232,11 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // the setters are checked as Exec checks them.
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
-	q.conflict = q.set.Upsert(q.conflict)
-	if err := q.check(); err != nil {
+	cf, err := q.check()
+	if err != nil {
 		return "", nil, err
 	}
+	q.conflict = cf
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
@@ -334,24 +335,17 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 // check refuses an insert that cannot be built: invalid metadata, Insert of
 // a nil pointer, a column setter that is not Set or SetNull, an upsert
 // without OnConflict's columns, and an upsert that sets the key of a
-// bidirectional one-to-one edge (EdgeBidi).
-func (q InsertQuery[E]) check[_ Lazy[E]]() error {
+// bidirectional one-to-one edge (EdgeBidi). It returns the conflict clause
+// the insert sends, without the columns whose setters were skipped
+// (engine.CheckInsertQuery).
+func (q InsertQuery[E]) check[_ Lazy[E]]() (*ConflictClause, error) {
 	if q.meta.Err != nil {
-		return q.meta.Err
+		return nil, q.meta.Err
 	}
 	if q.err != nil {
-		return q.err
+		return nil, q.err
 	}
-	if q.single && q.one == nil {
-		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.Info.Name)
-	}
-	if err := q.set.CheckInsert(q.meta.Info); err != nil {
-		return err
-	}
-	if q.conflict != nil {
-		return engine.CheckConflict(q.meta.Info, q.conflict, unsafe.Pointer(q.one))
-	}
-	return nil
+	return engine.CheckInsertQuery(q.meta.Info, q.set, q.conflict, unsafe.Pointer(q.one), q.single && q.one == nil)
 }
 
 // generatedKey is the index of a single integer primary key column holding

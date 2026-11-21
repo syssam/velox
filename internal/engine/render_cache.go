@@ -190,7 +190,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = nullsKey(k, st)
 	}
 	if cf := st.Conflict; cf != nil {
-		k = append(k, 1, bit(cf.DoNothing))
+		k = append(k, 1, bit(cf.DoNothing), bit(cf.ignores()))
 		k = appendInts(k, cf.Columns)
 		k = appendInts(k, cf.Update)
 		k = binary.AppendUvarint(k, uint64(len(cf.Where)))

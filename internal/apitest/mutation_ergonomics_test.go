@@ -112,7 +112,7 @@ func TestKeepDefaultsUntyped(t *testing.T) {
 
 // TestSetPtrOnUpdate: a nil pointer's setter is skipped, a non-nil one
 // sets the value, on a Null kind too; SetNull still writes NULL. An update
-// whose every setter is skipped has no Set.
+// whose every setter is skipped sends nothing.
 func TestSetPtrOnUpdate(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
@@ -131,8 +131,8 @@ func TestSetPtrOnUpdate(t *testing.T) {
 		t.Errorf("\n got %s %v\nwant %s", e.SQL, e.Args, want)
 	}
 	calls := e.Calls
-	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), "Update has no Set") || e.Calls != calls {
-		t.Errorf("every setter skipped: %v, %d calls", err, e.Calls-calls)
+	if n, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).Exec(ctx); n != 0 || err != nil || e.Calls != calls {
+		t.Errorf("every setter skipped (TestUpdateOfOnlySkippedSetters): %d, %v, %d calls", n, err, e.Calls-calls)
 	}
 	e.Results = [][][]any{{{int64(1)}}, {invoiceRow(1)}}
 	logged := len(e.Log)
@@ -192,7 +192,8 @@ func TestSetPtrLeavesTheDatabaseDefault(t *testing.T) {
 }
 
 // TestSetPtrOnUpsert: a column of the update branch whose setter is skipped
-// is not updated; with none left, the upsert keeps the existing row.
+// is not updated; with none left, the branch is the no-op assignment of the
+// first conflict column.
 func TestSetPtrOnUpsert(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
 	db := openFake(velox.Postgres, e)
@@ -208,8 +209,8 @@ func TestSetPtrOnUpsert(t *testing.T) {
 		t.Errorf("a column another setter sets is updated: %s, %v", e.SQL, err)
 	}
 	q, _, err := db.Insert(&inv).Set(I.Note.SetPtr(nil)).OnConflict(I.OrgID, I.Number).Update(I.Note).SQL(ctx)
-	if err != nil || !strings.Contains(q, "DO NOTHING") {
-		t.Errorf("no column left: %s, %v", q, err)
+	if err != nil || !strings.HasSuffix(q, `DO UPDATE SET "org_id" = "invoices"."org_id"`) {
+		t.Errorf("no column left (TestUpsertOfOnlySkippedColumns): %s, %v", q, err)
 	}
 }
 
@@ -262,5 +263,158 @@ func TestErrorHelpersOnVeloxErrors(t *testing.T) {
 	e.Rows = [][]any{invoiceRow(1), invoiceRow(2)}
 	if _, err := db.Query[testmodel.Invoice]().One(ctx); !velox.IsNotSingular(err) {
 		t.Errorf("One: %v", err)
+	}
+}
+
+// TestUpdateOfOnlySkippedSetters: an update given setters that were all
+// skipped sends nothing and returns 0: no hook runs, no UpdateDefault fires.
+// SQL renders "". One reads the row as Writable. An update given no setter
+// at all still has no Set, and the guard and KeepDefaults still apply.
+func TestUpdateOfOnlySkippedSetters(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	ran := 0
+	count := velox.Before(func(context.Context, *velox.Mutation) error { ran++; return nil }, velox.OpUpdate)
+	db := openFake(velox.Postgres, e, velox.WithHooksAll(count))
+	n, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil), I.PaidAt.SetPtr(nil)).Where(I.ID.EQ(1)).Exec(ctx)
+	if n != 0 || err != nil || e.Calls != 0 || ran != 0 {
+		t.Errorf("typed Exec: %d, %v, %d calls, %d hook runs", n, err, e.Calls, ran)
+	}
+	if q, args, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).SQL(ctx); q != "" || args != nil || err != nil || ran != 0 {
+		t.Errorf("typed SQL: %q %v %v", q, args, err)
+	}
+	tbl := untyped.TableOf[testmodel.Invoice]()
+	set := []velox.Setter[testmodel.Invoice]{I.Total.SetPtr(nil)}
+	n, err = untyped.Update(db, tbl).Assign(untyped.Assignments(set)...).Where(velox.Predicate(I.ID.EQ(1))).Exec(ctx)
+	if n != 0 || err != nil || e.Calls != 0 || ran != 0 {
+		t.Errorf("untyped Exec: %d, %v, %d calls, %d hook runs", n, err, e.Calls, ran)
+	}
+	if q, _, err := untyped.Update(db, tbl).Assign(untyped.Assignments(set)...).Where(velox.Predicate(I.ID.EQ(1))).SQL(ctx); q != "" || err != nil {
+		t.Errorf("untyped SQL: %q %v", q, err)
+	}
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Exec(ctx); !errors.Is(err, velox.ErrNoWhere) {
+		t.Errorf("no Where: %v", err)
+	}
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).KeepDefaults(I.Note).Where(I.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), "no UpdateDefault") {
+		t.Errorf("KeepDefaults of a column without one: %v", err)
+	}
+	if _, err := untyped.Update(db, tbl).Where(velox.Predicate(I.ID.EQ(1))).Exec(ctx); err == nil || !strings.Contains(err.Error(), "Update has no Set") {
+		t.Errorf("untyped without a setter: %v", err)
+	}
+
+	e.Results = [][][]any{{{int64(1)}}, {invoiceRow(1)}}
+	got, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).One(ctx)
+	if err != nil || got.ID != 1 || ran != 0 || !strings.Contains(strings.Join(e.Log, "\n"), "FOR UPDATE") {
+		t.Errorf("One: %+v, %v, %d hook runs, %v", got, err, ran, e.Log)
+	}
+}
+
+// TestKeepDefaultsCheckedWithoutAnUpdate: a KeepDefaults column without an
+// UpdateDefault fails a One with no setter and an update of only edge
+// setters, which send no UPDATE, before anything is sent.
+func TestKeepDefaultsCheckedWithoutAnUpdate(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e)
+	if _, err := db.Update[testmodel.Invoice]().KeepDefaults(I.Note).Where(I.ID.EQ(1)).One(ctx); err == nil || !strings.Contains(err.Error(), "no UpdateDefault") || e.Calls != 0 {
+		t.Errorf("One with no setter: %v, %d calls", err, e.Calls)
+	}
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Items.Add(1)).KeepDefaults(I.Note).Where(I.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), "no UpdateDefault") || e.Calls != 0 {
+		t.Errorf("edges only, Exec: %v, %d calls", err, e.Calls)
+	}
+	if _, _, err := db.Update[testmodel.Invoice]().Set(I.Items.Add(1)).KeepDefaults(I.Note).Where(I.ID.EQ(1)).SQL(ctx); err == nil || !strings.Contains(err.Error(), "no UpdateDefault") {
+		t.Errorf("edges only, SQL: %v", err)
+	}
+}
+
+// TestHookSetBeatsKeepDefaults: a hook that assigns a kept column writes
+// it: KeepDefaults stops the UpdateDefault only.
+func TestHookSetBeatsKeepDefaults(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	touch := velox.Before(func(_ context.Context, m *velox.Mutation) error { return m.Set("updated_at", t0) }, velox.OpUpdate)
+	db := openFake(velox.Postgres, e, velox.WithHooksAll(touch))
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.Set(1)).KeepDefaults(I.UpdatedAt).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := `UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3`; e.SQL != want || e.Args[1] != t0 {
+		t.Errorf("\n got %s %v\nwant %s", e.SQL, e.Args, want)
+	}
+}
+
+// TestValidateSetSkipsSetPtrNil: a nil SetPtr of an Immutable column is not
+// refused by ValidateSet, Table.ValidateSet or an update; a value is.
+func TestValidateSetSkipsSetPtrNil(t *testing.T) {
+	if err := velox.ValidateSet[testmodel.Invoice](I.CreatedAt.SetPtr(nil), I.Total.Set(1)); err != nil {
+		t.Errorf("ValidateSet: %v", err)
+	}
+	if err := velox.ValidateSet[testmodel.Invoice](I.CreatedAt.SetPtr(&t0)); !errors.Is(err, velox.ErrImmutable) {
+		t.Errorf("ValidateSet of a value: %v", err)
+	}
+	set := []velox.Setter[testmodel.Invoice]{I.CreatedAt.SetPtr(nil)}
+	if err := untyped.TableOf[testmodel.Invoice]().ValidateSet(untyped.Assignments(set)...); err != nil {
+		t.Errorf("Table.ValidateSet: %v", err)
+	}
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e)
+	if _, err := db.Update[testmodel.Invoice]().Set(I.CreatedAt.SetPtr(nil), I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Errorf("update: %v", err)
+	}
+}
+
+// TestRenderRefusesASkippedSetter: a skipped setter a Rewrite hook puts in
+// an UPDATE fails the statement rather than being written as a value.
+func TestRenderRefusesASkippedSetter(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	skip := I.Note.SetPtr(nil)
+	rw := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Set = append(st.Set, untyped.Assignments([]velox.Setter[testmodel.Invoice]{skip})...)
+		return nil
+	})
+	db := openFake(velox.Postgres, e, rw)
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), "skipped setter") || e.Calls != 0 {
+		t.Errorf("%v, %d calls", err, e.Calls)
+	}
+}
+
+// TestUpsertOfOnlySkippedColumns: an upsert whose every Update column had
+// its setter skipped assigns the first conflict column its own value, so the
+// conflicting row's key is read back as after an update.
+func TestUpsertOfOnlySkippedColumns(t *testing.T) {
+	for _, c := range []struct {
+		d    velox.Dialect
+		want string
+	}{
+		{velox.Postgres, `ON CONFLICT ("org_id", "number") DO UPDATE SET "org_id" = "invoices"."org_id" RETURNING "id"`},
+		{velox.SQLite, `ON CONFLICT (org_id, number) DO UPDATE SET org_id = invoices.org_id RETURNING id`},
+		{velox.MySQL, "AS new ON DUPLICATE KEY UPDATE `org_id` = `invoices`.`org_id`"},
+	} {
+		e := &fakeconn.Exec{}
+		db := openFake(c.d, e)
+		inv := testmodel.Invoice{OrgID: 1, Number: "N"}
+		q, _, err := db.Insert(&inv).Set(I.Note.SetPtr(nil)).OnConflict(I.OrgID, I.Number).Update(I.Note).SQL(ctx)
+		norm := strings.NewReplacer(`"`, "", "`", "")
+		if err != nil || !strings.HasSuffix(norm.Replace(q), norm.Replace(c.want)) {
+			t.Errorf("%v:\n got %s, %v\nwant suffix %s", c.d, q, err, c.want)
+		}
+	}
+}
+
+// TestUpsertOfOnlySkippedColumnsReadsTheKey: on SQLite, an upsert whose
+// every Update column had its setter skipped keeps the existing row and
+// reads its key back, as after an update; DoNothing would read none.
+func TestUpsertOfOnlySkippedColumnsReadsTheKey(t *testing.T) {
+	db, raw := enumDB(t)
+	a := dEnum{Name: "a", Status: "paid"}
+	if err := db.Insert(&a).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	x := dEnum{Name: "a", Status: "shipped"}
+	if err := db.Insert(&x).Set(dEnums.Status.SetPtr(nil)).OnConflict(dEnums.Name).Update(dEnums.Status).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if x.ID != a.ID {
+		t.Errorf("key read back %d, want %d", x.ID, a.ID)
+	}
+	var status string
+	if err := raw.QueryRow("SELECT status FROM denums WHERE id = ?", a.ID).Scan(&status); err != nil || status != "paid" {
+		t.Errorf("stored %q, %v; want the row kept", status, err)
 	}
 }

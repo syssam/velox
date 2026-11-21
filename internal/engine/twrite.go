@@ -97,7 +97,8 @@ func (t Table) Validate(row any, cols ...int) error {
 }
 
 // ValidateSet runs the validators of the Set values of set, and refuses an
-// Immutable column among them: velox's ValidateSet, untyped.
+// Immutable column among them: velox's ValidateSet, untyped. A skipped
+// setter is passed over.
 func (t Table) ValidateSet(set ...Assignment) error {
 	s := t.state()
 	if s.err != nil {
@@ -571,6 +572,7 @@ func (u TableUpdate) SetNull(col int) TableUpdate { return u.Set(col, nil) }
 // assignment of a SetPtr given a nil pointer is skipped.
 func (u TableUpdate) Assign(as ...Assignment) TableUpdate {
 	u.st.Set = append(slices.Clip(u.st.Set), Unskipped(as)...)
+	u.st.skipped = u.st.skipped || slices.ContainsFunc(as, isSkip)
 	return u
 }
 
@@ -608,8 +610,8 @@ func (u TableUpdate) statement() (Statement, error) {
 	if u.err != nil {
 		return Statement{}, u.err
 	}
-	if len(u.st.Set) == 0 {
-		return Statement{}, fmt.Errorf("velox: %s: Update has no Set", u.t.info.Name)
+	if err := CheckUpdateSet(&u.st, 0); err != nil {
+		return Statement{}, err
 	}
 	st := CloneStatement(&u.st)
 	if err := u.t.checkStatement(&st); err != nil {
@@ -624,6 +626,12 @@ func (u TableUpdate) Exec(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if skippedOnly(&st, 0) {
+		return 0, skippedUpdate(u.e, &st)
+	}
+	if err := checkKeep(st.Entity, st.keep); err != nil {
+		return 0, err
+	}
 	n, _, _, err := Write(ctx, u.e, &st, false, false)
 	return n, err
 }
@@ -634,6 +642,9 @@ func (u TableUpdate) SQL(ctx context.Context) (string, []any, error) {
 	st, err := u.statement()
 	if err != nil {
 		return "", nil, err
+	}
+	if skippedOnly(&st, 0) {
+		return "", nil, skippedUpdate(u.e, &st)
 	}
 	_, q, args, err := Write(ctx, u.e, &st, true, false)
 	return q, args, err

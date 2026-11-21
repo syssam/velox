@@ -1103,10 +1103,11 @@ func (w *writer) insertRows(st *Statement) {
 // ambiguous (error 1052), so the no-op assignment qualifies it with the
 // table.
 func (w *writer) conflict(cf *ConflictClause) {
-	keep := cf.DoNothing || len(cf.Update) == 0
+	noop := cf.ignores()
+	keep := keepsRow(cf)
 	if w.d == MySQL {
 		w.str(" AS new ON DUPLICATE KEY UPDATE ")
-		if keep {
+		if keep || noop {
 			w.col(int32(cf.Columns[0]))
 			w.str(" = ")
 			w.table()
@@ -1133,6 +1134,17 @@ func (w *writer) conflict(cf *ConflictClause) {
 		return
 	}
 	w.str(" DO UPDATE SET ")
+	if noop {
+		w.col(int32(cf.Columns[0]))
+		w.str(" = ")
+		w.table()
+		w.str(".")
+		w.col(int32(cf.Columns[0]))
+		w.qualify = true
+		w.where(cf.Where)
+		w.qualify = false
+		return
+	}
 	for i, c := range cf.Update {
 		if i > 0 {
 			w.str(", ")
@@ -1183,6 +1195,9 @@ func (w *writer) updateStmt(st *Statement) {
 			continue
 		case AssignExpr:
 			w.setExpr(a)
+			continue
+		case AssignSkip:
+			w.fail(fmt.Errorf("velox: %s: a skipped setter of column %d reached the statement", w.in.Name, a.Column))
 			continue
 		}
 		w.colArg(a.Column, a.Value)

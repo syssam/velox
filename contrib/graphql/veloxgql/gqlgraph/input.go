@@ -66,13 +66,17 @@ func validate(input string, c *Type, set []velox.Assignment) error {
 	if info == nil {
 		return fmt.Errorf("veloxgql: %s: the Type %s has no Table", input, c.Name)
 	}
+	create := strings.HasPrefix(input, "Create")
 	cols := make([]velox.Assignment, 0, len(set))
 	for _, a := range set {
-		if a.Column >= 0 {
+		// A create input's row is built from its Set values alone: a
+		// skipped setter (a SetPtr of a nil pointer) sets nothing, and is
+		// not stored as a zero and validated. ValidateSet passes it over.
+		if a.Column >= 0 && (!create || a.Op == velox.AssignSet) {
 			cols = append(cols, a)
 		}
 	}
-	names, create := c.UpdateInputs, strings.HasPrefix(input, "Create")
+	names := c.UpdateInputs
 	if create {
 		names = c.CreateInputs
 	}

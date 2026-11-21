@@ -29,6 +29,8 @@ func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error {
 // UpdateDefault and before any statement: velox-graphql's UpdateX checks the
 // fields its input sets this way. For generated code. The checks and the error
 // are Update's (see ValidationError); Update validates again after its hooks.
+// A SetPtr given a nil pointer is passed over, an Immutable column's
+// included: it writes nothing.
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error {
 	m := stateOf(PE(nil).VeloxMeta())
 	if m.Err != nil {

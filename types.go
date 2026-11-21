@@ -186,6 +186,12 @@ type Assignment = veloxtype.Assignment
 //	// conflicting row it rejects is neither updated nor replaced. PostgreSQL
 //	// and SQLite render it; velox refuses it on MySQL.
 //	Where []Predicate
+//	// Ignore, with an empty Update and no DoNothing, keeps the existing row
+//	// through an update branch that assigns the first conflict column its
+//	// own value (ent's Ignore): the row is returned and its key read back as
+//	// after an update. velox sets it when every Update column's setter was
+//	// skipped.
+//	Ignore bool
 type ConflictClause = engine.ConflictClause
 
 // EachClause makes a SELECT read, or count, the rows of each owner apart: the
