@@ -177,6 +177,12 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Create().OnConflict(...).UpdateNewValues()` | `db.Insert(&u).OnConflict(U.Email).UpdateAll().Exec(ctx)` |
 | `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `velox.Explain(ctx, q)` |
+| `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
+| `client.User.Update().SkipDefault(user.FieldUpdatedAt)` (veloxe) | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
+| `client.User.Query().IDs(ctx)` | `velox.IDs[int64](ctx, db.Query[veloxgen.User]().Limit(n))` |
+| `tx.OnCommit(...)` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed (decision 0100) |
+| `client.Debug()` | the option `velox.WithLog(logger)`; `velox.LogArgs()` logs arguments too |
+| `ent.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular` |
 
 `Count` returns an `int64`, where ent's returns an `int`.
 
@@ -208,6 +214,7 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
 | `privacy.Allow` | `velox.Allow()` |
+| `privacy.And`, `privacy.Or`, `privacy.Not` (veloxe) | `privacy.And`, `Or`, `Not`; an `Or` that does not allow returns a failing rule's error, where veloxe's returned the last result (decision 0102) |
 
 ent's `sql.FieldContainsFold` has no velox form: the engine has no
 case-insensitive substring match. A `velox.Predicate` is a `Pred` of no
