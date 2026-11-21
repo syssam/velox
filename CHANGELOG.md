@@ -30,7 +30,6 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   process; `contrib/graphql/graphqlgen.Plugin(opts)` is velox-graphql so,
   with the tool's output byte for byte. `FieldOrder` orders each entity's
   declared fields and must return a permutation of them.
-- `tx.AfterCommit(fn)` (ADR 0100), as veloxe's `tx.OnCommit`: queues `fn`
 - `Query.Distinct()` (ADR 0102): `SELECT DISTINCT` for a projection and for
   `velox.Values` and `velox.IDs`. A read of entities, `Count`, `Exists` or
   an aggregate with it fails before anything is sent, and so does an
