@@ -53,7 +53,7 @@ var (
 	// statements were cancelled. Its data is null.
 	ErrTimeout = errors.New("request timed out")
 	// ErrNoDB: a resolver ran with no DB in its context, which an adapter
-	// (gqlgenx.NewExtension) puts there.
+	// (gqlgenx.NewExtension, graphqlgo.With) puts there.
 	ErrNoDB = errors.New("no DB in the context")
 	// ErrNoSelectionSource: a read of generated code (a connection, an edge)
 	// ran in a context no adapter made, so nothing tells it the field it

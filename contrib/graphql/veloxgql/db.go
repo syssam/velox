@@ -10,11 +10,12 @@ import (
 
 // DBFromContext returns the DB an adapter put in ctx. It fails with ErrNoDB
 // when there is none: the schema is served without an adapter
-// (gqlgenx.NewExtension for gqlgen), which puts it there.
+// (gqlgenx.NewExtension for gqlgen, graphqlgo.With for graphql-go), which
+// puts it there.
 func DBFromContext(ctx context.Context) (*velox.DB, error) {
 	db := gqlcore.DB(ctx)
 	if db == nil {
-		return nil, fmt.Errorf("veloxgql: %w: serve the schema through gqlgenx.NewExtension, which puts the DB in each request's context", ErrNoDB)
+		return nil, fmt.Errorf("veloxgql: %w: serve the schema through gqlgenx.NewExtension or graphqlgo.With, which puts the DB in each request's context", ErrNoDB)
 	}
 	return db, nil
 }

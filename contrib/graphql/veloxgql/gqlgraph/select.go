@@ -23,7 +23,7 @@ func needSource(ctx context.Context) error {
 	if gqlcore.Source(ctx) != nil {
 		return nil
 	}
-	return fmt.Errorf("veloxgql: %w, and %w: serve the schema through gqlgenx.NewExtension, which puts both in each request's context", veloxgql.ErrNoDB, veloxgql.ErrNoSelectionSource)
+	return fmt.Errorf("veloxgql: %w, and %w: serve the schema through gqlgenx.NewExtension or graphqlgo.With, which puts both in each request's context", veloxgql.ErrNoDB, veloxgql.ErrNoSelectionSource)
 }
 
 // narrow returns q reading only those of cols, column indexes, that q

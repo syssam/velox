@@ -3,6 +3,7 @@ package gqlgraph_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -51,8 +52,8 @@ func TestNoSelectionSource(t *testing.T) {
 	for name, read := range reads {
 		log.take("")
 		err := read(bare)
-		if !errors.Is(err, veloxgql.ErrNoSelectionSource) || !errors.Is(err, veloxgql.ErrNoDB) {
-			t.Errorf("%s with no source: %v, want ErrNoSelectionSource and ErrNoDB", name, err)
+		if !errors.Is(err, veloxgql.ErrNoSelectionSource) || !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "gqlgenx.NewExtension or graphqlgo.With") {
+			t.Errorf("%s with no source: %v, want ErrNoSelectionSource and ErrNoDB, naming both adapters", name, err)
 		}
 		if sent := log.sent(); len(sent) != 0 {
 			t.Errorf("%s with no source sent %q", name, sent)

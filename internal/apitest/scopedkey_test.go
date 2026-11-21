@@ -193,3 +193,91 @@ func TestScopedKeyChecks(t *testing.T) {
 		}
 	}
 }
+
+// skPerson has one skCard, whose key is on the card: the card's person_code
+// holds the person's code, a column outside both primary keys. It is an
+// inverse to-one relation, which no ScopedKey takes.
+type skPerson struct {
+	ID   int64
+	Code int64
+	Card velox.One[skCard]
+}
+
+var skPersonMeta velox.MetaOnce[skPerson]
+
+func (*skPerson) VeloxMeta() *velox.Meta[skPerson] { return skPersonMeta.Load(skPersonDescriptor) }
+
+func skPersonDescriptor() velox.Descriptor[skPerson] {
+	return velox.Descriptor[skPerson]{
+		Table:        "sk_persons",
+		Columns:      []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Code", Name: "code"}},
+		PrimaryKey:   []int{0},
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[skCard]("card", 1, 1)},
+		FieldPtr:     func(x *skPerson, i int) any { return [...]any{&x.ID, &x.Code}[i] },
+		EdgeFieldPtr: func(x *skPerson, i int) any { return &x.Card },
+	}
+}
+
+type skCard struct {
+	ID         int64
+	PersonCode int64
+}
+
+var skCardMeta velox.MetaOnce[skCard]
+
+func (*skCard) VeloxMeta() *velox.Meta[skCard] { return skCardMeta.Load(skCardDescriptor) }
+
+func skCardDescriptor() velox.Descriptor[skCard] {
+	return velox.Descriptor[skCard]{
+		Table:      "sk_cards",
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "PersonCode", Name: "person_code"}},
+		PrimaryKey: []int{0},
+		FieldPtr:   func(x *skCard, i int) any { return [...]any{&x.ID, &x.PersonCode}[i] },
+	}
+}
+
+// skLink is keyed by its two columns, the first of which is the key of its
+// to-one relation to skPerson: a foreign key in the owner's primary key,
+// which no ScopedKey takes.
+type skLink struct {
+	PersonID int64
+	Slot     int64
+	Person   velox.One[skPerson]
+}
+
+var skLinkMeta velox.MetaOnce[skLink]
+
+func (*skLink) VeloxMeta() *velox.Meta[skLink] { return skLinkMeta.Load(skLinkDescriptor) }
+
+func skLinkDescriptor() velox.Descriptor[skLink] {
+	return velox.Descriptor[skLink]{
+		Table:        "sk_links",
+		Columns:      []velox.ColumnDescriptor{{Field: "PersonID", Name: "person_id"}, {Field: "Slot", Name: "slot"}},
+		PrimaryKey:   []int{0, 1},
+		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[skPerson]("person", 0, 0)},
+		FieldPtr:     func(x *skLink, i int) any { return [...]any{&x.PersonID, &x.Slot}[i] },
+		EdgeFieldPtr: func(x *skLink, i int) any { return &x.Person },
+	}
+}
+
+// TestScopedKeyRelationShapes: ScopedKey refuses a to-one relation whose key
+// is on the target, and one whose foreign key is in the owner's primary key,
+// and fails the statement before it is sent.
+func TestScopedKeyRelationShapes(t *testing.T) {
+	persons, cards, links := untyped.TableOf[skPerson](), untyped.TableOf[skCard](), untyped.TableOf[skLink]()
+	db := interceptorDB(t)
+	cases := []struct {
+		name  string
+		table untyped.Table
+		p     velox.Predicate
+	}{
+		{"the key on the target", persons, persons.ScopedKey(persons.Pred(1, untyped.PredEQ, int64(1)), 0, cards)},
+		{"the key in the owner's primary key", links, links.ScopedKey(links.Pred(0, untyped.PredEQ, int64(1)), 0, persons)},
+	}
+	for _, c := range cases {
+		_, err := untyped.Query(db, c.table).Where(c.p).Limit(5).All(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "not a to-one relation whose foreign key is") {
+			t.Errorf("%s: %v, want the to-one refusal", c.name, err)
+		}
+	}
+}

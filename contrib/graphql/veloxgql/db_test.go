@@ -13,8 +13,8 @@ import (
 
 func TestDBFrom(t *testing.T) {
 	_, err := veloxgql.DBFromContext(context.Background())
-	if !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "serve the schema through gqlgenx.NewExtension") {
-		t.Errorf("DBFromContext with no DB: %v, want ErrNoDB naming gqlgenx.NewExtension", err)
+	if !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "serve the schema through gqlgenx.NewExtension or graphqlgo.With") {
+		t.Errorf("DBFromContext with no DB: %v, want ErrNoDB naming both adapters", err)
 	}
 	db := &velox.DB{}
 	if got, err := veloxgql.DBFromContext(gqlgenx.NewExtension(db).NewContext(context.Background())); got != db || err != nil {

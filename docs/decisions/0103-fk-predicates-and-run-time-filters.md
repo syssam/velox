@@ -42,7 +42,8 @@ check can be right.
 - `edge` must be a to-one relation whose foreign key is the owner's
   column, keyed by the target's primary key, and `p` a comparison on that
   column. Anything else (another column, an And or Or, a to-many or
-  many-to-many relation, a key on the target) is an invalid condition,
+  many-to-many relation, a key on the target, a foreign key in the
+  owner's primary key) is an invalid condition,
   which fails the statement: the rewrite to the `Has` is right only for a
   key the relation reads.
 - gqlgraph's `EdgeIDField` uses it for its IDs predicates and its IsNil
@@ -69,7 +70,9 @@ code does not change.
   NOT NULL, EQ, In and NotIn, each run on one DB under contexts that
   differ, twice in turn, on the plain path and the hooked one;
   `TestScopedKeyDenied`, a target's Read policy that denies or fails;
-  `TestScopedKeyChecks`, the conditions and relations it refuses.
+  `TestScopedKeyChecks`, the conditions and relations it refuses;
+  `TestScopedKeyRelationShapes`, a to-one relation keyed on the target
+  and one whose foreign key is in the owner's primary key.
 - `contrib/graphql/veloxgql/gqlgraph/scopedkey_test.go`:
   `TestForeignKeyRunTimeFilter`, `ownerIDIsNil`, `ownerIDNotNil`,
   `ownerID`, `ownerIDNEQ`, `ownerIDIn` and `ownerIDNotIn` agree with

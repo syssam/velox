@@ -431,7 +431,7 @@ type Connection struct {
 // an edge method with an Edge. It checks the query and the arguments, decodes the cursor,
 // and runs no query. An Edge's connection batches (see Edge's paginate). It
 // fails with veloxgql.ErrNoSelectionSource, and veloxgql.ErrNoDB, in a
-// context no adapter made (gqlgenx.NewExtension), which tells it nothing of
+// context no adapter made (gqlgenx.NewExtension, graphqlgo.With), which tells it nothing of
 // the field it resolves.
 //
 // A Query's q keeps its filters, its With loads and the scope the application gave
