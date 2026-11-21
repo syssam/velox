@@ -82,6 +82,41 @@ func TestDistinctRefusesEntityReads(t *testing.T) {
 	}
 }
 
+// TestDistinctOrder: a Distinct read orders only by what it reads, on every
+// dialect: a projection by its terms, Values by its column. Any other
+// ordering fails before anything is sent, as PostgreSQL and MySQL would
+// fail it, where SQLite would order by an arbitrary row of each group.
+func TestDistinctOrder(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}}
+		db := openFake(d, e)
+		q := db.Query[testmodel.Invoice]().Distinct().Limit(5)
+		refused := func(what string, err error) {
+			t.Helper()
+			if err == nil || !strings.Contains(err.Error(), "a Distinct read orders only by what it reads") {
+				t.Errorf("%v: %s: %v", d, what, err)
+			}
+		}
+		_, err := velox.Values(ctx, q.OrderBy(I.Number.Asc()), I.OrgID.Key())
+		refused("Values by another column", err)
+		_, _, err = q.Select(I.OrgID).OrderBy(I.Total.Asc()).SQL(ctx)
+		refused("projection by a column it does not read", err)
+		_, _, err = q.Select(I.OrgID).OrderBy(I.Total.Sum().Desc()).GroupBy(I.OrgID).SQL(ctx)
+		refused("projection by an aggregate it does not read", err)
+		_, err = velox.Explain(ctx, q.Select(I.OrgID).OrderBy(I.Number.Desc()))
+		refused("Explain", err)
+		if e.Calls != 0 {
+			t.Errorf("%v: %d statements sent", d, e.Calls)
+		}
+		if _, err := velox.Values(ctx, q.OrderBy(I.OrgID.Desc()), I.OrgID.Key()); err != nil {
+			t.Errorf("%v: Values by its column: %v", d, err)
+		}
+		if _, _, err := q.Select(I.OrgID, I.Total.Sum()).GroupBy(I.OrgID).OrderBy(I.Total.Sum().Desc(), I.OrgID.Asc()).SQL(ctx); err != nil {
+			t.Errorf("%v: projection by its terms: %v", d, err)
+		}
+	}
+}
+
 // TestDistinctRewriteRefused: a Rewrite hook may not set or clear Distinct.
 func TestDistinctRewriteRefused(t *testing.T) {
 	e := &fakeconn.Exec{}
@@ -186,6 +221,24 @@ func TestUpsertUpdateAll(t *testing.T) {
 		got, _, err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).UpdateAll().SQL(ctx)
 		if err != nil || !strings.HasSuffix(got, c.want) {
 			t.Errorf("%v:\n got %s, %v\nwant suffix %s", c.d, got, err, c.want)
+		}
+	}
+
+	// InsertAll writes the same update branch for every row.
+	for _, c := range []struct {
+		d    velox.Dialect
+		want string
+	}{
+		{velox.Postgres, `($9, $10, $11, $12, $13, $14, NULL, $15, $16) ON CONFLICT ("org_id", "number") DO UPDATE SET "updated_at" = EXCLUDED."updated_at", "total" = EXCLUDED."total", "paid" = EXCLUDED."paid", "paid_at" = EXCLUDED."paid_at", "note" = EXCLUDED."note", "data" = EXCLUDED."data" RETURNING "id"`},
+		{velox.SQLite, `ON CONFLICT ("org_id", "number") DO UPDATE SET "updated_at" = EXCLUDED."updated_at", "total" = EXCLUDED."total", "paid" = EXCLUDED."paid", "paid_at" = EXCLUDED."paid_at", "note" = EXCLUDED."note", "data" = EXCLUDED."data" RETURNING "id"`},
+		{velox.MySQL, "AS new ON DUPLICATE KEY UPDATE `updated_at` = new.`updated_at`, `total` = new.`total`, `paid` = new.`paid`, `paid_at` = new.`paid_at`, `note` = new.`note`, `data` = new.`data`"},
+	} {
+		e := &fakeconn.Exec{Rows: [][]any{{int64(1)}, {int64(2)}}, Affected: 2, LastID: 1, HasLastID: true}
+		db := openFake(c.d, e)
+		two := []testmodel.Invoice{{OrgID: 1, Number: "A", Total: 1}, {OrgID: 1, Number: "B", Total: 2}}
+		got, _, err := db.InsertAll(two).OnConflict(I.OrgID, I.Number).UpdateAll().SQL(ctx)
+		if err != nil || !strings.HasSuffix(got, c.want) {
+			t.Errorf("%v InsertAll:\n got %s, %v\nwant suffix %s", c.d, got, err, c.want)
 		}
 	}
 

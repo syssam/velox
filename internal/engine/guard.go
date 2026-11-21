@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 )
 
@@ -90,6 +91,9 @@ func (db *DB) guard(st *Statement) error {
 	if st.Distinct && !distinctReads(st) {
 		return fmt.Errorf("velox: %s: Distinct applies to a projection (Select, Calc, Rows) or Values; a read of entities, Count, Exists or an aggregate is refused, as its rows are distinct by key (count distinct values with CountDistinct)", st.Entity.Name)
 	}
+	if st.Distinct && slices.ContainsFunc(st.OrderBy, func(o OrderTerm) bool { return !distinctOrdered(st, o) }) {
+		return fmt.Errorf("velox: %s: a Distinct read orders only by what it reads: an ordering term is not among its result columns (PostgreSQL and MySQL refuse it too; SQLite would order by an arbitrary row of each group)", st.Entity.Name)
+	}
 	if st.Op == OpSelect && !st.Count && !st.Exists && st.Aggregate == 0 && st.Columns != nil && len(st.Columns) == 0 {
 		return fmt.Errorf("velox: %s: the query selects no columns", st.Entity.Name)
 	}
@@ -137,6 +141,23 @@ func (db *DB) guard(st *Statement) error {
 func distinctReads(st *Statement) bool {
 	return st.Op == OpSelect && st.Each == nil && !st.Count && !st.Exists && st.Aggregate == 0 &&
 		(st.Project != nil || st.columnRead)
+}
+
+// distinctOrdered reports whether o, an ordering of a SELECT DISTINCT,
+// orders by a term the statement reads: a term of its projection, or the
+// one column a read of a column (Values, IDs) reads.
+func distinctOrdered(st *Statement, o OrderTerm) bool {
+	t, expr := o.Expr.(Term)
+	if !expr {
+		if o.Rel != 0 {
+			return false
+		}
+		t = ColumnTerm(int32(o.Column))
+	}
+	if st.Project != nil {
+		return slices.ContainsFunc(st.Project.Terms, func(x Term) bool { return reflect.DeepEqual(x, t) })
+	}
+	return !expr && o.Rel == 0 && len(st.Columns) == 1 && st.Columns[0] == o.Column
 }
 
 // guardLock checks a locking read: it needs a lock to wait on, a database

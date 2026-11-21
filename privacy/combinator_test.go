@@ -11,8 +11,10 @@ import (
 	"github.com/syssam/velox/privacy"
 )
 
-// TestCombinators is And's, Or's and Not's truth tables, veloxe's, on reads
-// and writes: which result each returns, as it is, and which rules ran.
+// TestCombinators is And's, Or's and Not's truth tables, veloxe's but for
+// Or keeping an error that is not a decision, on reads and writes: which
+// result each returns, as it is, and which rules ran. Not never turns an
+// error into Allow.
 func TestCombinators(t *testing.T) {
 	other := errors.New("other")
 	wrappedDeny := privacy.Denyf("no viewer")
@@ -42,7 +44,11 @@ func TestCombinators(t *testing.T) {
 		{"or deny skip", or, []error{privacy.Deny, privacy.Skip}, privacy.Skip, 2},
 		{"or skip deny", or, []error{privacy.Skip, privacy.Deny}, privacy.Deny, 2},
 		{"or skip nil", or, []error{privacy.Skip, nil}, nil, 2},
-		{"or other deny", or, []error{other, wrappedDeny}, wrappedDeny, 2},
+		{"or other deny", or, []error{other, wrappedDeny}, other, 2},
+		{"or other skip", or, []error{other, privacy.Skip}, other, 2},
+		{"or skip other nil", or, []error{privacy.Skip, other, nil}, other, 3},
+		{"or other allow", or, []error{other, privacy.Allow}, privacy.Allow, 2},
+		{"and allow other", and, []error{privacy.Allow, other}, other, 2},
 		{"not allow", not, []error{privacy.Allow}, privacy.Deny, 1},
 		{"not wrapped allow", not, []error{wrappedAllow}, privacy.Deny, 1},
 		{"not deny", not, []error{privacy.Deny}, privacy.Allow, 1},
@@ -71,7 +77,8 @@ func TestCombinators(t *testing.T) {
 }
 
 // A combinator in a list decides as one rule: an And that skips lets the
-// list go on, an Or that allows ends it.
+// list go on, an Or that allows ends it, and an Or that keeps an error
+// denies.
 func TestCombinatorInList(t *testing.T) {
 	var ran []string
 	qp := privacy.QueryPolicy{
@@ -81,6 +88,14 @@ func TestCombinatorInList(t *testing.T) {
 	}
 	if err := qp.EvalQuery(context.Background(), recQuery{&recFilter{}}); err != nil || !slices.Equal(ran, []string{"a0", "a1", "o0", "o1"}) {
 		t.Errorf("%v ran %v", err, ran)
+	}
+	// An Or whose rule failed denies the list, though a later branch
+	// skipped: the list does not run out and allow.
+	other := errors.New("no store")
+	ran = nil
+	qp = privacy.QueryPolicy{privacy.Or(step(&ran, "e", other), step(&ran, "s", privacy.Skip)), step(&ran, "after", nil)}
+	if err := qp.EvalQuery(context.Background(), recQuery{&recFilter{}}); err != other || !slices.Equal(ran, []string{"e", "s"}) { //nolint:errorlint // identity
+		t.Errorf("failed Or: %v ran %v", err, ran)
 	}
 }
 

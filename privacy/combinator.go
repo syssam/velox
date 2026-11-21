@@ -10,7 +10,8 @@ import (
 // And returns a rule that allows only when every one of rules allows, as
 // veloxe's And does. It runs them in order and returns the first result
 // that is not Allow, as it is: Deny, Skip, nil or another error. With every
-// rule allowing, and with no rules, it returns Allow.
+// rule allowing, and with no rules, it returns Allow. An earlier Skip or
+// nil ends And as a Deny does, so a later Deny does not run.
 //
 //	rules            And
 //	Allow, Allow     Allow
@@ -23,17 +24,23 @@ import (
 // list.
 func And(rules ...QueryMutationRule) QueryMutationRule { return andRule(rules) }
 
-// Or returns a rule that allows when any one of rules allows, as veloxe's
-// Or does. It runs them in order and returns Allow at the first that
-// allows; when none does, the last one's result, as it is. With no rules it
-// returns Deny.
+// Or returns a rule that allows when any one of rules allows. It runs them
+// in order and returns Allow at the first that allows. When none does, it
+// returns the first error that is not a decision (Allow, Deny, Skip, nil,
+// or one wrapping them), so that a failing rule still denies; with none,
+// the last result, as it is. With no rules it returns Deny.
 //
 //	rules            Or
 //	Deny, Allow      Allow
 //	Allow, Deny      Allow (Deny does not run)
+//	err, Allow       Allow
+//	err, Skip        err (a denial)
 //	Deny, Skip       Skip
 //	Skip, Deny       Deny
 //	(none)           Deny
+//
+// veloxe's Or returned the last result, so err, Skip gave Skip and a list
+// that then ran out allowed; velox fails closed (ADR 0102).
 //
 // A condition a rule gives the filter stays, whether or not that rule
 // allowed: a rule meant only for Or's other branch should not narrow.
@@ -77,25 +84,53 @@ func (rs andRule) EvalMutation(ctx context.Context, m Mutation) error {
 type orRule []QueryMutationRule
 
 func (rs orRule) EvalQuery(ctx context.Context, q Query) error {
-	var last error = Deny
+	var o orResult
 	for i, r := range rs {
-		last = engine.EvalQueryRule(ctx, r, q, i)
-		if errors.Is(last, Allow) {
+		if o.add(engine.EvalQueryRule(ctx, r, q, i)) {
 			return Allow
 		}
 	}
-	return last
+	return o.result()
 }
 
 func (rs orRule) EvalMutation(ctx context.Context, m Mutation) error {
-	var last error = Deny
+	var o orResult
 	for i, r := range rs {
-		last = engine.EvalMutationRule(ctx, r, m, i)
-		if errors.Is(last, Allow) {
+		if o.add(engine.EvalMutationRule(ctx, r, m, i)) {
 			return Allow
 		}
 	}
-	return last
+	return o.result()
+}
+
+// orResult is what Or has seen: the last result and the first error that
+// is not a decision.
+type orResult struct {
+	last, failed error
+	ran          bool
+}
+
+// add records err and reports whether it allows.
+func (o *orResult) add(err error) bool {
+	if errors.Is(err, Allow) {
+		return true
+	}
+	o.last, o.ran = err, true
+	if o.failed == nil && err != nil && !IsDecision(err) {
+		o.failed = err
+	}
+	return false
+}
+
+// result is Or's result when no rule allowed.
+func (o *orResult) result() error {
+	switch {
+	case o.failed != nil:
+		return o.failed
+	case !o.ran:
+		return Deny
+	}
+	return o.last
 }
 
 type notRule struct{ rule QueryMutationRule }

@@ -830,7 +830,10 @@ orgs, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Distinct().Limit(100
 
 A read of entities is by key, so its rows are distinct already: `All`,
 `Count`, `Exists` and an aggregate with `Distinct` fail before anything is
-sent. Count distinct values with a handle's `CountDistinct`
+sent. Count distinct values with a handle's `CountDistinct`. A `Distinct`
+read orders only by what it reads, a projection's terms or `Values`'
+column; any other ordering fails on every dialect, as PostgreSQL and MySQL
+refuse it
 ([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
 
 ## Writing
@@ -1265,7 +1268,9 @@ A schema written for veloxe keeps its `privacy` rules
 ([ADR 0089](decisions/0089-veloxe-privacy-shape.md)). `privacy.And`, `Or` and
 `Not` combine rules with veloxe's semantics: `And` returns the first result
 that is not `Allow`, `Or` allows at the first `Allow`, and `Not` turns
-`Allow` into `Deny` and only the bare `Deny` into `Allow`. To see why a
+`Allow` into `Deny` and only the bare `Deny` into `Allow`. An `Or` whose
+rules do not allow returns a failing rule's error, which denies, where
+veloxe's returned the last result. To see why a
 statement was allowed or denied, `privacy.WithTrace` reports each rule's
 decision:
 

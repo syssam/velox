@@ -22,6 +22,11 @@ and veloxe's `privacy.And`, `Or`, `Not` and rule trace (#104, #106).
   - `Count` with `Distinct` is refused, not rendered `COUNT(DISTINCT …)`.
     `Count` refuses a projection already, and a distinct count is a
     handle's `CountDistinct` in a `Select`.
+  - Its `ORDER BY` names only what it reads: a projection's terms
+    (compared whole, so an aggregate must be the same aggregate), or the
+    one column of `Values`. Anything else fails in the guard on every
+    dialect, as PostgreSQL and MySQL refuse it; SQLite would order by an
+    arbitrary row of each group.
   - A Rewrite hook may not change it, and it is part of the render
     cache's shape key.
 - `velox.Explain(ctx, q) (string, error)` returns the dialect's plan.
@@ -59,14 +64,22 @@ and veloxe's `privacy.And`, `Or`, `Not` and rule trace (#104, #106).
   - The flag is a field of `InsertQuery`, not of `ConflictClause`, whose
     fields are all exported so that a hook can rebuild it.
 - `privacy.And`, `Or` and `Not` take `QueryMutationRule`s, with veloxe's
-  semantics, results returned as they are:
+  semantics but one, results returned as they are:
   - `And` returns the first result that is not `Allow`, which may be
     `Skip` or nil; with all allowing, or none given, it returns `Allow`.
-  - `Or` returns `Allow` at the first that allows, else the last
-    result; with none given it returns `Deny`.
+  - `Or` returns `Allow` at the first that allows. Else it returns the
+    first error that is not a decision (not `Allow`, `Deny`, `Skip`, nil
+    or one wrapping them), and failing that the last result; with none
+    given it returns `Deny`. This departs from veloxe, whose `Or` returned
+    the last result: `Or(failing, Skip)` gave `Skip`, and a list that then
+    ran out allowed the statement on a rule that could not decide. velox
+    fails closed.
+  - `And` already returns a failing rule's error as it is: it is not
+    `Allow`. An earlier `Skip` or nil ends it, so a later `Deny` does not
+    run.
   - `Not` turns `Allow` (wrapped too) into `Deny` and the bare `Deny`
     into `Allow`. It keeps a wrapped `Deny`, `Skip`, nil and any other
-    error as they are, failing closed.
+    error as they are, failing closed: an error is never inverted.
   - The truth tables are in their godoc and in `TestCombinators`.
 - `privacy.WithTrace(ctx, func(privacy.TraceEntry))` reports each rule's
   decision.
@@ -99,10 +112,11 @@ compatibility.
 ## Evidence
 
 - `internal/apitest/parity_test.go`: `TestDistinct`,
-  `TestDistinctRefusesEntityReads`, `TestDistinctRewriteRefused`,
+  `TestDistinctRefusesEntityReads`, `TestDistinctOrder`,
+  `TestDistinctRewriteRefused`,
   `TestExplain` (three dialects, Around hook, `WithLog` masking),
   `TestExplainOfAProjection` and `TestUpsertUpdateAll` (three dialects,
-  `SetPtr`, Version, Ignore, order with `Update`/`DoNothing`).
+  `SetPtr`, Version, Ignore, order with `Update`/`DoNothing`, InsertAll).
 - `internal/integration/parity_test.go`: `TestDistinct`, `TestExplain` and
   `TestUpsertUpdateAll` on SQLite, and on PostgreSQL and MySQL in the gate.
 - `privacy/combinator_test.go`: `TestCombinators`, `TestCombinatorInList`,

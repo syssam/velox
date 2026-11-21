@@ -80,8 +80,9 @@ func (q Query[E]) SelectRaw[_ Lazy[E]](text string, args ...any) Query[E] {
 // A read of entities, by All, One, First, Iter, Count, Exists or an
 // aggregate, fails with an error before anything is sent: entities are
 // distinct by their key. To count distinct values, Select a handle's
-// CountDistinct. PostgreSQL refuses an ordering by a term the projection
-// does not read.
+// CountDistinct. A Distinct read orders only by what it reads: a term of
+// the projection, or Values' column. Any other OrderBy fails before
+// anything is sent, on every dialect, as PostgreSQL and MySQL refuse it.
 func (q Query[E]) Distinct[_ Lazy[E]]() Query[E] {
 	q.s.St.Distinct = true
 	return q
