@@ -304,6 +304,42 @@ its name, which is the folder's base name when you leave it out. Put the
 command in one `go:generate` line, and have CI call it, so the folder is named
 once.
 
+A Go program can run the same generate with package
+[`generate`](../generate), as ent's `compiler.Generate` is run from a
+`generate.go`. Its `Config` has a field for each flag: `Schema`, `Out`,
+`Package`, `Plugins` and `Check`. It also takes what the command cannot: a
+plugin called in the process, such as `graphqlgen.Plugin(opts)` from
+`contrib/graphql/graphqlgen`, with no tool to build, and `FieldOrder`, which
+orders each entity's fields. Such a program is the check too: have CI run it
+with `Check: true`, as `velox-gen -check` knows neither.
+
+```go
+//go:build ignore
+
+package main
+
+import (
+	"context"
+	"log"
+
+	"github.com/syssam/velox/contrib/graphql/graphqlgen"
+	"github.com/syssam/velox/generate"
+)
+
+func main() {
+	cfg := generate.Config{
+		Out:     "./veloxgen",
+		Plugins: []generate.Plugin{graphqlgen.Plugin(nil)},
+	}
+	if _, err := generate.Run(context.Background(), "", cfg); err != nil {
+		log.Fatal(err)
+	}
+}
+```
+
+A `//go:generate go run generate.go` line in another file of the package
+runs it.
+
 Generated code carries a version constant (today
 `velox.GeneratedCodeIsVersion25`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run

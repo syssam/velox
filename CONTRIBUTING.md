@@ -10,18 +10,21 @@ each.
 
 - The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
   `plugin`, `veloxtype` (the plain data types the root re-exports), `veloxpgx`
-  (pgx's native path) and `cmd/velox-gen`. `bench/` holds the baselines and the
+  (pgx's native path), `generate` (velox-gen's generate as a Go API) and
+  `cmd/velox-gen`. `bench/` holds the baselines and the
   scale check. `scripts/` holds CI's scripts and their configuration. Under
   `internal/`:
   - The product: the non-generic runtime (`engine`), the executors (`conn`), the
-    generator (`codegen`), the DDL writer (`ddl`), the reader of the drivers' errors (`dberr`), the writer of the root's
+    generator (`codegen`), velox-gen's generate run and its all-or-nothing
+    writer (`genrun`), the DDL writer (`ddl`), the reader of the drivers' errors (`dberr`), the writer of the root's
     `handles.go` (`handlegen`) and the name of the module a program is built from (`buildinfo`).
   - The tests: of the public API (`apitest`), against real databases
     (`integration`) and of the repository itself (`repocheck`).
   - What the tests use: the generated models (`testmodel`, `testbind`), a fake
     executor (`fakeconn`), a repository layer for caller capture (`testrepo`),
     temporary modules (`tempmod`) and build measurement (`buildcost`).
-- `contrib/graphql`: the annotations, the `velox-graphql` plugin and the
+- `contrib/graphql`: the annotations, the `velox-graphql` plugin (its answer
+  in `internal/gqlplugin`, and in the process as `graphqlgen`) and the
   `veloxgql` runtime.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - `examples`: the runnable examples. Each has its schema, its generated code and

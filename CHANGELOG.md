@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Package `generate` runs velox-gen's generate from Go, as ent's
+  `entc.Generate` and veloxe's `compiler.Generate` did (ADR 0097):
+  `generate.Run(ctx, dir, generate.Config{Schema, Out, Package, Plugins,
+  Check, Env, FieldOrder, Stdout, Stderr})`, with `ErrStale` for a stale
+  check and `ErrInterrupted` for a signal during the write. velox-gen calls
+  it, and its output is unchanged. A `Plugin` with `Run` answers in the
+  process; `contrib/graphql/graphqlgen.Plugin(opts)` is velox-graphql so,
+  with the tool's output byte for byte. `FieldOrder` orders each entity's
+  declared fields and must return a permutation of them.
 - A `field.Other` field in a decimal column (its `SchemaType` names
   `numeric` or `decimal`, on MySQL also `dec` or `fixed`, for every dialect
   it lists), such as a `decimal.Decimal`, has a `NumberCol` (`NullNumberCol`

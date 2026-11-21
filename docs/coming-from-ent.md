@@ -299,6 +299,33 @@ itself; the driver parses a `datetime` column, slower, and velox reads that
 too. `migrate diff` on a database ent made plans the change to `datetime(9)`,
 a table rebuild on SQLite.
 
+## Running the generator from Go
+
+ent's `entc.go` calls `entc.Generate` (veloxe's, `compiler.Generate`) with a
+`gen.Config`. velox's is `generate.Run(ctx, dir, generate.Config{...})`,
+from package `github.com/syssam/velox/generate`, in a `generate.go` behind
+`//go:build ignore` ([decision 0097](decisions/0097-generate-package.md)).
+It writes what `go tool velox-gen` writes with the same settings.
+
+| ent / veloxe | velox |
+|---|---|
+| `compiler.Generate("./schema", cfg)`, `entc.Generate` | `generate.Run(ctx, "", generate.Config{Schema: "./veloxschema"})` |
+| `gen.NewConfig(opts...)` | a `generate.Config` literal; the zero value is velox-gen with no flags |
+| `gen.WithTarget(dir)` | `Out` (default `./veloxgen`) |
+| `gen.WithPackage(path)` | not needed: the import path is the module's path joined to `Out`'s; `Package` names the package (default `Out`'s base name) |
+| `gen.WithSchema(path)` | `Schema`, a package pattern (default `./veloxschema`) |
+| `gen.WithFeatures(FeaturePrivacy, FeatureIntercept, ...)` | always on, so no flag: privacy is `Policy` and package `privacy`, intercept is `Interceptors` as row filters, lock is `ForUpdate`, modifier is `Expr`, `Calc`, `Select` and `SetExpr`, upsert is `OnConflict`, execquery is `db.Exec`, `Rows` and `Raw`, autodefault is the zero `DEFAULT` (decision 0090), entpredicates are the handles and `FieldEQ`, versioned migrations are velox-gen migrate, schemaconfig is `TableIn` and `sqlschema.Schema`; snapshot is not needed, as velox-gen loads a schema whose generated package is stale |
+| `gen.WithHooks(...)` | not offered. One rewrite is: `FieldOrder` gives each entity's field order, the rule a field-sorting hook implemented. A prefix hook for index names is the default (decision 0090). |
+| `gen.WithTemplates`, `compiler.TemplateDir`… | not offered: the generated package is entirely velox-gen's, reproducible from the schema alone, so `velox-gen -check` proves it current (decision 0034). Code of your own goes in a file of yours beside it. |
+| `compiler.Extensions(entgql.NewExtension(...))` | `Plugins`: `generate.Plugin{Tool: "velox-graphql"}` runs the tool; `graphqlgen.Plugin(opts)` from `contrib/graphql/graphqlgen` runs it in the process, with the same output |
+| `gen.WithBuildFlags`, `compiler.BuildFlags("-p=4")` | `Env: append(os.Environ(), "GOFLAGS=-p=4")`, the environment of every go command Run starts |
+| `gen.WithStorageDriver`, `gen.WithIDType`, `gen.WithHeader` | not offered: the dialect is the migration directory's, IDs are int64 unless the schema declares one, and the header is velox-gen's, which marks the files it owns |
+
+A program with `FieldOrder`, or a plugin that runs only in the process, is
+its own check: run it with `Check: true` in CI, where it returns
+`generate.ErrStale` when a file is out of date. `velox-gen -check` knows
+neither.
+
 ## GraphQL (contrib/graphql, compared with entgql)
 
 - **Inputs, not mutations, as in entgql.** velox-graphql writes
