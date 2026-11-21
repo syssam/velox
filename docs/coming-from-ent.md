@@ -221,6 +221,11 @@ middleware: its condition reaches every read and write of the entity, a
 relation's included, before the Read policy, and `WithoutPolicy` does not
 lift it. A hook that must use the typed API of `veloxgen` (another entity, say)
 is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
+ent's `client.Use(hooks...)` is `velox.WithHooksAll(hooks...)`, and
+`m.Type()` is `m.Entity()`. ent's `client.Intercept(...)` that adds a
+condition is `velox.WithFilter(func(ctx, entity string) (velox.Predicate,
+error))`, a row filter for every entity with an interceptor's reach
+(decision 0098).
 
 ent's `m.OldTitle(ctx)` reads one row's old value, on a one-row update,
 with a query outside the update's lock. In velox the writes through a

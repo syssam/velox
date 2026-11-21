@@ -164,3 +164,9 @@ func HasEdgeWith(name string, ps ...Predicate) Predicate { return engine.HasEdge
 // row. Typed code that wants a condition that matches every row writes
 // And[E]().
 func Allow() Predicate { return engine.NewPredicate(engine.Node{Op: engine.OpAllow}) }
+
+// NoFilter is what a WithFilter filter returns for an entity it does not
+// restrict: Allow, by the name a filter reads best with. A filter that
+// returns the zero Predicate instead fails the statement, so a filter that
+// forgot an entity fails closed.
+func NoFilter() Predicate { return Allow() }

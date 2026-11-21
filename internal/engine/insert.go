@@ -466,8 +466,8 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 
 // ConditionedUpsert predicts, before the scope runs, whether the update
 // branch of an InsertAll of n rows of entity in may get a condition: its
-// interceptors', its policy's Read or Write, or a Rewrite hook's. A row
-// those conditions hide fails the upsert once the statement has written the
+// interceptors', a WithFilter filter's, its policy's Read or Write, or a
+// Rewrite hook's. A row those conditions hide fails the upsert once the statement has written the
 // others, and a returned row that matches no entity fails it too
 // (placeUpserted), so such an InsertAll of several rows runs in a
 // transaction, which the failure rolls back. The scope conditions an
@@ -477,7 +477,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 // back (reads: a generated key, or a column with a declared default).
 func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int, reads bool) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.D != MySQL &&
-		(len(in.filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
+		(len(in.filters) > 0 || len(db.Cfg.Filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
 			InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
 }
 

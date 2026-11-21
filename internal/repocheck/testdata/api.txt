@@ -432,6 +432,7 @@ func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation) Affected() int64
 func (m *Mutation) DB() *DB
+func (m *Mutation) Entity() string
 func (m *Mutation) Fill(name string, v any) error
 func (m *Mutation) Op() Op
 func (m *Mutation) Predicates() []Predicate
@@ -595,6 +596,7 @@ func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func NoFilter() Predicate
 func Not[E any](p Pred[E]) Pred[E]
 func On(h Hook, ops ...Op) Hook
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB
@@ -627,6 +629,8 @@ func WithAround(a Around) Option
 func WithCallerSkip(pkgPath ...string) Option
 func WithCallers() Option
 func WithDeadlines(d Deadlines) Option
+func WithFilter(f Filter) Option
+func WithHooksAll(hs ...Hook) Option
 func WithHooks[E any, PE Entity[E]](hs ...Hook) Option
 func WithMaxLimit(n int) Option
 func WithMaxRows(n int) Option
@@ -673,6 +677,7 @@ type EntityTable = engine.EntityTable
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type Field = schema.Field
 type FieldChange = veloxtype.FieldChange
+type Filter func(ctx context.Context, entity string) (Predicate, error)
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type Hook func(next Mutator) Mutator

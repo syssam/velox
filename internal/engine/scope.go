@@ -17,7 +17,7 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 	var read, write Predicate
 	var err error
 	// The entity's own conditions first, as in scope.
-	if len(in.filters) > 0 || (policy && in.policy.Read != nil) {
+	if sc.filtered(in) || (policy && in.policy.Read != nil) {
 		if read, err = sc.RowCond(in, OpUpdate); err != nil {
 			return err
 		}
@@ -64,6 +64,9 @@ type Scoper struct {
 	Ctx    context.Context
 	Entity string // the statement's entity, which every error names
 	Skip   string // the DB's WithoutPolicy reason; "" when none
+	// Filters are the DB's WithFilter filters, which every entity's row
+	// condition gets before its interceptors'.
+	Filters []EntityFilterFn
 	// Reads is set for a statement that reads only (a SELECT that is not
 	// Writable): the policies' Query conditions apply to it, and to every
 	// EXISTS and join in it.
@@ -88,6 +91,10 @@ func (sc *Scoper) conditions(p *EntityPolicy) bool {
 	return p != nil && (p.Read != nil || sc.Reads && p.Query != nil)
 }
 
+// filtered reports whether entity t's rows get a condition whatever the
+// policy: from a WithFilter filter or an interceptor.
+func (sc *Scoper) filtered(t *EntityInfo) bool { return len(sc.Filters) > 0 || len(t.filters) > 0 }
+
 // PolicyOn reports whether a policy applies: false under WithoutPolicy, which
 // is then recorded as applied.
 func (sc *Scoper) PolicyOn() bool {
@@ -98,9 +105,10 @@ func (sc *Scoper) PolicyOn() bool {
 	return true
 }
 
-// RowCond returns entity t's row condition: the AND of its interceptors'
-// conditions, in order, then its Read policy's unless WithoutPolicy. It calls
-// them the first time only. A denial of the policy is a *PolicyError for op;
+// RowCond returns entity t's row condition: the AND of the WithFilter
+// filters' conditions, then its interceptors', in order, then its Read
+// policy's unless WithoutPolicy. It calls them the first time only, once per
+// statement. A denial of the policy is a *PolicyError for op; a filter's or
 // an interceptor's error fails the statement and is not a denial. The EXISTS
 // in the condition get their targets' row conditions in turn.
 //
@@ -152,9 +160,22 @@ func (sc *Scoper) markCut(at int) {
 // rowCond makes RowCond's condition.
 func (sc *Scoper) rowCond(t *EntityInfo, op Op) (Predicate, error) {
 	var kids []Node
+	if len(sc.Filters) > 0 {
+		name := EntityName(t)
+		for i, f := range sc.Filters {
+			p, err := f(sc.Ctx, name)
+			c, err := sc.filterCond(t, "filter", i, p, err)
+			if err != nil {
+				return Predicate{}, err
+			}
+			for _, k := range conjuncts(c) {
+				kids = append(kids, k.n)
+			}
+		}
+	}
 	for i, f := range t.filters {
 		p, err := f(sc.Ctx)
-		c, err := sc.filterCond(t, i, p, err)
+		c, err := sc.filterCond(t, "interceptor", i, p, err)
 		if err != nil {
 			return Predicate{}, err
 		}
@@ -191,29 +212,34 @@ func (sc *Scoper) rowCond(t *EntityInfo, op Op) (Predicate, error) {
 	return Predicate{Group(OpAnd, kids)}, nil
 }
 
-// filterCond checks what entity t's interceptor i returned, as PolicyCond
-// checks a policy's: an error fails the statement, wrapped and not as a
-// denial, a zero Pred fails it, and Allow is no condition.
-func (sc *Scoper) filterCond(t *EntityInfo, i int, p Predicate, err error) (Predicate, error) {
+// filterCond checks what entity t's interceptor or WithFilter filter
+// (kind, "interceptor" or "filter") i returned, as PolicyCond checks a
+// policy's: an error fails the statement, wrapped and not as a denial, a
+// zero Pred fails it, and Allow is no condition.
+func (sc *Scoper) filterCond(t *EntityInfo, kind string, i int, p Predicate, err error) (Predicate, error) {
 	switch {
 	case err != nil:
-		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]: %w", t.Name, i, err)
+		return Predicate{}, fmt.Errorf("velox: %s: %s [%d]: %w", t.Name, kind, i, err)
 	case p.n.Op == opZero:
-		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d] returned the zero Predicate; return velox.Allow() for no restriction", t.Name, i)
+		none := "velox.Allow()"
+		if kind == "filter" {
+			none = "velox.NoFilter()"
+		}
+		return Predicate{}, fmt.Errorf("velox: %s: %s [%d] returned the zero Predicate; return %s for no restriction", t.Name, kind, i, none)
 	case p.n.Op == OpAllow:
 		return Predicate{}, nil
 	case hasZero(p.n):
-		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition holds the zero Pred", t.Name, i)
+		return Predicate{}, fmt.Errorf("velox: %s: %s [%d]'s condition holds the zero Pred", t.Name, kind, i)
 	}
 	if named(p.n) {
 		n, err := resolveNamed(t, p.n)
 		if err != nil {
-			return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition: %w", t.Name, i, err)
+			return Predicate{}, fmt.Errorf("velox: %s: %s [%d]'s condition: %w", t.Name, kind, i, err)
 		}
 		p = Predicate{n}
 	}
 	if err := PredErr(p.n); err != nil {
-		return Predicate{}, fmt.Errorf("velox: %s: interceptor [%d]'s condition: %w", t.Name, i, err)
+		return Predicate{}, fmt.Errorf("velox: %s: %s [%d]'s condition: %w", t.Name, kind, i, err)
 	}
 	n, _, err := sc.Node(p.n)
 	return Predicate{n}, err
@@ -363,7 +389,7 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 // target returns what an EXISTS on entity t gets: t's row condition (zero for
 // none).
 func (sc *Scoper) target(t *EntityInfo) (Predicate, error) {
-	if len(t.filters) == 0 && (!sc.conditions(t.policy) || !sc.PolicyOn()) {
+	if !sc.filtered(t) && (!sc.conditions(t.policy) || !sc.PolicyOn()) {
 		return Predicate{}, nil
 	}
 	// An EXISTS reads its target, whatever the statement's kind.
@@ -422,13 +448,13 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		return nil
 	}
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Reads: st.Op == OpSelect && !st.Writable}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters, Reads: st.Op == OpSelect && !st.Writable}
 	// The entity's own conditions first, so that a denial is reported as the
 	// statement's, and an EXISTS on the same entity reuses its row condition.
 	var read, write Predicate
 	var err error
 	pol := InfoPolicy(in)
-	if len(in.filters) > 0 || (sc.conditions(pol) && sc.PolicyOn()) {
+	if sc.filtered(in) || (sc.conditions(pol) && sc.PolicyOn()) {
 		if read, err = sc.RowCond(in, st.Op); err != nil {
 			return err
 		}
@@ -495,15 +521,17 @@ func (sc *Scoper) scopeJoins(st *Statement) error {
 // the existing row (DoNothing) changes nothing, so it is exempt.
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters}
 	pol := InfoPolicy(in)
 	if pol != nil && pol.Insert != nil {
 		sc.PolicyOn() // records a WithoutPolicy that InsertAllowed obeyed
 	}
 	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
 		conditioned := pol != nil && (pol.Read != nil || pol.Write != nil) && sc.PolicyOn()
-		if (conditioned || len(in.filters) > 0) && db.D == MySQL {
-			return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy or an interceptor; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
+		if db.D == MySQL {
+			if err := sc.mysqlUpsert(in, conditioned); err != nil {
+				return err
+			}
 		}
 		if err := sc.ConditionUpsert(in, st, conditioned); err != nil {
 			return err
@@ -515,6 +543,26 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 		}
 	}
 	sc.Record(st)
+	return nil
+}
+
+// mysqlUpsert refuses an upsert that updates on MySQL, whose ON DUPLICATE
+// KEY UPDATE takes no condition, when the update branch would get one: the
+// entity has a Read or Write policy that applies (conditioned) or an
+// interceptor, or a WithFilter filter returns a condition for it. A filter
+// that returns NoFilter for the entity lets the upsert run.
+func (sc *Scoper) mysqlUpsert(in *EntityInfo, conditioned bool) error {
+	refuse := conditioned || len(in.filters) > 0
+	if !refuse && len(sc.Filters) > 0 {
+		p, err := sc.RowCond(in, OpUpdate)
+		if err != nil {
+			return err
+		}
+		refuse = p.n.Op != opZero
+	}
+	if refuse {
+		return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy or an interceptor, or a WithFilter condition; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
+	}
 	return nil
 }
 

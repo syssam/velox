@@ -37,6 +37,10 @@ type config struct {
 	ShardFor func(ctx context.Context) (string, error)
 	// Hooks are WithEntityHooks's, by entity; nil: none.
 	Hooks map[*EntityInfo][]HookFn
+	// AllHooks are WithAllHooks's, for every entity, outermost first.
+	AllHooks []HookFn
+	// Filters are WithFilter's, for every entity, in order.
+	Filters []EntityFilterFn
 	// noReturningOld is WithoutReturningOld's.
 	noReturningOld bool
 	// version is the PostgreSQL server_version_num a recording handle read

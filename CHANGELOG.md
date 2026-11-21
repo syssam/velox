@@ -30,6 +30,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   process; `contrib/graphql/graphqlgen.Plugin(opts)` is velox-graphql so,
   with the tool's output byte for byte. `FieldOrder` orders each entity's
   declared fields and must return a permutation of them.
+- Hooks and row filters for every entity (ADR 0098), as ent's `client.Use`
+  and `client.Intercept`: `velox.WithHooksAll(hooks...)` runs hooks on every
+  entity's writes, before the schema's and `WithHooks[E]`'s, and
+  `Mutation.Entity()` names the entity. `velox.WithFilter(f)` adds a row
+  filter, `func(ctx, entity string) (velox.Predicate, error)`, with an
+  interceptor's reach: reads, writes, loads, joins, `Has`/`HasWith`, counts
+  and aggregates. `WithoutPolicy` does not lift it; an error, the zero
+  `Predicate` or an unknown column fails the statement, and
+  `velox.NoFilter()` restricts nothing.
 - A `field.Other` field in a decimal column (its `SchemaType` names
   `numeric` or `decimal`, on MySQL also `dec` or `fixed`, for every dialect
   it lists), such as a `decimal.Decimal`, has a `NumberCol` (`NullNumberCol`

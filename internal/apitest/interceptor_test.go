@@ -26,7 +26,7 @@ var interceptorDDL = []string{
 // hidden, and 3 "secret", which the Read policy hides, of owner 1, and 4 "c"
 // of owner 2; and the links (1, 1), (1, 2) and (2, 2). The default context
 // sees notes 1 and 4.
-func interceptorDB(t *testing.T) *velox.DB {
+func interceptorDB(t *testing.T, opts ...velox.Option) *velox.DB {
 	t.Helper()
 	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "interceptor.db"))
 	if err != nil {
@@ -43,7 +43,7 @@ func interceptorDB(t *testing.T) *velox.DB {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	return velox.Open(velox.SQLite, raw)
+	return velox.Open(velox.SQLite, raw, opts...)
 }
 
 func noteIDs(ns []fixture.INote) []int64 {

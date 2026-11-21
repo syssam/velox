@@ -1103,6 +1103,50 @@ application rules that even admin code should respect, such as hiding
 soft-deleted rows. Declare `Interceptors() []velox.Interceptor` on a schema
 or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`.
 
+### Hooks and filters for every entity
+
+Some rules cover many entities and live in the application, not the
+schema: a permission matrix loaded per request, say. Two DB options add
+them for every entity, as ent's `client.Use` and `client.Intercept` do
+([ADR 0098](decisions/0098-hooks-and-filters-for-every-entity.md)).
+
+`velox.WithHooksAll(hooks...)` runs hooks on every entity's writes, before
+the schema's hooks and `WithHooks[E]`'s. `m.Entity()` names the entity,
+`"Invoice"`, so a hook acts on some and passes the others on:
+
+```go
+refund := velox.On(func(next velox.Mutator) velox.Mutator {
+	return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+		if err := next.Mutate(ctx, m); err != nil || m.Entity() != "CreditNote" {
+			return err
+		}
+		return syncRefunds(ctx, m.DB())
+	})
+}, velox.OpInsert, velox.OpUpdate)
+```
+
+`velox.WithFilter(f)` adds a row filter for every entity. velox calls it
+with the statement's context and the entity's name, once per statement for
+each entity the statement reads: its own, and each one a `With`, `Join`,
+`Has` or `HasWith` reaches. It reaches what an interceptor reaches, writes
+included, and `WithoutPolicy` does not lift it:
+
+```go
+db, err := velox.Connect("postgres", dsn, velox.WithFilter(
+	func(ctx context.Context, entity string) (velox.Predicate, error) {
+		if !softDeleted[entity] || includeDeleted(ctx) {
+			return velox.NoFilter(), nil
+		}
+		return velox.FieldIsNull("deleted_at"), nil
+	}))
+```
+
+A filter fails closed. It returns `velox.NoFilter()` for an entity it does
+not restrict. The zero `velox.Predicate{}`, an error, or a column the
+entity lacks fails the statement, and an error is not a denial.
+`velox.Not(velox.NoFilter())` matches no row, for a caller who may see
+none. Several filters AND, in the order given.
+
 ## Recording changes
 
 An audit log needs the values a write replaced. `db.Record(sink)` returns a

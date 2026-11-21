@@ -332,6 +332,16 @@ func (mu *MutationState) entity() *EntityInfo {
 	return mu.In
 }
 
+// EntityName is the name of the write's entity: EntityName; "" when it has
+// none.
+func (mu *MutationState) EntityName() string {
+	in := mu.entity()
+	if in == nil {
+		return ""
+	}
+	return EntityName(in)
+}
+
 // op is the write's kind.
 func (mu *MutationState) op() Op {
 	if mu.Op != 0 {

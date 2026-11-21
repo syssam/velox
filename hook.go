@@ -126,6 +126,34 @@ func WithHooks[E any, PE Entity[E]](hs ...Hook) Option {
 	return engine.WithEntityHooks(stateOf(PE(nil).VeloxMeta()).Info, hookFns(hs))
 }
 
+// WithHooksAll adds hs to the hooks of every entity, for the DB and every
+// Tx and shard it opens, as ent's client.Use does. They run before the
+// entity's own hooks and WithHooks's, outermost, the first given first, and
+// a later WithHooksAll's after an earlier one's. Mutation.Entity names the
+// entity a hook is called for, so one hook serves some entities and passes
+// the others to next:
+//
+//	audit := velox.Before(func(ctx context.Context, m *velox.Mutation) error {
+//		if m.Entity() != "Invoice" {
+//			return nil
+//		}
+//		return m.Fill("updated_by", userFrom(ctx))
+//	}, velox.OpInsert, velox.OpUpdate)
+//	db, err := velox.Connect("postgres", dsn, velox.WithHooksAll(audit))
+//
+// They follow every rule of Hook: the same transaction, errors and change
+// recording as WithHooks's. A join entity of a many-to-many edge is an
+// entity too: the writes of its rows that Rel.Add and the like make run
+// them. A nil hook panics.
+func WithHooksAll(hs ...Hook) Option {
+	for _, h := range hs {
+		if h == nil {
+			panic("velox: WithHooksAll: a nil hook")
+		}
+	}
+	return engine.WithAllHooks(hookFns(hs))
+}
+
 // bind keeps in info the interceptors, policy and hooks that s declares:
 // those of each value its Mixin method returns, in order, then its own. It
 // is not generic, so that Load, compiled for every entity, instantiates

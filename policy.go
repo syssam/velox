@@ -121,6 +121,11 @@ func (m *Mutation) Op() Op {
 	return m.mu.St.Op
 }
 
+// Entity returns the name of the write's entity: its Go type's, without
+// the package, which for a generated entity is its schema's name ("Invoice"),
+// as ent's Mutation.Type gives. WithFilter's filters are given the same name.
+func (m *Mutation) Entity() string { return m.mu.EntityName() }
+
 // Rows returns an insert's rows, which a hook may change before next;
 // none for an update or delete. Insert and InsertAll hand the hooks all
 // their rows.

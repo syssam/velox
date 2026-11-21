@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -159,19 +160,54 @@ func WithEntityHooks(in *EntityInfo, hs []HookFn) Option {
 	}}
 }
 
-// HasHooks reports whether a write of entity in on db runs hooks: the
-// entity's own, or those WithEntityHooks added.
-func (db *DB) HasHooks(in *EntityInfo) bool {
-	return len(in.hooks) > 0 || len(db.Cfg.Hooks[in]) > 0
+// WithAllHooks adds hs to the hooks of every entity, for every DB the
+// option configures and every Tx and shard it opens: they run before the
+// entity's own and WithEntityHooks's, outermost, in the order given.
+func WithAllHooks(hs []HookFn) Option {
+	return Option{func(c *config) { c.AllHooks = append(c.AllHooks, hs...) }}
 }
 
-// hooksOf is the hooks a write of in on db runs, the entity's own first.
+// EntityFilterFn is a filter WithFilter adds, as the engine runs it: given
+// the statement's context and an entity's name (EntityName), it returns the
+// entity's row condition.
+type EntityFilterFn func(ctx context.Context, entity string) (Predicate, error)
+
+// WithFilter adds f to the row filters of every entity, for every DB the
+// option configures and every Tx and shard it opens. The scope calls it
+// where it calls an entity's interceptors, before them, and checks what it
+// returns as theirs. A nil f panics.
+func WithFilter(f EntityFilterFn) Option {
+	if f == nil {
+		panic("velox: WithFilter(nil)")
+	}
+	return Option{func(c *config) { c.Filters = append(c.Filters, f) }}
+}
+
+// EntityName is the name of entity in that WithFilter's filters and
+// Mutation.Entity give: its Go type's, without the package, which for a
+// generated entity is its schema's name.
+func EntityName(in *EntityInfo) string {
+	head := in.Name
+	if i := strings.IndexByte(head, '['); i >= 0 {
+		head = head[:i]
+	}
+	return in.Name[strings.LastIndexByte(head, '.')+1:]
+}
+
+// HasHooks reports whether a write of entity in on db runs hooks: the
+// entity's own, those WithEntityHooks added, or WithAllHooks's.
+func (db *DB) HasHooks(in *EntityInfo) bool {
+	return len(in.hooks) > 0 || len(db.Cfg.Hooks[in]) > 0 || len(db.Cfg.AllHooks) > 0
+}
+
+// hooksOf is the hooks a write of in on db runs: WithAllHooks's, the
+// entity's own, then WithEntityHooks's.
 func (db *DB) hooksOf(in *EntityInfo) []HookFn {
-	extra := db.Cfg.Hooks[in]
-	if len(extra) == 0 {
+	all, extra := db.Cfg.AllHooks, db.Cfg.Hooks[in]
+	if len(all) == 0 && len(extra) == 0 {
 		return in.hooks
 	}
-	return append(slices.Clip(in.hooks), extra...)
+	return slices.Concat(all, in.hooks, extra)
 }
 
 // tables holds each entity's Table that MutationTable built, by its

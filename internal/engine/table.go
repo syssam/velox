@@ -475,7 +475,7 @@ func checkValue(in *EntityInfo, c *ColumnInfo, want reflect.Type, v any) error {
 
 // HasRowFilter reports whether the entity's rows are filtered for reads, by
 // an interceptor or a Read policy, which the schema declares or a scope
-// adds: Meta.HasRowFilter.
+// adds: Meta.HasRowFilter. A WithFilter filter does not count.
 func (t Table) HasRowFilter() bool {
 	s := t.state()
 	if s.info == nil {

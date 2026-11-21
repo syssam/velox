@@ -62,6 +62,51 @@ type Option = engine.Option
 // nil hook panics.
 func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)) }
 
+// Filter is a row filter for every entity, which WithFilter adds. Given
+// the statement's context and an entity's name (as Mutation.Entity gives
+// it, "Invoice"), it returns that entity's row condition, by column name as
+// an Interceptor's Filter does: FieldEQ and the like. It returns NoFilter()
+// for an entity it does not restrict. Its zero Predicate fails the
+// statement, and so does an error, which is not a denial.
+type Filter func(ctx context.Context, entity string) (Predicate, error)
+
+// WithFilter adds f to the row filters of every entity, for the DB and every
+// Tx and shard it opens, as ent's client.Intercept adds an interceptor for
+// every entity. Its reach is an Interceptor's: every read, update and delete
+// of an entity, and every With load, Join, Has and HasWith subquery, Count,
+// aggregate and page that reads one, gets the condition f returns for it.
+// WithoutPolicy does not lift it: f offers its own way to be skipped, such
+// as a context value it reads.
+//
+//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, entity string) (velox.Predicate, error) {
+//		if !softDeleted[entity] || includeDeleted(ctx) {
+//			return velox.NoFilter(), nil
+//		}
+//		return velox.FieldIsNull("deleted_at"), nil
+//	}))
+//
+// The scope calls f once per statement for each entity the statement reads
+// or writes, the statement's own and each one a Has, HasWith or Join of it
+// reaches, with the statement's context; velox keeps nothing between
+// statements. f's conditions come before the entity's interceptors' and
+// its Read policy's in the WHERE, and several WithFilter filters AND in the
+// order given. A column f names that the entity lacks fails the statement.
+// A Filter that reads a context value records it with WithScopeValue, so
+// that the GraphQL batcher keeps callers apart.
+//
+// A join entity of a many-to-many edge is an entity too: f is called for it
+// where its rows are read or written as its own, as a With load through it
+// and Rel.Add and the like do, and is not called for it inside a Has
+// through it, which reads it through its two sides. On MySQL, an upsert that
+// updates an entity f returns a condition for is refused with
+// ErrPolicyUpsert. A nil f panics.
+func WithFilter(f Filter) Option {
+	if f == nil {
+		panic("velox: WithFilter(nil)")
+	}
+	return engine.WithFilter(engine.EntityFilterFn(f))
+}
+
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.
 // n must be at least 2, the limit One uses; a smaller n panics.
 func WithMaxLimit(n int) Option { return engine.WithMaxLimit(n) }

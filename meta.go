@@ -62,7 +62,8 @@ func CheckEntity[E any, PE Entity[E]]() error {
 // interceptor, or by a Read policy the schema declares or a scope adds. For
 // generated code, such as a GraphQL filter that treats a key whose row is
 // hidden as null. It is false when E's metadata failed to build; the
-// entity's first statement reports why.
+// entity's first statement reports why. It knows no DB, so a WithFilter
+// filter does not count.
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool {
 	if m == nil || m.d.Info == nil {
 		return false

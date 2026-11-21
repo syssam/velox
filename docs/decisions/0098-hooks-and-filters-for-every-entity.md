@@ -1,0 +1,79 @@
+# 98. Hooks and row filters for every entity
+
+Status: accepted, 2026-11-21.
+
+## Context
+
+ent's `client.Use(hooks...)` adds a hook to every entity's mutations, and
+`client.Intercept(interceptors...)` adds query middleware to every entity's
+reads. Each dispatches on `m.Type()` or `q.Type()`, the entity's name.
+nextapp registers three interceptors this way (soft delete, permission
+conditions, row scope) and four hooks (an access-policy check, two
+custom-field hooks and a refund-status hook). velox had per-entity
+`WithHooks[E]`, schema hooks and Interceptors, and the low-level
+`WithRewrite`, which sees statements, not rows, and no entity name to
+dispatch on. The gap analysis
+(`docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 item 3)
+asked for both at run time.
+
+## Decision
+
+- `velox.WithHooksAll(hs ...Hook) Option`. The hooks run on every entity's
+  writes, outermost: before the schema's hooks (mixins' then the entity's)
+  and before `WithHooks[E]`'s, in the order given. They follow every rule
+  of `Hook`: transaction, errors (`velox: <Entity>: hook: <err>`), dry runs
+  and change recording. A nil hook panics, as `WithHooks`'s does.
+- `Mutation.Entity() string` names the write's entity: its Go type's name
+  without the package, which for a generated entity is the schema's name
+  (`"Invoice"`), as ent's `Mutation.Type` gives. Mutation had no name of
+  its own; `untyped.MutationTable` gives a Table, not a name.
+- `velox.WithFilter(f Filter) Option`, with
+  `type Filter func(ctx context.Context, entity string) (Predicate, error)`
+  and the same entity name. The engine keeps the filters in the DB's
+  config, shared by its Tx and shards, and the scope calls them in
+  `RowCond`, where it calls an entity's interceptors, before them. Every
+  place that asked "does this entity have interceptors?" asks "does it
+  have interceptors, or does the DB have filters?" (`Scoper.filtered`). So
+  a filter reaches exactly what an Interceptor reaches, by construction:
+  every read, update, delete and Save, every With load, Join ON, `Has` and
+  `HasWith` EXISTS (`Select`/`InSelect` subqueries included, 0057), Count,
+  aggregate and page, and an upsert's update branch. `WithoutPolicy` does
+  not lift it.
+- What a filter returns is checked as an interceptor's is
+  (`Scoper.filterCond`): an error fails the statement and is not a denial;
+  the zero `Predicate` fails it, so a filter that forgot an entity fails
+  closed; a column the entity lacks fails it; `velox.NoFilter()` is no
+  condition. `NoFilter` is `Allow` by the name a filter reads best with:
+  a function, as `Allow` is, so no one can reassign it.
+- The filter is given the statement's context and runs once per statement
+  for each entity whose row condition the statement needs (`RowCond`'s
+  per-statement memo); velox keeps nothing across statements, so a filter
+  that reads the context is right in every call.
+- Several filters AND, in registration order; their conditions come before
+  the interceptors' and the Read policy's.
+- A join entity of a many-to-many edge is an entity: the filter is called
+  for it where its rows are a statement's own (a With load through it, the
+  join-row writes of `Rel.Add`, `Remove`, `Clear`), and not inside a `Has`
+  through it, which reads it through its two sides. A filter that returns
+  `NoFilter` for names it does not know keeps the interceptor rule that a
+  join entity is read through its sides. An interceptor on a join entity
+  stays refused: a schema can be checked when it is built, a run-time
+  filter only when it runs.
+- MySQL's `ON DUPLICATE KEY UPDATE` takes no condition. An upsert that
+  updates is refused there with `ErrPolicyUpsert` when a filter returns a
+  condition for its entity, and runs when every filter returns `NoFilter`.
+  An interceptor or a Read/Write policy still refuses it without asking
+  the filters. A multi-row upsert on a DB with filters runs in a
+  transaction, as one on an entity with an interceptor does.
+
+## Consequences
+
+- ent's client-wide hooks and interceptors port one to one, with the
+  entity name to dispatch on. velox's filter is a row filter, not query
+  middleware: it reaches writes as well as reads (ent's interceptors reach
+  queries only), and it cannot add an ORDER BY or a LIMIT.
+- `Meta.HasRowFilter` and `untyped.Table.HasRowFilter` are about the
+  schema: they know no DB, so they do not see `WithFilter`. velox-graphql's
+  where filter, which reads them to treat a foreign key whose target is
+  hidden as null, does not see a run-time filter on the target.
+- No change to generated code, and none to `EntityInfo`'s export data.
