@@ -197,7 +197,11 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 		if err := r.declare(n, what); err != nil {
 			return plugin.File{}, err
 		}
-		f.doc("", fmt.Sprintf("%s is %s under its GraphQL type name, so that gqlgen's autobind finds the Go type of the GraphQL type %[1]s.", n, e.Name))
+		why := fmt.Sprintf(", so that gqlgen's autobind finds the Go type of the GraphQL type %s", n)
+		if r.graphqlGo {
+			why = "" // velox.graphql binds the type to the entity with @goModel
+		}
+		f.doc("", fmt.Sprintf("%s is %s under its GraphQL type name%s.", n, e.Name, why))
 		f.p("type %s = %s", n, e.Name)
 		f.p("")
 	}
@@ -233,6 +237,15 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 	return f.finish(e.Label+"_gql.go", r.outPkg)
 }
 
+// getterUse says who calls a getter: gqlgen, which binds the field to it,
+// or under engine=graphql-go the field's resolver, which may return it.
+func (r *renderer) getterUse() string {
+	if r.graphqlGo {
+		return "the field's resolver may return it"
+	}
+	return "gqlgen binds the field to it"
+}
+
 // writeGetter writes g, which returns its field as the Go type the field's
 // scalar binds to.
 func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
@@ -251,7 +264,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 		}
 	}
 	if g.JSON() {
-		f.doc("", fmt.Sprintf("%s is the field %s as JSON, the GraphQL scalar it is: gqlgen binds the field to it.", g.Method, fd.Name))
+		f.doc("", fmt.Sprintf("%s is the field %s as JSON, the GraphQL scalar it is: %s.", g.Method, fd.Name, r.getterUse()))
 		f.p("func (%s *%s) %s() (%s, error) {", x, e.Name, g.Method, ret)
 		f.p("	b, err := %s.Marshal(%s.%s)", f.use("encoding/json", "json"), x, fd.GoName)
 		f.p("	return %s(b), err", ret)
@@ -259,7 +272,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 		f.p("")
 		return nil
 	}
-	f.doc("", fmt.Sprintf("%s is the field %s as %s %s, the Go type its GraphQL scalar binds to: gqlgen binds the field to it.", g.Method, fd.Name, english.Article(ret), ret))
+	f.doc("", fmt.Sprintf("%s is the field %s as %s %s, the Go type its GraphQL scalar binds to: %s.", g.Method, fd.Name, english.Article(ret), ret, r.getterUse()))
 	if fd.Type == "bytes" && !fd.Nullable {
 		// Its column is NOT NULL, so nil is an empty blob, which gqlgen would
 		// refuse in a Bytes! as a null.

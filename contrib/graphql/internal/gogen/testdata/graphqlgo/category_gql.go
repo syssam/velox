@@ -33,7 +33,7 @@ func (c *Category) Parent(ctx context.Context) (*Category, error) {
 }
 
 // CategoryConnection is the GraphQL type CategoryConnection. Its fields run
-// their queries when gqlgen resolves them.
+// their queries when they are resolved.
 type CategoryConnection struct {
 	c *gqlgraph.Connection
 }

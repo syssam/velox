@@ -16,7 +16,8 @@ import (
 // Scalars binds velox's scalars to the Go types velox entities hold, as
 // veloxgql's scalar types read and write them: Time to time.Time
 // (graphql.Time, an RFC 3339 string), UUID to uuid.UUID (the hyphenated
-// lower-case string), Bytes to []byte (standard base64 with padding) and
+// lower-case string), Bytes to []byte (standard base64 with padding; nil,
+// a NULL column, is null, as under gqlgen) and
 // Uint64 to uint64 and uint (a decimal string both ways). It binds GraphQL's
 // Int to int8, int16, uint8, uint16 and uint32 too, beside graphql-go's own
 // int, int32 and int64, so that the generated inputs' fields of those types
@@ -38,6 +39,10 @@ func Scalars() graphql.SchemaOption {
 			return uuid.UUID(u), err
 		}),
 		graphql.Scalar("Bytes", func(w *graphql.Writer, b []byte) error {
+			if b == nil {
+				w.Null() // a NULL column, as gqlgen writes it
+				return nil
+			}
 			w.String(base64.StdEncoding.EncodeToString(b))
 			return nil
 		}, func(v any) ([]byte, error) {
@@ -56,13 +61,22 @@ func Scalars() graphql.SchemaOption {
 		graphql.Scalar("Uint64", func(w *graphql.Writer, u uint) error {
 			w.String(strconv.FormatUint(uint64(u), 10))
 			return nil
-		}, func(v any) (uint, error) {
-			var u veloxgql.Uint64
-			err := u.UnmarshalGQL(v)
-			return uint(u), err
-		}),
+		}, decodeUint),
 		intScalar[int8](), intScalar[int16](), intScalar[uint8](), intScalar[uint16](), intScalar[uint32](),
 	)
+}
+
+// decodeUint reads a Uint64 as a uint, which holds 32 bits on a 32-bit
+// platform: a value it does not hold is the client's error.
+func decodeUint(v any) (uint, error) {
+	var u veloxgql.Uint64
+	if err := u.UnmarshalGQL(v); err != nil {
+		return 0, err
+	}
+	if uint64(uint(u)) != uint64(u) {
+		return 0, fmt.Errorf("graphqlgo: the Uint64 %d does not fit a uint", uint64(u))
+	}
+	return uint(u), nil
 }
 
 // smallInt are the integer Go types velox entities hold that graphql-go

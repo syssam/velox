@@ -80,7 +80,7 @@ func (p *Post) RelatedBy(
 }
 
 // PostConnection is the GraphQL type PostConnection. Its fields run their
-// queries when gqlgen resolves them.
+// queries when they are resolved.
 type PostConnection struct {
 	c *gqlgraph.Connection
 }

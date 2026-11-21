@@ -29,7 +29,7 @@ func (l *Like) Post(ctx context.Context) (*Post, error) {
 }
 
 // LikeConnection is the GraphQL type LikeConnection. Its fields run their
-// queries when gqlgen resolves them.
+// queries when they are resolved.
 type LikeConnection struct {
 	c *gqlgraph.Connection
 }

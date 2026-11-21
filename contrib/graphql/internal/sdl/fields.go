@@ -33,9 +33,7 @@ func (g *graph) fill(o *object) error {
 		where := "schema " + e.Name + ", field " + pk.Name
 		id := gqlField{name: "id", typ: "ID!", desc: pk.Comment, where: where}
 		if !strings.EqualFold(pk.GoName, "id") {
-			if err := g.nameBound(where, "the field id binds to the key's Go field "+pk.GoName, "name the key field id"); err != nil {
-				return err
-			}
+			g.nameBound(where, "the field id binds to the key's Go field "+pk.GoName, "name the key field id")
 			id.dirs = []directive{bindTo(pk.GoName)}
 		}
 		if err := add(id, where); err != nil {
@@ -150,17 +148,25 @@ func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 		// converts the field's own. An empty blob of a Bytes! needs one too:
 		// modernc.org/sqlite reads it as nil, which gqlgen refuses in a T!.
 		gt := Getter{Field: i, Method: f.GoName + "GQL", Returns: v.getter, Pkg: v.getterPkg}
-		if err := g.nameBound(where, "the field is read through the method "+gt.Method+", which converts its Go type to its scalar's",
-			"give it graphql.Type naming a type the application binds to its Go type, or leave it out with graphql.Skip()"); err != nil {
-			return gqlField{}, false, err
-		}
 		o.getters = append(o.getters, gt)
-		dirs = append(dirs, bindTo(gt.Method))
+		switch {
+		case !g.cfg.GraphQLGo:
+			dirs = append(dirs, bindTo(gt.Method))
+		case v.own:
+			// A nil []byte, which an empty blob reads as, is null: a Bytes!
+			// needs the getter's "", and no resolver of the application
+			// should have to write it.
+			g.nameBound(where, "the field is read through the method "+gt.Method+", which writes an empty blob as \"\" and not null,",
+				"make it Nillable, or leave it out with graphql.Skip()")
+		default:
+			// gqlc puts the field on the Resolver, whose method returns the
+			// field or its getter's value: gqlc does not read
+			// @goField(name:) yet.
+			dirs = append(dirs, directive{name: "goField", text: "@goField(forceResolver: true)"})
+		}
 	case !strings.EqualFold(name, f.GoName):
 		// gqlgen binds a field to the Go field of its name, ignoring case.
-		if err := g.nameBound(where, renamed(name, a.FieldName, "Go field "+f.GoName), "drop the annotation"); err != nil {
-			return gqlField{}, false, err
-		}
+		g.nameBound(where, renamed(name, a.FieldName, "Go field "+f.GoName), "drop the annotation")
 		dirs = append(dirs, bindTo(f.GoName))
 	}
 	ds, err := directives(a.Directives, where)
@@ -222,23 +228,21 @@ func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error)
 		return gqlField{}, edgeField{}, false, err
 	}
 	if !gqlgenMatches(f.name, ed.GoName) {
-		if err := g.nameBound(where, renamed(f.name, a.FieldName, "method "+ed.GoName), "drop the annotation"); err != nil {
-			return gqlField{}, edgeField{}, false, err
-		}
+		g.nameBound(where, renamed(f.name, a.FieldName, "method "+ed.GoName), "drop the annotation")
 	}
 	f.dirs = append(edgeBind(f.name, ed.GoName, a.MaxList), ds...)
 	return f, ef, true, nil
 }
 
-// nameBound is, under Config.GraphQLGo, the error for the element where,
-// which gqlgen binds to Go through @goField(name:) for the reason why, with
-// fix, what the schema can do instead: gqlc does not read the argument
-// yet, and would bind the field to a Resolver stub. It is nil otherwise.
-func (g *graph) nameBound(where, why, fix string) error {
-	if !g.cfg.GraphQLGo {
-		return nil
+// nameBound records, under Config.GraphQLGo, the refusal of the element
+// where, which gqlgen binds to Go through @goField(name:) for the reason
+// why, with fix, what the schema can do instead: gqlc does not read the
+// argument yet, and would leave the field to a Resolver stub, which
+// gqlc -check lists. build returns every refusal, joined.
+func (g *graph) nameBound(where, why, fix string) {
+	if g.cfg.GraphQLGo {
+		g.refused = append(g.refused, fmt.Errorf("%s: engine=graphql-go: %s through @goField(name:), and gqlc does not yet honour @goField(name:); %s", where, why, fix))
 	}
-	return fmt.Errorf("%s: engine=graphql-go: %s through @goField(name:), and gqlc does not yet honour @goField(name:); %s", where, why, fix)
 }
 
 // renamed says why the GraphQL field name binds to the Go name what

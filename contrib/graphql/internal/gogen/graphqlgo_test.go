@@ -55,8 +55,8 @@ func TestGraphQLGoGolden(t *testing.T) {
 // TestGraphQLGoInputs: under engine=graphql-go an input field whose
 // GraphQL name graphql-go does not derive from its Go name carries a graphql
 // tag with the name, and no other does; an optional list is a slice, nil
-// when not given, where gqlgen's is a pointer to one. gqlgen's Go of the
-// same model has no tags.
+// when not given, where gqlgen's is a pointer to one. Its docs do not name
+// gqlgen. gqlgen's Go of the same model has no tags.
 func TestGraphQLGoInputs(t *testing.T) {
 	files, err := RenderConfig(modeltest.GraphQLGo(t), outPath, "gen", graphqlGoConfig)
 	if err != nil {
@@ -65,6 +65,9 @@ func TestGraphQLGoInputs(t *testing.T) {
 	got := map[string]string{}
 	for _, f := range files {
 		got[f.Path] = f.Content
+		if strings.Contains(f.Content, "gqlgen") {
+			t.Errorf("%s names gqlgen, which does not serve it", f.Path)
+		}
 	}
 	post := got["post_gql.go"]
 	for _, want := range []string{

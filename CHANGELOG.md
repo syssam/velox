@@ -28,12 +28,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   but Query carries `@goModel` naming its Go type, each scalar the Go type
   entities hold; an input field whose name graphql-go would not derive has
   a `graphql` tag, and an optional list in a mutation input is a slice. A
-  field or edge renamed by `graphql.FieldName`, a field read through a
-  getter and a key not named ID are refused, naming the schema and the
-  field, as gqlc does not read `@goField(name:)` yet. `engine=gqlgen` is the
-  default, and its output is unchanged. `graphqlgo.Scalars()` binds Int to
-  int8, int16, uint8, uint16 and uint32, and Uint64 to uint, as gqlgen.yml's
-  models do. `veloxgql.GeneratedCodeIsVersion27` stays: code generated
+  field gqlgen reads through a getter, a JSON field or one of the
+  application's Go type, carries `@goField(forceResolver: true)`, and its
+  resolver returns the getter's value or the field. A field or edge renamed
+  by `graphql.FieldName`, a non-null bytes field and a key not named ID are
+  refused, all of them in one run, naming the schema and the field, as gqlc
+  does not read `@goField(name:)` yet. `engine=gqlgen` is the default, and
+  its output is unchanged. `graphqlgo.Scalars()` writes a nil `[]byte` as
+  null, as gqlgen does, and binds Int to int8, int16, uint8, uint16 and
+  uint32, and Uint64 to uint, as gqlgen.yml's models do. `veloxgql.GeneratedCodeIsVersion27` stays: code generated
   before runs as it did, and the new output needs nothing new of the
   runtime.
 - Under velox-graphql's `compat=veloxe` (`gqlgraph.Type.Veloxe`), a

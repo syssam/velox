@@ -64,8 +64,10 @@
 //
 // Every type of velox.graphql but Query then carries @goModel naming its Go
 // type, an input's field whose name graphql-go would not derive has a graphql
-// tag, and a field or edge gqlgen would bind with @goField(name:) is refused,
-// as gqlc does not read the argument yet. Package
+// tag, and a JSON field, or one of the application's own Go type, is on the
+// Resolver. A field or edge graphql.FieldName renames, a non-null bytes
+// field and a key not named ID are refused, as gqlc does not read
+// @goField(name:) yet. Package
 // github.com/syssam/velox/contrib/graphql, "graphql-go and gqlc", has the
 // gqlc.yaml it needs.
 //

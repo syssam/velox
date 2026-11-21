@@ -1,6 +1,10 @@
 package main
 
 import (
+	"fmt"
+	goast "go/ast"
+	goparser "go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,11 +13,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
+
+	"github.com/syssam/velox/contrib/graphql/internal/gogen"
+	"github.com/syssam/velox/contrib/graphql/internal/modeltest"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox/internal/tempmod"
 )
 
 // gqlcSchema is a schema whose GraphQL surface engine=graphql-go writes in
-// full: every scalar velox binds but JSON, an enum, an Int field of a Go type
+// full: every scalar velox binds, a JSON field, which gqlc puts on the
+// Resolver, an enum, an Int field of a Go type
 // graphql-go does not bind to Int itself (int8), an optional list, unique,
 // connection and many-to-many edges, a multi-field order and mutation
 // inputs whose fields' Go names graphql-go would derive otherwise
@@ -41,6 +52,7 @@ func (User) Fields() []velox.Field {
 		field.Bytes("blob").Optional().Nillable(),
 		field.Float("score").Optional().Default(0),
 		field.Bool("active").Default(true),
+		field.JSON("prefs", map[string]any{}),
 	}
 }
 
@@ -157,6 +169,10 @@ func (root) Users(ctx context.Context, a vg.UsersArgs) (*gen.UserConnection, err
 	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithUserOrder(a.OrderBy), gen.WithUserFilter(a.Where))
 }
 
+// UserPrefs is the one field gqlc leaves to the application: a JSON field,
+// read through its getter.
+func (root) UserPrefs(_ context.Context, obj *gen.User) (veloxgql.JSON, error) { return obj.PrefsGQL() }
+
 func (root) CreatePost(ctx context.Context, a app.CreatePostArgs) (*gen.Post, error) {
 	x := &gen.Post{}
 	return x, veloxgql.DB(ctx).Insert(x).SetInput(a.Input).Exec(ctx)
@@ -168,20 +184,19 @@ func (root) UpdatePost(ctx context.Context, a app.UpdatePostArgs) (*gen.Post, er
 
 const ddl = ` + "`" + `
 CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, role TEXT NOT NULL, joined_at DATETIME,
-	quota INTEGER NOT NULL, ref TEXT, blob BLOB, score REAL NOT NULL, active BOOLEAN NOT NULL);
+	quota INTEGER NOT NULL, ref TEXT, blob BLOB, score REAL NOT NULL, active BOOLEAN NOT NULL, prefs JSON NOT NULL);
 CREATE TABLE posts (id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL,
 	views INTEGER NOT NULL, keywords JSON NOT NULL);
 CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL, rank INTEGER NOT NULL);
 CREATE TABLE post_tags (post_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY (post_id, tag_id));
-INSERT INTO users VALUES (1, 'ann', 'admin', NULL, 7, NULL, NULL, 1.5, 1), (2, 'bob', 'member', NULL, 0, NULL, NULL, 0, 0);
+INSERT INTO users VALUES (1, 'ann', 'admin', NULL, 7, NULL, NULL, 1.5, 1, '{"theme":"dark"}'), (2, 'bob', 'member', NULL, 0, NULL, NULL, 0, 0, '{}');
 INSERT INTO posts VALUES (1, 1, 'a', 'published', 3, '["go"]'), (2, 1, 'b', 'draft', 0, '[]'), (3, 2, 'c', 'draft', 1, '[]'), (4, 1, 'd', 'draft', 0, '[]');
 INSERT INTO tags VALUES (1, 'x', 1), (2, 'y', -2);
 INSERT INTO post_tags VALUES (1, 1), (1, 2), (2, 2), (4, 1);
 ` + "`" + `
 
-// TestServe runs queries and mutations. graphql-go writes a nil []byte, a
-// NULL blob, as "", where gqlgen writes null: Scalars binds Bytes to []byte,
-// and graphql-go hands a nil slice to the scalar.
+// TestServe runs queries and mutations. A NULL blob is null, as under
+// gqlgen, and the JSON field is its resolver's.
 func TestServe(t *testing.T) {
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -203,9 +218,9 @@ func TestServe(t *testing.T) {
 			` + "`" + `{ posts(first: 2, orderBy: [{field: TITLE, direction: DESC}], where: {authorID: 1, hasTags: true, keywordsIsEmpty: false}) {
 				totalCount pageInfo { hasNextPage }
 				edges { node { id title status views keywords
-					author { id name role quota ref blob score active joinedAt }
+					author { id name role quota ref blob score active joinedAt prefs }
 					tags(first: 5, orderBy: {field: NAME}, where: {rankGTE: -2}) { totalCount edges { node { id name rank } } } } } } }` + "`" + `,
-			` + "`" + `{"data":{"posts":{"totalCount":1,"pageInfo":{"hasNextPage":false},"edges":[{"node":{"id":"1","title":"a","status":"PUBLISHED","views":3,"keywords":["go"],"author":{"id":"1","name":"ann","role":"ADMIN","quota":"7","ref":null,"blob":"","score":1.5,"active":true,"joinedAt":null},"tags":{"totalCount":2,"edges":[{"node":{"id":"1","name":"x","rank":1}},{"node":{"id":"2","name":"y","rank":-2}}]}}}]}}}` + "`" + `,
+			` + "`" + `{"data":{"posts":{"totalCount":1,"pageInfo":{"hasNextPage":false},"edges":[{"node":{"id":"1","title":"a","status":"PUBLISHED","views":3,"keywords":["go"],"author":{"id":"1","name":"ann","role":"ADMIN","quota":"7","ref":null,"blob":null,"score":1.5,"active":true,"joinedAt":null,"prefs":{"theme":"dark"}},"tags":{"totalCount":2,"edges":[{"node":{"id":"1","name":"x","rank":1}},{"node":{"id":"2","name":"y","rank":-2}}]}}}]}}}` + "`" + `,
 		},
 		{
 			` + "`" + `{ labels(where: {rank: 1}) { edges { node { name posts(orderBy: [{field: VIEWS}]) { edges { node { id author { name } } } } } } } }` + "`" + `,
@@ -236,10 +251,12 @@ func TestServe(t *testing.T) {
 // TestGqlcBinds is engine=graphql-go end to end: velox-gen writes the SDL
 // and the Go, gqlc of the graphql-go version this module requires (the one
 // nextapp pins) binds them with the keys the package documentation lists,
-// and its Resolvers hold the root fields alone: every other field is bound
-// to velox's struct fields and methods, every input and enum to velox's Go
-// types, and no model is generated. The application's module then builds
-// and serves a query and mutations through graphqlgo.With on SQLite.
+// and its Resolvers hold the root fields and the JSON field alone: every
+// other field is bound to velox's struct fields and methods, every input
+// and enum to velox's Go types, and no model is generated. The
+// application's module then builds and serves a query and mutations
+// through graphqlgo.With on SQLite, and graphql-go binds every input of the
+// test model's Go, compat or not, to its SDL by name (TestInputNames).
 //
 // It builds three tools and a module, offline, from the module cache, as
 // the other end-to-end tests do, and is left out under -short.
@@ -248,7 +265,8 @@ func TestGqlcBinds(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module and gqlc")
 	}
-	dir, run := app(t, map[string]string{"schema/schema.go": gqlcSchema, "graph/app.graphql": gqlcApp, "gqlc.yaml": gqlcConfig, "serve_test.go": gqlcServe})
+	dir, run := app(t, map[string]string{"schema/schema.go": gqlcSchema, "graph/app.graphql": gqlcApp, "gqlc.yaml": gqlcConfig, "serve_test.go": gqlcServe,
+		"names_test.go": inputNamesTest(t)})
 	withGqlc(t, dir, run)
 
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:engine=graphql-go", "./schema"); err != nil {
@@ -257,13 +275,13 @@ func TestGqlcBinds(t *testing.T) {
 	if out, err := run("tool", "gqlc", "-config", "gqlc.yaml"); err != nil {
 		t.Fatalf("gqlc: %v\n%s", err, out)
 	}
-	for group, want := range map[string][]string{"velox": {"Labels", "Posts", "Users"}, "app": {"CreatePost", "UpdatePost"}} {
+	for group, want := range map[string][]string{"velox": {"Labels", "Posts", "UserPrefs", "Users"}, "app": {"CreatePost", "UpdatePost"}} {
 		b, err := os.ReadFile(filepath.Join(dir, "graph", group, "generated.go"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if got := resolverMethods(string(b)); !slices.Equal(got, want) {
-			t.Errorf("the %s group's Resolver has %v, want the root fields %v alone:\n%s", group, got, want, b)
+			t.Errorf("the %s group's Resolver has %v, want %v alone:\n%s", group, got, want, b)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(dir, "graph", "model")); !os.IsNotExist(err) {
@@ -272,7 +290,7 @@ func TestGqlcBinds(t *testing.T) {
 	if out, err := run("tool", "gqlc", "-config", "gqlc.yaml", "-check"); err != nil {
 		t.Errorf("gqlc -check: %v\n%s", err, out)
 	}
-	if out, err := run("test", "-count=1", "-run", "^TestServe$", "."); err != nil {
+	if out, err := run("test", "-count=1", "-run", "^(TestServe|TestInputNames)$", "."); err != nil {
 		t.Fatalf("serve: %v\n%s", err, out)
 	}
 }
@@ -342,4 +360,97 @@ func withGqlc(t *testing.T, dir string, run func(args ...string) (string, error)
 	if out, err := run("mod", "tidy", "-e"); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
+}
+
+// inputNamesTest is a test of the application's module in which graphql-go
+// binds each input struct velox-graphql writes for the test model under
+// engine=graphql-go, compat=veloxe or not, to an input of the field names
+// velox.graphql gives it: each Go field, with its name and its graphql tag,
+// must bind to one of them, so that graphql-go's own derivation of a GraphQL
+// name, and not gogen's copy of it, is checked on every input field. The
+// fields' types are String: the names are what is checked.
+func inputNamesTest(t *testing.T) string {
+	t.Helper()
+	var cases []string
+	for _, veloxe := range []bool{false, true} {
+		cfg := sdl.Config{GraphQLGo: true, Veloxe: veloxe, Package: "example.com/app/gen"}
+		m := modeltest.GraphQLGo(t)
+		schema, err := sdl.RenderConfig(m, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, perr := parser.ParseSchema(&ast.Source{Input: schema})
+		if perr != nil {
+			t.Fatal(perr)
+		}
+		files, err := gogen.RenderConfig(m, cfg.Package, "gen", cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		structs := map[string][]*goast.Field{}
+		for _, f := range files {
+			gf, err := goparser.ParseFile(token.NewFileSet(), f.Path, f.Content, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, d := range gf.Decls {
+				if g, ok := d.(*goast.GenDecl); ok {
+					for _, sp := range g.Specs {
+						if ts, ok := sp.(*goast.TypeSpec); ok {
+							if st, ok := ts.Type.(*goast.StructType); ok {
+								structs[ts.Name.Name] = st.Fields.List
+							}
+						}
+					}
+				}
+			}
+		}
+		for _, def := range doc.Definitions {
+			if def.Kind != ast.InputObject {
+				continue
+			}
+			fields, ok := structs[def.Name]
+			if !ok || len(fields) != len(def.Fields) {
+				t.Fatalf("compat %v: input %s has %d fields, and its Go %d (found %v)", veloxe, def.Name, len(def.Fields), len(fields), ok)
+			}
+			var sdlFields, goFields []string
+			for _, f := range def.Fields {
+				sdlFields = append(sdlFields, f.Name+": String")
+			}
+			for _, f := range fields {
+				tag := ""
+				if f.Tag != nil {
+					tag = " " + f.Tag.Value
+				}
+				goFields = append(goFields, f.Names[0].Name+" *string"+tag)
+			}
+			cases = append(cases, fmt.Sprintf("{%q, graphql.Validate(graphql.SDL(%q), graphql.Input[struct{ %s }](\"T\"), q)},",
+				fmt.Sprintf("compat %v: %s", veloxe, def.Name),
+				"input T { "+strings.Join(sdlFields, " ")+" }\ntype Query { x: String }",
+				strings.Join(goFields, "; ")))
+		}
+	}
+	return `package app_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/syssam/graphql-go"
+)
+
+func TestInputNames(t *testing.T) {
+	q := graphql.Query(graphql.Resolve("x", func(context.Context, graphql.Root) (*string, error) { return nil, nil }))
+	for _, c := range []struct {
+		input string
+		err   error
+	}{
+		` + strings.Join(cases, "\n\t\t") + `
+	} {
+		if c.err != nil {
+			t.Errorf("%s: %v", c.input, c.err)
+		}
+	}
+}
+`
 }

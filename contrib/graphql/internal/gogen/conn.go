@@ -114,7 +114,11 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlgraph()
 
-	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection. Its fields run their queries when gqlgen resolves them.", n))
+	resolves := "gqlgen resolves them"
+	if r.graphqlGo {
+		resolves = "they are resolved"
+	}
+	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection. Its fields run their queries when %s.", n, resolves))
 	f.p("type %sConnection struct {", n)
 	f.p("\tc *%s.Connection", impl)
 	f.p("}")

@@ -22,6 +22,7 @@ type graph struct {
 	appSet  map[string]bool    // the types graphql.Type names on fields, which the application may declare
 	bytes   bool               // a field is of type bytes, whose scalar Bytes veloxe declared
 	cfg     Config
+	refused []error // nameBound's refusals under Config.GraphQLGo
 	types   typeNames
 	ents    map[string]*plugin.Entity // every entity, by name, join entities too
 	query   []gqlField                // the QueryFields, in entity name order
@@ -165,6 +166,9 @@ func build(m *plugin.Model, cfg Config) (*graph, error) {
 		if err := g.addQueryField(o, queryBy); err != nil {
 			return nil, err
 		}
+	}
+	if err := errors.Join(g.refused...); err != nil {
+		return nil, err // every element engine=graphql-go refuses, in one run
 	}
 
 	// The orders and where inputs, which connections to an entity take; then

@@ -42,16 +42,30 @@ beside the 3 root fields on examples/graphql's schema).
   input is `[]T`, nil when not given, and not `*[]T`, which graphql-go
   cannot bind; a list given empty is an empty slice.
 - gqlc does not honour `@goField(name:)` yet (spec GA1, deferred), and an
-  element bound by it would fall to a Resolver stub. So under graphql-go
-  velox-gen refuses, naming the schema, the field or edge and the reason
-  "gqlc does not yet honour @goField(name:)", and writes nothing: a field
-  or edge `graphql.FieldName` renames, a field read through a
-  `<Field>GQL` getter (a JSON field, a non-null bytes field, a field of
-  the application's own Go type), and a key whose Go name is not ID (Q2).
+  element bound by it would fall to a Resolver stub. A field gqlgen reads
+  through a `<Field>GQL` getter, a JSON field or one of the application's
+  own Go type, is written with `@goField(forceResolver: true)` and no
+  name instead: gqlc puts it on the Resolver explicitly, `gqlc -check`
+  lists it, and the application's method returns the getter's value or
+  the field in one line, as nextapp's veloxe binding does today
+  (`AccessPolicyUsingPredicate`). The getter is still written. Under
+  graphql-go velox-gen refuses the rest, naming the schema, the field or
+  edge and the reason "gqlc does not yet honour @goField(name:)", every
+  one in one run (errors.Join), and writes nothing: a field or edge
+  `graphql.FieldName` renames, a non-null bytes field, whose getter writes
+  an empty blob as `""` where its nil would be null, and a key whose Go
+  name is not ID (Q2). nextapp has none of them.
 - `graphqlgo.Scalars()` also binds Int to int8, int16, uint8, uint16 and
   uint32, and Uint64 to uint, as gqlgen.yml lists models for them: a
   generated input's field of such a type does not bind otherwise. A value
   outside the Go type's range, or Int's 32 bits, is the client's error.
+  It writes a nil `[]byte`, a NULL bytes field, as null, as gqlgen does
+  (it wrote `""`, as graphql-go hands the scalar a nil slice).
+- An input field of a type `graphql.Type` names is bound only when the
+  application's gqlc model and graphql.Scalar of the type are exactly the
+  field's Go type. velox-gen cannot know them, so it does not refuse such a
+  field: graphql-go's NewSchema does, at start-up, naming the input field
+  (`TestUnboundInputFails`).
 - `veloxgql.GeneratedCodeIsVersion27` stays. It changes when code generated
   before no longer fits the runtime; gqlgen's output is unchanged, and the
   graphql-go output names nothing the runtime lacks.
@@ -63,35 +77,43 @@ beside the 3 root fields on examples/graphql's schema).
   `inputListPointers`, `inlineAccessors`), gqlc puts only the root fields
   on Resolvers and generates no model. Each root field is one line over
   the generated code, as under gqlgen.
-- graphql-go writes a nil `[]byte`, a NULL bytes field, as `""` where
-  gqlgen writes null, as nextapp's veloxe binding does today.
+- A NULL bytes field is null under both engines.
 - Under compat=veloxe the application declares JSON, UUID, Uint64 (and
   Bytes when no field is bytes) and binds them in gqlc.yaml's models, as
-  veloxe left them to it. graphql-go logs that it walks `[]Noder` (nodes)
-  by reflection.
-- The getters' fields are refused until gqlc reads `@goField(name:)`;
-  nextapp's SDL has 26 of them, which need `graphql.Type` or a schema
-  change first.
+  veloxe left them to it; UUID, Uint64 and Bytes must be modelled as
+  velox's Go types, or their fields fall to Resolver stubs. JSON fields
+  are on the Resolver either way, so nextapp's `JSON: any` stays, each
+  resolver returning the field. graphql-go logs that it walks `[]Noder`
+  (nodes) by reflection.
+- nextapp's 26 getter fields are on its Resolvers, as under veloxe; when
+  gqlc reads `@goField(name:)` they can bind to the getters instead.
 
 ## Evidence
 
 - `contrib/graphql/cmd/velox-graphql`: `TestGqlcBinds` generates a schema
-  with every scalar but JSON, an enum, an int8, an optional list, unique,
+  with every scalar, a JSON field, an enum, an int8, an optional list, unique,
   connection and many-to-many edges, a multi-field order and mutation
   inputs with `engine=graphql-go`, runs gqlc of graphql-go 3e0050b
-  (nextapp's pin) with doc.go's keys, finds the root fields alone on the
-  Resolvers and no `graph/model`, passes `gqlc -check`, and serves two
-  queries and two mutations through `graphqlgo.With` on SQLite.
+  (nextapp's pin) with doc.go's keys, finds the root fields and the JSON
+  field alone on the Resolvers and no `graph/model`, passes `gqlc -check`,
+  and serves two queries (a NULL blob null, the JSON from its resolver)
+  and two mutations through `graphqlgo.With` on SQLite. Its
+  `TestInputNames` has graphql-go bind every input struct of the test
+  model's Go, compat or not, to its SDL input by name: graphql-go's own
+  derivation checks every tag gogen writes or leaves out.
   `TestGraphQLGoRefusesThroughVeloxGen`: velox-gen fails naming the field
   and writes no `gen`.
 - `contrib/graphql/internal/sdl`: `TestGraphQLGoGolden`
   (`testdata/graphqlgo.graphql`, `graphqlgo_veloxe.graphql`),
   `TestGraphQLGoBindsEveryType`, `TestGraphQLGoRefusesNameBindings`,
+  `TestGraphQLGoRefusesAllAtOnce`, `TestGraphQLGoForcesResolvers`,
   `TestGraphQLGoNeedsPackage`; `TestRenderGolden` unchanged.
 - `contrib/graphql/internal/gogen`: `TestGraphQLGoGolden`
   (`testdata/graphqlgo`), `TestGraphQLGoInputs`, `TestGraphQLName`;
   `TestGoGolden` unchanged.
 - `contrib/graphql/internal/gqlplugin`: `TestRun` (engine values, the
   refusal, only=enums). `contrib/graphql/graphqlgen`: `TestPluginAnswers`.
-- `contrib/graphql/veloxgql/graphqlgo`: `TestScalarsIntegers`.
+- `contrib/graphql/veloxgql/graphqlgo`: `TestScalars` (nil and empty
+  bytes), `TestScalarsIntegers`, `TestDecodeInt`, `TestDecodeUint`,
+  `TestUnboundInputFails`.
 - examples/graphql regenerated with gqlgen generate: no difference.

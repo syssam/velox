@@ -41,8 +41,9 @@ type Config struct {
 	// @goModel naming its Go type in Package, or in veloxgql for PageInfo
 	// and OrderDirection; each scalar names the Go type velox entities hold;
 	// there are no introspection binds, which only gqlgen needs. gqlc does
-	// not read @goField(name:) yet, so a field or edge bound by it, renamed
-	// by graphql.FieldName or read through a getter, is an error.
+	// not read @goField(name:) yet: a field gqlgen reads through a getter is
+	// forced to a resolver, a non-null bytes field, a key not named ID and a
+	// field or edge graphql.FieldName renames are errors, joined.
 	GraphQLGo bool
 
 	// Package is the generated package's import path, which binds Node to

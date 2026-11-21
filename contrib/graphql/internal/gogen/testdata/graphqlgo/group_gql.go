@@ -49,7 +49,7 @@ func (g *Group) Users(
 }
 
 // GroupConnection is the GraphQL type GroupConnection. Its fields run their
-// queries when gqlgen resolves them.
+// queries when they are resolved.
 type GroupConnection struct {
 	c *gqlgraph.Connection
 }

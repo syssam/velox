@@ -381,6 +381,7 @@ type Account @goModel(model: "example.com/app/gen.User") {
   avatar: Bytes
   quota: Uint64!
   active: Boolean!
+  settings: JSON @goField(forceResolver: true)
   """The posts the user wrote."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
   groups: [Group!]!

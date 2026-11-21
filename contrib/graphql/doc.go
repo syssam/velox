@@ -733,13 +733,24 @@
 // gqlc puts each on a Resolver, one line over the generated code, as in
 // "Mutations".
 //
+// A field gqlgen reads through a <Field>GQL getter, a JSON field or a field
+// of the application's own Go type, carries @goField(forceResolver: true):
+// gqlc puts it on the Resolver, gqlc -check lists it, and its method is one
+// line that returns the getter's value (obj.SettingsGQL()) or, when the
+// application's gqlc model of the scalar is exactly the field's Go type,
+// the field itself.
+//
 // gqlc does not read @goField(name:) yet, so velox-gen refuses, naming the
 // schema, the field and the reason, a field or edge that graphql.FieldName
-// renames, a field read through a <Field>GQL getter (a JSON field, a
-// non-null bytes field, a field of the application's own Go type) and a
-// key not named ID, and writes nothing. graphql.Type naming a type the
-// application binds to the field's Go type takes a getter's place; a bytes
-// field needs Nillable.
+// renames, a non-null bytes field, whose getter writes an empty blob as ""
+// where null is wrong, and a key not named ID. It names every refusal in
+// one run, and writes nothing. A bytes field needs Nillable.
+//
+// graphql.Type binds a field to its struct field only when the
+// application's gqlc model, and graphql.Scalar, of the type it names is
+// exactly the field's Go type; else gqlc leaves the field to a Resolver
+// stub, which gqlc -check lists, and graphql-go's NewSchema refuses an input
+// field of it at start-up, naming the field.
 //
 // gqlc.yaml needs these keys:
 //
@@ -761,8 +772,16 @@
 //	s, err := graph.NewSchema(velox.Bindings(root), app.Bindings(root), graphqlgo.Scalars())
 //	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
 //
-// graphql-go writes a nil []byte, a NULL bytes field, as "" where gqlgen
-// writes null.
+// A nil []byte, a NULL bytes field, is null, as under gqlgen.
+//
+// Under compat=veloxe, velox.graphql declares neither JSON, UUID, Uint64
+// nor (when no field is bytes) Bytes, as veloxe left them to the
+// application. Its gqlc models of UUID, Uint64 and Bytes must then be
+// velox's Go types, uuid.UUID, uint64 and []byte, which graphqlgo.Scalars
+// binds, or gqlc leaves the fields to Resolver stubs. JSON fields are on
+// the Resolver either way: with JSON modelled as any, as veloxe's
+// applications have it, each resolver returns the field (obj.Settings),
+// and with it modelled as veloxgql.JSON, the getter's value.
 //
 // # IDs
 //

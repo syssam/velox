@@ -314,6 +314,7 @@ type Account implements Node @goModel(model: "example.com/app/gen.User") {
   avatar: Bytes
   quota: Uint64!
   active: Boolean
+  settings: JSON @goField(forceResolver: true)
   """The posts the user wrote."""
   posts: [Post!]! @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
   groups: [Group!]!

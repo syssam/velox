@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -125,9 +126,9 @@ func TestGraphQLGoNeedsPackage(t *testing.T) {
 // TestGraphQLGoRefusesNameBindings: an element gqlgen binds through
 // @goField(name:) is refused under engine=graphql-go, naming the schema,
 // the field or edge and the reason, as gqlc does not read the argument
-// yet: a field graphql.FieldName renames, an edge it renames, a field read
-// through a getter and a key whose Go name is not ID. gqlgen's SDL of the
-// same model has them.
+// yet: a field graphql.FieldName renames, an edge it renames, a non-null
+// bytes field, whose getter writes an empty blob as "", and a key whose Go
+// name is not ID. gqlgen's SDL of the same model has them.
 func TestGraphQLGoRefusesNameBindings(t *testing.T) {
 	for name, c := range map[string]struct {
 		edit func(*plugin.Model)
@@ -135,7 +136,13 @@ func TestGraphQLGoRefusesNameBindings(t *testing.T) {
 	}{
 		"renamed field": {func(m *plugin.Model) { annotate(m, "User", "name", "", `{"field_name":"displayName"}`) }, `schema User, field name: engine=graphql-go: graphql.FieldName("displayName")`},
 		"renamed edge":  {func(m *plugin.Model) { annotate(m, "Post", "", "author", `{"field_name":"writer"}`) }, `schema Post, edge author: engine=graphql-go: graphql.FieldName("writer")`},
-		"getter":        {func(m *plugin.Model) { annotate(m, "User", "settings", "", `{}`) }, "schema User, field settings: engine=graphql-go: the field is read through the method SettingsGQL"},
+		"bytes": {func(m *plugin.Model) {
+			for _, e := range m.Entities {
+				if e.Name == "User" {
+					e.Fields = append(e.Fields, &plugin.Field{Name: "photo", GoName: "Photo", Type: "bytes", Column: "photo"})
+				}
+			}
+		}, "schema User, field photo: engine=graphql-go: the field is read through the method PhotoGQL, which writes an empty blob as \"\" and not null,"},
 		"key": {func(m *plugin.Model) {
 			for _, e := range m.Entities {
 				if e.Name == "Category" {
@@ -157,6 +164,50 @@ func TestGraphQLGoRefusesNameBindings(t *testing.T) {
 				t.Errorf("gqlgen's: %v", err)
 			}
 		})
+	}
+}
+
+// TestGraphQLGoRefusesAllAtOnce: one run names every element
+// engine=graphql-go refuses, and not the first alone.
+func TestGraphQLGoRefusesAllAtOnce(t *testing.T) {
+	m := modeltest.GraphQLGo(t)
+	annotate(m, "User", "name", "", `{"field_name":"displayName"}`)
+	annotate(m, "Post", "", "author", `{"field_name":"writer"}`)
+	_, err := RenderConfig(m, graphqlGo(false))
+	for _, want := range []string{"schema User, field name:", "schema Post, edge author:"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%v, want %q among the refusals", err, want)
+		}
+	}
+}
+
+// TestGraphQLGoForcesResolvers: under engine=graphql-go a field gqlgen reads
+// through a getter, a JSON field or one of the application's own Go type,
+// is on the Resolver, with @goField(forceResolver: true) and no name, and
+// its getter is still written for the resolver to return.
+func TestGraphQLGoForcesResolvers(t *testing.T) {
+	s, err := RenderConfig(modeltest.GraphQLGo(t), graphqlGo(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s, "  settings: JSON @goField(forceResolver: true)\n") {
+		t.Errorf("no forced resolver for User.settings:\n%s", s)
+	}
+	if strings.Contains(s, "@goField(name:") {
+		t.Error("a field bound by name")
+	}
+	surf, err := BuildConfig(modeltest.GraphQLGo(t), graphqlGo(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var getters []string
+	for _, ty := range surf.Types {
+		for _, g := range ty.Getters {
+			getters = append(getters, ty.Entity.Name+"."+g.Method)
+		}
+	}
+	if !slices.Contains(getters, "User.SettingsGQL") {
+		t.Errorf("getters %v, want User.SettingsGQL", getters)
 	}
 }
 

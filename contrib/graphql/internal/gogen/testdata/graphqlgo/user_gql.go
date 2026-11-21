@@ -2,6 +2,7 @@ package gen
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -15,9 +16,15 @@ import (
 
 const _ = veloxgql.GeneratedCodeIsVersion27
 
-// Account is User under its GraphQL type name, so that gqlgen's autobind finds
-// the Go type of the GraphQL type Account.
+// Account is User under its GraphQL type name.
 type Account = User
+
+// SettingsGQL is the field settings as JSON, the GraphQL scalar it is: the
+// field's resolver may return it.
+func (u *User) SettingsGQL() (veloxgql.JSON, error) {
+	b, err := json.Marshal(u.Settings)
+	return veloxgql.JSON(b), err
+}
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -77,7 +84,7 @@ func (u *User) Likes(
 }
 
 // AccountConnection is the GraphQL type AccountConnection. Its fields run their
-// queries when gqlgen resolves them.
+// queries when they are resolved.
 type AccountConnection struct {
 	c *gqlgraph.Connection
 }
@@ -180,6 +187,7 @@ var userType = gqlgraph.Type{
 		userColAvatar:     "avatar",
 		userColQuota:      "quota",
 		userColActive:     "active",
+		userColSettings:   "settings",
 	},
 	Edges: []string{
 		userEdgePosts:  "posts",

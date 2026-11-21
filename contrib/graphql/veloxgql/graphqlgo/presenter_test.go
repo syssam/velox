@@ -78,7 +78,7 @@ scalar UUID
 scalar Bytes
 scalar Uint64
 type Query { echo(t: Time!, u: UUID!, b: Bytes!, n: Uint64!): Vals! none: Vals! }
-type Vals { t: Time! u: UUID b: Bytes! n: Uint64! }
+type Vals { t: Time! u: UUID b: Bytes e: Bytes! n: Uint64! }
 `
 
 // vals holds the Go types velox entities hold.
@@ -86,13 +86,14 @@ type vals struct {
 	T time.Time
 	U *uuid.UUID
 	B []byte
+	E []byte
 	N uint64
 }
 
 // TestScalars: Scalars binds Time, UUID, Bytes and Uint64 to time.Time,
 // uuid.UUID (and a pointer to one), []byte and uint64, written and read as
 // veloxgql's scalar types do; a value veloxgql refuses is the client's
-// error.
+// error. A nil []byte, a NULL column, is null, and an empty one "".
 func TestScalars(t *testing.T) {
 	type echoArgs struct {
 		T time.Time
@@ -103,14 +104,15 @@ func TestScalars(t *testing.T) {
 	s, err := graphql.NewSchema(graphql.SDL(scalarSDL), graphqlgo.Scalars(),
 		graphql.Query(
 			graphql.ResolveArgs("echo", func(_ context.Context, _ graphql.Root, a echoArgs) (*vals, error) {
-				return &vals{a.T, &a.U, a.B, a.N}, nil
+				return &vals{T: a.T, U: &a.U, B: a.B, N: a.N}, nil
 			}),
-			graphql.Resolve("none", func(context.Context, graphql.Root) (*vals, error) { return &vals{}, nil }),
+			graphql.Resolve("none", func(context.Context, graphql.Root) (*vals, error) { return &vals{E: []byte{}}, nil }),
 		),
 		graphql.Object[vals]("Vals",
 			graphql.Field("t", func(v *vals) time.Time { return v.T }),
 			graphql.Field("u", func(v *vals) *uuid.UUID { return v.U }),
 			graphql.Field("b", func(v *vals) []byte { return v.B }),
+			graphql.Field("e", func(v *vals) []byte { return v.E }),
 			graphql.Field("n", func(v *vals) uint64 { return v.N }),
 		),
 	)
@@ -124,7 +126,7 @@ func TestScalars(t *testing.T) {
 	if out, want := srv(t, ctx, q, vars), `{"data":{"echo":{"t":"2026-11-22T10:00:00.5+08:00","u":"0f8fad5b-d9cb-469f-a165-70867728950e","b":"aGk=","n":"18446744"}}}`; out != want {
 		t.Errorf("echo:\n got %s\nwant %s", out, want)
 	}
-	if out, want := srv(t, ctx, `{ none { t u b n } }`, nil), `{"data":{"none":{"t":"0001-01-01T00:00:00Z","u":null,"b":"","n":"0"}}}`; out != want {
+	if out, want := srv(t, ctx, `{ none { t u b e n } }`, nil), `{"data":{"none":{"t":"0001-01-01T00:00:00Z","u":null,"b":null,"e":"","n":"0"}}}`; out != want {
 		t.Errorf("zero values:\n got %s\nwant %s", out, want)
 	}
 	for name, v := range map[string]map[string]any{
@@ -203,7 +205,7 @@ type Out { i8: Int, i16: Int!, u8: Int!, u16: Int!, u32: Int!, u: Uint64! }
 		"an int16 under":  {"i16": -32769},
 		"a uint8 under":   {"u8": -1},
 		"a uint16 over":   {"u16": 65536},
-		"a uint32 over":   {"u32": 2147483648},
+		"a uint32 over":   {"u32": int64(2147483648)},
 		"a fraction":      {"u8": 1.5},
 		"a uint negative": {"u": "-1"},
 	} {
@@ -266,4 +268,37 @@ func quiet(t *testing.T) {
 	old := slog.Default()
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	t.Cleanup(func() { slog.SetDefault(old) })
+}
+
+// money is an application's Go type no scalar of velox's binds.
+type money int64
+
+// TestUnboundInputFails: an input's field of a Go type no scalar binds, as
+// a generated input's field of a graphql.Type the application has not bound
+// to the field's own Go type, or has bound to another, fails NewSchema at start-up, naming the input
+// field, and is not left for a request to find. velox-gen does not refuse
+// it, as whether the application binds the type is the application's.
+func TestUnboundInputFails(t *testing.T) {
+	const src = "scalar Time scalar UUID scalar Bytes scalar Uint64 scalar Money\ninput In { price: Money }\ntype Query { x: String }"
+	q := graphql.Query(graphql.Resolve("x", func(context.Context, graphql.Root) (*string, error) { return nil, nil }))
+	other := graphql.Scalar("Money", func(w *graphql.Writer, n int64) error { w.Int64(n); return nil }, decodeMoney)
+	for name, opt := range map[string]graphql.SchemaOption{"unbound": graphql.Options(), "bound to another Go type": other} {
+		err := graphql.Validate(graphql.SDL(src), graphqlgo.Scalars(), opt, graphql.Input[struct{ Price *money }]("In"), q)
+		if err == nil || !strings.Contains(err.Error(), "In.price") {
+			t.Errorf("%s: %v, want an error naming In.price", name, err)
+		}
+	}
+	bound := graphql.Scalar("Money", func(w *graphql.Writer, m money) error { w.Int64(int64(m)); return nil },
+		func(v any) (money, error) { n, err := decodeMoney(v); return money(n), err })
+	if err := graphql.Validate(graphql.SDL(src), graphqlgo.Scalars(), bound, graphql.Input[struct{ Price *money }]("In"), q); err != nil {
+		t.Errorf("bound by the application: %v", err)
+	}
+}
+
+// decodeMoney reads a Money literal or variable.
+func decodeMoney(v any) (int64, error) {
+	if n, ok := v.(int64); ok {
+		return n, nil
+	}
+	return 0, errors.New("not a Money")
 }
