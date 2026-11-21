@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -45,8 +44,8 @@ func TestPresent(t *testing.T) {
 }
 
 // TestConfig: NewConfig starts from DefaultLimits() and applies each
-// option, the last of two that set one thing winning, appends each
-// AdapterOption's value, and panics on a zero Option.
+// option, the last of two that set one thing winning, and panics on a zero
+// Option.
 func TestConfig(t *testing.T) {
 	filter := func(context.Context, *ast.OperationDefinition) bool { return false }
 	scoped := func(context.Context) any { return 1 }
@@ -55,11 +54,8 @@ func TestConfig(t *testing.T) {
 	if c.Limits.MaxPage != 4 || c.Limits.MaxCost != veloxgql.DefaultLimits().MaxCost || len(c.TxOptions) != 1 || c.TxFilter == nil || c.BatchScope == nil {
 		t.Errorf("NewConfig = %+v", c)
 	}
-	if d := veloxgql.NewConfig(); d.Limits != veloxgql.DefaultLimits() || d.TxOptions != nil || d.TxFilter != nil || d.BatchScope != nil || d.Adapter != nil {
+	if d := veloxgql.NewConfig(); d.Limits != veloxgql.DefaultLimits() || d.TxOptions != nil || d.TxFilter != nil || d.BatchScope != nil {
 		t.Errorf("NewConfig() = %+v", d)
-	}
-	if a := veloxgql.NewConfig(veloxgql.AdapterOption("a"), veloxgql.WithLimits(veloxgql.Limits{}), veloxgql.AdapterOption(2)).Adapter; !slices.Equal(a, []any{"a", 2}) {
-		t.Errorf("AdapterOption: Adapter = %v, want [a 2], in order", a)
 	}
 	defer func() {
 		if recover() == nil {

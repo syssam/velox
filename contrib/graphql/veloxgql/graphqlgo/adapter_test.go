@@ -1,8 +1,11 @@
 package graphqlgo_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -56,7 +59,7 @@ func bareExecutor(t *testing.T, db *velox.DB, opts ...graphql.ExecutorOption) *g
 	if err != nil {
 		t.Fatal(err)
 	}
-	return graphql.NewExecutor(s, opts...)
+	return newExecutor(s, opts...)
 }
 
 // TestNoWith: under graphql-go without graphqlgo.With, every gqlgraph read
@@ -78,27 +81,31 @@ func TestNoWith(t *testing.T) {
 	if st, _ := log.take(); len(st) != 0 {
 		t.Errorf("sent %q", st)
 	}
-	out := executorServer(bareExecutor(t, db, graphqlgo.With(db)...))(t, ctx, `{ page { totalCount } one { name } }`, nil)
+	out := executorServer(bareExecutor(t, db, graphqlgo.With(db)))(t, ctx, `{ page { totalCount } one { name } }`, nil)
 	if want := `{"data":{"page":{"totalCount":3},"one":{"name":"ann"}}}`; out != want {
 		t.Errorf("with With: %s, want %s", out, want)
 	}
 }
 
-// TestWithPanics: With refuses a nil DB, a negative limit, an option of
-// another adapter, and a retrying transaction under WithMutationTx, which
-// it allows without.
-func TestWithPanics(t *testing.T) {
+// TestOptionPanics: With refuses a nil DB, PageLimits a negative limit,
+// MutationTx a retrying transaction and a nil option, and each refuses
+// being given twice to one executor.
+func TestOptionPanics(t *testing.T) {
 	db, _ := modelDB(t)
-	type other struct{}
+	s := graphqlgoSchema(t)
 	for name, c := range map[string]struct {
-		db   *velox.DB
-		opts []veloxgql.Option
+		f    func()
 		want string
 	}{
-		"nil DB":         {nil, nil, "graphqlgo.With: nil DB"},
-		"negative limit": {db, []veloxgql.Option{veloxgql.WithLimits(veloxgql.Limits{MaxPage: -1})}, "Limits.MaxPage is -1"},
-		"another's":      {db, []veloxgql.Option{veloxgql.AdapterOption(other{})}, "an option of another adapter (graphqlgo_test.other)"},
-		"retry":          {db, []veloxgql.Option{graphqlgo.WithMutationTx(), veloxgql.WithTxOptions(velox.TxRetrySerializable(2))}, "TxRetrySerializable(2)"},
+		"nil DB":         {func() { graphqlgo.With(nil) }, "graphqlgo.With: nil DB"},
+		"negative limit": {func() { graphqlgo.PageLimits(veloxgql.Limits{MaxPage: -1}) }, "Limits.MaxPage is -1"},
+		"retry":          {func() { graphqlgo.MutationTx(graphqlgo.TxOptions(velox.TxRetrySerializable(2))) }, "TxRetrySerializable(2)"},
+		"nil option":     {func() { graphqlgo.MutationTx(nil) }, "graphqlgo.MutationTx: a nil option"},
+		"With twice":     {func() { newExecutor(s, graphqlgo.With(db), graphqlgo.With(db)) }, "graphqlgo.With: given twice"},
+		"limits twice": {func() {
+			newExecutor(s, graphqlgo.PageLimits(veloxgql.Limits{}), graphqlgo.PageLimits(veloxgql.Limits{}))
+		}, "graphqlgo.PageLimits: given twice"},
+		"tx twice": {func() { newExecutor(s, graphqlgo.MutationTx(), graphqlgo.MutationTx()) }, "graphqlgo.MutationTx: given twice"},
 	} {
 		func() {
 			defer func() {
@@ -106,10 +113,50 @@ func TestWithPanics(t *testing.T) {
 					t.Errorf("%s: panic %v, want %q", name, p, c.want)
 				}
 			}()
-			graphqlgo.With(c.db, c.opts...)
+			c.f()
 		}()
 	}
-	graphqlgo.With(db, veloxgql.WithTxOptions(velox.TxRetrySerializable(2)))
+}
+
+// TestOptionsAnyOrder: the options configure one executor in any order,
+// mixed with graphql-go's own, and one option value serves several
+// executors, each with its own state.
+func TestOptionsAnyOrder(t *testing.T) {
+	db, log := modelDB(t)
+	ctx := context.Background()
+	limits := graphqlgo.PageLimits(veloxgql.Limits{MaxPage: 2})
+	for name, opts := range map[string][]graphql.ExecutorOption{
+		"With first": {graphqlgo.With(db), graphql.WithMaxErrors(5), graphqlgo.MutationTx(), limits, graphqlgo.Cost()},
+		"With last":  {graphqlgo.Cost(), limits, graphqlgo.MutationTx(graphqlgo.TxOptions(), graphqlgo.TxFilter(nil), graphqlgo.ErrorLog(nil)), graphql.WithMaxErrors(5), graphqlgo.With(db)},
+	} {
+		srv := executorServer(newExecutor(graphqlgoSchema(t), opts...))
+		if out := srv(t, ctx, `{ authors(first: 3) { totalCount } }`, nil); !strings.Contains(out, "BAD_USER_INPUT") {
+			t.Errorf("%s: over PageLimits' MaxPage: %s", name, out)
+		}
+		out := srv(t, ctx, `mutation { addPost(author: 1, title: "x") { title } }`, nil)
+		if _, txs := log.take(); out != `{"data":{"addPost":{"title":"x"}}}` || !slices.Equal(txs, []string{"commit"}) {
+			t.Errorf("%s: %s, transactions %q; want a commit", name, out, txs)
+		}
+	}
+}
+
+// TestMutationTxNoWith: MutationTx without With fails a mutation before
+// any resolver runs, with veloxgql.ErrNoDB, logged naming graphqlgo.With.
+func TestMutationTxNoWith(t *testing.T) {
+	db, log := modelDB(t)
+	var buf bytes.Buffer
+	tx := graphqlgo.MutationTx(graphqlgo.ErrorLog(slog.New(slog.NewTextHandler(&buf, nil))))
+	srv := executorServer(newExecutor(graphqlgoSchema(t), tx, graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))
+	out := srv(t, context.Background(), `mutation { addPost(author: 1, title: "x") { title } }`, nil)
+	if !strings.Contains(out, `"data":null`) || !strings.Contains(out, "INTERNAL_SERVER_ERROR") || !strings.Contains(buf.String(), "give the executor graphqlgo.With(db)") {
+		t.Errorf("mutation: %s, logged %q", out, buf.String())
+	}
+	if st, txs := log.take(); len(st) != 0 || len(txs) != 0 {
+		t.Errorf("sent %q %q", st, txs)
+	}
+	if n := postCount(t, db, log); n != 6 {
+		t.Errorf("%d posts, want none added", n)
+	}
 }
 
 // panicText is a recovered value's text.
@@ -121,15 +168,15 @@ func panicText(p any) string {
 	return s
 }
 
-// TestMutationPlain: without WithMutationTx a mutation runs with no
+// TestMutationPlain: without MutationTx a mutation runs with no
 // transaction: a resolver that fails after its insert keeps the row. Under
-// WithMutationTx, a mutation veloxgql.WithTxFilter leaves out does the same.
+// MutationTx, a mutation TxFilter leaves out does the same.
 func TestMutationPlain(t *testing.T) {
 	ctx := context.Background()
-	for name, opts := range map[string][]veloxgql.Option{
+	for name, opts := range map[string][]graphql.ExecutorOption{
 		"default":   nil,
-		"filtered":  {graphqlgo.WithMutationTx(), veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false })},
-		"filter on": {graphqlgo.WithMutationTx(), veloxgql.WithTxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name == "tx" })},
+		"filtered":  {graphqlgo.MutationTx(graphqlgo.TxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))},
+		"filter on": {graphqlgo.MutationTx(graphqlgo.TxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name == "tx" }))},
 	} {
 		db, log := modelDB(t)
 		out := graphqlgoServer(t, db, opts...)(t, ctx, `mutation plain { failPost(author: 1, title: "kept") { title } }`, nil)
@@ -143,9 +190,9 @@ func TestMutationPlain(t *testing.T) {
 	}
 }
 
-// TestMutationSerial: under WithMutationTx a mutation's fields run one at a
-// time, as a field interceptor inside With's sees them; a query's do not
-// wait on each other.
+// TestMutationSerial: under MutationTx a mutation's fields run one at a
+// time, as a field interceptor after MutationTx's sees them; a query's do
+// not wait on each other.
 func TestMutationSerial(t *testing.T) {
 	db, _ := modelDB(t)
 	var cur, most atomic.Int32
@@ -161,14 +208,22 @@ func TestMutationSerial(t *testing.T) {
 		time.Sleep(time.Millisecond)
 		return next(ctx)
 	})
-	opts := append(graphqlgo.With(db, graphqlgo.WithMutationTx()), graphql.WithFieldInterceptor(count))
-	srv := executorServer(graphql.NewExecutor(graphqlgoSchema(t), opts...))
-	out := srv(t, context.Background(), `mutation { addPost(author: 2, title: "t") { title author { name posts(first: 9) { edges { node { title author { name } tags { name } } } } } } }`, nil)
+	srv := executorServer(newExecutor(graphqlgoSchema(t), graphqlgo.With(db), graphqlgo.MutationTx(), graphql.WithFieldInterceptor(count)))
+	const sel = `author { name posts(first: 9) { edges { node { title author { name } tags { name } } } } }`
+	out := srv(t, context.Background(), `mutation { addPost(author: 2, title: "t") { title `+sel+` } }`, nil)
 	if !strings.Contains(out, `"title":"t"`) || strings.Contains(out, "errors") {
 		t.Fatal(out)
 	}
 	if n := most.Load(); n != 1 {
 		t.Errorf("mutation: at most %d fields in flight, want 1", n)
+	}
+	most.Store(0)
+	out = srv(t, context.Background(), `{ node(id: "11") { ... on Post { a: `+sel+` b: `+sel+` } } }`, nil)
+	if strings.Contains(out, "errors") {
+		t.Fatal(out)
+	}
+	if n := most.Load(); n < 2 {
+		t.Errorf("query: at most %d fields in flight, want more than 1", n)
 	}
 }
 
@@ -191,7 +246,7 @@ func TestWaitParks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := executorServer(graphql.NewExecutor(s, graphqlgo.With(db)...))(t, context.Background(), `{ wait }`, nil)
+	out := executorServer(newExecutor(s, graphqlgo.With(db)))(t, context.Background(), `{ wait }`, nil)
 	if out != `{"data":{"wait":true}}` {
 		t.Errorf("%s: the wave was not ready while the resolver waited", out)
 	}
@@ -199,52 +254,48 @@ func TestWaitParks(t *testing.T) {
 	src.Wait(context.Background())()
 }
 
-// TestCost: under WithCost a request over MaxCost is refused before any
+// TestCost: under Cost a request over MaxCost is refused before any
 // statement, with COST_LIMIT_EXCEEDED, and one within it runs; without
-// WithCost the same request runs. The options of WithCost serve one
-// executor.
+// Cost the same request runs.
 func TestCost(t *testing.T) {
 	db, log := modelDB(t)
 	ctx := context.Background()
-	l := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 300})
+	l := graphqlgo.PageLimits(veloxgql.Limits{MaxCost: 300})
 	const query = `{ authors(first: 10) { edges { node { posts(first: 10) { totalCount } } } } }`
-	out := graphqlgoServer(t, db, l, graphqlgo.WithCost())(t, ctx, query, nil)
+	out := graphqlgoServer(t, db, l, graphqlgo.Cost())(t, ctx, query, nil)
 	if !strings.Contains(out, `"code":"COST_LIMIT_EXCEEDED"`) || !strings.Contains(out, "request is too costly: it costs") || strings.Contains(out, `"data"`) {
 		t.Errorf("over MaxCost: %s", out)
 	}
 	if st, _ := log.take(); len(st) != 0 {
 		t.Errorf("over MaxCost sent %q", st)
 	}
-	if out := graphqlgoServer(t, db, l, graphqlgo.WithCost())(t, ctx, `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
+	if out := graphqlgoServer(t, db, l, graphqlgo.Cost())(t, ctx, `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
 		t.Errorf("within MaxCost: %s", out)
 	}
 	if out := graphqlgoServer(t, db, l)(t, ctx, query, nil); strings.Contains(out, "errors") {
-		t.Errorf("without WithCost: %s", out)
+		t.Errorf("without Cost: %s", out)
 	}
-	opts := graphqlgo.With(db, graphqlgo.WithCost())
-	graphql.NewExecutor(graphqlgoSchema(t), opts...)
-	defer func() {
-		if p := recover(); p == nil || !strings.Contains(panicText(p), "serve one executor") {
-			t.Errorf("a second executor: panic %v", p)
-		}
-	}()
-	graphql.NewExecutor(graphqlgoSchema(t), opts...)
 }
 
-// TestLimits: Limits maps veloxgql's limits of a request onto graphql-go's,
-// which enforces them with its own codes.
-func TestLimits(t *testing.T) {
-	db, _ := modelDB(t)
-	opts := append(graphqlgo.With(db), graphqlgo.Limits(veloxgql.Limits{MaxDepth: 3})...)
-	srv := executorServer(graphql.NewExecutor(graphqlgoSchema(t), opts...))
-	if out := srv(t, context.Background(), `{ authors(first: 1) { edges { node { name } } } }`, nil); !strings.Contains(out, `"code":"MAX_DEPTH_EXCEEDED"`) {
-		t.Errorf("over MaxDepth: %s", out)
+// TestMutationTxErrorLog: a transaction that fails after the resolvers
+// succeed nulls the data and adds an internal error, logged to ErrorLog's
+// logger.
+func TestMutationTxErrorLog(t *testing.T) {
+	refuse := velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return errors.New("the transaction was refused")
+	})
+	db, _ := modelDB(t, refuse)
+	var buf bytes.Buffer
+	srv := graphqlgoServer(t, db, graphqlgo.MutationTx(graphqlgo.ErrorLog(slog.New(slog.NewTextHandler(&buf, nil)))))
+	out := srv(t, context.Background(), `mutation { addPost(author: 1, title: "x") { title } }`, nil)
+	if out != `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}` {
+		t.Errorf("a failed transaction: %s", out)
 	}
-	if out := srv(t, context.Background(), `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
-		t.Errorf("within MaxDepth: %s", out)
-	}
-	if n := len(graphqlgo.Limits(veloxgql.Limits{})); n != 5 {
-		t.Errorf("Limits gives %d options, want 5", n)
+	if !strings.Contains(buf.String(), "veloxgql: internal error") || !strings.Contains(buf.String(), "the transaction was refused") {
+		t.Errorf("logged %q, want the transaction's error", buf.String())
 	}
 }
 
@@ -282,7 +333,7 @@ type Tick { authors(first: Int): AuthorConnection }
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := graphql.NewExecutor(s, graphqlgo.With(db)...)
+	e := newExecutor(s, graphqlgo.With(db))
 	ch, err := e.Subscribe(context.Background(), &graphql.Request{Query: `subscription { tick { authors(first: 5) { edges { node { name posts(first: 1) { edges { node { title } } } } } } } }`})
 	if err != nil {
 		t.Fatal(err)

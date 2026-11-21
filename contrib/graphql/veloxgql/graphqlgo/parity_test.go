@@ -90,7 +90,7 @@ func TestParity(t *testing.T) {
 		log  *stmtLog
 	}{
 		{"gqlgenx", gqlgenServer(t, gdb, opts...), glog},
-		{"graphqlgo", graphqlgoServer(t, qdb, opts...), qlog},
+		{"graphqlgo", graphqlgoServer(t, qdb, graphqlgo.PageLimits(veloxgql.Limits{MaxList: 10})), qlog},
 	}
 	// The first after-a-cursor run finds the cursor the second pages from.
 	for _, c := range parityCases {
@@ -119,7 +119,7 @@ func TestParity(t *testing.T) {
 }
 
 // TestParityMutation: a mutation in a transaction, gqlgenx's by default and
-// graphqlgo's under WithMutationTx, sends the same statements in it and
+// graphqlgo's under MutationTx, sends the same statements in it and
 // commits; one whose resolver fails after its insert rolls back on both,
 // with data null and the same error.
 func TestParityMutation(t *testing.T) {
@@ -132,7 +132,7 @@ func TestParityMutation(t *testing.T) {
 		log  *stmtLog
 	}{
 		{"gqlgenx", gqlgenServer(t, gdb), glog},
-		{"graphqlgo", graphqlgoServer(t, qdb, graphqlgo.WithMutationTx()), qlog},
+		{"graphqlgo", graphqlgoServer(t, qdb, graphqlgo.MutationTx()), qlog},
 	}
 	for _, c := range []struct {
 		query, want string
@@ -158,7 +158,6 @@ func TestParityMutation(t *testing.T) {
 					t.Errorf("%s: %q ran outside the transaction", s.name, x)
 				}
 			}
-			t.Logf("%s: %d statements, transactions %q", s.name, len(st), txs)
 			got, stmts = append(got, out), append(stmts, st)
 		}
 		if n := postCount(t, gdb, glog); n != c.posts {
@@ -181,7 +180,7 @@ func TestParityMutation(t *testing.T) {
 // sends what one alone does.
 func TestConcurrentRequests(t *testing.T) {
 	db, log := modelDB(t)
-	srv := graphqlgoServer(t, db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 10}))
+	srv := graphqlgoServer(t, db, graphqlgo.PageLimits(veloxgql.Limits{MaxList: 10}))
 	c := parityCases[0]
 	want := srv(t, context.Background(), c.query, nil)
 	log.take()

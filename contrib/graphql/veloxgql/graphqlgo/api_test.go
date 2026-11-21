@@ -14,12 +14,16 @@ import (
 // publicAPI is the exported API of package graphqlgo, sorted. Every change to
 // the API edits this list.
 var publicAPI = []string{
+	"Cost",
+	"ErrorLog",
 	"ErrorPresenter",
-	"Limits",
+	"MutationTx",
+	"MutationTxOption",
+	"PageLimits",
 	"Scalars",
+	"TxFilter",
+	"TxOptions",
 	"With",
-	"WithCost",
-	"WithMutationTx",
 }
 
 // exportedNames are the exported names of the package in dir, as "Name" and

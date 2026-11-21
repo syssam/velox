@@ -28,6 +28,12 @@ import (
 // JSON.
 type server func(t testing.TB, ctx context.Context, query string, vars map[string]any) string
 
+// newExecutor is graphql.NewExecutor with a depth limit before opts, so
+// that graphql-go does not warn of an executor with no limits.
+func newExecutor(s *graphql.Schema, opts ...graphql.ExecutorOption) *graphql.Executor {
+	return graphql.NewExecutor(s, append([]graphql.ExecutorOption{graphql.WithMaxDepth(20)}, opts...)...)
+}
+
 // graphqlgoSchema is paritySDL bound to the resolvers by
 // graphqlgoSchemaOptions.
 func graphqlgoSchema(t testing.TB) *graphql.Schema {
@@ -118,10 +124,10 @@ func connBindings[E any](typ string) graphql.SchemaOption {
 }
 
 // graphqlgoServer serves paritySDL through graphql-go, with
-// graphqlgo.With(db, opts...) and graphqlgo.ErrorPresenter.
-func graphqlgoServer(t testing.TB, db *velox.DB, opts ...veloxgql.Option) server {
-	return executorServer(graphql.NewExecutor(graphqlgoSchema(t),
-		append(graphqlgo.With(db, opts...), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil)))...))
+// graphqlgo.With(db), opts and graphqlgo.ErrorPresenter.
+func graphqlgoServer(t testing.TB, db *velox.DB, opts ...graphql.ExecutorOption) server {
+	opts = append([]graphql.ExecutorOption{graphqlgo.With(db), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))}, opts...)
+	return executorServer(newExecutor(graphqlgoSchema(t), opts...))
 }
 
 // executorServer runs queries on e.

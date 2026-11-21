@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,7 +115,7 @@ func TestScalars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := executorServer(graphql.NewExecutor(s, graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))
+	srv := executorServer(newExecutor(s, graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))
 	ctx := context.Background()
 	const q = `query($t: Time!, $u: UUID!, $b: Bytes!, $n: Uint64!) { echo(t: $t, u: $u, b: $b, n: $n) { t u b n } }`
 	vars := map[string]any{"t": "2026-11-22T10:00:00.5+08:00", "u": "0F8FAD5B-D9CB-469F-A165-70867728950E", "b": "aGk=", "n": "18446744"}
@@ -135,5 +136,21 @@ func TestScalars(t *testing.T) {
 		if out := srv(t, ctx, q, in); !contains([]string{out}, `"errors"`) || contains([]string{out}, `"echo"`) {
 			t.Errorf("%s refused: %s", name, out)
 		}
+	}
+}
+
+// TestPresenterPanic: a resolver's panic, which graphql-go recovers and
+// logs with its stack, is shown as an internal error and not logged again.
+func TestPresenterPanic(t *testing.T) {
+	var logged []error
+	s, err := graphql.NewSchema(graphql.SDL(`type Query { boom: Int }`),
+		graphql.Query(graphql.Resolve("boom", func(context.Context, graphql.Root) (int, error) { panic("boom") })))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := graphqlgo.ErrorPresenter(func(_ context.Context, err error) { logged = append(logged, err) })
+	out := executorServer(newExecutor(s, graphql.WithErrorPresenter(p)))(t, context.Background(), `{ boom }`, nil)
+	if !strings.Contains(out, `"message":"internal error"`) || !strings.Contains(out, "INTERNAL_SERVER_ERROR") || len(logged) != 0 {
+		t.Errorf("%s, logged %v; want an internal error, not logged", out, logged)
 	}
 }

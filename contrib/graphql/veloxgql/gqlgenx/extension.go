@@ -129,9 +129,6 @@ type Extension struct {
 	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
 	// batchScope is veloxgql.WithBatchScope's function, or nil.
 	batchScope func(context.Context) any
-	// foreign are the values of veloxgql.AdapterOption, which are another
-	// adapter's: gqlgen's adapter has none, and Validate refuses them.
-	foreign []any
 }
 
 // NewExtension returns the extension that serves a schema on db, configured
@@ -148,7 +145,7 @@ type Extension struct {
 // driver's, which name entities, tables, constraints and scope values.
 func NewExtension(db *velox.DB, opts ...veloxgql.Option) *Extension {
 	c := veloxgql.NewConfig(opts...)
-	return &Extension{db: db, limits: c.Limits, txOpts: c.TxOptions, txFilter: c.TxFilter, batchScope: c.BatchScope, foreign: c.Adapter}
+	return &Extension{db: db, limits: c.Limits, txOpts: c.TxOptions, txFilter: c.TxFilter, batchScope: c.BatchScope}
 }
 
 // NewContext returns ctx with the extension's DB and limits, as a query
@@ -197,9 +194,8 @@ var errRollback = errors.New("veloxgql: the response has errors")
 func (*Extension) ExtensionName() string { return "VeloxDB" }
 
 // Validate implements graphql.HandlerExtension: it refuses a nil DB, a
-// negative limit, transaction options that ask for
-// velox.TxRetrySerializable, and an option of another adapter (such as
-// graphqlgo.WithMutationTx), when the server takes the extension.
+// negative limit, and transaction options that ask for
+// velox.TxRetrySerializable, when the server takes the extension.
 func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	if es != nil {
 		e.schema = es.Schema()
@@ -213,9 +209,6 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	}
 	if n := velox.TxRetries(e.txOpts...); n > 0 {
 		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
-	}
-	if len(e.foreign) > 0 {
-		return fmt.Errorf("gqlgenx.NewExtension: an option of another adapter (%T), which gqlgen's does not take", e.foreign[0])
 	}
 	return nil
 }

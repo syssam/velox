@@ -1,31 +1,33 @@
 // Package graphqlgo serves the GraphQL code velox-graphql generates through
-// github.com/syssam/graphql-go: the executor options that put velox's state
-// in each operation's context, the scalars, the limits and the error
-// presenter. The runtime generated code calls is in package veloxgql and
-// its package gqlgraph, which import no engine; this package is
-// graphql-go's adapter to them, as package gqlgenx is gqlgen's. It imports
-// no gqlgen.
+// github.com/syssam/graphql-go. Every function returns a graphql-go option
+// or presenter, to compose with graphql-go's own. The runtime generated code
+// calls is in package veloxgql and its package gqlgraph, which import no
+// engine; this package is graphql-go's adapter to them, as package gqlgenx
+// is gqlgen's. It imports no gqlgen.
 //
 // # The executor
 //
-// gqlc binds the SDL velox-graphql writes to the generated Go; the server
-// adds the scalars to the schema and With's options to the executor:
+// gqlc binds the SDL velox-graphql writes to the generated Go. The server
+// adds Scalars to the schema, and With to the executor:
 //
 //	s, err := graph.NewSchema(post.Bindings(h), user.Bindings(h), graphqlgo.Scalars())
 //	exec := graphql.NewExecutor(s,
-//		append(graphqlgo.With(db, veloxgql.WithLimits(l)), graphqlgo.Limits(l)...),
-//		graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil)))
+//		graphqlgo.With(db),
+//		graphqlgo.MutationTx(),
+//		graphql.WithMaxDepth(12),
+//		graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
 //
-// With puts the DB, the limits and graphql-go's selection source in each
-// operation's context, where veloxgql.DB and veloxgql.LimitsFromContext read
-// them and generated code finds the field it resolves, with a new table of
-// rows per operation and per event of a subscription. Its options are
-// veloxgql's (veloxgql.WithLimits, veloxgql.WithTxOptions,
-// veloxgql.WithTxFilter, veloxgql.WithBatchScope), which every adapter
-// takes, and two of this package's, both off by default: WithMutationTx
-// runs a mutation in one transaction, and WithCost refuses a request over
-// veloxgql.Cost. Without With, generated code fails with veloxgql.ErrNoDB
-// and veloxgql.ErrNoSelectionSource, before any statement.
+// With puts the DB, the page limits and graphql-go's selection source in
+// each operation's context, with a new table of rows per operation and per
+// event of a subscription. Without it, generated code fails with
+// veloxgql.ErrNoDB and veloxgql.ErrNoSelectionSource, before any statement.
+// The other options are off by default, and work in any order with With:
+//
+//   - MutationTx runs each mutation in one transaction (TxOptions,
+//     TxFilter, ErrorLog configure it).
+//   - PageLimits sets the page, list, orderBy and filter limits generated
+//     code holds a request to, and the cost Cost refuses.
+//   - Cost refuses a request over velox's cost.
 //
 // # Selections
 //
@@ -43,12 +45,11 @@
 //
 // # Limits
 //
-// The limits of a request as a whole are graphql-go's: Limits maps
-// veloxgql's MaxDepth, MaxTokens, MaxErrors, MaxResponseBytes and Timeout
-// onto graphql-go's options. gqlgraph holds each connection, list and
-// filter to MaxPage, MaxList, MaxOrderTerms and the filter limits, from the
-// state. graphql.WithQueryCost is graphql-go's cost model; WithCost adds
-// velox's, which knows velox's connections and statements.
+// The limits of a request as a whole are graphql-go's own options
+// (graphql.WithMaxDepth, graphql.WithMaxComplexity, graphql.WithQueryCost,
+// graphql.WithMaxResponseBytes, graphql.WithOperationTimeout and the rest).
+// PageLimits sets velox's: the largest page of a connection,
+// the rows of a list edge, and the size of an orderBy or a where filter.
 //
 // # Errors
 //

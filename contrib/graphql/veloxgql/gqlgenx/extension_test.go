@@ -875,17 +875,6 @@ func TestTxOptionsRefuseRetry(t *testing.T) {
 	}
 }
 
-// TestForeignAdapterOption: an option of another adapter, made with
-// veloxgql.AdapterOption, is refused by Validate, naming its type.
-func TestForeignAdapterOption(t *testing.T) {
-	db, _ := handlerDB(t)
-	type other struct{}
-	err := gqlgenx.NewExtension(db, veloxgql.AdapterOption(other{})).Validate(nil)
-	if err == nil || !strings.Contains(err.Error(), "an option of another adapter (gqlgenx_test.other)") {
-		t.Errorf("Validate = %v, want the option refused", err)
-	}
-}
-
 // TestTxOptionsApply: the options reach the mutation's transaction.
 func TestTxOptionsApply(t *testing.T) {
 	// post returns when the response is written, after the resolvers and the

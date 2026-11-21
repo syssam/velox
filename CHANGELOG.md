@@ -22,17 +22,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 ### Added
 
 - Package `contrib/graphql/veloxgql/graphqlgo` serves velox-graphql's
-  generated code under github.com/syssam/graphql-go (ADR 0106):
-  `graphqlgo.With(db, opts...)` returns the executor options that put the
-  DB, the limits and graphql-go's selection source in each operation's
-  context, so generated code reads only the selected columns and batches
-  its edges, as under gqlgen. `WithMutationTx` (a mutation in one
-  transaction) and `WithCost` (velox's cost) are opt-in; `Limits` maps
-  veloxgql's limits of a request onto graphql-go's options; `Scalars`
-  binds `Time`, `UUID`, `Bytes` and `Uint64`; `ErrorPresenter` shows
-  `veloxgql.Present`'s codes. `veloxgql.AdapterOption` and
-  `veloxgql.Config.Adapter` carry an adapter's own options, which the other
-  adapter refuses. contrib/graphql requires graphql-go
+  generated code under github.com/syssam/graphql-go (ADR 0106), with
+  graphql-go's own option types: `graphqlgo.With(db)` is the executor
+  option that puts the DB and graphql-go's selection source in each
+  operation's context, so generated code reads only the selected columns
+  and batches its edges, as under gqlgen. `MutationTx` (a mutation in one
+  transaction; `TxOptions`, `TxFilter`, `ErrorLog`), `PageLimits` and
+  `Cost` (velox's cost) are opt-in executor options, in any order;
+  `Scalars` binds `Time`, `UUID`, `Bytes` and `Uint64`; `ErrorPresenter`
+  shows `veloxgql.Present`'s codes. The limits of a whole request are
+  graphql-go's own options. contrib/graphql requires graphql-go
   v0.0.0-20261029022150-3e0050be7462.
 - Package `generate` runs velox-gen's generate from Go, as ent's
   `entc.Generate` and veloxe's `compiler.Generate` did (ADR 0097):

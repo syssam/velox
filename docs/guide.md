@@ -1819,14 +1819,23 @@ walks through each step.
 
 The same generated code also serves
 [github.com/syssam/graphql-go](https://github.com/syssam/graphql-go), whose
-generator gqlc binds the SDL. Its adapter is `veloxgql/graphqlgo`:
-`graphql.NewExecutor(s, graphqlgo.With(db, veloxgql.WithLimits(l))...)`
-puts velox's state in each operation, so edges batch and reads are
-projected as under gqlgen, and `graphqlgo.Scalars()` binds velox's scalars
-in the schema. graphql-go keeps its own limits, cost and timeouts;
-`graphqlgo.Limits(l)` maps velox's onto them. A mutation runs in one
-transaction only with `graphqlgo.WithMutationTx()`, and velox's cost only
-with `graphqlgo.WithCost()`.
+generator gqlc binds the SDL. Its adapter is `veloxgql/graphqlgo`, whose
+functions are graphql-go options:
+
+```go
+exec := graphql.NewExecutor(schema,
+	graphqlgo.With(db),
+	graphqlgo.MutationTx(),
+	graphql.WithMaxDepth(12),
+	graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
+```
+
+`graphqlgo.With(db)` puts velox's state in each operation, so edges batch
+and reads are projected as under gqlgen, and `graphqlgo.Scalars()` binds
+velox's scalars in the schema. graphql-go's own options limit a request;
+`graphqlgo.PageLimits(l)` sets velox's page and filter limits. A mutation
+runs in one transaction only with `graphqlgo.MutationTx()`, and velox's
+cost applies only with `graphqlgo.Cost()`.
 
 ## Where to go next
 

@@ -18,7 +18,8 @@ import (
 // with it, nil being null. The schema must declare the four, as the
 // vocabulary velox-graphql writes does; NewSchema fails on one it lacks.
 // gqlc binds Cursor, JSON, OrderDirection and PageInfo from their own
-// methods and fields.
+// methods and fields. Give it to graphql.NewSchema with the generated
+// bindings.
 func Scalars() graphql.SchemaOption {
 	return graphql.Options(
 		graphql.Time("Time"),
