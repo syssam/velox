@@ -15,6 +15,9 @@
 //	go get -tool github.com/syssam/velox/cmd/velox-gen
 //	go tool velox-gen ./veloxschema
 //
+// A Go program runs the same generate with package
+// github.com/syssam/velox/generate, whose Config has a field for each flag.
+//
 // Usage:
 //
 //	velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
@@ -281,16 +284,25 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
+	"github.com/syssam/velox/internal/buildinfo"
 	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/plugin"
 )
 
 func main() {
 	os.Exit(run(os.Args[1:], ".", nil, os.Stdout, os.Stderr))
 }
+
+// interruptedCode is the exit code of a command interrupted while it wrote.
+const interruptedCode = 130
+
+// generator is velox-gen and the version of the velox module it is built
+// from, "(devel)" when the build does not say, as a plugin's request names
+// it.
+func generator() string { return buildinfo.Generator() }
 
 // run is the command, with its directory, environment and output passed in
 // so that tests can run it.
@@ -357,12 +369,12 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 		}
 	})
 	f := genFlags{out: *outDir, pkg: *pkgName, plugins: plugins, rerun: append(rerun, patterns...)}
-	pattern, err := schemaPackage(dir, patterns, env)
+	pattern, err := genrun.SchemaPackage(dir, patterns, env)
 	if err != nil {
-		if pattern = defaultSchema; len(patterns) == 1 {
+		if pattern = genrun.DefaultSchema; len(patterns) == 1 {
 			pattern = patterns[0]
 		}
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", explainLoad(dir, pattern, f.outDir(dir), env, err, nil))
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.ExplainLoad(dir, pattern, f.outDir(dir), env, err, nil))
 		return 1
 	}
 	if verify {
@@ -481,110 +493,4 @@ Exit codes:
      or the migration directory (migrate diff -check, migrate hash -check);
      pending files (migrate status); drift (migrate drift)
 `)
-}
-
-// relPath shows a path relative to dir when it is inside dir.
-func relPath(dir, path string) string {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return path
-	}
-	if r, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = r
-	}
-	if r, err := filepath.Rel(abs, path); err == nil && !strings.HasPrefix(r, "..") {
-		return r
-	}
-	return path
-}
-
-// relErrors shows the positions of err's *codegen.Error and *codegen.FileError
-// values, as errors.Join joined them, relative to dir when their files are
-// inside it. That covers
-// the positions inside a Reason too.
-func relErrors(dir string, err error) error {
-	errs := []error{err}
-	if j, ok := err.(interface{ Unwrap() []error }); ok {
-		errs = j.Unwrap()
-	}
-	inside := relInside(dir)
-	out := make([]error, len(errs))
-	changed := false
-	for i, e := range errs {
-		out[i] = e
-		if fe, ok := e.(*codegen.FileError); ok {
-			c := *fe
-			c.Path = relPath(dir, fe.Path)
-			out[i], changed = &c, c != *fe
-			continue
-		}
-		if ge, ok := e.(*codegen.Error); ok {
-			c := *ge
-			if ge.Pos != "" {
-				c.Pos = relPos(dir, ge.Pos)
-			}
-			if inside != nil {
-				c.Reason = inside.ReplaceAllString(ge.Reason, "${1}")
-			}
-			if c != *ge {
-				out[i], changed = &c, true
-			}
-		}
-	}
-	if !changed {
-		return err
-	}
-	return errors.Join(out...)
-}
-
-// relInside matches the working directory, and its symlink-free form when
-// that differs, as the start of a path: the directory and its separator,
-// after anything but a path character. Its first group is what comes before.
-// It is nil when dir has no absolute form, and for the filesystem root, which
-// every path is inside: cutting it would cut every slash.
-func relInside(dir string) *regexp.Regexp {
-	abs, err := filepath.Abs(dir)
-	if err != nil {
-		return nil
-	}
-	cands := []string{abs}
-	if r, err := filepath.EvalSymlinks(abs); err == nil && r != abs {
-		cands = append(cands, r)
-	}
-	var prefixes []string
-	for _, p := range cands {
-		if filepath.Dir(p) != p {
-			prefixes = append(prefixes, regexp.QuoteMeta(strings.TrimRight(p, string(filepath.Separator))+string(filepath.Separator)))
-		}
-	}
-	if len(prefixes) == 0 {
-		return nil
-	}
-	return regexp.MustCompile(`(^|[^\w./\\-])(?:` + strings.Join(prefixes, "|") + `)`)
-}
-
-// relPos shows a file:line position, or a file alone, relative to dir when
-// the file is inside it.
-func relPos(dir, pos string) string {
-	file, line := pos, ""
-	if i := strings.LastIndexByte(pos, ':'); i >= 0 && pos[i+1:] != "" && strings.Trim(pos[i+1:], "0123456789") == "" {
-		file, line = pos[:i], pos[i:]
-	}
-	file = filepath.FromSlash(file)
-	if !filepath.IsAbs(file) {
-		return pos
-	}
-	if r, err := filepath.EvalSymlinks(file); err == nil {
-		file = r
-	}
-	return relPath(dir, file) + line
-}
-
-// relWarning is the warning w, "file:line: text", with the file relative
-// to dir, as relPos makes it.
-func relWarning(dir, w string) string {
-	if i := strings.Index(w, ": "); i > 0 {
-		return relPos(dir, w[:i]) + w[i:]
-	}
-	return w
 }

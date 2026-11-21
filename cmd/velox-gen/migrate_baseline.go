@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -50,7 +51,7 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 	}
 
 	// The schema package, as -dialect sees it.
-	pattern, err := schemaPackage(dir, patterns, env)
+	pattern, err := genrun.SchemaPackage(dir, patterns, env)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
@@ -67,7 +68,7 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 		return codegen.Tables(g, dialect.d)
 	}()
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))
 		return 1
 	}
 

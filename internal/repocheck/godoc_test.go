@@ -19,9 +19,9 @@ import (
 var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section|note)\b|\bsection \d|\b(schema|policy|routing|observability|core|graphql) (design|spec)\b|\bdocs/(specs|plans|reviews)\b|\b(GraphQL|API|core|policy|schema)\s+plan\s+\d`)
 
 // TestGodocCitesNoSpec: no comment in the public packages of this module (the
-// root package and veloxtype, tests included; schema and its subpackages; plugin;
-// and cmd/velox-gen) and no string literal in them, which holds the messages a
-// user sees, cites a design document or a ruling.
+// root package, veloxtype and generate, tests included; schema and its
+// subpackages; plugin; and cmd/velox-gen) and no string literal in them,
+// which holds the messages a user sees, cites a design document or a ruling.
 func TestGodocCitesNoSpec(t *testing.T) {
 	t.Parallel()
 	root := repoRoot()
@@ -48,6 +48,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 	add("veloxtype", true, false)
 	add("schema", false, true)
 	add("plugin", false, false)
+	add("generate", true, false)
 	add("migrate", false, false)
 	add("cmd/velox-gen", false, false)
 	if len(files) < 50 {
@@ -218,6 +219,7 @@ func TestExportedMethodsHaveDocs(t *testing.T) {
 	add("veloxtype", false)
 	add("migrate", false)
 	add("plugin", false)
+	add("generate", false)
 	add("schema", true)
 	add("contrib/graphql", false)
 	add("contrib/graphql/veloxgql", false)

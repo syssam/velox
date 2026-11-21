@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/genrun"
 )
 
 // runDescribe is velox-gen describe: it loads the schema package, builds its
@@ -20,7 +21,7 @@ func runDescribe(args []string, dir string, env []string, stdout, stderr io.Writ
 		return tooMany("describe", fs, stderr)
 	}
 	err := func() error {
-		pattern, err := schemaPackage(dir, rest, env)
+		pattern, err := genrun.SchemaPackage(dir, rest, env)
 		if err != nil {
 			return err
 		}
@@ -35,7 +36,7 @@ func runDescribe(args []string, dir string, env []string, stdout, stderr io.Writ
 		return codegen.Describe(stdout, g, *asJSON)
 	}()
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))
 		return 1
 	}
 	return 0

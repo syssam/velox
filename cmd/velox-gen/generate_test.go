@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/syssam/velox/internal/genrun"
 )
 
 const genUserSchema = `package veloxschema
@@ -109,7 +111,7 @@ func TestGenerateWritesThenNothingChanges(t *testing.T) {
 		t.Fatalf("first run: %d %q %q", code, out, errs)
 	}
 	for _, f := range []string{"tag.go", "user.go", "velox.go"} {
-		if !isGenerated(filepath.Join(dir, "veloxgen", f)) {
+		if !genrun.IsGenerated(filepath.Join(dir, "veloxgen", f)) {
 			t.Errorf("%s lacks the header", f)
 		}
 	}
@@ -144,7 +146,7 @@ type Item struct{ schema.Schema }
 
 func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")} }
 `
-	other := header + "\n\npackage other\n"
+	other := genrun.Header + "\n\npackage other\n"
 	dir := genModule(t, map[string]string{
 		"schemab/item.go":         itemSchema,
 		"veloxgen/mod/go.mod":     "module example.com/other\n",
@@ -1186,14 +1188,14 @@ func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")}
 	writeFile(t, filepath.Join(dir, "veloxschema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
 	before := treeFiles(t, gen)
 	injected := errors.New("injected failure")
-	renameFile = func(from, to string) error {
+	genrun.RenameFile = func(from, to string) error {
 		if filepath.Base(to) == "user.go" && strings.Contains(from, ".tmp-") {
 			return injected
 		}
 		return os.Rename(from, to)
 	}
 	code, out, errs := runCLI(t, dir, "./veloxschema")
-	renameFile = os.Rename
+	genrun.RenameFile = os.Rename
 	if code != 1 || out != "" || !strings.Contains(errs, "injected failure") {
 		t.Errorf("%d %q %q", code, out, errs)
 	}
@@ -1218,7 +1220,7 @@ func TestGenerateSweepsLeftovers(t *testing.T) {
 	if err := os.Rename(filepath.Join(gen, "tag.go"), filepath.Join(gen, ".tag.go.gone-velox-3")); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(gen, ".pb.gone-velox-4", "x.go"), header+"\n\npackage pb\n")
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-4", "x.go"), genrun.Header+"\n\npackage pb\n")
 	writeFile(t, filepath.Join(gen, ".notes.old-velox"), "mine")
 	before := treeFiles(t, gen)
 	if code, _, _ := runCLI(t, dir, "-check", "./veloxschema"); code != 3 {
@@ -1252,7 +1254,7 @@ func TestGenerateCheckReportsLeftovers(t *testing.T) {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	writeFile(t, filepath.Join(gen, ".user.go.old-velox-1"), "old")
-	writeFile(t, filepath.Join(gen, ".pb.gone-velox-2", "x.go"), header+"\n\npackage pb\n")
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-2", "x.go"), genrun.Header+"\n\npackage pb\n")
 	writeFile(t, filepath.Join(gen, ".notes.old-velox"), "mine")
 	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
 	want := "velox-gen: veloxgen/.pb.gone-velox-2 is left over from an interrupted run\n" +
@@ -1273,7 +1275,7 @@ func TestGenerateKeepsYoursInALeftover(t *testing.T) {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	writeFile(t, filepath.Join(gen, "pb", "keep.txt"), "mine")
-	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "x.go"), header+"\n\npackage pb\n")
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "x.go"), genrun.Header+"\n\npackage pb\n")
 	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "mine.txt"), "mine")
 	code, out, errs := runCLI(t, dir, "./veloxschema")
 	want := "velox-gen: kept veloxgen/.pb.gone-velox-1/mine.txt, which is not velox-gen's, in veloxgen/.pb.gone-velox-1, which an interrupted run left; move it\n"
@@ -1629,7 +1631,7 @@ func TestGeneratePrivacyPolicy(t *testing.T) {
 	// veloxe's applications imported the generated package's privacy:
 	// velox-gen writes it, and code that imports it builds.
 	src, err := os.ReadFile(filepath.Join(dir, "veloxgen", "privacy", "privacy.go"))
-	if err != nil || !strings.HasPrefix(string(src), header) || !strings.Contains(string(src), "DecisionContext = privacy.DecisionContext") {
+	if err != nil || !strings.HasPrefix(string(src), genrun.Header) || !strings.Contains(string(src), "DecisionContext = privacy.DecisionContext") {
 		t.Fatalf("veloxgen/privacy/privacy.go: %v\n%s", err, src)
 	}
 	writeFile(t, filepath.Join(dir, "service", "service.go"), `package service

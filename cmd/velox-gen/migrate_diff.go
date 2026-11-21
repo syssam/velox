@@ -13,6 +13,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -194,14 +195,14 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	}
 
 	// The schema package, as the directory's dialect sees it.
-	pattern, err := schemaPackage(dir, patterns, env)
+	pattern, err := genrun.SchemaPackage(dir, patterns, env)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
 	}
 	to, err := schemaTables(dir, pattern, env, d.Config.Dialect)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))
 		return 1
 	}
 
@@ -349,14 +350,14 @@ func relMigrate(dir string, err error) error {
 		c := &migrate.BlockedError{Findings: slices.Clone(be.Findings)}
 		for i := range c.Findings {
 			if c.Findings[i].Pos != "" {
-				c.Findings[i].Pos = relPos(dir, c.Findings[i].Pos)
+				c.Findings[i].Pos = genrun.RelPos(dir, c.Findings[i].Pos)
 			}
 		}
 		return c
 	}
 	if me, ok := errors.AsType[*migrate.Error](err); ok && me.Pos != "" {
 		e := *me
-		e.Pos = relPos(dir, me.Pos)
+		e.Pos = genrun.RelPos(dir, me.Pos)
 		return &e
 	}
 	return err

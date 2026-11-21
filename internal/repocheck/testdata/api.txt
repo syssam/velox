@@ -1233,6 +1233,14 @@ type Request struct { Protocol int Generator string OutPackage string OutPath st
 type Response struct { Protocol int Files []File Warnings []string Error string }
 type Supports struct { Protocol, Model int }
 
+package generate
+func Run(ctx context.Context, dir string, cfg Config) (Result, error)
+type Config struct { Schema string Out string Package string Plugins []Plugin Check bool Env []string FieldOrder func(entity string, fields []string) []string Stdout io.Writer Stderr io.Writer }
+type Plugin struct { Tool string Options map[string]string Run func(context.Context, *plugin.Request) (*plugin.Response, error) }
+type Result struct { Written []string Removed []string Stale []string Warnings []string }
+var ErrInterrupted
+var ErrStale
+
 package scope
 func (k *Key[V]) From(ctx context.Context) (V, bool)
 func (k *Key[V]) Match(ctx context.Context, v any) error

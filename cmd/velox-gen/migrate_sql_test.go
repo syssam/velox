@@ -11,6 +11,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -245,7 +246,7 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 		{"no position", "", "plain", "", "plain"},
 		{"relative", "veloxschema/a.go:2", "plain", "veloxschema/a.go:2", "plain"},
 	} {
-		got, ok := errors.AsType[*codegen.Error](relErrors(dir, &codegen.Error{Pos: c.pos, Reason: c.reason}))
+		got, ok := errors.AsType[*codegen.Error](genrun.RelErrors(dir, &codegen.Error{Pos: c.pos, Reason: c.reason}))
 		if !ok {
 			t.Fatalf("%s: not a *veloxgen.Error", c.name)
 		}
@@ -260,7 +261,7 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 func TestRelErrorsAtTheRoot(t *testing.T) {
 	root := string(filepath.Separator)
 	reason := "a " + root + " b and " + root + "usr" + root + "lib"
-	if got, ok := errors.AsType[*codegen.Error](relErrors(root, &codegen.Error{Reason: reason})); !ok || got.Reason != reason {
+	if got, ok := errors.AsType[*codegen.Error](genrun.RelErrors(root, &codegen.Error{Reason: reason})); !ok || got.Reason != reason {
 		t.Errorf("got %v, want the reason %q as it was", got, reason)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -38,7 +39,7 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 
 	// A package with no schemas is refused: Atlas would read an empty
 	// output as an empty schema and plan to drop every table.
-	pattern, err := schemaPackage(dir, patterns, env)
+	pattern, err := genrun.SchemaPackage(dir, patterns, env)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
@@ -55,7 +56,7 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 		return codegen.Tables(g, dialect.d)
 	}()
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))
 		return 1
 	}
 

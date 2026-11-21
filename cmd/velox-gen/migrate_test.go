@@ -23,6 +23,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -78,8 +79,8 @@ func TestMigrateDiff(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	// Serial: "all or nothing" replaces writeTemp and renameFile, which the
-	// parallel tests' runs use too.
+	// Serial: "all or nothing" replaces genrun.WriteTemp and
+	// genrun.RenameFile, which the parallel tests' runs use too.
 	dir := tempModuleSerial(t, map[string]string{"veloxschema/user.go": userSchema(`field.String("name")`)})
 	mig := filepath.Join(dir, "migrations")
 	setSchema := func(fields ...string) {
@@ -163,15 +164,15 @@ func TestMigrateDiff(t *testing.T) {
 		}{
 			{"write", func() {
 				n := 0
-				writeTemp = func(dir, pattern string, data []byte) (string, error) {
+				genrun.WriteTemp = func(dir, pattern string, data []byte) (string, error) {
 					if n++; n == 2 {
 						return "", injected
 					}
-					return writeTempFile(dir, pattern, data)
+					return genrun.WriteTempFile(dir, pattern, data)
 				}
 			}},
 			{"rename", func() {
-				renameFile = func(from, to string) error {
+				genrun.RenameFile = func(from, to string) error {
 					if filepath.Base(to) == "velox.sum" && strings.Contains(from, ".tmp-") { // the swap, not the undo
 						return injected
 					}
@@ -181,15 +182,15 @@ func TestMigrateDiff(t *testing.T) {
 		} {
 			c.fail()
 			code, out, errs := runCLI(t, dir, "migrate", "diff")
-			writeTemp, renameFile = writeTempFile, os.Rename
+			genrun.WriteTemp, genrun.RenameFile = genrun.WriteTempFile, os.Rename
 			want(t, c.name, code, out, errs, 1, "", "velox-gen: migrate diff: injected failure\n")
 			if after := dirFiles(t, mig); !reflect.DeepEqual(after, before) {
 				t.Errorf("%s: the directory changed:\n%v\nwas\n%v", c.name, slices.Sorted(maps.Keys(after)), slices.Sorted(maps.Keys(before)))
 			}
 		}
-		renameFile = func(string, string) error { return injected }
+		genrun.RenameFile = func(string, string) error { return injected }
 		code, out, errs := runCLI(t, dir, "migrate", "diff", "-dir", "new/a/b", "-dialect", "sqlite")
-		renameFile = os.Rename
+		genrun.RenameFile = os.Rename
 		want(t, "new directory", code, out, errs, 1, "", "velox-gen: migrate diff: injected failure\n")
 		if exists(filepath.Join(dir, "new")) {
 			t.Error("a failed diff left the directories it made")
@@ -275,9 +276,9 @@ func TestMigrateHashAndLint(t *testing.T) {
 	code, out, errs = run("lint")
 	want(t, "edited lint", code, out, errs, 1, "", "velox-gen: migrate lint: "+stale)
 	before := dirFiles(t, dir)
-	renameFile = func(string, string) error { return errors.New("injected failure") }
+	genrun.RenameFile = func(string, string) error { return errors.New("injected failure") }
 	code, out, errs = run("hash")
-	renameFile = os.Rename
+	genrun.RenameFile = os.Rename
 	want(t, "hash failing", code, out, errs, 1, "", "velox-gen: migrate hash: injected failure\n")
 	if after := dirFiles(t, dir); !reflect.DeepEqual(after, before) {
 		t.Errorf("a failed hash changed the directory:\n%v", slices.Sorted(maps.Keys(after)))

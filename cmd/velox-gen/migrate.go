@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/migrate"
 )
 
@@ -99,14 +100,14 @@ func (c *migrateCmd) stopped(interrupted bool, code int) int {
 // directory it makes until the write is done or undone, the directories it
 // made among the undo. It reports whether a signal arrived meanwhile.
 func writeDirHeld(abs string, files map[string][]byte) (bool, error) {
-	h := holdSignals()
-	remove, err := makeDirs(abs)
+	h := genrun.HoldSignals()
+	remove, err := genrun.MakeDirs(abs)
 	if err == nil {
-		if err = writeAll(abs, files, nil); err != nil {
+		if err = genrun.WriteAll(abs, files, nil); err != nil {
 			err = undoDirs(err, remove)
 		}
 	}
-	return h.release(), err
+	return h.Release(), err
 }
 
 // undoDirs is err, naming the directories of -dir a failed write made that
@@ -265,7 +266,7 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	if *check {
 		return c.fail(3, &migrate.SumError{Path: c.path("velox.sum")})
 	}
-	interrupted, err := writeAllHeld(abs, map[string][]byte{"velox.sum": sum}, nil)
+	interrupted, err := genrun.WriteAllHeld(abs, map[string][]byte{"velox.sum": sum}, nil)
 	if err != nil {
 		return c.stopped(interrupted, c.fail(1, err))
 	}
