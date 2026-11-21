@@ -183,8 +183,10 @@ func allShown(shown []ArgShow, n int) bool {
 // as MySQL's "Duplicate entry 'x' for key …" and PostgreSQL's "invalid
 // input syntax for type uuid: \"x\"" do. For a constraint violation it
 // names the entity, the kind, the constraint and the driver's code; for
-// any other error, the Go types of its chain, the driver's code when it
-// has one, and whether a context's end or velox's deadline caused it.
+// one of velox's own errors that holds no value (safeError), the entity and
+// that error's fixed text; for any other error, the Go types of its chain.
+// It adds the driver's code when there is one, and whether a context's end
+// or velox's deadline caused the error.
 func RedactedError(st *Statement, err error) string {
 	entity := ""
 	if st.Entity != nil {
@@ -205,6 +207,8 @@ func RedactedError(st *Statement, err error) string {
 			b.WriteString("velox: " + ce.Entity + ": ")
 		}
 		b.WriteString(ce.Kind.String() + " constraint " + name + " violated")
+	} else if safe := safeError(entity, err); safe != "" {
+		b.WriteString(safe)
 	} else {
 		b.WriteString(errTypes(err))
 	}
@@ -234,4 +238,44 @@ func errTypes(err error) string {
 		}
 	}
 	return strings.Join(ts, " > ")
+}
+
+// safeSentinels are velox's errors whose text is fixed and holds no value,
+// in the order safeError names them. ErrOutOfRange and ErrNoShard are not
+// among them, nor a ValidationError's Err, a PolicyError's Err or an
+// EdgeError's keys: they may hold one.
+var safeSentinels = [...]error{
+	ErrStale, ErrNotFound, ErrNotSingular, ErrUnbounded, ErrNoWhere,
+	ErrLimitTooLarge, ErrTooManyRows, ErrImmutable, ErrVersionSet,
+	ErrPolicyUpsert, ErrOutsideTx, ErrTxControl, ErrDryRun, ErrDenied,
+	ErrTimeout, ErrLocked,
+}
+
+// safeError names err, a statement's error on entity, by what of it is
+// velox's own and holds no value: a ValidationError's entity and field
+// alone, as its Err is the validator's; else an EdgeError's entity and edge
+// and the fixed text of each of safeSentinels that err matches. It never
+// prints the text of the errors that wrap them, and is "" when err matches
+// none.
+func safeError(entity string, err error) string {
+	if ve, ok := dberr.As[*ValidationError](err); ok {
+		return "velox: " + ve.Entity + "." + ve.Field + ": validation failed"
+	}
+	var parts []string
+	if ee, ok := dberr.As[*EdgeError](err); ok {
+		parts = append(parts, ee.Entity+": edge "+ee.Edge)
+		entity = ""
+	}
+	for _, s := range safeSentinels {
+		if dberr.Is(err, s) {
+			parts = append(parts, s.Error())
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	if entity != "" {
+		parts[0] = entity + ": " + parts[0]
+	}
+	return "velox: " + strings.Join(parts, "; ")
 }

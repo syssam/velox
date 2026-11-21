@@ -29,8 +29,11 @@ func LogArgs() LogOption { return engine.LogArgs() }
 // A driver's message can echo a value, as MySQL's "Duplicate entry 'x' for
 // key …" does, so err is the error's text only with LogArgs and when every
 // argument of the statement was shown. Otherwise it is redacted: a
-// constraint violation's entity, kind, constraint name and driver code, or
-// any other error's Go types and driver code, with "the message is hidden".
+// constraint violation's entity, kind, constraint name and driver code; for
+// one of velox's own errors that holds no value, such as ErrNotFound, the
+// entity and that error's fixed text; a ValidationError's entity and field;
+// or any other error's Go types and driver code; each with "the message is
+// hidden".
 //
 //	db, err := velox.Connect("postgres", dsn, velox.WithLog(slog.Default(), velox.LogArgs()))
 //

@@ -126,6 +126,36 @@ func TestAfterCommitSavepoint(t *testing.T) {
 	}
 }
 
+// TestAfterCommitStaleSavepoint: a nested Tx's DB, kept past its return,
+// queues nothing on the transaction still running: AfterCommit returns an
+// error, whether the savepoint rolled back or was released, and nothing
+// runs after the outer commit.
+func TestAfterCommitStaleSavepoint(t *testing.T) {
+	db := useTxDB(t)
+	ran := 0
+	fn := func(context.Context) { ran++ }
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		var rolled, released *velox.DB
+		_ = tx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { rolled = sp; return errors.New("boom") })
+		if err := tx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { released = sp; return nil }); err != nil {
+			return err
+		}
+		if err := velox.AfterCommit(rolled, fn); err == nil {
+			t.Error("a rolled-back savepoint's DB queued a function")
+		}
+		if err := velox.AfterCommit(released, fn); err == nil {
+			t.Error("a released savepoint's DB queued a function")
+		}
+		return velox.AfterCommit(tx, func(context.Context) {})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ran != 0 {
+		t.Errorf("a stale savepoint's function ran %d times", ran)
+	}
+}
+
 // TestAfterCommitRefusals: outside a transaction, after it ended, on a
 // UseTx DB (and its savepoint) and with a nil fn, AfterCommit returns an
 // error and nothing runs.

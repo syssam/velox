@@ -1,6 +1,11 @@
 package engine
 
-import "testing"
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+)
 
 // TestSameArg: bytes compare by content, and a value Go cannot compare is
 // not the same, so its statement's arguments are all hidden.
@@ -44,5 +49,48 @@ func TestShownArgsUnknown(t *testing.T) {
 	st.Args = []any{"s"}
 	if s := ShownArgs(Postgres, st); s != nil {
 		t.Errorf("fewer args: %v", s)
+	}
+}
+
+// TestRedactedErrorNamesSafeErrors: for each of velox's errors that hold no
+// value, the log names the entity and the error's own fixed text, through
+// any wrapping, a multi-wrap included; never the wrapper's text, which
+// carries the secret here. ValidationError names its field alone, EdgeError
+// its edge alone, and ErrOutOfRange and ErrNoShard fall back to the types.
+func TestRedactedErrorNamesSafeErrors(t *testing.T) {
+	st := &Statement{Entity: &EntityInfo{Name: "gen.Invoice"}}
+	wrap := func(e error) error { return fmt.Errorf("velox: value 'the-secret': %w", e) }
+	for _, s := range safeSentinels {
+		got := RedactedError(st, wrap(s))
+		if want := "velox: gen.Invoice: " + s.Error(); !strings.HasPrefix(got, want) {
+			t.Errorf("%v: got %q, want prefix %q", s, got, want)
+		}
+		if strings.Contains(got, "secret") {
+			t.Errorf("%v: leaked: %q", s, got)
+		}
+	}
+	for _, c := range []struct {
+		name string
+		err  error
+		want string // prefix
+	}{
+		{"multi-wrap", fmt.Errorf("velox: the-secret: %w (%w)", ErrStale, ErrNotFound),
+			"velox: gen.Invoice: " + ErrStale.Error() + "; " + ErrNotFound.Error()},
+		{"policy", wrap(&PolicyError{Entity: "gen.Invoice", Op: OpUpdate, Err: errors.New("owner is the-secret")}),
+			"velox: gen.Invoice: " + ErrDenied.Error() + ";"},
+		{"validation", wrap(&ValidationError{Entity: "gen.Invoice", Field: "Number", Err: fmt.Errorf("bad the-secret: %w", ErrNotFound)}),
+			"velox: gen.Invoice.Number: validation failed;"},
+		{"edge", wrap(&EdgeError{Entity: "gen.Post", Edge: "tags", Keys: []any{"the-secret"}, Err: fmt.Errorf("velox: %w", ErrNotFound)}),
+			"velox: gen.Post: edge tags; " + ErrNotFound.Error() + ";"},
+		{"out of range", wrap(ErrOutOfRange), "*fmt.wrapError > *errors.errorString;"},
+		{"no shard", wrap(ErrNoShard), "*fmt.wrapError > *errors.errorString;"},
+	} {
+		got := RedactedError(st, c.err)
+		if !strings.HasPrefix(got, c.want) {
+			t.Errorf("%s: got %q, want prefix %q", c.name, got, c.want)
+		}
+		if strings.Contains(got, "secret") {
+			t.Errorf("%s: leaked: %q", c.name, got)
+		}
 	}
 }

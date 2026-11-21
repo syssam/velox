@@ -46,7 +46,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   velox cannot tie some arguments to a column, such as an `Expr`'s or raw
   SQL's, and those are `"<hidden>"`. A driver's error text, which can echo a
   value, is printed only with `LogArgs` and every argument shown; otherwise
-  the error is redacted to its constraint or type and driver code.
+  the error is redacted to its constraint, velox's own error by its fixed
+  text (`ErrNotFound`…, a `ValidationError`'s field), or its type, and the
+  driver's code.
 - Hooks and row filters for every entity (ADR 0098), as ent's `client.Use`
   and `client.Intercept`: `velox.WithHooksAll(hooks...)` runs hooks on every
   entity's writes, before the schema's and `WithHooks[E]`'s, and

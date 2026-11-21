@@ -1687,8 +1687,9 @@ arguments too. A Sensitive column's argument is always `"<sensitive>"`.
 An argument velox cannot tie to a column, such as an `Expr`'s or raw
 SQL's, is `"<hidden>"`. A driver's error message can echo a value, so it
 is printed only with `LogArgs` and when every argument was shown;
-otherwise the record names the constraint, or the error's type, and the
-driver's code.
+otherwise the record names the constraint, velox's own error (such as
+`not found`, or a field's `validation failed`), or the error's type, and
+the driver's code.
 
 ## GraphQL
 

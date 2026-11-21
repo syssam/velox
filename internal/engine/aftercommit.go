@@ -9,8 +9,9 @@ import (
 // transaction has committed (ADR 0100). db must be a transaction's DB: the
 // tx a Tx gives its fn, a savepoint's, or Mutation.DB inside one. It
 // returns an error, and queues nothing, for a nil fn, for a db in no
-// transaction, for one whose transaction has ended or is ending, and for a
-// UseTx DB, whose commit velox never sees.
+// transaction, for one whose transaction has ended or is ending, for a
+// nested Tx's db once that Tx has returned (its savepoint released or
+// rolled back), and for a UseTx DB, whose commit velox never sees.
 //
 // The root frame's mutex orders it with the transaction's end (takeAfter,
 // closeAfter): a call that comes too late gets an error, and is never
@@ -29,6 +30,9 @@ func AfterCommit(db *DB, fn func(context.Context)) error {
 	defer f.afterMu.Unlock()
 	if f.afterClosed || f.ended.Load() {
 		return errors.New("velox: AfterCommit: the transaction has ended")
+	}
+	if db.txSelf != nil && db.txSelf.ended.Load() {
+		return errors.New("velox: AfterCommit: the DB is a nested Tx's that has returned; call it on a DB of the transaction that is still running")
 	}
 	f.after = append(f.after, fn)
 	return nil

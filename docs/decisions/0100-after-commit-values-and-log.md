@@ -51,6 +51,10 @@ function. `fn` runs once the outermost transaction has committed.
   - a DB in no transaction, so the call fails instead of running `fn` at
     once;
   - a transaction that has ended, or whose end has taken the queue;
+  - a nested Tx's DB once that Tx has returned, released or rolled back.
+    Each handle knows its own frame (`DB.txSelf`), whose `ended` the
+    savepoint sets on return, so a stale handle cannot queue onto the
+    root that is still running;
   - a UseTx DB (0066) and its savepoints. The caller commits that
     transaction, and velox never sees it end.
 
@@ -155,6 +159,17 @@ that growth is in the engine types an entity's package reaches.
   - for a constraint violation (a `*ConstraintError` in the chain, or a
     driver error `dberr.Constraint` reads), the entity, the kind, the
     constraint's name and the driver's code;
+  - for one of velox's own errors whose text is fixed (`safeError`):
+    `ErrNotFound`, `ErrNotSingular`, `ErrStale`, `ErrUnbounded`,
+    `ErrNoWhere`, `ErrLimitTooLarge`, `ErrTooManyRows`, `ErrImmutable`,
+    `ErrVersionSet`, `ErrPolicyUpsert`, `ErrOutsideTx`, `ErrTxControl`,
+    `ErrDryRun`, `ErrDenied` (a `PolicyError`, not its `Err`),
+    `ErrTimeout` and `ErrLocked`, matched with `dberr.Is` through any
+    wrapping, the entity and each matched error's own text, never the
+    wrapper's; an `EdgeError`'s entity and edge, not its keys; a
+    `ValidationError`'s entity and field, then "validation failed",
+    never its `Err`. `ErrOutOfRange` and `ErrNoShard` are not in the set:
+    their wrappers name a value;
   - for any other error, the Go types of its chain, the driver's code
     when `dberr.DriverCode` has one, and whether a context's end or
     velox's deadline caused it.

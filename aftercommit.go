@@ -33,8 +33,8 @@ import (
 // again with the first panic's value, the transaction committed.
 //
 // AfterCommit returns an error, and queues nothing, for a nil fn, on a DB in
-// no transaction, on one whose transaction has ended or is ending, and on a
-// UseTx DB, whose commit is your code's: velox never sees it. Call it from
+// no transaction, on one whose transaction has ended or is ending, on a
+// nested Tx's DB once that Tx has returned, and on a UseTx DB, whose commit is your code's: velox never sees it. Call it from
 // the goroutine that runs the transaction's fn, as for tx's statements; a
 // call that races the end of the transaction returns an error and is never
 // lost.

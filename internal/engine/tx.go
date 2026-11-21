@@ -579,6 +579,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		}
 	}()
 	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
+	defer f.ended.Store(true) // its handles are stale once it has returned (AfterCommit)
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		db.batch.truncate(mark)
@@ -728,7 +729,9 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 
 // txFrame is a transaction's or a savepoint's DB and the context its fn
 // gets, in one allocation. ended is set, on the transaction's own frame (its
-// root), once the transaction has committed or rolled back.
+// root), once the transaction has committed or rolled back, and on a
+// savepoint's once its nested Tx has returned, released or rolled back.
+// Foreign reads only the root's.
 //
 // broken is set, on the root, once a savepoint's ROLLBACK TO or its RELEASE
 // has failed, as the savepoint's work may still be in the transaction, or once
@@ -776,7 +779,7 @@ func newTxFrame(ctx context.Context, db DB, root *txFrame) *txFrame {
 	if root == nil {
 		root = f
 	}
-	f.db.txRoot = root
+	f.db.txRoot, f.db.txSelf = root, f
 	f.ctx = txCtx{Context: ctx, root: root}
 	return f
 }

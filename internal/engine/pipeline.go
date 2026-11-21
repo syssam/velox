@@ -45,6 +45,9 @@ type DB struct {
 	// txRoot is, in a transaction, its frame: the identity the mark on its
 	// fn's ctx carries, which its savepoints share. Nil elsewhere.
 	txRoot *txFrame
+	// txSelf is, in a transaction, the frame of this handle: the root's for
+	// the transaction's own, a savepoint's for a nested Tx's. Nil elsewhere.
+	txSelf *txFrame
 	// pool is the *sql.DB of Open and Connect; nil on any other DB. owned says
 	// Connect opened it, so that Close closes it. A field naming *sql.DB would
 	// put database/sql's types in the export data of every package that uses a
