@@ -1817,6 +1817,17 @@ them too. The
 [graphql example](../examples/graphql) is a complete server, and its README
 walks through each step.
 
+The same generated code also serves
+[github.com/syssam/graphql-go](https://github.com/syssam/graphql-go), whose
+generator gqlc binds the SDL. Its adapter is `veloxgql/graphqlgo`:
+`graphql.NewExecutor(s, graphqlgo.With(db, veloxgql.WithLimits(l))...)`
+puts velox's state in each operation, so edges batch and reads are
+projected as under gqlgen, and `graphqlgo.Scalars()` binds velox's scalars
+in the schema. graphql-go keeps its own limits, cost and timeouts;
+`graphqlgo.Limits(l)` maps velox's onto them. A mutation runs in one
+transaction only with `graphqlgo.WithMutationTx()`, and velox's cost only
+with `graphqlgo.WithCost()`.
+
 ## Where to go next
 
 - [examples/](../examples/README.md): one runnable program per topic, plus

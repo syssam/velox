@@ -14,7 +14,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/cost"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/request"
 )
@@ -130,6 +129,9 @@ type Extension struct {
 	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
 	// batchScope is veloxgql.WithBatchScope's function, or nil.
 	batchScope func(context.Context) any
+	// foreign are the values of veloxgql.AdapterOption, which are another
+	// adapter's: gqlgen's adapter has none, and Validate refuses them.
+	foreign []any
 }
 
 // NewExtension returns the extension that serves a schema on db, configured
@@ -146,7 +148,7 @@ type Extension struct {
 // driver's, which name entities, tables, constraints and scope values.
 func NewExtension(db *velox.DB, opts ...veloxgql.Option) *Extension {
 	c := veloxgql.NewConfig(opts...)
-	return &Extension{db: db, limits: c.Limits, txOpts: c.TxOptions, txFilter: c.TxFilter, batchScope: c.BatchScope}
+	return &Extension{db: db, limits: c.Limits, txOpts: c.TxOptions, txFilter: c.TxFilter, batchScope: c.BatchScope, foreign: c.Adapter}
 }
 
 // NewContext returns ctx with the extension's DB and limits, as a query
@@ -195,8 +197,9 @@ var errRollback = errors.New("veloxgql: the response has errors")
 func (*Extension) ExtensionName() string { return "VeloxDB" }
 
 // Validate implements graphql.HandlerExtension: it refuses a nil DB, a
-// negative limit, and transaction options that ask for
-// velox.TxRetrySerializable, when the server takes the extension.
+// negative limit, transaction options that ask for
+// velox.TxRetrySerializable, and an option of another adapter (such as
+// graphqlgo.WithMutationTx), when the server takes the extension.
 func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	if es != nil {
 		e.schema = es.Schema()
@@ -210,6 +213,9 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	}
 	if n := velox.TxRetries(e.txOpts...); n > 0 {
 		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
+	}
+	if len(e.foreign) > 0 {
+		return fmt.Errorf("gqlgenx.NewExtension: an option of another adapter (%T), which gqlgen's does not take", e.foreign[0])
 	}
 	return nil
 }
@@ -229,23 +235,10 @@ func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawP
 // refuses a request whose veloxgql.Cost is over MaxCost with veloxgql.ErrTooCostly. gqlgen runs
 // it after validation and before any resolver, so no statement is sent.
 func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error {
-	if e.schema == nil || rc.Operation == nil {
+	err := request.CostError(e.schema, rc.Operation, rc.Variables, e.limits)
+	if err == nil {
 		return nil
 	}
-	data, meta, list := cost.Of(e.schema, rc.Operation, rc.Variables, request.CostLimits(e.limits))
-	var msg string
-	if meta > int64(e.limits.MaxIntrospectionCost) {
-		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", veloxgql.ErrTooCostly, meta, e.limits.MaxIntrospectionCost)
-	} else if data > int64(e.limits.MaxCost) {
-		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", veloxgql.ErrTooCostly, data, e.limits.MaxCost)
-		if list != "" {
-			// A client cannot lower what a list charges, as it can a page.
-			msg += fmt.Sprintf("; a list such as %s costs its limit for each parent, however few rows it has: the schema lowers that with graphql.MaxList on the edge, or makes the edge a Connection", list)
-		}
-	} else {
-		return nil
-	}
-	err := &gqlcore.Error{Code: veloxgql.CodeTooCostly, Msg: msg, Err: veloxgql.ErrTooCostly}
 	return &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()}
 }
 

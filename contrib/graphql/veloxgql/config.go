@@ -23,6 +23,10 @@ type Config struct {
 	TxFilter func(ctx context.Context, op *ast.OperationDefinition) bool
 	// BatchScope is WithBatchScope's function, or nil.
 	BatchScope func(context.Context) any
+	// Adapter holds the values of the options of one adapter
+	// (AdapterOption), in order, which only that adapter reads. An adapter
+	// refuses a value it does not know: an option of another engine.
+	Adapter []any
 }
 
 // Option configures an adapter's Config. The With functions make them; the
@@ -40,6 +44,14 @@ func NewConfig(opts ...Option) Config {
 		o.apply(&c)
 	}
 	return c
+}
+
+// AdapterOption is an Option that appends v to Config.Adapter: an adapter
+// makes its own options with it, such as graphqlgo.WithMutationTx, so that
+// they are given with the others. v is the adapter's own value, which no
+// other adapter takes.
+func AdapterOption(v any) Option {
+	return Option{func(c *Config) { c.Adapter = append(c.Adapter, v) }}
 }
 
 // WithLimits sets the limits to l, each zero field of l taken from

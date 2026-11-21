@@ -2,6 +2,7 @@ package graphql_test
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -99,6 +100,21 @@ func TestGqlgenxImportsNoGraphqlGo(t *testing.T) {
 		t.Skip("runs go list")
 	}
 	refuse(t, "gqlgenx imports no graphql-go", []string{"./veloxgql/gqlgenx"}, graphqlGo)
+}
+
+// TestGraphqlgoImportsNoGqlgen: graphql-go's adapter compiles no gqlgen and
+// no net/http: it imports graphql-go and the core.
+func TestGraphqlgoImportsNoGqlgen(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs go list")
+	}
+	refuse(t, "graphqlgo imports no gqlgen", []string{"./veloxgql/graphqlgo"}, gqlgen, "net/http", "github.com/sosodev/duration")
+	deps := depends(t, "./veloxgql/graphqlgo")
+	for _, want := range []string{graphqlGo, "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"} {
+		if !slices.Contains(deps, want) {
+			t.Errorf("graphqlgo does not depend on %s", want)
+		}
+	}
 }
 
 // TestGeneratorImportsNoEngine: the plugin and the packages that write the

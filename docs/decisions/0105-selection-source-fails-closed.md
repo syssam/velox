@@ -36,7 +36,8 @@ N-V2.
 - Every gqlgraph read (`Paginate`, an edge's connection, `EdgeOne`,
   `EdgeList`) fails without a source, before any statement, with
   `veloxgql.ErrNoSelectionSource` joined with `ErrNoDB`: the error names
-  `gqlgenx.NewExtension`, which puts both in the context. Nothing logs and
+  the adapters, `gqlgenx.NewExtension` or `graphqlgo.With` (0106), which
+  put both in the context. Nothing logs and
   nothing falls back. `Present` shows it as "internal error".
 - With a source, the rest is as before: outside a field (an application's
   own code), or in another field, a read is alone; a selection the source

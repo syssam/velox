@@ -609,3 +609,29 @@ func fields(l veloxgql.Limits) []struct {
 		{"MaxResponseBytes", l.MaxResponseBytes},
 	}
 }
+
+// CostError is the error of a request that costs too much under l: one whose
+// introspection costs over l.MaxIntrospectionCost, or the rest over
+// l.MaxCost, by cost.Of of schema, op and vars. It is a coded error of
+// veloxgql.CodeTooCostly that wraps veloxgql.ErrTooCostly; nil when the
+// request is within both limits, or op is nil.
+func CostError(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l veloxgql.Limits) *gqlcore.Error {
+	if schema == nil || op == nil {
+		return nil
+	}
+	data, meta, list := cost.Of(schema, op, vars, CostLimits(l))
+	var msg string
+	switch {
+	case meta > int64(l.MaxIntrospectionCost):
+		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", veloxgql.ErrTooCostly, meta, l.MaxIntrospectionCost)
+	case data > int64(l.MaxCost):
+		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", veloxgql.ErrTooCostly, data, l.MaxCost)
+		if list != "" {
+			// A client cannot lower what a list charges, as it can a page.
+			msg += fmt.Sprintf("; a list such as %s costs its limit for each parent, however few rows it has: the schema lowers that with graphql.MaxList on the edge, or makes the edge a Connection", list)
+		}
+	default:
+		return nil
+	}
+	return &gqlcore.Error{Code: veloxgql.CodeTooCostly, Msg: msg, Err: veloxgql.ErrTooCostly}
+}

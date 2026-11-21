@@ -15,6 +15,7 @@ import (
 // the API edits this list: a name that generated code alone calls lives in
 // package gqlgraph, and one of gqlgen alone in package gqlgenx.
 var publicAPI = []string{
+	"AdapterOption",
 	"Batch",
 	"Bytes",
 	"Bytes.MarshalGQL",

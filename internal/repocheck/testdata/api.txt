@@ -1571,6 +1571,7 @@ func (u *Uint64) UnmarshalGQL(v any) error
 func (u UUID) MarshalGQL(w io.Writer)
 func (u UUID) String() string
 func (u Uint64) MarshalGQL(w io.Writer)
+func AdapterOption(v any) Option
 func Batch[E any](ctx context.Context, rows []*E)
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int
 func DB(ctx context.Context) *velox.DB
@@ -1586,7 +1587,7 @@ func WithLimits(l Limits) Option
 func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option
 func WithTxOptions(opts ...velox.TxOption) Option
 type Bytes []byte
-type Config struct { Limits Limits TxOptions []velox.TxOption TxFilter func(ctx context.Context, op *ast.OperationDefinition) bool BatchScope func(context.Context) any }
+type Config struct { Limits Limits TxOptions []velox.TxOption TxFilter func(ctx context.Context, op *ast.OperationDefinition) bool BatchScope func(context.Context) any Adapter []any }
 type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
 type JSON json.RawMessage
@@ -1641,6 +1642,14 @@ func UnmarshalUint64(v any) (uint64, error)
 type Extension struct { }
 type PresenterOption struct { }
 type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
+
+package contrib/graphql/veloxgql/graphqlgo
+func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter
+func Limits(l veloxgql.Limits) []graphql.ExecutorOption
+func Scalars() graphql.SchemaOption
+func With(db *velox.DB, opts ...veloxgql.Option) []graphql.ExecutorOption
+func WithCost() veloxgql.Option
+func WithMutationTx() veloxgql.Option
 
 package contrib/veloxotel
 func Options(cfg Config) []velox.Option

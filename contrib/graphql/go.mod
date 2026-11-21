@@ -8,6 +8,7 @@ require (
 	github.com/99designs/gqlgen v0.17.86
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/syssam/graphql-go v0.0.0-20261029022150-3e0050be7462
 	github.com/syssam/velox v0.0.0-00010101000000-000000000000
 	github.com/vektah/gqlparser/v2 v2.5.59
 	modernc.org/sqlite v1.60.1
@@ -26,7 +27,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
