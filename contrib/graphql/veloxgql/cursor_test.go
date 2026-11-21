@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // terms are order terms F0, F1, … ascending with the values vs.
@@ -244,4 +245,41 @@ func trailingBits(s string) string {
 	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 	i := strings.IndexByte(alphabet, s[len(s)-1])
 	return s[:len(s)-1] + string(alphabet[i^1])
+}
+
+// TestCursorLegacy: a cursor veloxe wrote (the parity probe's) decodes
+// through UnmarshalGQL and UnmarshalGQLContext with no error, to a Cursor
+// whose Key is the legacy cursor, which keeps the error DecodeCursor gives
+// its text, for a connection to use or return.
+// DecodeCursor still refuses it, and any other text still fails in
+// UnmarshalGQL as it did.
+func TestCursorLegacy(t *testing.T) {
+	for _, s := range []string{"gqFpAaF2wA", "gqFpAqF2plVzZXItNA", "gqFpA6F2FA"} {
+		_, want := veloxgql.DecodeCursor(s)
+		if !errors.Is(want, veloxgql.ErrBadCursor) {
+			t.Fatalf("DecodeCursor(%q) = %v, want ErrBadCursor", s, want)
+		}
+		for name, un := range map[string]func(*veloxgql.Cursor) error{
+			"UnmarshalGQL":        func(c *veloxgql.Cursor) error { return c.UnmarshalGQL(s) },
+			"UnmarshalGQLContext": func(c *veloxgql.Cursor) error { return c.UnmarshalGQLContext(context.Background(), s) },
+		} {
+			c := veloxgql.Cursor{Type: "User", Key: int64(9)}
+			if err := un(&c); err != nil {
+				t.Errorf("%s(%q) = %v, want no error", name, s, err)
+				continue
+			}
+			l, ok := c.Key.(*gqlcore.LegacyCursor)
+			if c.Type != "" || c.Terms != nil || !ok {
+				t.Errorf("%s(%q) = %+v, want only the legacy cursor as the key", name, s, c)
+				continue
+			}
+			if l.Err == nil || l.Err.Error() != want.Error() || !errors.Is(l.Err, veloxgql.ErrBadCursor) {
+				t.Errorf("%s(%q): kept %v, want %v", name, s, l.Err, want)
+			}
+		}
+	}
+	var c veloxgql.Cursor
+	if err := c.UnmarshalGQL("garbage!!"); !errors.Is(err, veloxgql.ErrBadCursor) {
+		t.Errorf("UnmarshalGQL(garbage!!) = %v, want ErrBadCursor", err)
+	}
 }

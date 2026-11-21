@@ -113,6 +113,13 @@ type Type struct {
 	// an error (BAD_USER_INPUT) in a not, an or or a has<Edge>With, and left
 	// out of an and; and MaxFilterWidth and MaxFilterNodes do not apply,
 	// as veloxe had no such limits. MaxFilterDepth does.
+	//
+	// Veloxe gives the type's connections and foreign keys veloxe's
+	// semantics too (ADR 0110): a connection takes a cursor veloxe wrote
+	// (see Paginate); an order of one term breaks ties by the key in
+	// that term's direction, where it is otherwise ASC; a page after a
+	// cursor has hasPreviousPage, and one before a cursor hasNextPage; and
+	// EdgeIDField's predicates are the column's alone.
 	Veloxe bool
 
 	fieldsOnce sync.Once
@@ -412,6 +419,9 @@ type Connection struct {
 	terms []term             // the order's terms, then the key's columns
 	key   int                // the index in terms of the key's first column
 	after any                // the row the page starts after, in the paging direction
+	// veloxe is the Type's Veloxe: a cursor veloxe wrote is read, and a
+	// page that starts at a cursor has a page on the cursor's side.
+	veloxe bool
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
@@ -453,6 +463,13 @@ type Connection struct {
 // veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a cursor of
 // another type, taken under another order, or whose
 // values are not of the order's types.
+//
+// Under Type.Veloxe a cursor veloxe wrote, which veloxgql.Cursor's
+// UnmarshalGQL keeps, is read as veloxe read it: its key as the key, and
+// its values as the order's, whatever order it was taken under. One whose
+// number of values is not the order's number of terms fails with
+// ErrBadCursor. Without Veloxe such a cursor fails with the error
+// veloxgql.DecodeCursor gives its text.
 func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
 	if err := needSource(ctx); err != nil {
 		return nil, err
@@ -533,14 +550,19 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 	if len(order) > lim.MaxOrderTerms {
 		return nil, InputErrorf("%s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
 	}
+	keyDir := veloxgql.OrderDirectionAsc
+	if c.Veloxe && len(order) == 1 && order[0].Direction == veloxgql.OrderDirectionDesc {
+		// veloxe's tie-break: the key in the one term's direction.
+		keyDir = veloxgql.OrderDirectionDesc
+	}
 	for i := range c.Key {
-		t, err := newTerm(own, &c.Key[i], veloxgql.OrderDirectionAsc)
+		t, err := newTerm(own, &c.Key[i], keyDir)
 		if err != nil {
 			return nil, err
 		}
 		terms = append(terms, t)
 	}
-	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order)}
+	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order), veloxe: c.Veloxe}
 	var joined []int
 	for _, t := range terms {
 		if t.edge != 0 && !slices.Contains(joined, t.edge) {
@@ -577,7 +599,9 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 //     reverses the rows read.
 //   - It reads one row more than the page: that row's presence is
 //     hasNextPage forward and hasPreviousPage backward. The other is false:
-//     Relay lets a server say false when it cannot tell cheaply.
+//     Relay lets a server say false when it cannot tell cheaply. Under
+//     Type.Veloxe it is true when the page starts at a cursor, after or
+//     before, as veloxe said.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap: the
 // MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
@@ -660,8 +684,11 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	}
 	if c.back {
 		p.Info.HasPreviousPage = more
+		// veloxe's: a page before a cursor has one after it.
+		p.Info.HasNextPage = c.veloxe && c.after != nil
 	} else {
 		p.Info.HasNextPage = more
+		p.Info.HasPreviousPage = c.veloxe && c.after != nil
 	}
 	if n > 0 {
 		p.Info.StartCursor, p.Info.EndCursor = &p.Cursors[0], &p.Cursors[n-1]
@@ -692,6 +719,15 @@ func (c *Connection) field(i int) string {
 // row it stands for: a zero row with the order's and the key's columns set
 // from it, for Query.After.
 func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
+	if l, ok := cur.Key.(*gqlcore.LegacyCursor); ok {
+		if !c.veloxe {
+			return nil, l.Err
+		}
+		var err error
+		if cur, err = c.legacy(l); err != nil {
+			return nil, err
+		}
+	}
 	last := len(c.terms) - 1
 	order := make([]cursorOrder, last)
 	for i := range c.terms[:last] {
@@ -711,6 +747,25 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 		return nil, gqlcore.Within(c.typ+" cursor", err)
 	}
 	return x, nil
+}
+
+// legacy is l, a cursor veloxe wrote, as a cursor of the connection's own
+// type and order, as veloxe read one: its key is the key, and its values
+// are the order's, whatever order it was taken under. A cursor whose number
+// of values is not the order's number of terms, or a connection whose key
+// has more than one column, which veloxe's cursors never had, is refused as
+// a cursor taken under another order.
+func (c *Connection) legacy(l *gqlcore.LegacyCursor) (veloxgql.Cursor, error) {
+	last := len(c.terms) - 1
+	vs, ok := l.Values(c.key)
+	if !ok || c.key != last {
+		return veloxgql.Cursor{}, errOtherOrder(c.typ)
+	}
+	terms := make([]veloxgql.CursorTerm, len(vs))
+	for i, v := range vs {
+		terms[i] = veloxgql.CursorTerm{Field: c.field(i), Direction: c.terms[i].dir, Value: v}
+	}
+	return veloxgql.Cursor{Type: c.typ, Terms: terms, Key: l.Key}, nil
 }
 
 // pageSize is the page size args ask for, and whether they page backward;

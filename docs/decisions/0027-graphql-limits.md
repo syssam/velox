@@ -6,7 +6,9 @@
   `scope.ErrNoScope` presents as UNAUTHENTICATED, `scope.ErrMismatch` as FORBIDDEN.
   Its explicit-null rules (a null clears a field, a null `<edge>ID` is refused) are
   superseded by [0045](0045-graphql-input-setters.md): a null is a field not given, and
-  only `clear<Field>` or `clear<Edge>` clears.
+  only `clear<Field>` or `clear<Edge>` clears. Under compat=veloxe a foreign key's
+  predicates are the column's alone, as veloxe's were, by
+  [0110](0110-veloxe-compat-paging-and-fk-filters.md).
 
 ## Context
 

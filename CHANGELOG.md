@@ -21,6 +21,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Under velox-graphql's `compat=veloxe` (`gqlgraph.Type.Veloxe`), a
+  connection behaves for clients as veloxe's did (ADR 0110). It takes a
+  cursor veloxe wrote, so a list a client paged before the deploy pages
+  on. The cursor's key is the key, and its values are the current order's;
+  a cursor with another number of values fails as one taken under another
+  order. Connections still write velox's cursors. An order of one term
+  breaks ties by the key in that term's direction. A page after a cursor
+  has `hasPreviousPage`, and a page before a cursor `hasNextPage`. A
+  foreign key's predicates (`customerId`, `customerIdIn`,
+  `customerIdIsNil`, …) are the column's alone, with no EXISTS on the
+  target. Without compat, a veloxe cursor fails with the same error as
+  before, when the connection is built rather than when the argument is
+  decoded. Generated code does not change.
 - Package `contrib/graphql/veloxgql/graphqlgo` serves velox-graphql's
   generated code under github.com/syssam/graphql-go (ADR 0106), with
   graphql-go's own option types: `graphqlgo.With(db)` is the executor

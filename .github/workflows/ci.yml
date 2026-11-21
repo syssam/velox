@@ -273,6 +273,7 @@ jobs:
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql/internal/cost
+          go test -run XXX -fuzz '^FuzzLegacyCursor$' -fuzztime 10s ./veloxgql/internal/gqlcore
       - name: examples/graphql
         working-directory: examples
         run: |

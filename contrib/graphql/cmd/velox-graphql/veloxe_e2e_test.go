@@ -279,6 +279,12 @@ func TestVeloxeNames(t *testing.T) {
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","customer":{"tier":"SILVER"}}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIsNil: true}) { edges { node { id } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11"}}]}}}` + "`" + `,
+		// Cursors veloxe wrote, the parity probe's of keys 1 and 3, page on,
+		// with veloxe's page flags (ADR 0110).
+		` + "`" + `{"query":"{ customers(first: 2, after: \"gqFpAaF2wA\") { edges { node { name } } pageInfo { hasNextPage hasPreviousPage } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"bob"}},{"node":{"name":"cy"}}],"pageInfo":{"hasNextPage":false,"hasPreviousPage":true}}}}` + "`" + `,
+		` + "`" + `{"query":"{ customers(last: 1, before: \"gqFpA6F2wA\") { edges { node { name } } pageInfo { hasNextPage hasPreviousPage } } }"}` + "`" + `: ` +
+	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"bob"}}],"pageInfo":{"hasNextPage":true,"hasPreviousPage":true}}}}` + "`" + `,
 		` + "`" + `{"query":"{ customers(first: 5, orderBy: {field: JOINED_AT, direction: DESC}) { edges { node { name } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"bob"}},{"node":{"name":"ada"}},{"node":{"name":"cy"}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ customers(first: 5, orderBy: {field: TIER}) { edges { node { name } } } }"}` + "`" + `: ` +
@@ -292,7 +298,8 @@ func TestVeloxeNames(t *testing.T) {
 			t.Errorf("%s:\n got %s\nwant %s", q, got, want)
 		}
 	}
-	// A bool order pages on: the cursor holds the bool.
+	// A bool order pages on: the cursor holds the bool. bob and cy tie, and
+	// the key breaks the tie DESC, as veloxe did (ADR 0110): cy, then bob.
 	var page struct {
 		Data struct {
 			Customers struct {
@@ -309,7 +316,7 @@ func TestVeloxeNames(t *testing.T) {
 		t.Fatalf("the first page by vip: %v\n%s", err, got)
 	}
 	got = query("{\"query\":\"query($c: Cursor) { customers(first: 2, after: $c, orderBy: {field: VIP, direction: DESC}) { edges { node { name } } } }\",\"variables\":{\"c\":\"" + page.Data.Customers.PageInfo.EndCursor + "\"}}")
-	if want := "{\"data\":{\"customers\":{\"edges\":[{\"node\":{\"name\":\"cy\"}}]}}}"; got != want {
+	if want := "{\"data\":{\"customers\":{\"edges\":[{\"node\":{\"name\":\"bob\"}}]}}}"; got != want {
 		t.Errorf("the next page by vip:\n got %s\nwant %s", got, want)
 	}
 }

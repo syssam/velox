@@ -527,8 +527,12 @@ func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
 //
 // A WithRewrite in the application's own query is not known here, nor is it
 // to the edge's Has.
+//
+// Under Type.Veloxe each predicate is the column's alone, as veloxe's were:
+// compat shows the foreign key in the type, so the scoping would hide
+// nothing, and would only change results and add an EXISTS (ADR 0110).
 func EdgeIDField[V any](f *Filter, field string, col, edge int, target *Type, o Ops[V]) {
-	fk := fkScope{edge: edge, target: target.table(), on: true}
+	fk := fkScope{edge: edge, target: target.table(), on: !f.veloxe}
 	ids(f, field, col, o, fk)
 	f.fkNull(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil, fk)
 	f.fkNull(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil, fk)

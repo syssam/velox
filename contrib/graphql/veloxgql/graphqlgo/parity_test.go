@@ -45,6 +45,17 @@ var parityCases = []parityCase{
 		stmts: 1,
 	},
 	{
+		// A cursor veloxe wrote, on a type without compat=veloxe: the
+		// connection refuses it with velox's decoding error, gqlgen's
+		// response as before. graphql-go refused the variable before,
+		// when it decoded it (ADR 0110).
+		name:  "a veloxe cursor",
+		query: `query($after: Cursor) { authors(first: 1, after: $after) { edges { node { name } } } }`,
+		vars:  map[string]any{"after": "gqFpAaF2wA"},
+		want:  `{"message":"malformed cursor: not a cursor document"`,
+		stmts: 0,
+	},
+	{
 		name:  "where",
 		query: `{ authors(first: 5, where: {or: [{nameHasPrefix: "b"}, {name: "cy"}], not: {name: "ann"}}) { totalCount edges { node { name posts(first: 5) { edges { node { title } } } } } } }`,
 		want:  `"totalCount":2`,

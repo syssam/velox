@@ -43,7 +43,11 @@
 // with the generated ResolveNode and ResolveNodes (veloxgen/noder_gql.go). A
 // where input reads as veloxe's did: an empty In, a false IsNil and an empty
 // or add nothing, a not of nothing is an error, and no width or node cap
-// applies (gqlgraph.Type's Veloxe).
+// applies (gqlgraph.Type's Veloxe). A foreign key's predicates are the
+// column's alone. A connection takes the cursors veloxe wrote, as well as
+// its own, and reads their values as the current order's. An order of one
+// term breaks ties by the key in its direction. A page after a cursor has
+// a previous page, and a page before one a next page (docs/decisions/0110).
 //
 // An application whose filters were opt-in field by field, as a veloxe
 // codegen hook made them, asks for where=whitelist: a field other than the

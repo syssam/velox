@@ -22,12 +22,18 @@ func checkCursor(c veloxgql.Cursor, typ string, order []cursorOrder) error {
 		return InputErrorf("%s cursor: %w: taken on another type", typ, veloxgql.ErrBadCursor)
 	}
 	if len(c.Terms) != len(order) {
-		return InputErrorf("%s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
+		return errOtherOrder(typ)
 	}
 	for i, t := range c.Terms {
 		if t.Field != order[i].Field || t.Direction != order[i].Direction {
-			return InputErrorf("%s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
+			return errOtherOrder(typ)
 		}
 	}
 	return nil
+}
+
+// errOtherOrder is the error of a cursor of the type typ taken under
+// another order.
+func errOtherOrder(typ string) error {
+	return InputErrorf("%s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
 }
