@@ -136,6 +136,12 @@ func TestVeloxeLegacyCursor(t *testing.T) {
 		// follow, as on veloxe; the NULLs, which velox puts last (ADR
 		// 0032), come after them.
 		{"age ASC after age 20", "gqFpA6F2FA", false, []gqlgraph.OrderTerm[user]{userAge(asc)}, []int64{1, 5}, true, true},
+		// The probe's AGE ASC cursor of id 4, whose age is NULL (v nil): the
+		// nil stays the term's NULL, not the key, as AGE is not the key's
+		// column. AGE ASC with NULLs last is 3, 1, 5, 2, 4, so nothing
+		// follows (NULL, 4); were the nil read as the key, age 4, rows 3 and
+		// 1 would.
+		{"age ASC after a NULL age", "gqFpBKF2wA", false, []gqlgraph.OrderTerm[user]{userAge(asc)}, []int64{}, false, true},
 		// orderBy ID: veloxe wrote the key alone, Cursor{ID}, as for the
 		// default order; the ID term's value is the key.
 		{"ID ASC after id 2", "gqFpAqF2wA", false, []gqlgraph.OrderTerm[user]{userID(asc)}, []int64{3, 4}, true, true},
