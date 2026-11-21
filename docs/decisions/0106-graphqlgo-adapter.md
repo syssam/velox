@@ -16,9 +16,8 @@ no selection source for veloxe, so projection and batching never ran.
   graphql-go and the core, and no gqlgen and no `net/http`
   (`TestGraphqlgoImportsNoGqlgen`).
 - Its API is graphql-go's vocabulary, so that an application composes it
-  with graphql-go's own options, as nextapp's executor does: `With(db)`,
-  `MutationTx(opts...)`, `PageLimits(l)` and `Cost()` are
-  `graphql.ExecutorOption`s, `Scalars()` a `graphql.SchemaOption`, and
+  with graphql-go's own options, as nextapp's executor does: `With(db)`
+  and `MutationTx(opts...)` are `graphql.ExecutorOption`s, `Scalars()` a `graphql.SchemaOption`, and
   `ErrorPresenter(log)` a `graphql.ErrorPresenter`. It takes no
   `veloxgql.Option`, and the core holds no adapter state: the first
   design's `veloxgql.AdapterOption` and `Config.Adapter`, and a
@@ -27,13 +26,17 @@ no selection source for veloxe, so projection and batching never ran.
 - graphql-go is pinned at `v0.0.0-20261029022150-3e0050be7462`, nextapp's
   pin. The newer 5d906e7 is not fetchable (`go list -m` reports an unknown
   revision), and nothing here needs it: every API used is at 3e0050b.
-- The options work in any order. Each looks up its executor's adapter in a
+- `With` and `MutationTx` work in any order. Each looks up its executor's adapter in a
   registry keyed by a weak pointer to the executor, which the first one
   makes and whose interceptors it registers; the entry is dropped when the
   executor is collected (`runtime.AddCleanup`), and the adapter holds no
   reference to the executor. graphql-go applies options in order and keeps
   its interceptors unexported, so there is nowhere else to meet. Giving
-  `With`, `PageLimits` or `MutationTx` twice to one executor panics.
+  `With` or `MutationTx` twice to one executor panics. With only those two
+  options left, the registry is still the smallest design: the
+  alternative, markers in the context, has to run the transaction from
+  either interceptor, whichever is inner, and refuse each field of a
+  mutation whose marker no `With` claimed.
 - `With(db)` gives an operation interceptor, which installs the state (DB,
   limits, source) and a new table of rows, and a subscription interceptor,
   which installs the state for the source's context. graphql-go runs the
@@ -60,7 +63,8 @@ no selection source for veloxe, so projection and batching never ran.
   gqlgraph only through methods that take a context, which gqlc binds with
   `Resolve`.
 - `MutationTx(TxOptions(...), TxFilter(f), ErrorLog(l))` (Q5, off by
-  default) runs a mutation in `db.Tx` unless the filter leaves it out,
+  default): the three are `MutationTxOption`s, arguments of `MutationTx`
+  and not executor options, as they mean nothing without it. It runs a mutation in `db.Tx` unless the filter leaves it out,
   rolls back on any error and nulls the data. A begin or commit error is
   added, presented as `ErrorPresenter` does and logged to `ErrorLog`'s
   logger: graphql-go gives an interceptor no access to the executor's
@@ -69,19 +73,23 @@ no selection source for veloxe, so projection and batching never ran.
   alone, so it cannot nest); a field that waits for it is parked in the
   wave coordinator, so an application's loader still flushes.
   `TxRetrySerializable` is refused. Without `With`, a mutation fails with
-  `veloxgql.ErrNoDB`, naming `graphqlgo.With`, before any resolver.
-- `PageLimits(l)` sets what gqlgraph reads from the state (`MaxPage`,
-  `MaxList`, `MaxOrderTerms`, the filter limits) and the cost
-  `Cost` refuses; it is an option and not an argument of `With`, so that
-  `With(db)` stays one argument and the defaults need nothing. The limits
-  of a whole request are graphql-go's own options (Q6): the first design's
-  `Limits(l)`, which mapped velox's onto them, is gone.
-- `Cost()` (Q6, off by default) runs velox's cost (`request.CostError`,
-  shared with gqlgenx) against the executor's schema. It is not
-  `graphql.WithQueryCost`: that takes one `QueryCost` per executor, which
-  would replace the application's own, and it charges a list by
-  `DefaultListSize`, not velox's `MaxList` per parent row and introspection
-  apart. budget.go is not ported.
+  `veloxgql.ErrNoDB` before any resolver: the client sees "internal
+  error", and the log names `graphqlgo.With`.
+- No limits are configurable under graphqlgo, and velox's cost is not
+  applied. ent and gqlgen leave a request's limits to the server, and
+  graphql-go has its own (`WithMaxDepth`, `WithMaxComplexity`,
+  `WithQueryCost`, `WithMaxResponseBytes`, `WithOperationTimeout`). velox
+  keeps only the bounds its own rules need, as a read needs a bound
+  (`ErrUnbounded`): generated code reads `veloxgql.DefaultLimits()`,
+  MaxPage 100, MaxList 1000, MaxOrderTerms and the filter limits, a
+  backstop against unbounded reads and where-input abuse, not
+  configuration. An application that wants a smaller page refuses a larger
+  `first`/`last` in its own interceptor, as nextapp's PaginationInterceptor
+  does. `LimitsFromContext` reports `DefaultLimits()`, and its godoc says
+  velox does not enforce the request-wide fields under graphqlgo. The
+  earlier `Limits(l)`, `PageLimits(l)` and `Cost()` were removed; gqlgenx
+  keeps `veloxgql.WithLimits`, as gqlgen has no limits of its own beyond
+  complexity.
 - `WithBatchScope` has no graphqlgo option: graphql-go gives each operation
   its own table, the row scope is already in every batch's key, and no
   caller needs more. It stays in the core for gqlgenx.
@@ -93,8 +101,9 @@ no selection source for veloxe, so projection and batching never ran.
   is not wrapped as graphql-go's default presenter does (graphql-go's own
   errors, a timeout among them), and anything else as `veloxgql.Present`
   does, logging internal errors. A panic graphql-go recovered, which it has
-  logged with the stack, is not logged again; graphql-go does not export
-  its type, so it is known by its name, `*graphql.panicError`
+  logged with the stack, is not logged again, wrapped or not; graphql-go
+  does not export its type, so it is known by its name,
+  `*graphql.panicError`, anywhere in the error's chain
   (`TestPresenterPanic` fails if that changes).
 
 ## Consequences
@@ -126,7 +135,7 @@ no selection source for veloxe, so projection and batching never ran.
   graphql-go's options mixed, With first and last), `TestMutationTxNoWith`,
   `TestMutationTxErrorLog`, `TestMutationPlain`, `TestMutationSerial` (a
   mutation's fields one at a time, a query's concurrently),
-  `TestWaitParks`, `TestCost`, `TestSubscription`, `TestErrorPresenter`,
+  `TestWaitParks`, `TestLimitsFromContext`, `TestTxOptions`, `TestSubscription`, `TestErrorPresenter`,
   `TestPresenterPanic`, `TestScalars`, `TestAdapterDropped`,
   `TestPublicAPI`.
 - `contrib/graphql/deps_test.go`: `TestGraphqlgoImportsNoGqlgen`.

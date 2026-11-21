@@ -17,17 +17,13 @@
 //		graphql.WithMaxDepth(12),
 //		graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
 //
-// With puts the DB, the page limits and graphql-go's selection source in
-// each operation's context, with a new table of rows per operation and per
-// event of a subscription. Without it, generated code fails with
-// veloxgql.ErrNoDB and veloxgql.ErrNoSelectionSource, before any statement.
-// The other options are off by default, and work in any order with With:
-//
-//   - MutationTx runs each mutation in one transaction (TxOptions,
-//     TxFilter, ErrorLog configure it).
-//   - PageLimits sets the page, list, orderBy and filter limits generated
-//     code holds a request to, and the cost Cost refuses.
-//   - Cost refuses a request over velox's cost.
+// With puts the DB, veloxgql.DefaultLimits() and graphql-go's selection
+// source in each operation's context, with a new table of rows per
+// operation and per event of a subscription. Without it, generated code
+// fails with veloxgql.ErrNoDB and veloxgql.ErrNoSelectionSource, before any
+// statement. MutationTx, off by default and in any order with With, runs
+// each mutation in one transaction (TxOptions, TxFilter and ErrorLog
+// configure it).
 //
 // # Selections
 //
@@ -45,17 +41,24 @@
 //
 // # Limits
 //
-// The limits of a request as a whole are graphql-go's own options
+// The limits of a request are graphql-go's own options
 // (graphql.WithMaxDepth, graphql.WithMaxComplexity, graphql.WithQueryCost,
-// graphql.WithMaxResponseBytes, graphql.WithOperationTimeout and the rest).
-// PageLimits sets velox's: the largest page of a connection,
-// the rows of a list edge, and the size of an orderBy or a where filter.
+// graphql.WithMaxResponseBytes, graphql.WithOperationTimeout and the rest),
+// as ent and gqlgen leave them to the server. velox keeps only the bounds
+// its own rules need, fixed at veloxgql.DefaultLimits(): a connection's page
+// is at most MaxPage (100) rows, a list edge reads at most MaxList (1000),
+// and an orderBy or a where filter is held to MaxOrderTerms and the filter
+// limits. They are a backstop against unbounded reads, not configuration:
+// an application that wants a smaller page refuses a larger first or last
+// in an interceptor of its own.
 //
 // # Errors
 //
 // ErrorPresenter is the presenter to give the executor. It shows a client
 // what veloxgql.Present gives, and graphql-go's own errors as graphql-go
-// shows them; it logs every internal error.
+// shows them. It logs each internal error, except a panic graphql-go
+// recovered, which graphql-go has logged, and a canceled request, which
+// it records at level debug.
 //
 // # Scalars
 //

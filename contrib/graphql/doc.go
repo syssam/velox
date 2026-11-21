@@ -202,7 +202,7 @@
 // edge may set under the limit, lowers that and what the edge costs, and a request
 // refused for a list edge's cost names the edge and these two ways out: it or a connection. The limits are
 // veloxgql.LimitsFromContext(ctx): the ones given to gqlgenx.NewExtension with
-// veloxgql.WithLimits, or veloxgql.DefaultLimits().
+// veloxgql.WithLimits, or veloxgql.DefaultLimits(), which graphqlgo always uses.
 //
 // Every one of these limits bounds one argument or one edge, not a request;
 // see "The cost limit" below. A mutation's transaction does not cover @defer

@@ -3,6 +3,7 @@ package graphqlgo_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"slices"
@@ -87,7 +88,7 @@ func TestNoWith(t *testing.T) {
 	}
 }
 
-// TestOptionPanics: With refuses a nil DB, PageLimits a negative limit,
+// TestOptionPanics: With refuses a nil DB,
 // MutationTx a retrying transaction and a nil option, and each refuses
 // being given twice to one executor.
 func TestOptionPanics(t *testing.T) {
@@ -97,15 +98,11 @@ func TestOptionPanics(t *testing.T) {
 		f    func()
 		want string
 	}{
-		"nil DB":         {func() { graphqlgo.With(nil) }, "graphqlgo.With: nil DB"},
-		"negative limit": {func() { graphqlgo.PageLimits(veloxgql.Limits{MaxPage: -1}) }, "Limits.MaxPage is -1"},
-		"retry":          {func() { graphqlgo.MutationTx(graphqlgo.TxOptions(velox.TxRetrySerializable(2))) }, "TxRetrySerializable(2)"},
-		"nil option":     {func() { graphqlgo.MutationTx(nil) }, "graphqlgo.MutationTx: a nil option"},
-		"With twice":     {func() { newExecutor(s, graphqlgo.With(db), graphqlgo.With(db)) }, "graphqlgo.With: given twice"},
-		"limits twice": {func() {
-			newExecutor(s, graphqlgo.PageLimits(veloxgql.Limits{}), graphqlgo.PageLimits(veloxgql.Limits{}))
-		}, "graphqlgo.PageLimits: given twice"},
-		"tx twice": {func() { newExecutor(s, graphqlgo.MutationTx(), graphqlgo.MutationTx()) }, "graphqlgo.MutationTx: given twice"},
+		"nil DB":     {func() { graphqlgo.With(nil) }, "graphqlgo.With: nil DB"},
+		"retry":      {func() { graphqlgo.MutationTx(graphqlgo.TxOptions(velox.TxRetrySerializable(2))) }, "TxRetrySerializable(2)"},
+		"nil option": {func() { graphqlgo.MutationTx(nil) }, "graphqlgo.MutationTx: a nil option"},
+		"With twice": {func() { newExecutor(s, graphqlgo.With(db), graphqlgo.With(db)) }, "graphqlgo.With: given twice"},
+		"tx twice":   {func() { newExecutor(s, graphqlgo.MutationTx(), graphqlgo.MutationTx()) }, "graphqlgo.MutationTx: given twice"},
 	} {
 		func() {
 			defer func() {
@@ -118,25 +115,66 @@ func TestOptionPanics(t *testing.T) {
 	}
 }
 
-// TestOptionsAnyOrder: the options configure one executor in any order,
-// mixed with graphql-go's own, and one option value serves several
-// executors, each with its own state.
+// TestOptionsAnyOrder: With and MutationTx configure one executor in any
+// order, mixed with graphql-go's own options, and one option value serves
+// several executors, each with its own state.
 func TestOptionsAnyOrder(t *testing.T) {
 	db, log := modelDB(t)
 	ctx := context.Background()
-	limits := graphqlgo.PageLimits(veloxgql.Limits{MaxPage: 2})
+	with, tx := graphqlgo.With(db), graphqlgo.MutationTx(graphqlgo.TxOptions(), graphqlgo.TxFilter(nil), graphqlgo.ErrorLog(nil))
 	for name, opts := range map[string][]graphql.ExecutorOption{
-		"With first": {graphqlgo.With(db), graphql.WithMaxErrors(5), graphqlgo.MutationTx(), limits, graphqlgo.Cost()},
-		"With last":  {graphqlgo.Cost(), limits, graphqlgo.MutationTx(graphqlgo.TxOptions(), graphqlgo.TxFilter(nil), graphqlgo.ErrorLog(nil)), graphql.WithMaxErrors(5), graphqlgo.With(db)},
+		"With first": {with, graphql.WithMaxErrors(5), tx},
+		"With last":  {tx, graphql.WithMaxErrors(5), with},
 	} {
 		srv := executorServer(newExecutor(graphqlgoSchema(t), opts...))
-		if out := srv(t, ctx, `{ authors(first: 3) { totalCount } }`, nil); !strings.Contains(out, "BAD_USER_INPUT") {
-			t.Errorf("%s: over PageLimits' MaxPage: %s", name, out)
+		if out := srv(t, ctx, `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
+			t.Errorf("%s: query: %s", name, out)
 		}
+		log.take()
 		out := srv(t, ctx, `mutation { addPost(author: 1, title: "x") { title } }`, nil)
 		if _, txs := log.take(); out != `{"data":{"addPost":{"title":"x"}}}` || !slices.Equal(txs, []string{"commit"}) {
 			t.Errorf("%s: %s, transactions %q; want a commit", name, out, txs)
 		}
+	}
+}
+
+// TestLimitsFromContext: under graphqlgo the limits are
+// veloxgql.DefaultLimits(): generated code holds a page to MaxPage 100.
+func TestLimitsFromContext(t *testing.T) {
+	db, _ := modelDB(t)
+	var got veloxgql.Limits
+	s, err := graphql.NewSchema(graphql.SDL(`type Query { limits: Boolean! }`),
+		graphql.Query(graphql.Resolve("limits", func(ctx context.Context, _ graphql.Root) (bool, error) {
+			got = veloxgql.LimitsFromContext(ctx)
+			return true, nil
+		})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	executorServer(newExecutor(s, graphqlgo.With(db)))(t, context.Background(), `{ limits }`, nil)
+	if got != veloxgql.DefaultLimits() {
+		t.Errorf("LimitsFromContext = %+v, want DefaultLimits()", got)
+	}
+	out := graphqlgoServer(t, db)(t, context.Background(), `{ authors(first: 101) { totalCount } }`, nil)
+	if !strings.Contains(out, "BAD_USER_INPUT") || !strings.Contains(out, "100") {
+		t.Errorf("first: 101: %s", out)
+	}
+}
+
+// TestTxOptions: TxOptions reach each mutation's db.Tx.
+func TestTxOptions(t *testing.T) {
+	var info []sql.IsolationLevel
+	var mu sync.Mutex
+	db, _ := modelDB(t, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		mu.Lock()
+		info = append(info, tx.Isolation)
+		mu.Unlock()
+		return next(ctx)
+	}))
+	srv := graphqlgoServer(t, db, graphqlgo.MutationTx(graphqlgo.TxOptions(velox.TxIsolation(sql.LevelSerializable))))
+	srv(t, context.Background(), `mutation { addPost(author: 1, title: "x") { title } }`, nil)
+	if !slices.Equal(info, []sql.IsolationLevel{sql.LevelSerializable}) {
+		t.Errorf("transactions' isolation %v, want [Serializable]", info)
 	}
 }
 
@@ -252,29 +290,6 @@ func TestWaitParks(t *testing.T) {
 	}
 	// Outside an operation, Wait does nothing.
 	src.Wait(context.Background())()
-}
-
-// TestCost: under Cost a request over MaxCost is refused before any
-// statement, with COST_LIMIT_EXCEEDED, and one within it runs; without
-// Cost the same request runs.
-func TestCost(t *testing.T) {
-	db, log := modelDB(t)
-	ctx := context.Background()
-	l := graphqlgo.PageLimits(veloxgql.Limits{MaxCost: 300})
-	const query = `{ authors(first: 10) { edges { node { posts(first: 10) { totalCount } } } } }`
-	out := graphqlgoServer(t, db, l, graphqlgo.Cost())(t, ctx, query, nil)
-	if !strings.Contains(out, `"code":"COST_LIMIT_EXCEEDED"`) || !strings.Contains(out, "request is too costly: it costs") || strings.Contains(out, `"data"`) {
-		t.Errorf("over MaxCost: %s", out)
-	}
-	if st, _ := log.take(); len(st) != 0 {
-		t.Errorf("over MaxCost sent %q", st)
-	}
-	if out := graphqlgoServer(t, db, l, graphqlgo.Cost())(t, ctx, `{ authors(first: 1) { totalCount } }`, nil); out != `{"data":{"authors":{"totalCount":3}}}` {
-		t.Errorf("within MaxCost: %s", out)
-	}
-	if out := graphqlgoServer(t, db, l)(t, ctx, query, nil); strings.Contains(out, "errors") {
-		t.Errorf("without Cost: %s", out)
-	}
 }
 
 // TestMutationTxErrorLog: a transaction that fails after the resolvers

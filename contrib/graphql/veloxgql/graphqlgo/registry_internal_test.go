@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/syssam/graphql-go"
 )
@@ -16,24 +17,21 @@ func TestAdapterDropped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := func() (n int) {
-		adapters.Range(func(any, any) bool { n++; return true })
-		return n
-	}
-	before := count()
-	func() {
-		e := graphql.NewExecutor(s, Cost(), graphql.WithMaxDepth(5))
-		if count() != before+1 {
+	k := func() weak.Pointer[graphql.Executor] {
+		e := graphql.NewExecutor(s, MutationTx(), graphql.WithMaxDepth(5))
+		k := weak.Make(e)
+		if _, ok := adapters.Load(k); !ok {
 			t.Fatal("no adapter registered")
 		}
 		runtime.KeepAlive(e)
+		return k
 	}()
-	for range 50 {
+	for range 100 {
 		runtime.GC()
-		if count() == before {
+		if _, ok := adapters.Load(k); !ok {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Errorf("%d adapters, want %d after the executor is collected", count(), before)
+	t.Error("the adapter is still registered after the executor is collected")
 }

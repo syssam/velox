@@ -27,12 +27,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   option that puts the DB and graphql-go's selection source in each
   operation's context, so generated code reads only the selected columns
   and batches its edges, as under gqlgen. `MutationTx` (a mutation in one
-  transaction; `TxOptions`, `TxFilter`, `ErrorLog`), `PageLimits` and
-  `Cost` (velox's cost) are opt-in executor options, in any order;
-  `Scalars` binds `Time`, `UUID`, `Bytes` and `Uint64`; `ErrorPresenter`
-  shows `veloxgql.Present`'s codes. The limits of a whole request are
-  graphql-go's own options. contrib/graphql requires graphql-go
-  v0.0.0-20261029022150-3e0050be7462.
+  transaction; `TxOptions`, `TxFilter`, `ErrorLog`) is an opt-in executor
+  option, in any order with With; `Scalars` binds `Time`, `UUID`, `Bytes`
+  and `Uint64`; `ErrorPresenter` shows `veloxgql.Present`'s codes. The
+  limits of a request are graphql-go's own options; velox's page, list
+  and filter bounds are fixed at `veloxgql.DefaultLimits()`.
+  contrib/graphql requires graphql-go v0.0.0-20261029022150-3e0050be7462.
 - Package `generate` runs velox-gen's generate from Go, as ent's
   `entc.Generate` and veloxe's `compiler.Generate` did (ADR 0097):
   `generate.Run(ctx, dir, generate.Config{Schema, Out, Package, Plugins,

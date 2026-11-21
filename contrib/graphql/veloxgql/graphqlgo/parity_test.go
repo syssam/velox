@@ -8,7 +8,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
 )
 
@@ -83,14 +82,13 @@ func TestParity(t *testing.T) {
 	ctx := context.Background()
 	gdb, glog := modelDB(t)
 	qdb, qlog := modelDB(t)
-	opts := []veloxgql.Option{veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})}
 	servers := []struct {
 		name string
 		srv  server
 		log  *stmtLog
 	}{
-		{"gqlgenx", gqlgenServer(t, gdb, opts...), glog},
-		{"graphqlgo", graphqlgoServer(t, qdb, graphqlgo.PageLimits(veloxgql.Limits{MaxList: 10})), qlog},
+		{"gqlgenx", gqlgenServer(t, gdb), glog},
+		{"graphqlgo", graphqlgoServer(t, qdb), qlog},
 	}
 	// The first after-a-cursor run finds the cursor the second pages from.
 	for _, c := range parityCases {
@@ -180,7 +178,7 @@ func TestParityMutation(t *testing.T) {
 // sends what one alone does.
 func TestConcurrentRequests(t *testing.T) {
 	db, log := modelDB(t)
-	srv := graphqlgoServer(t, db, graphqlgo.PageLimits(veloxgql.Limits{MaxList: 10}))
+	srv := graphqlgoServer(t, db)
 	c := parityCases[0]
 	want := srv(t, context.Background(), c.query, nil)
 	log.take()

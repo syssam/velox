@@ -156,7 +156,11 @@ func DefaultLimits() Limits {
 }
 
 // LimitsFromContext returns the limits an adapter put in ctx, or
-// DefaultLimits() when there are none.
+// DefaultLimits() when there are none. Under graphqlgo they are always
+// DefaultLimits(), and velox enforces only the ones generated code reads
+// (MaxPage, MaxList, MaxOrderTerms and the filter limits): the fields that
+// limit a whole request (MaxCost and MaxTokens through Timeout) are
+// graphql-go's own options to set, and velox does not enforce them.
 func LimitsFromContext(ctx context.Context) Limits {
 	if l, ok := gqlcore.LimitsOf(ctx).(*Limits); ok && l != nil {
 		return *l

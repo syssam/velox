@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/syssam/graphql-go"
 	"github.com/vektah/gqlparser/v2/gqlerror"
@@ -79,11 +80,24 @@ func presenter(log, canceled func(ctx context.Context, err error)) graphql.Error
 	}
 }
 
-// recoveredPanic reports whether err is the error graphql-go presents for a
-// panic it recovered, which it has logged with the stack. graphql-go does
-// not export its type, so it is known by its name.
+// recoveredPanic reports whether err, or an error it wraps, is the error
+// graphql-go presents for a panic it recovered, which it has logged with
+// the stack. graphql-go does not export its type, so it is known by its
+// name. It walks the chain as errors.Is does.
 func recoveredPanic(err error) bool {
-	return fmt.Sprintf("%T", err) == "*graphql.panicError"
+	if err == nil {
+		return false
+	}
+	if fmt.Sprintf("%T", err) == "*graphql.panicError" {
+		return true
+	}
+	switch u := err.(type) {
+	case interface{ Unwrap() error }:
+		return recoveredPanic(u.Unwrap())
+	case interface{ Unwrap() []error }:
+		return slices.ContainsFunc(u.Unwrap(), recoveredPanic)
+	}
+	return false
 }
 
 // slogInternal is ErrorPresenter's log, on l (nil: slog's default), when

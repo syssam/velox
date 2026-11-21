@@ -15,7 +15,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/request"
 )
 
 // With is the executor option that serves velox's generated code on db.
@@ -23,9 +22,10 @@ import (
 //
 //	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
 //
-// For each operation it puts db, the page limits and the selection source
-// in the context, where veloxgql.DB reads the DB and generated code finds
-// the field it resolves, with a new table of rows, so that edges batch. A
+// For each operation it puts db, veloxgql.DefaultLimits() (velox's fixed
+// backstop: see the package doc) and the selection source in the context,
+// where veloxgql.DB reads the DB and generated code finds the field it
+// resolves, with a new table of rows, so that edges batch. A
 // subscription's source opens with the same state, and each of its events
 // gets a table of its own. A mutation runs in a velox session
 // (velox.WithSession), so on a DB with replicas it reads its own writes
@@ -47,44 +47,8 @@ func With(db *velox.DB) graphql.ExecutorOption {
 	}
 }
 
-// PageLimits is the executor option that sets the limits generated code
-// holds a request to: the largest page of a connection (MaxPage), the rows
-// of a list edge (MaxList), the terms of an orderBy (MaxOrderTerms) and the
-// size of a where filter (MaxFilterDepth, MaxFilterWidth, MaxFilterNodes),
-// and the cost Cost refuses (MaxCost, MaxIntrospectionCost). Use it when
-// velox's defaults do not suit the schema. A zero field is
-// veloxgql.DefaultLimits()'s, and so are all of them without PageLimits.
-// The other fields of l limit a whole request, which graphql-go's own
-// options do (graphql.WithMaxDepth, graphql.WithMaxTokens and the rest):
-// PageLimits ignores them. It panics on a negative field, and when an
-// executor is given it twice.
-func PageLimits(l veloxgql.Limits) graphql.ExecutorOption {
-	if err := request.CheckLimits("graphqlgo.PageLimits", l); err != nil {
-		panic(err)
-	}
-	l = veloxgql.NewConfig(veloxgql.WithLimits(l)).Limits
-	return func(e *graphql.Executor) {
-		a := adapterOf(e)
-		if a.limitsSet {
-			panic("graphqlgo.PageLimits: given twice to one executor")
-		}
-		a.limits, a.limitsSet = l, true
-	}
-}
-
-// Cost is the executor option that refuses, before any resolver runs, a
-// request whose veloxgql.Cost is over MaxCost, or whose introspection is
-// over MaxIntrospectionCost (see PageLimits), with veloxgql.ErrTooCostly,
-// the code veloxgql.CodeTooCostly and no data. A subscription over it does
-// not open. Use it when the schema's connections and list edges are what
-// you need to bound: velox's cost charges each connection its page and
-// each list edge its MaxList, per parent row. graphql.WithQueryCost is
-// graphql-go's own cost model; the two can be used together.
-func Cost() graphql.ExecutorOption {
-	return func(e *graphql.Executor) { adapterOf(e).cost = true }
-}
-
-// MutationTxOption configures MutationTx.
+// MutationTxOption configures MutationTx. The options are MutationTx's
+// arguments, not executor options, as they mean nothing without it.
 type MutationTxOption func(*txConfig)
 
 // txConfig is what MutationTx's options set.
@@ -127,8 +91,9 @@ func ErrorLog(l *slog.Logger) MutationTxOption {
 // when it has any, even a field's error under data the other fields
 // filled; a response whose transaction did not commit has data null, and a
 // begin or commit error is added, presented as ErrorPresenter presents it
-// and logged to ErrorLog's logger. Without With, a mutation fails, naming
-// graphqlgo.With, and no resolver runs.
+// and logged to ErrorLog's logger. Without With, a mutation fails before
+// any resolver runs: the client sees "internal error", and only the log
+// names graphqlgo.With.
 //
 // A transaction's DB is not safe for concurrent use, and graphql-go resolves
 // the fields below a mutation's root concurrently. So a mutation's fields
@@ -163,9 +128,10 @@ func MutationTx(opts ...MutationTxOption) graphql.ExecutorOption {
 	}
 }
 
-// adapters holds the adapter of each executor that one of this package's
-// options was given to, while the executor lives, so that the options
-// configure one adapter in any order.
+// adapters holds the adapter of each executor that With or MutationTx was
+// given to, while the executor lives, so that the two configure one
+// adapter in any order: MutationTx needs With's DB, and graphql-go runs
+// interceptors in the order they were given and keeps them unexported.
 var adapters sync.Map // weak.Pointer[graphql.Executor] -> *adapter
 
 // adapterOf is e's adapter. The first call for e makes it and registers its
@@ -175,7 +141,7 @@ func adapterOf(e *graphql.Executor) *adapter {
 	if a, ok := adapters.Load(k); ok {
 		return a.(*adapter)
 	}
-	a := &adapter{schema: e.Schema(), limits: veloxgql.DefaultLimits()}
+	a := &adapter{limits: veloxgql.DefaultLimits()}
 	adapters.Store(k, a)
 	runtime.AddCleanup(e, func(k weak.Pointer[graphql.Executor]) { adapters.Delete(k) }, k)
 	graphql.WithOperationInterceptor(a)(e)
@@ -186,11 +152,10 @@ func adapterOf(e *graphql.Executor) *adapter {
 // adapter is what the options configure for one executor, and its
 // interceptors. It holds no reference to the executor.
 type adapter struct {
-	db        *velox.DB
-	schema    *graphql.Schema
-	limits    veloxgql.Limits
-	limitsSet bool
-	cost      bool
+	db *velox.DB
+	// limits are veloxgql.DefaultLimits(), which gqlgraph reads from the
+	// state: velox's backstop against unbounded reads and filters.
+	limits veloxgql.Limits
 	// tx is MutationTx's configuration, nil without it; present presents
 	// its begin and commit errors.
 	tx      *txConfig
@@ -215,43 +180,21 @@ func (a *adapter) install(ctx context.Context) context.Context {
 }
 
 // InterceptSubscription implements graphql.SubscriptionInterceptor: the
-// subscription's source opens with the state in its context, and under
-// Cost one over the cost does not open. Each event's resolvers get the
-// state, and a table of their own, from InterceptOperation.
+// subscription's source opens with the state in its context. Each event's
+// resolvers get the state, and a table of their own, from
+// InterceptOperation.
 func (a *adapter) InterceptSubscription(ctx context.Context, oc *graphql.OperationContext, next graphql.SubscriptionHandler) (<-chan *graphql.Response, error) {
-	if err := a.costError(oc); err != nil {
-		return nil, err
-	}
 	return next(a.install(ctx), oc)
 }
 
-// costError is the error of oc under Cost when it costs too much; nil
-// without Cost.
-func (a *adapter) costError(oc *graphql.OperationContext) *graphql.Error {
-	if !a.cost {
-		return nil
-	}
-	err := request.CostError(a.schema.AST(), oc.Operation, oc.Variables, a.limits)
-	if err == nil {
-		return nil
-	}
-	return &graphql.Error{Message: err.Error(), Extensions: err.Extensions(), Err: err}
-}
-
 // InterceptOperation implements graphql.OperationInterceptor: it puts the
-// operation's state and a new table of rows in its context, refuses a
-// request over the cost under Cost, and runs a mutation in a transaction
-// under MutationTx, or in a velox session.
+// operation's state and a new table of rows in its context, and runs a
+// mutation in a transaction under MutationTx, or in a velox session.
 func (a *adapter) InterceptOperation(ctx context.Context, oc *graphql.OperationContext, next graphql.OperationHandler) *graphql.Response {
 	if a.db != nil {
 		ctx = gqlcore.WithTable(a.install(ctx), nil)
 	}
 	op := oc.Operation
-	if op != nil && op.Operation != ast.Subscription { // a subscription's cost is InterceptSubscription's
-		if err := a.costError(oc); err != nil {
-			return &graphql.Response{Errors: []*graphql.Error{err}}
-		}
-	}
 	if op == nil || op.Operation != ast.Mutation {
 		return next(ctx, oc)
 	}

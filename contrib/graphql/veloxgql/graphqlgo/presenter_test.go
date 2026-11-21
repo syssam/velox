@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"strings"
 	"testing"
@@ -60,6 +61,7 @@ func TestErrorPresenter(t *testing.T) {
 		t.Errorf("a canceled request: %q, logged %v", out.Message, logged)
 	}
 	// The default log, slog's, takes both.
+	quiet(t)
 	d := graphqlgo.ErrorPresenter(nil)
 	if out := d(context.Background(), driver); out.Message != "internal error" {
 		t.Errorf("the default log: %q", out.Message)
@@ -142,6 +144,7 @@ func TestScalars(t *testing.T) {
 // TestPresenterPanic: a resolver's panic, which graphql-go recovers and
 // logs with its stack, is shown as an internal error and not logged again.
 func TestPresenterPanic(t *testing.T) {
+	quiet(t)
 	var logged []error
 	s, err := graphql.NewSchema(graphql.SDL(`type Query { boom: Int }`),
 		graphql.Query(graphql.Resolve("boom", func(context.Context, graphql.Root) (int, error) { panic("boom") })))
@@ -153,4 +156,40 @@ func TestPresenterPanic(t *testing.T) {
 	if !strings.Contains(out, `"message":"internal error"`) || !strings.Contains(out, "INTERNAL_SERVER_ERROR") || len(logged) != 0 {
 		t.Errorf("%s, logged %v; want an internal error, not logged", out, logged)
 	}
+	// A wrapped one too, and one joined with others.
+	rp := recoveredPanic(t)
+	for _, err := range []error{fmt.Errorf("field: %w", rp), errors.Join(errors.New("other"), rp)} {
+		if out := p(context.Background(), err); out.Message != "internal error" || len(logged) != 0 {
+			t.Errorf("%v: %q, logged %v", err, out.Message, logged)
+		}
+	}
+}
+
+// recoveredPanic is the error graphql-go gives the presenter for a panic
+// it recovered.
+func recoveredPanic(t *testing.T) error {
+	t.Helper()
+	var got error
+	s, err := graphql.NewSchema(graphql.SDL(`type Query { boom: Int }`),
+		graphql.Query(graphql.Resolve("boom", func(context.Context, graphql.Root) (int, error) { panic("boom") })))
+	if err != nil {
+		t.Fatal(err)
+	}
+	grab := func(ctx context.Context, err error) *graphql.Error {
+		got = err
+		return graphql.DefaultErrorPresenter(ctx, err)
+	}
+	executorServer(newExecutor(s, graphql.WithErrorPresenter(grab)))(t, context.Background(), `{ boom }`, nil)
+	if got == nil {
+		t.Fatal("no error presented")
+	}
+	return got
+}
+
+// quiet sends slog's default logger to nowhere until the test ends: the
+// test logs errors on purpose.
+func quiet(t *testing.T) {
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.DiscardHandler))
+	t.Cleanup(func() { slog.SetDefault(old) })
 }
