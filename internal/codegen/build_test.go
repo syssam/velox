@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -39,17 +41,42 @@ func build(t *testing.T, ss ...schema.Interface) (*Graph, error) {
 	if len(m.Errors) > 0 {
 		t.Fatalf("builder errors %+v", m.Errors)
 	}
-	return Build(&m)
+	g, err := Build(&m)
+	positioned(t, &m, err)
+	return g, err
+}
+
+// positioned fails t for each *Error in err that has no file:line: velox-gen
+// prints one with every problem. The one exception is an error of a schema
+// that declares no method, which has no line here: Marshal reads a line from
+// a method, and velox-gen's Load gives it its type's (TestLoadSchemaLine).
+func positioned(t *testing.T, m *loadjson.Model, err error) {
+	t.Helper()
+	noLine := map[string]bool{}
+	for _, s := range m.Schemas {
+		noLine[s.Name] = s.Pos == ""
+	}
+	errs := []error{err}
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = j.Unwrap()
+	}
+	for _, e := range errs {
+		if ge, ok := e.(*Error); ok && ge.Pos == "" && !noLine[ge.Schema] {
+			t.Errorf("an error has no position: %v", ge)
+		}
+	}
 }
 
 // plain is the text of err, a join of *Error values, without their positions.
 func plain(err error) string {
-	j, ok := err.(interface{ Unwrap() []error })
-	if !ok {
+	errs := []error{err}
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = j.Unwrap()
+	} else if _, ok := err.(*Error); !ok {
 		return fmt.Sprint(err)
 	}
 	var lines []string
-	for _, e := range j.Unwrap() {
+	for _, e := range errs {
 		if ge, ok := e.(*Error); ok {
 			c := *ge
 			c.Pos = ""
@@ -1408,10 +1435,13 @@ func TestRuleErrorPos(t *testing.T) {
 			t.Errorf("error %d: %q (pos %q), want pos ...%s", i, e.Error(), e.Pos, suffix)
 		}
 	}
-	// An implicit foreign key has no position.
+	// An implicit foreign key is at the line of its edge.
 	_, err = build(t, clashOwner{}, clashPet{})
-	if ge, ok := errors.AsType[*Error](err); !ok || ge.Pos != "" || !strings.HasPrefix(ge.Error(), "schema clashPet: ") {
-		t.Fatalf("got %v", err)
+	pc := reflect.ValueOf(clashOwner.Edges).Pointer()
+	file, line := runtime.FuncForPC(pc).FileLine(pc) // the edge is on Edges' line
+	edgeLine := file + ":" + strconv.Itoa(line)
+	if ge, ok := errors.AsType[*Error](err); !ok || ge.Pos == "" || ge.Pos != edgeLine || !strings.HasPrefix(ge.Error(), ge.Pos+": schema clashPet: ") {
+		t.Fatalf("got %v, want pos %s", err, edgeLine)
 	}
 }
 

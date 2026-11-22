@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-
+	"go/parser"
 	"go/token"
 	"io"
 	"os"
@@ -170,6 +170,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", pkg.ImportPath, err)
 	}
+	typeLines(pkg, m)
 	if len(m.Errors) > 0 {
 		errs := make([]error, len(m.Errors))
 		for i, e := range m.Errors {
@@ -178,6 +179,36 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 		return nil, errors.Join(errs...)
 	}
 	return m, nil
+}
+
+// typeLines sets each schema's Pos to the line that declares its type in
+// the package's files, which stands for the schema better than the line of
+// one of its methods, and which a schema that declares no method has too.
+func typeLines(pkg *listed, m *loadjson.Model) {
+	fset := token.NewFileSet()
+	at := map[string]string{}
+	for _, name := range pkg.GoFiles {
+		f, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.SkipObjectResolution)
+		if err != nil {
+			continue // the program that wrote m compiled it
+		}
+		for _, d := range f.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, sp := range gd.Specs {
+				if ts, ok := sp.(*ast.TypeSpec); ok {
+					at[ts.Name.Name] = posString(fset.Position(ts.Name.Pos()))
+				}
+			}
+		}
+	}
+	for _, s := range m.Schemas {
+		if p, ok := at[s.Name]; ok {
+			s.Pos = p
+		}
+	}
 }
 
 // exitStatus matches the line go run writes last when the program fails.

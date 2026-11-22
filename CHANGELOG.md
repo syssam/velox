@@ -1305,6 +1305,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   which run SQL from a string, and an `@` right before a name, a MySQL
   variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass
   when a space follows them.
+- Every problem velox-gen reports has its file:line: a builder misuse or
+  a panic at the line of the method that returned it, an error of the
+  schema as a whole at the line of its type, of an implicit foreign key at
+  its edge's, and of a join entity at the edge that makes it. About fifty
+  errors had none.
 - velox-gen runs in a module that vendors it: velox-gen imports
   `schema/load`, which its loader's program needs, so `go mod vendor`
   copies it.

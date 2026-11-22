@@ -254,7 +254,7 @@ func TestMixinListedTwiceRefused(t *testing.T) {
 		}
 	}
 	_, err := mixinBehaviour(t, g, dir, policy("A"))
-	if err == nil || err.Error() != "schema Project: Mixin()[2] is A again, which declares behaviour: list a mixin once" {
+	if ge, ok := errors.AsType[*Error](err); !ok || ge.Pos == "" || plain(err) != "schema Project: Mixin()[2] is A again, which declares behaviour: list a mixin once" {
 		t.Fatalf("got %v", err)
 	}
 }

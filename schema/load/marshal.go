@@ -39,7 +39,7 @@ func Marshal(pkgPath string, schemas ...schema.Interface) ([]byte, error) {
 		}
 		name := typeName(reflect.TypeOf(s))
 		if name != "" && seen[name] {
-			m.Errors = append(m.Errors, loadjson.Error{Schema: name, Reason: "declared twice"})
+			m.Errors = append(m.Errors, loadjson.Error{Pos: schemaPos(elem(reflect.TypeOf(s))), Schema: name, Reason: "declared twice"})
 			continue
 		}
 		seen[name] = true
@@ -54,6 +54,14 @@ func Marshal(pkgPath string, schemas ...schema.Interface) ([]byte, error) {
 	return json.MarshalIndent(m, "", "  ")
 }
 
+// elem is t, or the type t points to.
+func elem(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Pointer {
+		return t.Elem()
+	}
+	return t
+}
+
 // typeName is the name of a schema's type, or of the type a pointer points to.
 func typeName(t reflect.Type) string {
 	if t.Kind() == reflect.Pointer {
@@ -64,9 +72,10 @@ func typeName(t reflect.Type) string {
 
 // loader loads one schema and collects its errors.
 type loader struct {
-	name     string
-	mixinPos string // the line of the schema's Mixin method, or ""
-	errs     []loadjson.Error
+	name      string
+	schemaPos string // the line of a method the schema declares (see schemaPos), or ""
+	mixinPos  string // the line of the schema's Mixin method, or ""
+	errs      []loadjson.Error
 }
 
 // mixinPkg prefixes the functions of package schema/mixin, whose elements
@@ -111,15 +120,21 @@ func position(j int, mixin int, mixedIn bool) loadjson.Position {
 func (l *loader) load(s schema.Interface) (out *loadjson.Schema) {
 	t := reflect.TypeOf(s)
 	if l.name == "" {
+		// A type with no name declares no method: no line stands for it.
 		l.fail("", "", "the type %v has no name", t)
 		return nil
 	}
+	vt := t
+	if vt.Kind() == reflect.Pointer {
+		vt = vt.Elem()
+	}
+	l.schemaPos = schemaPos(vt)
 	// Annotation methods and the JSON encoding of annotations and defaults run
 	// user code outside call; a panic there is still the schema's error.
 	defer func() {
 		if r := recover(); r != nil {
 			out = nil
-			l.fail("", "", "panicked: %v", r)
+			l.fail(l.schemaPos, "", "panicked: %v", r)
 		}
 	}()
 	return l.build(t, s)
@@ -132,25 +147,51 @@ type elements struct {
 	edges       []schema.Edge
 	indexes     []schema.Index
 	annotations []schema.Annotation
+	// at is the file:line of each method, by name, for the errors of what it
+	// returned: where the source declares it, else where the schema does.
+	at map[string]string
 }
 
-// read calls the methods of a schema or a mixin. A method that panics is
-// recorded, under prefix, and the others are still read.
-func (l *loader) read(prefix string, fields func() []schema.Field, edges func() []schema.Edge, indexes func() []schema.Index, annotations func() []schema.Annotation) (e elements) {
+// read calls the methods of a schema or a mixin, whose type is src. A
+// method that panics is recorded, under prefix, and the others are still
+// read. fallback is the line of an error whose method src does not declare.
+func (l *loader) read(prefix string, src reflect.Type, fallback string, fields func() []schema.Field, edges func() []schema.Edge, indexes func() []schema.Index, annotations func() []schema.Annotation) (e elements) {
+	if src.Kind() == reflect.Pointer {
+		src = src.Elem()
+	}
+	e.at = map[string]string{}
+	for _, m := range []string{"Fields", "Edges", "Indexes", "Annotations"} {
+		e.at[m] = cmp.Or(methodPos(src, m), fallback)
+	}
 	var err error
 	if e.fields, err = call("Fields", fields); err != nil {
-		l.fail("", "", "%s%v", prefix, err)
+		l.fail(e.at["Fields"], "", "%s%v", prefix, err)
 	}
 	if e.edges, err = call("Edges", edges); err != nil {
-		l.fail("", "", "%s%v", prefix, err)
+		l.fail(e.at["Edges"], "", "%s%v", prefix, err)
 	}
 	if e.indexes, err = call("Indexes", indexes); err != nil {
-		l.fail("", "", "%s%v", prefix, err)
+		l.fail(e.at["Indexes"], "", "%s%v", prefix, err)
 	}
 	if e.annotations, err = call("Annotations", annotations); err != nil {
-		l.fail("", "", "%s%v", prefix, err)
+		l.fail(e.at["Annotations"], "", "%s%v", prefix, err)
 	}
 	return e
+}
+
+// schemaMethods are the methods whose line stands for the schema's, in the
+// order schemaPos tries them.
+var schemaMethods = []string{"Fields", "Edges", "Indexes", "Mixin", "Annotations", "Policy", "Hooks", "Interceptors"}
+
+// schemaPos is the file:line of the first of schemaMethods that the schema
+// type t declares itself, or "" when it declares none.
+func schemaPos(t reflect.Type) string {
+	for _, m := range schemaMethods {
+		if p := methodPos(t, m); p != "" {
+			return p
+		}
+	}
+	return ""
 }
 
 func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
@@ -183,20 +224,20 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 			l.fail(pos, "", "has %s %s method promoted from %s, which velox-gen does not bind: declare %[2]s on the schema itself, in the schema package: %[4]s", article, h, from, want)
 		}
 	}
-	l.mixinPos = methodPos(vt, "Mixin")
-	out := &loadjson.Schema{Name: l.name}
+	l.mixinPos = cmp.Or(methodPos(vt, "Mixin"), l.schemaPos)
+	out := &loadjson.Schema{Name: l.name, Pos: l.schemaPos}
 	annos := map[string]schema.Annotation{}
 	add := func(e elements, prefix string, mixin int, mixedIn bool) {
 		for j, f := range e.fields {
-			if lf := l.buildField(f, prefix, j, position(j, mixin, mixedIn)); lf != nil {
+			if lf := l.buildField(f, prefix, j, position(j, mixin, mixedIn), e.at["Fields"]); lf != nil {
 				out.Fields = append(out.Fields, lf)
 			}
 		}
 		for j, ed := range e.edges {
-			out.Edges = append(out.Edges, l.buildEdge(ed, prefix, j, position(j, mixin, mixedIn))...)
+			out.Edges = append(out.Edges, l.buildEdge(ed, prefix, j, position(j, mixin, mixedIn), e.at["Edges"])...)
 		}
 		for j, ix := range e.indexes {
-			if li := l.buildIndex(ix, prefix, j, position(j, mixin, mixedIn)); li != nil {
+			if li := l.buildIndex(ix, prefix, j, position(j, mixin, mixedIn), e.at["Indexes"]); li != nil {
 				out.Indexes = append(out.Indexes, li)
 			}
 		}
@@ -205,32 +246,32 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 			err = mergeAnnotations(annos, lowered)
 		}
 		if err != nil {
-			l.fail("", "", "%s%v", prefix, err)
+			l.fail(e.at["Annotations"], "", "%s%v", prefix, err)
 		}
 	}
 	mixins, err := call("Mixin", s.Mixin)
 	if err != nil {
-		l.fail("", "", "%v", err)
+		l.fail(l.mixinPos, "", "%v", err)
 	}
 	out.Pointer = !vt.Implements(reflect.TypeFor[schema.Interface]())
 	for i, m := range mixins {
 		prefix := fmt.Sprintf("Mixin()[%d]: ", i)
 		if isNil(m) {
-			l.fail("", "", "Mixin()[%d] is nil", i)
+			l.fail(l.mixinPos, "", "Mixin()[%d] is nil", i)
 			out.Mixins = append(out.Mixins, loadjson.Mixin{})
 			continue
 		}
 		if nested, err := nestedMixins(m); err != nil {
-			l.fail("", "", "%s%v", prefix, err)
+			l.fail(l.mixinPos, "", "%s%v", prefix, err)
 		} else if nested > 0 {
-			l.fail("", "", "Mixin()[%d] lists mixins of its own, which velox does not follow: list them in the schema's Mixin", i)
+			l.fail(l.mixinPos, "", "Mixin()[%d] lists mixins of its own, which velox does not follow: list them in the schema's Mixin", i)
 		}
 		out.Mixins = append(out.Mixins, mixinOf(m))
-		add(l.read(prefix, m.Fields, m.Edges, m.Indexes, m.Annotations), prefix, i, true)
+		add(l.read(prefix, reflect.TypeOf(m), l.mixinPos, m.Fields, m.Edges, m.Indexes, m.Annotations), prefix, i, true)
 	}
-	add(l.read("", s.Fields, s.Edges, s.Indexes, s.Annotations), "", 0, false)
+	add(l.read("", vt, l.schemaPos, s.Fields, s.Edges, s.Indexes, s.Annotations), "", 0, false)
 	if out.Annotations, err = marshalAnnotations(annos); err != nil {
-		l.fail("", "", "%v", err)
+		l.fail(cmp.Or(methodPos(vt, "Annotations"), l.schemaPos), "", "%v", err)
 	}
 	return out
 }
@@ -360,18 +401,19 @@ func listAnnotations(list []desc.Annotation) (map[string]json.RawMessage, error)
 func isFunc(v any) bool { return v != nil && reflect.TypeOf(v).Kind() == reflect.Func }
 
 // buildField loads one field, or records why it cannot and returns nil.
-func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.Position) *loadjson.Field {
+// at is the line of the Fields method that returned f.
+func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.Position, at string) *loadjson.Field {
 	if isNil(f) {
-		l.fail("", "", "%sFields()[%d] is nil", prefix, j)
+		l.fail(at, "", "%sFields()[%d] is nil", prefix, j)
 		return nil
 	}
 	d, err := call("Descriptor", f.Descriptor)
 	if err != nil {
-		l.fail("", "", "%sFields()[%d]: %v", prefix, j, err)
+		l.fail(at, "", "%sFields()[%d]: %v", prefix, j, err)
 		return nil
 	}
 	if d == nil {
-		l.fail("", "", "%sFields()[%d] has no descriptor", prefix, j)
+		l.fail(at, "", "%sFields()[%d] has no descriptor", prefix, j)
 		return nil
 	}
 	where := fmt.Sprintf("field %q", d.Name)
@@ -469,18 +511,19 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 
 // buildEdge loads one edge, and the inverse declared inline with it, or
 // records why it cannot and returns nil.
-func (l *loader) buildEdge(e schema.Edge, prefix string, j int, pos loadjson.Position) []*loadjson.Edge {
+// at is the line of the Edges method that returned e.
+func (l *loader) buildEdge(e schema.Edge, prefix string, j int, pos loadjson.Position, at string) []*loadjson.Edge {
 	if isNil(e) {
-		l.fail("", "", "%sEdges()[%d] is nil", prefix, j)
+		l.fail(at, "", "%sEdges()[%d] is nil", prefix, j)
 		return nil
 	}
 	d, err := call("Descriptor", e.Descriptor)
 	if err != nil {
-		l.fail("", "", "%sEdges()[%d]: %v", prefix, j, err)
+		l.fail(at, "", "%sEdges()[%d]: %v", prefix, j, err)
 		return nil
 	}
 	if d == nil {
-		l.fail("", "", "%sEdges()[%d] has no descriptor", prefix, j)
+		l.fail(at, "", "%sEdges()[%d] has no descriptor", prefix, j)
 		return nil
 	}
 	n := len(l.errs)
@@ -529,18 +572,19 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 }
 
 // buildIndex loads one index, or records why it cannot and returns nil.
-func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.Position) *loadjson.Index {
+// at is the line of the Indexes method that returned x.
+func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.Position, at string) *loadjson.Index {
 	if isNil(x) {
-		l.fail("", "", "%sIndexes()[%d] is nil", prefix, j)
+		l.fail(at, "", "%sIndexes()[%d] is nil", prefix, j)
 		return nil
 	}
 	d, err := call("Descriptor", x.Descriptor)
 	if err != nil {
-		l.fail("", "", "%sIndexes()[%d]: %v", prefix, j, err)
+		l.fail(at, "", "%sIndexes()[%d]: %v", prefix, j, err)
 		return nil
 	}
 	if d == nil {
-		l.fail("", "", "%sIndexes()[%d] has no descriptor", prefix, j)
+		l.fail(at, "", "%sIndexes()[%d] has no descriptor", prefix, j)
 		return nil
 	}
 	out := &loadjson.Index{

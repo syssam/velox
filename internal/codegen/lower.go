@@ -163,19 +163,21 @@ type join struct {
 	ent   *OutEntity
 	st    *entState
 	owner string // the schema of the edge
-	where string
+	at    loc    // the edge
 }
 
 // enumDecl is a generated enum type with the field that declares it.
 type enumDecl struct {
-	enum          *OutEnum
-	schema, where string
+	enum   *OutEnum
+	schema string
+	at     loc // the field
 }
 
 // entState is the state of lowering one entity.
 type entState struct {
 	l       *lowerer
 	name    string // the schema or join entity's name, for errors
+	pos     string // the line of an error whose element has none: the schema's, or the edge's of a join entity
 	out     *OutEntity
 	paths   map[string]string // import name → path
 	sch     bool              // the code reads the schema package
@@ -186,19 +188,20 @@ type entState struct {
 	cases   []string
 }
 
-func (s *entState) fail(where, format string, args ...any) {
-	s.l.errs = append(s.l.errs, &Error{Schema: s.name, Where: where, Reason: fmt.Sprintf(format, args...)})
+// fail records an error of the element at, at its line or else s.pos.
+func (s *entState) fail(at loc, format string, args ...any) {
+	s.l.errs = append(s.l.errs, &Error{Pos: cmp.Or(at.pos, s.pos), Schema: s.name, Where: at.where, Reason: fmt.Sprintf(format, args...)})
 }
 
 // use adds the import path p, which the code refers to as name. Two paths with
 // one name are an error.
-func (s *entState) use(p, name, where string) {
+func (s *entState) use(p, name string, at loc) {
 	if owner, ok := s.l.owned[name]; ok && owner != p {
-		s.fail(where, "imports %s, but the generated code uses the name %s for %s", p, name, owner)
+		s.fail(at, "imports %s, but the generated code uses the name %s for %s", p, name, owner)
 		return
 	}
 	if old, ok := s.paths[name]; ok && old != p {
-		s.fail(where, "imports %s and %s both named %s", old, p, name)
+		s.fail(at, "imports %s and %s both named %s", old, p, name)
 		return
 	}
 	s.paths[name] = p
@@ -208,7 +211,7 @@ func (s *entState) use(p, name, where string) {
 func (l *lowerer) entities() {
 	l.state = make(map[string]*entState, len(l.g.Entities))
 	for _, e := range l.g.Entities {
-		s := &entState{l: l, name: e.Name, paths: map[string]string{}}
+		s := &entState{l: l, name: e.Name, pos: e.Pos, paths: map[string]string{}}
 		s.out = &OutEntity{
 			Name: e.Name, Label: e.Label, Handles: plugin.GoPlural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
 			Bound: l.cfg.Bound[e.Name],
@@ -218,7 +221,7 @@ func (l *lowerer) entities() {
 				Text string `json:"text"`
 			}
 			if err := json.Unmarshal(raw, &c); err != nil {
-				s.fail("", "its Comment annotation is not a comment: %v", err)
+				s.fail(loc{}, "its Comment annotation is not a comment: %v", err)
 			}
 			s.out.Comment = c.Text
 		}
@@ -235,7 +238,7 @@ func (l *lowerer) entities() {
 				if j := columnIndex(e, c); j >= 0 {
 					oi.Columns = append(oi.Columns, j)
 				} else {
-					s.fail(indexAt(i), "column %q is not a field's", c)
+					s.fail(indexLoc(i, e.Indexes[i]), "column %q is not a field's", c)
 				}
 			}
 			s.out.Indexes = append(s.out.Indexes, oi)
@@ -323,13 +326,13 @@ var nilKinds = map[string]bool{"slice": true, "map": true, "ptr": true}
 
 // field lowers the field f, column i of e (nil for a join entity).
 func (s *entState) field(e *Entity, i int, f *Field) *OutField {
-	where := fieldAt(f.Name)
+	at := fieldLoc(f)
 	o := &OutField{
 		GoName: f.GoName, Column: f.Column, Name: f.Name, Comment: f.Comment,
 		Sensitive: f.Sensitive, Immutable: f.Immutable, Version: f.Version, JSON: f.Type == "json", Implicit: f.Implicit != "",
 	}
 	if reserved[f.GoName] {
-		s.fail(where, "its Go name %s is reserved: it is a method of the entity", f.GoName)
+		s.fail(at, "its Go name %s is reserved: it is a method of the entity", f.GoName)
 	}
 	o.DBDefault = dbDefaultDialects(f.SchemaDefault)
 	if e != nil && f.Nillable {
@@ -341,7 +344,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 			}
 		}
 	}
-	elem, kind := s.elemType(f, where)
+	elem, kind := s.elemType(f, at)
 	o.ElemType = elem
 	// Only Nillable makes a pointer: a Default never changes the Go type.
 	o.Pointer = f.Nillable && i != 0 && !nilKinds[kind]
@@ -363,15 +366,15 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	}
 	if f.GoType != nil {
 		for _, p := range importNames(f.GoType) {
-			s.use(p.path, p.name, where)
+			s.use(p.path, p.name, at)
 		}
 	}
 	if f.GoType == nil && f.Type == "time" {
-		s.use("time", "time", where)
+		s.use("time", "time", at)
 	}
 	if o.JSON {
 		// The codec: the generated file, not the core, imports encoding/json.
-		s.use("encoding/json", "json", where)
+		s.use("encoding/json", "json", at)
 	}
 	var h string
 	switch {
@@ -407,7 +410,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	}
 	o.Handle = fmt.Sprintf("velox.%s[%s, %s]", h, s.name, elem)
 	if f.Sensitive && f.StructTag != "" && reflect.StructTag(f.StructTag).Get("json") != "-" {
-		s.fail(where, "a Sensitive field's StructTag must not expose it to JSON")
+		s.fail(at, "a Sensitive field's StructTag must not expose it to JSON")
 	}
 	switch {
 	case f.StructTag != "":
@@ -428,8 +431,8 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	default:
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitempty"`, f.Name))
 	}
-	s.defaults(e, f, o, where)
-	s.checks(e, f, o, where)
+	s.defaults(e, f, o, at)
+	s.checks(e, f, o, at)
 	return o
 }
 
@@ -453,7 +456,7 @@ func quoteTag(tag string) string {
 
 // elemType is the Go type of f without a pointer, and the reflect kind of it.
 // It declares the enum type of an enum field with no Go type.
-func (s *entState) elemType(f *Field, where string) (elem, kind string) {
+func (s *entState) elemType(f *Field, at loc) (elem, kind string) {
 	if f.GoType != nil {
 		return f.GoType.Ident, f.GoType.Kind
 	}
@@ -481,10 +484,10 @@ func (s *entState) elemType(f *Field, where string) (elem, kind string) {
 				return t, "string"
 			}
 		}
-		s.l.enums = append(s.l.enums, &enumDecl{enum: en, schema: s.name, where: where})
+		s.l.enums = append(s.l.enums, &enumDecl{enum: en, schema: s.name, at: at})
 		return t, "string"
 	}
-	s.fail(where, "a field of type %s needs a Go type", f.Type)
+	s.fail(at, "a field of type %s needs a Go type", f.Type)
 	return "any", "interface"
 }
 
@@ -595,7 +598,7 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 // ref names the function. It is the function itself, pkg.Name, when ref
 // names one the generated package can import, of the type typ; else a
 // variable of the setup block that reads the descriptor once.
-func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member, typ, where string) string {
+func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member, typ string, at loc) string {
 	if ref != nil && ref.Pkg != "" && ref.Type == typ {
 		if p, ok := s.l.cfg.Funcs[ref.Pkg]; ok && p.Gen {
 			name := p.Name
@@ -604,13 +607,13 @@ func (s *entState) schemaFunc(e *Entity, f *Field, ref *loadjson.FuncRef, member
 			}
 			if s.free(ref.Pkg, name) {
 				if ref.Pkg != s.l.out.SchemaPath {
-					s.use(ref.Pkg, name, where)
+					s.use(ref.Pkg, name, at)
 				}
 				return name + "." + ref.Name
 			}
 		}
 	}
-	s.use(schemaPkg, s.l.vschema, where)
+	s.use(schemaPkg, s.l.vschema, at)
 	fd := s.descriptor(e, f)
 	v := "d" + strconv.Itoa(s.reads)
 	s.reads++
@@ -632,22 +635,22 @@ func (s *entState) free(p, name string) bool {
 // A function is called by its name when it has one the generated code can
 // use (see schemaFunc), and is read from the schema once otherwise, so the
 // closure of a column reads no descriptor per row.
-func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
+func (s *entState) defaults(e *Entity, f *Field, o *OutField, at loc) {
 	elem := o.ElemType
 	// call returns the column's closure, which calls the function member.
 	call := func(member string, ref *loadjson.FuncRef) string {
 		if f.Type == "time" && elem != "time.Time" {
 			// A time default is a func() time.Time, which the builder let
 			// through only for a GoType that converts from time.Time.
-			s.use("time", "time", where)
-			d := s.schemaFunc(e, f, ref, member, "func() time.Time", where)
+			s.use("time", "time", at)
+			d := s.schemaFunc(e, f, ref, member, "func() time.Time", at)
 			return fmt.Sprintf("func() any { return %s(%s()) }", elem, d)
 		}
-		d := s.schemaFunc(e, f, ref, member, "func() "+elem, where)
+		d := s.schemaFunc(e, f, ref, member, "func() "+elem, at)
 		return fmt.Sprintf("func() any { return %s() }", d)
 	}
 	if len(f.Default) > 0 {
-		lit, ok := s.literal(f, elem, where)
+		lit, ok := s.literal(f, elem, at)
 		switch {
 		case ok && lit != "":
 			o.DefaultCode = lit
@@ -658,10 +661,10 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s }", lit)
 		case f.Type == "bytes" || f.Type == "json":
 			// Decoded on each call, so that no two rows share a slice or a map.
-			s.use("encoding/json", "json", where)
+			s.use("encoding/json", "json", at)
 			o.DefaultFuncCode = fmt.Sprintf("func() any { var v %s; _ = json.Unmarshal([]byte(%s), &v); return v }", elem, strconv.Quote(compact(f.Default)))
 		case !f.DefaultFunc: // else DefaultFunc below replaces it, and nothing reads this
-			d := s.schemaValue(e, f, "Default", where)
+			d := s.schemaValue(e, f, "Default", at)
 			o.DefaultFuncCode = fmt.Sprintf("func() any { return %s }", d)
 		}
 	}
@@ -695,8 +698,8 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 // schemaValue returns the expression of a value of f's descriptor, its
 // member, of type any, that is not a function: a variable of the setup
 // block.
-func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string {
-	s.use(schemaPkg, s.l.vschema, where)
+func (s *entState) schemaValue(e *Entity, f *Field, member string, at loc) string {
+	s.use(schemaPkg, s.l.vschema, at)
 	fd := s.descriptor(e, f)
 	v := "d" + strconv.Itoa(s.reads)
 	s.reads++
@@ -707,7 +710,7 @@ func (s *entState) schemaValue(e *Entity, f *Field, member, where string) string
 // literal writes f's literal Default as a Go literal of the element type
 // elem. It returns "" for a Default that is not a literal on a bool, number,
 // string or enum, which is read from the descriptor; !ok means it is wrong.
-func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
+func (s *entState) literal(f *Field, elem string, at loc) (lit string, ok bool) {
 	raw := string(f.Default)
 	conv := func(l string) string {
 		if f.GoType != nil || elem != f.Type {
@@ -719,20 +722,20 @@ func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
 	case f.Type == "bool":
 		var v bool
 		if json.Unmarshal(f.Default, &v) != nil {
-			s.fail(where, "its Default %s is not a bool", raw)
+			s.fail(at, "its Default %s is not a bool", raw)
 			return "", false
 		}
 		return conv(strconv.FormatBool(v)), true
 	case numeric[f.Type]:
 		if !fits(f.Type, raw) {
-			s.fail(where, "its Default %s is not a %s", raw, f.Type)
+			s.fail(at, "its Default %s is not a %s", raw, f.Type)
 			return "", false
 		}
 		return elem + "(" + raw + ")", true
 	case f.Type == "string", f.Type == "enum":
 		var v string
 		if json.Unmarshal(f.Default, &v) != nil {
-			s.fail(where, "its Default %s is not a string", raw)
+			s.fail(at, "its Default %s is not a string", raw)
 			return "", false
 		}
 		if f.Type == "enum" && f.GoType == nil {
@@ -741,7 +744,7 @@ func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
 					return elem + plugin.GoName(en.Name), true
 				}
 			}
-			s.fail(where, "its Default %s is not one of the enum values", raw)
+			s.fail(at, "its Default %s is not one of the enum values", raw)
 			return "", false
 		}
 		q := strconv.Quote(v)
@@ -863,7 +866,7 @@ type checkWriter struct {
 	s     *entState
 	f     *Field
 	o     *OutField
-	where string
+	at    loc
 	b     strings.Builder
 }
 
@@ -876,7 +879,7 @@ func (w *checkWriter) line(depth int, format string, args ...any) {
 
 // fail writes the return of a check that fails with msg.
 func (w *checkWriter) fail(msg string) {
-	w.s.useStd("errors", w.where)
+	w.s.useStd("errors", w.at)
 	w.line(2, "return errors.New(%s)", strconv.Quote(msg))
 }
 
@@ -890,11 +893,11 @@ func (w *checkWriter) conv(t string) string {
 
 // checks writes the case of Check's switch for f's column, when f has
 // checks, an enum or validators.
-func (s *entState) checks(e *Entity, f *Field, o *OutField, where string) {
+func (s *entState) checks(e *Entity, f *Field, o *OutField, at loc) {
 	if len(f.Checks) == 0 && f.Type != "enum" && f.Validators == 0 {
 		return
 	}
-	w := &checkWriter{s: s, f: f, o: o, where: where}
+	w := &checkWriter{s: s, f: f, o: o, at: at}
 	w.line(0, "case %sCol%s:", camel(s.out.Label), o.GoName)
 	w.line(1, "x := v.(%s)", o.ElemType)
 	if o.Unset != "" {
@@ -939,12 +942,12 @@ func (w *checkWriter) enum() {
 		w.line(1, "\treturn errors.New(%s)", msg)
 		w.line(1, "}")
 	}
-	w.s.useStd("errors", w.where)
+	w.s.useStd("errors", w.at)
 }
 
 // check writes the comparison of the check c, or reports why it cannot.
 func (w *checkWriter) check(c loadjson.Check) {
-	s, f, where := w.s, w.f, w.where
+	s, f, at := w.s, w.f, w.at
 	args := make([]string, len(c.Args))
 	for i, a := range c.Args {
 		args[i] = strings.TrimSpace(string(a))
@@ -960,13 +963,13 @@ func (w *checkWriter) check(c loadjson.Check) {
 		w.match(c, args)
 	case "Range", "Min", "Max", "Positive", "Negative", "NonNegative":
 		if !numeric[f.Type] {
-			s.fail(where, "check %s is for number fields, not %s", c.Kind, f.Type)
+			s.fail(at, "check %s is for number fields, not %s", c.Kind, f.Type)
 			return
 		}
 		num := func(i int) (lit, text string, ok bool) { return w.num(c.Kind, args, i) }
 		s.numberCheck(c.Kind, num, w.line, w.fail)
 	default:
-		s.fail(where, "unknown check %s", c.Kind)
+		s.fail(at, "unknown check %s", c.Kind)
 	}
 }
 
@@ -974,11 +977,11 @@ func (w *checkWriter) check(c loadjson.Check) {
 // type, and as written; it reports a missing or ill-typed argument.
 func (w *checkWriter) num(kind string, args []string, i int) (lit, text string, ok bool) {
 	if i >= len(args) {
-		w.s.fail(w.where, "check %s needs an argument", kind)
+		w.s.fail(w.at, "check %s needs an argument", kind)
 		return "", "", false
 	}
 	if !fits(w.f.Type, args[i]) {
-		w.s.fail(w.where, "check %s: %s is not a %s", kind, args[i], w.f.Type)
+		w.s.fail(w.at, "check %s: %s is not a %s", kind, args[i], w.f.Type)
 		return "", "", false
 	}
 	if w.o.ElemType == w.f.Type {
@@ -998,7 +1001,7 @@ func (w *checkWriter) notEmpty() {
 	case "bytes":
 		w.line(1, "if len(x) == 0 {")
 	default:
-		w.s.fail(w.where, "check NotEmpty is for string and bytes fields, not %s", w.f.Type)
+		w.s.fail(w.at, "check NotEmpty is for string and bytes fields, not %s", w.f.Type)
 		return
 	}
 	w.fail("must not be empty")
@@ -1009,12 +1012,12 @@ func (w *checkWriter) notEmpty() {
 // is one; it reports why it is not.
 func (w *checkWriter) length(kind string, args []string) (int, bool) {
 	if len(args) != 1 {
-		w.s.fail(w.where, "check %s needs one argument", kind)
+		w.s.fail(w.at, "check %s needs one argument", kind)
 		return 0, false
 	}
 	n, err := strconv.Atoi(args[0])
 	if err != nil {
-		w.s.fail(w.where, "check %s: %s is not a length", kind, args[0])
+		w.s.fail(w.at, "check %s: %s is not a length", kind, args[0])
 		return 0, false
 	}
 	return n, true
@@ -1023,7 +1026,7 @@ func (w *checkWriter) length(kind string, args []string) (int, bool) {
 // byteLen writes the MinLen or MaxLen check.
 func (w *checkWriter) byteLen(kind string, args []string) {
 	if w.f.Type != "string" && w.f.Type != "bytes" {
-		w.s.fail(w.where, "check %s is for string and bytes fields, not %s", kind, w.f.Type)
+		w.s.fail(w.at, "check %s is for string and bytes fields, not %s", kind, w.f.Type)
 		return
 	}
 	n, ok := w.length(kind, args)
@@ -1046,7 +1049,7 @@ func (w *checkWriter) byteLen(kind string, args []string) {
 // runeLen writes the MinRuneLen or MaxRuneLen check.
 func (w *checkWriter) runeLen(kind string, args []string) {
 	if w.f.Type != "string" {
-		w.s.fail(w.where, "check %s is for string fields, not %s", kind, w.f.Type)
+		w.s.fail(w.at, "check %s is for string fields, not %s", kind, w.f.Type)
 		return
 	}
 	n, ok := w.length(kind, args)
@@ -1056,7 +1059,7 @@ func (w *checkWriter) runeLen(kind string, args []string) {
 	if kind == "MinRuneLen" && n <= 1 && w.o.Unset != "" {
 		return // only "" has fewer characters, and "" is unset
 	}
-	w.s.useStd("unicode/utf8", w.where)
+	w.s.useStd("unicode/utf8", w.at)
 	if kind == "MinRuneLen" {
 		w.line(1, "if utf8.RuneCountInString(%s) < %s {", w.conv("string"), args[0])
 		w.fail("length in characters is less than " + args[0])
@@ -1072,10 +1075,10 @@ func (w *checkWriter) match(c loadjson.Check, args []string) {
 	s := w.s
 	var pat string
 	if w.f.Type != "string" || len(args) != 1 || json.Unmarshal(c.Args[0], &pat) != nil {
-		s.fail(w.where, "check Match is for string fields, with a pattern")
+		s.fail(w.at, "check Match is for string fields, with a pattern")
 		return
 	}
-	s.useStd("regexp", w.where)
+	s.useStd("regexp", w.at)
 	s.setup = append(s.setup, fmt.Sprintf("re%d := regexp.MustCompile(%s)", s.regexps, strconv.Quote(pat)))
 	w.line(1, "if !re%d.MatchString(%s) {", s.regexps, w.conv("string"))
 	s.regexps++
@@ -1089,14 +1092,14 @@ func (w *checkWriter) validators(e *Entity) {
 	for j := range f.Validators {
 		v := base(f)
 		if v == "" {
-			w.s.fail(w.where, "Validate is not allowed on a field of type %s", f.Type)
+			w.s.fail(w.at, "Validate is not allowed on a field of type %s", f.Type)
 			break
 		}
 		var ref *loadjson.FuncRef
 		if j < len(f.ValidatorRefs) {
 			ref = &f.ValidatorRefs[j]
 		}
-		fn := w.s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), w.where)
+		fn := w.s.schemaFunc(e, f, ref, fmt.Sprintf("Validators[%d]", j), fmt.Sprintf("func(%s) error", v), w.at)
 		w.line(1, "if err := %s(%s); err != nil {", fn, w.conv(v))
 		w.line(2, "return err")
 		w.line(1, "}")
@@ -1136,8 +1139,8 @@ func (s *entState) numberCheck(kind string, arg func(int) (string, string, bool)
 }
 
 // useStd records that the code uses the standard package p.
-func (s *entState) useStd(p, where string) {
-	s.use(p, p, where)
+func (s *entState) useStd(p string, at loc) {
+	s.use(p, p, at)
 }
 
 // relations lowers the edges of every entity, and makes the join entities of
@@ -1146,13 +1149,13 @@ func (l *lowerer) relations() {
 	for _, e := range l.g.Entities {
 		s := l.state[e.Name]
 		for _, ed := range e.Edges {
-			where := edgeAt(ed.Name)
+			at := edgeLoc(ed)
 			if reserved[ed.GoName] {
-				s.fail(where, "its Go name %s is reserved: it is a method of the entity", ed.GoName)
+				s.fail(at, "its Go name %s is reserved: it is a method of the entity", ed.GoName)
 			}
 			t := l.g.Entity(ed.Target)
 			if t == nil {
-				s.fail(where, "type %s is not a schema of this package", ed.Target)
+				s.fail(at, "type %s is not a schema of this package", ed.Target)
 				continue
 			}
 			r := &OutRel{GoName: ed.GoName, Name: ed.Name, Target: ed.Target, Many: ed.Rel.Kind == "O2M" || ed.Rel.Kind == "M2M", Comment: ed.Comment}
@@ -1166,7 +1169,7 @@ func (l *lowerer) relations() {
 					targetCol = fieldIndex(t, ed.Field)
 				}
 				if ownerCol < 0 || targetCol < 0 {
-					s.fail(where, "the foreign key field %q is not a field", ed.Field)
+					s.fail(at, "the foreign key field %q is not a field", ed.Field)
 					continue
 				}
 				owner, target := colConst(s.out, ownerCol), colConst(l.state[t.Name].out, targetCol)
@@ -1187,7 +1190,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	if ed.Rel.EdgeSchema != "" {
 		return l.edgeSchema(s, t, ed)
 	}
-	where := edgeAt(ed.Name)
+	at := edgeLoc(ed)
 	// The join entity's columns are the assoc edge's owner's, then its
 	// target's. An inverse edge lists them the other way round.
 	owner, target, cols := e, t, ed.Rel.Columns
@@ -1207,12 +1210,12 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 			handles = plugin.GoPlural(name)
 		}
 		if !ident(name) {
-			s.fail(where, "join table %s has no Go name for its entity", ed.Rel.Table)
+			s.fail(at, "join table %s has no Go name for its entity", ed.Rel.Table)
 			name = "Join"
 		}
-		js := &entState{l: l, name: name, paths: map[string]string{}}
+		js := &entState{l: l, name: name, pos: ed.Pos, paths: map[string]string{}}
 		if owner.TableSchema != target.TableSchema {
-			s.fail(where, "join table %s lies between tables in different schemas (%q and %q)", ed.Rel.Table, owner.TableSchema, target.TableSchema)
+			s.fail(at, "join table %s lies between tables in different schemas (%q and %q)", ed.Rel.Table, owner.TableSchema, target.TableSchema)
 		}
 		js.out = &OutEntity{
 			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: handles, Table: ed.Rel.Table,
@@ -1224,15 +1227,18 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 			js.out.Fields = append(js.out.Fields, js.field(nil, i, f))
 		}
 		// Errors name the assoc edge, whichever of the pair makes the entity first.
-		j = &join{ent: js.out, st: js, owner: owner.Name, where: where}
+		j = &join{ent: js.out, st: js, owner: owner.Name, at: at}
 		if ed.Inverse {
-			j.where = edgeAt(ed.Ref)
+			j.at = loc{edgeAt(ed.Ref), ed.Pos}
+			if ref := t.Edge(ed.Ref); ref != nil && ref.Pos != "" {
+				j.at.pos = ref.Pos
+			}
 		}
 		l.joins[ed.Rel.Table] = j
 	} else {
 		for i, ent := range []*Entity{owner, target} {
 			if f := j.ent.Fields[i]; f.Column != cols[i] || f.ElemType != l.state[ent.Name].out.Fields[0].ElemType {
-				s.fail(where, "join table %s is also declared with other columns or ID types, by %s", ed.Rel.Table, j.owner)
+				s.fail(at, "join table %s is also declared with other columns or ID types, by %s", ed.Rel.Table, j.owner)
 				break
 			}
 		}
@@ -1311,30 +1317,30 @@ func (l *lowerer) finish() {
 func (l *lowerer) checkDeclared(joins []*join) {
 	// Every name the package declares at its top level.
 	declared := map[string]string{}
-	add := func(name, kind, schema, where string) bool {
+	add := func(name, kind, schema string, at loc) bool {
 		if old, ok := declared[name]; ok {
-			l.errs = append(l.errs, &Error{Schema: schema, Where: where, Reason: fmt.Sprintf("%s %s collides with %s %s", kind, name, old, name)})
+			l.errs = append(l.errs, &Error{Pos: at.pos, Schema: schema, Where: at.where, Reason: fmt.Sprintf("%s %s collides with %s %s", kind, name, old, name)})
 			return false
 		}
 		declared[name] = kind
 		return true
 	}
 	for _, e := range l.g.Entities {
-		add(e.Name, "schema", e.Name, "")
+		add(e.Name, "schema", e.Name, loc{pos: e.Pos})
 	}
 	// The names that follow from one that collides are not reported again.
 	joinOK := make([]bool, len(joins))
 	for i, j := range joins {
-		joinOK[i] = add(j.ent.Name, "join entity", j.owner, j.where)
+		joinOK[i] = add(j.ent.Name, "join entity", j.owner, j.at)
 	}
 	enumOK := make([]bool, len(l.enums))
 	for i, d := range l.enums {
-		enumOK[i] = add(d.enum.Type, "enum type", d.schema, d.where)
+		enumOK[i] = add(d.enum.Type, "enum type", d.schema, d.at)
 	}
 	for i, d := range l.enums {
 		for _, c := range d.enum.Consts {
 			if enumOK[i] {
-				add(c, "enum constant", d.schema, d.where)
+				add(c, "enum constant", d.schema, d.at)
 			}
 		}
 	}
@@ -1345,58 +1351,58 @@ func (l *lowerer) checkDeclared(joins []*join) {
 		if len(o.Rels) == 0 {
 			continue
 		}
-		add(e.Name+"Edges", "edges type", e.Name, "")
-		for _, f := range o.Fields {
+		add(e.Name+"Edges", "edges type", e.Name, loc{pos: e.Pos})
+		for _, f := range e.Fields {
 			if f.GoName == "Edges" {
-				l.errs = append(l.errs, &Error{Schema: e.Name, Where: fieldAt(f.Name), Reason: "its Go name Edges is reserved: it holds the entity's relations"})
+				l.errs = append(l.errs, &Error{Pos: cmp.Or(f.Pos, e.Pos), Schema: e.Name, Where: fieldAt(f.Name), Reason: "its Go name Edges is reserved: it holds the entity's relations"})
 			}
 		}
 	}
 	for _, e := range l.g.Entities {
-		add(plugin.GoPlural(e.Name), "handles variable", e.Name, "")
+		add(plugin.GoPlural(e.Name), "handles variable", e.Name, loc{pos: e.Pos})
 	}
 	for i, j := range joins {
 		if joinOK[i] {
-			add(j.ent.Handles, "handles variable", j.owner, j.where)
+			add(j.ent.Handles, "handles variable", j.owner, j.at)
 		}
 	}
 	// Each handles variable has a type of its own, XHandles.
 	for _, e := range l.g.Entities {
-		add(e.Name+"Handles", "handles type", e.Name, "")
+		add(e.Name+"Handles", "handles type", e.Name, loc{pos: e.Pos})
 	}
 	for i, j := range joins {
 		if joinOK[i] {
-			add(j.ent.Name+"Handles", "handles type", j.owner, j.where)
+			add(j.ent.Name+"Handles", "handles type", j.owner, j.at)
 		}
 	}
 	// The unexported names: each entity's meta variable, descriptor
 	// function and the constants of its columns and edges.
 	for _, e := range l.g.Entities {
-		addUnexported(add, l.state[e.Name].out, e.Name, "")
+		addUnexported(add, l.state[e.Name].out, e.Name, loc{pos: e.Pos})
 	}
 	for i, j := range joins {
 		if joinOK[i] {
-			addUnexported(add, j.ent, j.owner, j.where)
+			addUnexported(add, j.ent, j.owner, j.at)
 		}
 	}
 }
 
 // addUnexported adds the unexported names renderEntity declares for o.
-func addUnexported(add func(name, kind, schema, where string) bool, o *OutEntity, schema, where string) {
+func addUnexported(add func(name, kind, schema string, at loc) bool, o *OutEntity, schema string, at loc) {
 	id := camel(o.Label)
-	add(id+"Meta", "meta variable", schema, where)
-	add(id+"Descriptor", "descriptor function", schema, where)
+	add(id+"Meta", "meta variable", schema, at)
+	add(id+"Descriptor", "descriptor function", schema, at)
 	for i, f := range o.Fields {
-		w := where
-		if w == "" {
-			w = fieldAt(f.Name)
+		w := at
+		if w.where == "" {
+			w.where = fieldAt(f.Name)
 		}
 		add(colConst(o, i), "column constant", schema, w)
 	}
 	for i, r := range o.Rels {
-		w := where
-		if w == "" {
-			w = edgeAt(r.Name)
+		w := at
+		if w.where == "" {
+			w.where = edgeAt(r.Name)
 		}
 		add(edgeConst(o, i), "edge constant", schema, w)
 	}
@@ -1408,7 +1414,7 @@ func (l *lowerer) checkJoinTables(joins []*join) {
 	for _, j := range joins {
 		for _, e := range l.g.Entities {
 			if e.Table == j.ent.Table && e.TableSchema == j.ent.TableSchema {
-				l.errs = append(l.errs, &Error{Schema: j.owner, Where: j.where, Reason: fmt.Sprintf("join table %s is also the table of schema %s", j.ent.Table, e.Name)})
+				l.errs = append(l.errs, &Error{Pos: j.at.pos, Schema: j.owner, Where: j.at.where, Reason: fmt.Sprintf("join table %s is also the table of schema %s", j.ent.Table, e.Name)})
 			}
 		}
 	}
@@ -1421,11 +1427,14 @@ func (l *lowerer) checkLabels() {
 	labels := map[string]string{}
 	for _, o := range l.out.Entities {
 		if old, ok := labels[o.Label]; ok && old != o.Name { // one name is reported as a collision already
-			schema, where := o.Name, ""
-			if j := l.joins[o.Table]; o.Join && j != nil {
-				schema, where = j.owner, j.where
+			schema, at := o.Name, loc{}
+			if e := l.g.Entity(o.Name); e != nil {
+				at.pos = e.Pos
 			}
-			l.errs = append(l.errs, &Error{Schema: schema, Where: where, Reason: fmt.Sprintf("%s %s has label %s, which is also %s's", kindOf(o), o.Name, o.Label, old)})
+			if j := l.joins[o.Table]; o.Join && j != nil {
+				schema, at = j.owner, j.at
+			}
+			l.errs = append(l.errs, &Error{Pos: at.pos, Schema: schema, Where: at.where, Reason: fmt.Sprintf("%s %s has label %s, which is also %s's", kindOf(o), o.Name, o.Label, old)})
 			continue
 		}
 		labels[o.Label] = o.Name

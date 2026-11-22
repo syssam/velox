@@ -66,7 +66,13 @@ func lower(t *testing.T, cfg Config, ss ...schema.Interface) (*Out, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Lower(g, cfg)
+	o, err := Lower(g, cfg)
+	m := &loadjson.Model{}
+	for _, e := range g.Entities {
+		m.Schemas = append(m.Schemas, &loadjson.Schema{Name: e.Name, Pos: e.Pos})
+	}
+	positioned(t, m, err)
+	return o, err
 }
 
 func mustLower(t *testing.T, cfg Config, ss ...schema.Interface) *Out {
@@ -932,7 +938,7 @@ func TestLowerPackageNameClash(t *testing.T) {
 		t.Fatal("no error")
 	}
 	w := `schema LwPkgClash: field "a": imports github.com/syssam/velox/internal/codegen/internal/errors, but the generated code uses the name errors for errors`
-	if err.Error() != w {
+	if plain(err) != w {
 		t.Errorf("error %v, want %s", err, w)
 	}
 	// A schema package named as a field type's package, sch here, takes

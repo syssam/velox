@@ -62,7 +62,18 @@ func decode(t *testing.T, ss ...schema.Interface) *loadjson.Model {
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
+	for _, e := range m.Errors {
+		if e.Pos == "" && !noPosition(e.Reason) {
+			t.Errorf("an error has no position: schema %s: %s: %s", e.Schema, e.Where, e.Reason)
+		}
+	}
 	return &m
+}
+
+// noPosition reports whether an error of Marshal has no file:line, as a
+// schema that is nil or whose type has no name declares no method.
+func noPosition(reason string) bool {
+	return reason == "a schema is nil" || strings.HasPrefix(reason, "the type ") && strings.HasSuffix(reason, " has no name")
 }
 
 // marshal is decode for a model that must have no errors.

@@ -29,7 +29,7 @@
 == change-comment
 == table-comment
 == key-type-change
-1 widen-type review orgs.id: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
+1 widen-type review orgs.id [cases_test.go]: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
 2 widen-type review users.org_id [cases_test.go]: widens column users.org_id from integer to bigint; the table is rewritten under an exclusive lock
 == add-index
 0 add-index review users.users_user_created_at [cases_test.go]: adds index users.users_user_created_at; building it scans the table
@@ -63,10 +63,10 @@
 == literals
 == schema-qualified
 == add-identity
-0 add-identity review users.id: adds an identity to column users.id and sets its counter past the column's largest value
+0 add-identity review users.id [cases_test.go]: adds an identity to column users.id and sets its counter past the column's largest value
 == serial-to-identity
-0 add-identity review users.id: adds an identity to column users.id and sets its counter past the column's largest value
-0 serial-to-identity review users.id: turns serial column users.id into an identity that goes on from its sequence: its default and sequence are dropped
+0 add-identity review users.id [cases_test.go]: adds an identity to column users.id and sets its counter past the column's largest value
+0 serial-to-identity review users.id [cases_test.go]: turns serial column users.id into an identity that goes on from its sequence: its default and sequence are dropped
 == enum-swap-dependents
 0 drop-enum-value destructive users_role [cases_test.go]: removes 'guest' from enum type users_role; rows that hold it fail or change
 == index-name-to-table
@@ -78,7 +78,7 @@
 == rename-table-key-type
 1 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
 7 widen-type review accounts.org_id [cases_test.go]: widens column accounts.org_id from integer to bigint; the table is rewritten under an exclusive lock
-8 widen-type review orgs.id: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
+8 widen-type review orgs.id [cases_test.go]: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock
 == reuse-dropped-name
 3 add-index review users.shared_idx [cases_test.go]: adds index users.shared_idx; building it scans the table
 4 drop-table destructive posts: drops table posts and its rows

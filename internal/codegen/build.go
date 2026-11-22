@@ -88,8 +88,12 @@ type edgeState struct {
 	column string     // the foreign-key column a storage key set, on a non-M2M relation
 }
 
-// fail records that schema s breaks rule, at the element at.
+// fail records that schema s breaks rule, at the element at, or at the
+// schema when the element has no position.
 func (b *builder) fail(rule int, s string, at loc, format string, args ...any) {
+	if n := b.node(s); at.pos == "" && n != nil {
+		at.pos = n.ent.Pos
+	}
 	b.errs = append(b.errs, ruleError{rule, &Error{Pos: at.pos, Schema: s, Where: at.where, Reason: fmt.Sprintf(format, args...)}})
 }
 
@@ -139,7 +143,7 @@ func (b *builder) entities(m *loadjson.Model) {
 	schemas := slices.Clone(m.Schemas)
 	slices.SortStableFunc(schemas, func(x, y *loadjson.Schema) int { return strings.Compare(x.Name, y.Name) })
 	for _, s := range schemas {
-		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations, Mixins: s.Mixins, Pointer: s.Pointer}
+		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations, Mixins: s.Mixins, Pointer: s.Pointer, Pos: s.Pos}
 		e.Table = tableName(e.Name)
 		if raw, ok := s.Annotations["Table"]; ok {
 			var t struct {
@@ -162,7 +166,7 @@ func (b *builder) entities(m *loadjson.Model) {
 			copy(e.Fields[1:id+1], e.Fields[:id])
 			e.Fields[0] = f
 		} else {
-			auto := &Field{Name: "id", Type: "int64", GoName: "ID", Column: "id", AutoID: true}
+			auto := &Field{Name: "id", Type: "int64", GoName: "ID", Column: "id", AutoID: true, Pos: s.Pos}
 			e.Fields = append([]*Field{auto}, e.Fields...)
 		}
 		b.g.Entities = append(b.g.Entities, e)
@@ -570,7 +574,7 @@ func (b *builder) implicit(holder, ref *node, s *edgeState, required, unique, im
 		g := *id.GoType
 		lf.GoType = &g
 	}
-	f := &Field{Field: lf, GoName: plugin.GoName(name), Column: name, Pointer: !required, Implicit: s.ed.Name}
+	f := &Field{Field: lf, Pos: s.ed.Pos, GoName: plugin.GoName(name), Column: name, Pointer: !required, Implicit: s.ed.Name}
 	holder.ent.Fields = append(holder.ent.Fields, f)
 	b.implicits[f] = s
 	b.bind(s, name, name)
@@ -1009,7 +1013,7 @@ func ascii(s string) bool {
 // field's Go name is rule 4; elements of one name are rules 1, 2 and 3.
 func (b *builder) validateNames(e *Entity) {
 	if !ascii(e.Name) {
-		b.fail(56, e.Name, loc{}, "its name is not ASCII, and velox derives table, column and Go names from it: rename the schema")
+		b.fail(56, e.Name, loc{pos: e.Pos}, "its name is not ASCII, and velox derives table, column and Go names from it: rename the schema")
 	}
 	for _, f := range e.Fields {
 		if !ascii(f.Name) && isDeclared(f) {

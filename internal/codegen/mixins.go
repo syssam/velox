@@ -91,7 +91,7 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 			}
 			key := m.PkgPath + "." + m.Name
 			if seen[key] {
-				return nil, &Error{Schema: e.Name, Reason: fmt.Sprintf("Mixin()[%d] is %s again, which declares behaviour: list a mixin once", i, m.Name)}
+				return nil, &Error{Pos: e.Pos, Schema: e.Name, Reason: fmt.Sprintf("Mixin()[%d] is %s again, which declares behaviour: list a mixin once", i, m.Name)}
 			}
 			seen[key] = true
 			mb := MixinBound{PkgPath: m.PkgPath, Name: m.Name, Methods: map[string]bool{}}

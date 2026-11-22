@@ -197,3 +197,27 @@ func samePos(a, b string) bool {
 	}
 	return resolve(a) == resolve(b)
 }
+
+// A schema's own errors are at the line that declares its type, also when
+// it declares no method, where Marshal alone has no line.
+func TestLoadSchemaLine(t *testing.T) {
+	dir := module(t, map[string]string{"schema/cafe.go": `package schema
+
+import "github.com/syssam/velox/schema"
+
+type Café struct{ schema.Schema }
+`})
+	m, err := Load(dir, "./schema", offline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Build(m)
+	j, ok := err.(interface{ Unwrap() []error })
+	if !ok || len(j.Unwrap()) != 1 {
+		t.Fatalf("got %v", err)
+	}
+	e, ok := j.Unwrap()[0].(*Error)
+	if want := filepath.Join(dir, "schema", "cafe.go") + ":5"; !ok || !samePos(e.Pos, want) {
+		t.Fatalf("got %+v, want pos %s", e, want)
+	}
+}

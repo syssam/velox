@@ -41,7 +41,12 @@ type Position struct {
 
 // Schema describes one schema, with the elements of its mixins merged in.
 type Schema struct {
-	Name        string                     `json:"name"`
+	Name string `json:"name"`
+	// Pos is the file:line of a method the schema type declares, the first
+	// of Fields, Edges, Indexes, Mixin, Annotations, Policy, Hooks and
+	// Interceptors that it has, for the errors of the schema as a whole; ""
+	// when it declares none of them.
+	Pos         string                     `json:"pos,omitempty"`
 	Fields      []*Field                   `json:"fields,omitempty"`  // the mixins' first, in mixin order, then the schema's own
 	Edges       []*Edge                    `json:"edges,omitempty"`   // likewise
 	Indexes     []*Index                   `json:"indexes,omitempty"` // likewise

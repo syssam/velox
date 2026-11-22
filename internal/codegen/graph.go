@@ -30,6 +30,10 @@ type Entity struct {
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	EdgeSchema  bool                       `json:"edge_schema,omitempty"` // a many-to-many relation's links are its rows, as edge.Through names it
 
+	// Pos is the file:line that stands for the schema in its errors, as
+	// loadjson.Schema's; it is not part of the model's JSON.
+	Pos string `json:"-"`
+
 	// Mixins are the values of the schema's Mixin method, and Pointer says
 	// the schema implements schema.Interface only through a pointer. They
 	// are for velox-gen's binding of mixin behaviour, not the model's JSON.
@@ -42,9 +46,10 @@ type Entity struct {
 //
 // Position, from loadjson.Field, is meaningful only for a declared field: one
 // with !AutoID && Implicit == "". The ID velox adds and the implicit foreign
-// keys have no position in the schema and leave it zero, and Pos "".
+// keys have no position in the schema and leave it zero.
 //
-// Pos is the file:line that declares the field, for errors. It is kept out of
+// Pos is the file:line that declares the field, for errors: for the ID velox
+// adds, the schema's; for an implicit foreign key, its edge's. It is kept out of
 // the JSON, so that describe -json and the generated files do not depend on
 // the checkout's path. MarshalJSON leaves out the embedded loadjson.Field's
 // Pos too, which a json:"-" tag here would not hide.
