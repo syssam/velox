@@ -10,8 +10,8 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// TestEdgeSchemaGolden pins the SDL of the edge schema model for gqlgen and
-// graphql-go. Run it with -update to rewrite testdata/edgeschema*.graphql.
+// TestEdgeSchemaGolden pins the SDL of the edge schema model for gqlgen,
+// graphql-go and compat=veloxe. Run it with -update to rewrite testdata/edgeschema*.graphql.
 // Membership and Follow are types like any; User.groups keeps every input,
 // and User.following and followers, whose edge schema Follow has a note Add
 // cannot fill, have no input that adds links.
@@ -25,7 +25,7 @@ func TestEdgeSchemaGolden(t *testing.T) {
 	if ms, key := edgeOf(t, byName["User"], "memberships"), edgeOf(t, byName["Membership"], "user"); ms.Ref != "user" || key.Ref != "" {
 		t.Fatalf("the model's Ref pair is not one way: %q, %q", ms.Ref, key.Ref)
 	}
-	for name, cfg := range map[string]Config{"edgeschema.graphql": {}, "edgeschema_graphqlgo.graphql": graphqlGo(false)} {
+	for name, cfg := range map[string]Config{"edgeschema.graphql": {}, "edgeschema_graphqlgo.graphql": graphqlGo(false), "edgeschema_veloxe.graphql": {Veloxe: true, Package: genPath}} {
 		t.Run(name, func(t *testing.T) {
 			got, err := RenderConfig(modeltest.EdgeSchema(t), cfg)
 			if err != nil {
@@ -45,7 +45,7 @@ func TestEdgeSchemaGolden(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			for _, want := range []string{"type Membership ", "type Follow ", "memberships(", "groupIDs: [ID!]", "addGroupIDs: [ID!]", "removeFollowingIDs: [ID!]", "clearFollowing: Boolean"} {
+			for _, want := range []string{"type Membership ", "type Follow ", "  memberships", "groupIDs: [ID!]", "addGroupIDs: [ID!]", "removeFollowingIDs: [ID!]", "clearFollowing: Boolean"} {
 				if !strings.Contains(got, want) {
 					t.Errorf("no %q", want)
 				}

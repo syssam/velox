@@ -1,0 +1,211 @@
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
+
+"""A time, as an RFC 3339 string."""
+scalar Time
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+
+"""Information about a page of a connection."""
+type PageInfo {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+"""
+An object with an ID.
+Follows the [Relay Global Object Identification Specification](https://relay.dev/graphql/objectidentification.htm)
+"""
+interface Node @goModel(model: "example.com/app/gen.Noder") {
+  """The id of the object."""
+  id: ID!
+}
+
+# The root query.
+
+type Query {
+  """Fetches an object given its ID."""
+  node(id: ID!): Node
+  """Lookup nodes by a list of IDs."""
+  nodes(ids: [ID!]!): [Node]!
+  """The connection to the Follow nodes, ordered by orderBy and then the key, and paged by the other arguments."""
+  follows(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: FollowOrder): FollowConnection!
+  """The Group nodes, as the application's resolver returns them."""
+  groups: [Group!]!
+  """The Membership nodes, as the application's resolver returns them."""
+  memberships: [Membership!]!
+  """The User nodes, as the application's resolver returns them."""
+  users: [User!]!
+}
+
+# Follow
+
+type Follow implements Node {
+  id: ID!
+  note: String!
+  userId: ID!
+  followerId: ID!
+  user: User!
+  follower: User!
+}
+
+"""A connection to a list of Follow."""
+type FollowConnection {
+  """The edges of this page."""
+  edges: [FollowEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Follow."""
+type FollowEdge {
+  """The Follow at the end of the edge."""
+  node: Follow
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Follow."""
+input FollowOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: FollowOrderField!
+}
+
+"""The fields connections to Follow can be ordered by."""
+enum FollowOrderField {
+  NOTE
+  USER_ID
+  FOLLOWER_ID
+}
+
+"""The input that creates a Follow."""
+input CreateFollowInput {
+  note: String!
+  """The ID of the User the edge user leads to."""
+  userId: ID!
+  """The ID of the User the edge follower leads to."""
+  followerId: ID!
+}
+
+# Group
+
+type Group implements Node {
+  id: ID!
+  name: String!
+  users: [User!]!
+  memberships: [Membership!]!
+}
+
+"""The input that creates a Group."""
+input CreateGroupInput {
+  name: String!
+  """The IDs of the User nodes the edge users leads to."""
+  userIDs: [ID!]
+}
+
+"""The input that updates a Group: a field not given is left as it is."""
+input UpdateGroupInput {
+  name: String
+  """The IDs of User nodes to add to the edge users."""
+  addUserIDs: [ID!]
+  """The IDs of User nodes to remove from the edge users; an ID the edge does not lead to is ignored."""
+  removeUserIDs: [ID!]
+  """Removes every User from the edge users, before the IDs to remove and to add."""
+  clearUsers: Boolean
+}
+
+# Membership
+
+type Membership implements Node {
+  id: ID!
+  role: MembershipRole!
+  joinedAt: Time!
+  userId: ID!
+  groupId: ID!
+  user: User!
+  group: Group!
+}
+
+enum MembershipRole {
+  OWNER
+  MEMBER
+}
+
+"""The input that creates a Membership."""
+input CreateMembershipInput {
+  role: MembershipRole
+  joinedAt: Time
+  """The ID of the User the edge user leads to."""
+  userId: ID!
+  """The ID of the Group the edge group leads to."""
+  groupId: ID!
+}
+
+"""The input that updates a Membership: a field not given is left as it is."""
+input UpdateMembershipInput {
+  role: MembershipRole
+  """The ID of the User the edge user leads to."""
+  userId: ID
+  """The ID of the Group the edge group leads to."""
+  groupId: ID
+}
+
+# User
+
+type User implements Node {
+  id: ID!
+  name: String!
+  groups: [Group!]!
+  following: [User!]!
+  followers: [User!]!
+  memberships: [Membership!]!
+  follows(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: FollowOrder): FollowConnection!
+}
+
+"""The input that creates a User."""
+input CreateUserInput {
+  name: String!
+  """The IDs of the Group nodes the edge groups leads to."""
+  groupIDs: [ID!]
+}
+
+"""The input that updates a User: a field not given is left as it is."""
+input UpdateUserInput {
+  name: String
+  """The IDs of Group nodes to add to the edge groups."""
+  addGroupIDs: [ID!]
+  """The IDs of Group nodes to remove from the edge groups; an ID the edge does not lead to is ignored."""
+  removeGroupIDs: [ID!]
+  """Removes every Group from the edge groups, before the IDs to remove and to add."""
+  clearGroups: Boolean
+  """The IDs of User nodes to remove from the edge following; an ID the edge does not lead to is ignored."""
+  removeFollowingIDs: [ID!]
+  """Removes every User from the edge following, before the IDs to remove."""
+  clearFollowing: Boolean
+  """The IDs of User nodes to remove from the edge followers; an ID the edge does not lead to is ignored."""
+  removeFollowerIDs: [ID!]
+  """Removes every User from the edge followers, before the IDs to remove."""
+  clearFollowers: Boolean
+}

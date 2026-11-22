@@ -26,6 +26,11 @@ type graph struct {
 	types   typeNames
 	ents    map[string]*plugin.Entity // every entity, by name, join entities too
 	query   []gqlField                // the QueryFields, in entity name order
+	// warnings are the edges with an input that has no add, as their edge
+	// schema has columns Add cannot fill; warned holds them by
+	// "Entity.edge", so each is warned of once.
+	warnings []string
+	warned   map[string]bool
 }
 
 // object is an entity's type.

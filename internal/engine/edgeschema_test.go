@@ -11,13 +11,14 @@ import (
 
 // esUser is in groups through esMember, an edge schema with a key of its own
 // and a note Add cannot fill; and in clubs through esSecret, an edge schema
-// with a Read policy; and in teams through a descriptor whose unfilled
-// column is out of range.
+// with a Read policy; in teams through a descriptor whose unfilled column
+// is out of range; and in crews through esMember with two unfilled columns.
 type esUser struct {
 	ID     int64
 	Groups velox.Many[esGroup]
 	Clubs  velox.Many[esGroup]
 	Teams  velox.Many[esGroup]
+	Crews  velox.Many[esGroup]
 }
 
 var esUsers = struct {
@@ -25,7 +26,8 @@ var esUsers = struct {
 	Groups velox.Rel[esUser, esGroup]
 	Clubs  velox.Rel[esUser, esGroup]
 	Teams  velox.Rel[esUser, esGroup]
-}{velox.NumberCol[esUser, int64]{I: 0}, velox.Rel[esUser, esGroup]{I: 0}, velox.Rel[esUser, esGroup]{I: 1}, velox.Rel[esUser, esGroup]{I: 2}}
+	Crews  velox.Rel[esUser, esGroup]
+}{velox.NumberCol[esUser, int64]{I: 0}, velox.Rel[esUser, esGroup]{I: 0}, velox.Rel[esUser, esGroup]{I: 1}, velox.Rel[esUser, esGroup]{I: 2}, velox.Rel[esUser, esGroup]{I: 3}}
 
 var esUserMeta velox.MetaOnce[esUser]
 
@@ -39,9 +41,10 @@ func (*esUser) VeloxMeta() *velox.Meta[esUser] {
 				velox.EdgeThrough[esMember, esGroup]("groups", 0, 2, 3, 0, 1),
 				velox.EdgeThrough[esSecret, esGroup]("clubs", 0, 1, 2, 0),
 				velox.EdgeThrough[esMember, esGroup]("teams", 0, 2, 3, 0, 9),
+				velox.EdgeThrough[esMember, esGroup]("crews", 0, 2, 3, 0, 0, 1),
 			},
 			FieldPtr:     func(x *esUser, i int) any { return &x.ID },
-			EdgeFieldPtr: func(x *esUser, i int) any { return [...]any{&x.Groups, &x.Clubs, &x.Teams}[i] },
+			EdgeFieldPtr: func(x *esUser, i int) any { return [...]any{&x.Groups, &x.Clubs, &x.Teams, &x.Crews}[i] },
 		}
 	})
 }
@@ -109,7 +112,7 @@ func (*esSecret) VeloxMeta() *velox.Meta[esSecret] {
 // before any statement, the owner's insert or update included; Remove and
 // Clear still run.
 func TestEdgeSchemaAddUnfilled(t *testing.T) {
-	const want = "velox: engine_test.esUser: edge groups: Add cannot fill engine_test.esMember.Note, which has no default; insert engine_test.esMember rows, or give note a Default or Optional"
+	const want = "velox: engine_test.esUser: edge groups: Add cannot fill engine_test.esMember.Note, which has no default; insert engine_test.esMember rows, or give it a Default or Optional"
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	if err := db.Insert(&esUser{ID: 1}).Set(esUsers.Groups.Add(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), want) {
@@ -117,6 +120,10 @@ func TestEdgeSchemaAddUnfilled(t *testing.T) {
 	}
 	if _, err := db.Update[esUser]().Set(esUsers.Groups.Add(1)).Where(esUsers.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("update: %v", err)
+	}
+	const two = "Add cannot fill engine_test.esMember.ID, engine_test.esMember.Note, which have no default; insert engine_test.esMember rows, or give them a Default or Optional"
+	if err := db.Insert(&esUser{ID: 1}).Set(esUsers.Crews.Add(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), two) {
+		t.Errorf("two columns: %v", err)
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent: %s", e.Calls, e.SQL)

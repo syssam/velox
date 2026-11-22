@@ -139,6 +139,9 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 		if err != nil {
 			return nil, nil, err
 		}
+		if g.addsRefused(e.Edges[i], create) {
+			g.warnUnfilled(e, e.Edges[i])
+		}
 		for _, f := range add {
 			if err := fs.add(f.gqlField); err != nil {
 				return nil, nil, err
@@ -391,6 +394,43 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		clearEdge()
 	}
 	return out, nil
+}
+
+// addsRefused reports whether the M2M edge ed would have an input that adds
+// links, on create or on update, but for its edge schema's columns that Add
+// cannot fill: its target has an ID, and the edge is mutable or the input
+// is the create input.
+func (g *graph) addsRefused(ed *plugin.Edge, create bool) bool {
+	t := g.byName[ed.Target]
+	return ed.Kind == plugin.M2M && len(ed.Unfilled) > 0 && t != nil && t.hasID && (create || !ed.Immutable)
+}
+
+// warnUnfilled warns, once, that the M2M edge ed of e has no input that
+// adds links, as its edge schema has the columns ed.Unfilled, which Add
+// cannot fill. It names entities and fields by their Go names, as velox's
+// refusal of the Add does, and the edge by its schema name.
+func (g *graph) warnUnfilled(e *plugin.Entity, ed *plugin.Edge) {
+	key := e.Name + "." + ed.Name
+	if g.warned[key] {
+		return
+	}
+	if g.warned == nil {
+		g.warned = map[string]bool{}
+	}
+	g.warned[key] = true
+	es := g.ents[ed.Join]
+	fields := make([]string, len(ed.Unfilled))
+	for i, name := range ed.Unfilled {
+		fields[i] = ed.Join + "." + name
+		if j := slices.IndexFunc(es.Fields, func(f *plugin.Field) bool { return f.Name == name }); j >= 0 {
+			fields[i] = ed.Join + "." + es.Fields[j].GoName
+		}
+	}
+	has := "has"
+	if len(fields) > 1 {
+		has = "have"
+	}
+	g.warnings = append(g.warnings, fmt.Sprintf("%s: no add inputs; %s %s no default", key, strings.Join(fields, ", "), has))
 }
 
 // unsettableEdge returns the error of a required edge ed of o whose key is

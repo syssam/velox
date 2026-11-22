@@ -138,24 +138,28 @@ func TestRun(t *testing.T) {
 
 // TestUnfilledWarning: an M2M edge whose edge schema has a column Add cannot
 // fill is written without add inputs, and velox-graphql says so, once per
-// edge, for either engine. The edge whose edge schema fills every column
-// draws no warning.
+// edge, for either engine, naming fields by their Go names. The edge whose
+// edge schema fills every column draws no warning, and neither does an edge
+// of a type with no create or update input; a create input alone is enough.
 func TestUnfilledWarning(t *testing.T) {
-	for _, engine := range []string{"gqlgen", "graphql-go"} {
-		files, warnings, err := Generate(&plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen",
-			Options: map[string]string{"engine": engine}, Model: modeltest.EdgeSchema(t)})
+	generate := func(m *plugin.Model, opts map[string]string) []string {
+		t.Helper()
+		files, warnings, err := Generate(&plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen", Options: opts, Model: m})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(files) == 0 {
 			t.Fatal("no files")
 		}
-		want := []string{
-			"User.following: no add inputs; Follow.note has no default",
-			"User.followers: no add inputs; Follow.note has no default",
-		}
-		if !reflect.DeepEqual(warnings, want) {
-			t.Errorf("%s: warnings %q, want %q", engine, warnings, want)
+		return warnings
+	}
+	want := []string{
+		"User.following: no add inputs; Follow.Note has no default",
+		"User.followers: no add inputs; Follow.Note has no default",
+	}
+	for _, opts := range []map[string]string{nil, {"engine": "graphql-go"}, {"compat": "veloxe"}} {
+		if got := generate(modeltest.EdgeSchema(t), opts); !reflect.DeepEqual(got, want) {
+			t.Errorf("%v: warnings %q, want %q", opts, got, want)
 		}
 	}
 	m := modeltest.EdgeSchema(t)
@@ -166,11 +170,18 @@ func TestUnfilledWarning(t *testing.T) {
 			}
 		}
 	}
-	_, warnings, err := Generate(&plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen", Model: m})
-	if err != nil {
-		t.Fatal(err)
+	if got, want := generate(m, nil), "User.following: no add inputs; Follow.Note, Follow.ID have no default"; len(got) == 0 || got[0] != want {
+		t.Errorf("warnings %q, want %q first", got, want)
 	}
-	if want := "User.following: no add inputs; Follow.note, Follow.id have no default"; len(warnings) == 0 || warnings[0] != want {
-		t.Errorf("warnings %q, want %q first", warnings, want)
+	for ann, want := range map[string][]string{`{"query_field": "users"}`: nil, `{"query_field": "users", "mutations": ["create"]}`: want} {
+		m = modeltest.EdgeSchema(t)
+		for _, e := range m.Entities {
+			if e.Name == "User" {
+				e.Annotations["graphql"] = json.RawMessage(ann)
+			}
+		}
+		if got := generate(m, nil); !reflect.DeepEqual(got, want) {
+			t.Errorf("User %s: warnings %q, want %q", ann, got, want)
+		}
 	}
 }

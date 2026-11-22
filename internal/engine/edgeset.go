@@ -277,16 +277,16 @@ func (w *edgeWrite) fillable() error {
 		return nil
 	}
 	j := w.link.Join
-	fields, names := make([]string, len(cols)), make([]string, len(cols))
+	fields := make([]string, len(cols))
 	for i, c := range cols {
-		fields[i], names[i] = j.Name+"."+j.Columns[c].Field, j.Columns[c].Name
+		fields[i] = j.Name + "." + j.Columns[c].Field
 	}
-	has := "has"
+	has, it := "has", "it"
 	if len(cols) > 1 {
-		has = "have"
+		has, it = "have", "them"
 	}
 	return fmt.Errorf("velox: %s: edge %s: Add cannot fill %s, which %s no default; insert %s rows, or give %s a Default or Optional",
-		w.owner.Name, w.link.Name, strings.Join(fields, ", "), has, j.Name, strings.Join(names, ", "))
+		w.owner.Name, w.link.Name, strings.Join(fields, ", "), has, j.Name, it)
 }
 
 // keys is have with each of ks, converted to w's key column's Go type, that

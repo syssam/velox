@@ -121,6 +121,9 @@ func (m *Model) check() error {
 
 // check is Model.check of e; byName holds the model's entities.
 func (e *Entity) check(byName map[string]*Entity) error {
+	if e.Join && e.EdgeSchema {
+		return fmt.Errorf("it is both a join entity and an edge schema")
+	}
 	for i, f := range e.Fields {
 		if f == nil {
 			return fmt.Errorf("field %d is null", i)
@@ -148,9 +151,25 @@ func (e *Entity) check(byName map[string]*Entity) error {
 		if err := ed.check(byName); err != nil {
 			return fmt.Errorf("edge %s: %w", ed.Name, err)
 		}
-		if ed.Through != "" && !slices.ContainsFunc(e.Edges, func(t *Edge) bool { return t != nil && t.Name == ed.Through }) {
-			return fmt.Errorf("edge %s: its through edge %s is not an edge of %s", ed.Name, ed.Through, e.Name)
+		if err := ed.checkThrough(e); err != nil {
+			return fmt.Errorf("edge %s: %w", ed.Name, err)
 		}
+	}
+	return nil
+}
+
+// checkThrough is Model.check of the through edge of ed, an edge of e: an
+// O2M edge of e to the entity that holds ed's links.
+func (ed *Edge) checkThrough(e *Entity) error {
+	if ed.Through == "" {
+		return nil
+	}
+	i := slices.IndexFunc(e.Edges, func(t *Edge) bool { return t != nil && t.Name == ed.Through })
+	switch {
+	case i < 0:
+		return fmt.Errorf("its through edge %s is not an edge of %s", ed.Through, e.Name)
+	case e.Edges[i].Kind != O2M || e.Edges[i].Target != ed.Join:
+		return fmt.Errorf("its through edge %s is not an O2M edge to %s, which holds its links", ed.Through, ed.Join)
 	}
 	return nil
 }
@@ -161,6 +180,8 @@ func (ed *Edge) check(byName map[string]*Entity) error {
 	switch {
 	case t == nil:
 		return fmt.Errorf("no target entity %s", ed.Target)
+	case ed.Kind != M2M && (ed.Join != "" || len(ed.Unfilled) > 0 || ed.Through != ""):
+		return fmt.Errorf("it is %s, and only an M2M edge has a join entity, a through edge or unfilled fields", ed.Kind)
 	case ed.Ref != "" && !slices.ContainsFunc(t.Edges, func(r *Edge) bool { return r != nil && r.Name == ed.Ref }):
 		return fmt.Errorf("its pair %s is not an edge of %s", ed.Ref, ed.Target)
 	case ed.Join != "" && byName[ed.Join] == nil:

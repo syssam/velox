@@ -97,23 +97,43 @@ func TestRunChecksLiterals(t *testing.T) {
 			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Ref: "x"}}}}}}),
 			"edge friends: its pair x is not an edge of User"},
 		{"no join", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
-			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "J"}}}}}}),
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "J"}}}}}}),
 			"edge friends: no join entity J"},
 		{"join not a join", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
-			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "User"}}}}}}),
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "User"}}}}}}),
 			"edge friends: User holds its links but is neither a join entity nor an edge schema"},
 		{"unfilled without edge schema", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
-			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "J", Unfilled: []string{"note"}}}},
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "J", Unfilled: []string{"note"}}}},
 			{Name: "J", Join: true}}}}),
 			"edge friends: it lists unfilled fields but goes through no edge schema"},
 		{"unfilled not a field", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
-			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "F", Unfilled: []string{"note"}}}},
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "F", Unfilled: []string{"note"}}}},
 			{Name: "F", EdgeSchema: true}}}}),
 			"edge friends: an unfilled field is not a field of F"},
 		{"no through edge", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
-			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "F", Through: "follows"}}},
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "F", Through: "follows"}}},
 			{Name: "F", EdgeSchema: true}}}}),
 			"entity User: edge friends: its through edge follows is not an edge of User"},
+		{"join on O2M", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "pets", Target: "User", Kind: plugin.O2M, Join: "J"}}},
+			{Name: "J", Join: true}}}}),
+			"edge pets: it is O2M, and only an M2M edge has a join entity, a through edge or unfilled fields"},
+		{"unfilled on M2O", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "boss", Target: "User", Kind: plugin.M2O, Unfilled: []string{"note"}}}}}}}),
+			"edge boss: it is M2O, and only an M2M edge has a join entity, a through edge or unfilled fields"},
+		{"join and edge schema", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "F", Join: true, EdgeSchema: true}}}}),
+			"entity F: it is both a join entity and an edge schema"},
+		{"through edge not O2M", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "F", Through: "follow"},
+				{Name: "follow", Target: "F", Kind: plugin.M2O}}},
+			{Name: "F", EdgeSchema: true}}}}),
+			"entity User: edge friends: its through edge follow is not an O2M edge to F, which holds its links"},
+		{"through edge to another", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Kind: plugin.M2M, Join: "F", Through: "pets"},
+				{Name: "pets", Target: "User", Kind: plugin.O2M}}},
+			{Name: "F", EdgeSchema: true}}}}),
+			"entity User: edge friends: its through edge pets is not an O2M edge to F, which holds its links"},
 		{"no key holder", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
 			{Name: "User", Edges: []*plugin.Edge{{Name: "boss", Target: "User", Field: "boss_id", FieldOn: "X"}}}}}}),
 			"edge boss: no entity X, which holds its key"},

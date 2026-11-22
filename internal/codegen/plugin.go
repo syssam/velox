@@ -38,9 +38,10 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 		}
 	}
 	for _, oe := range o.Entities {
+		ge := g.Entity(oe.Name) // nil for a join entity
 		pe := &plugin.Entity{
 			Name: oe.Name, Label: oe.Label, Handles: oe.Handles, Table: oe.Table, TableSchema: oe.TableSchema, Join: oe.Join,
-			EdgeSchema: g.Entity(oe.Name) != nil && g.Entity(oe.Name).EdgeSchema, Comment: oe.Comment, Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{}, Indexes: []*plugin.Index{},
+			EdgeSchema: ge != nil && ge.EdgeSchema, Comment: oe.Comment, Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{}, Indexes: []*plugin.Index{},
 			PrimaryKey: append([]int{}, oe.PrimaryKey...),
 		}
 		if oe.Join {
@@ -48,7 +49,6 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			m.Entities = append(m.Entities, pe)
 			continue
 		}
-		ge := g.Entity(oe.Name)
 		pe.Annotations = ge.Annotations
 		pe.Indexes = indexes(ge)
 		for _, of := range oe.Fields {

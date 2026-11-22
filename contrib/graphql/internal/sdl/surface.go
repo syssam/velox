@@ -15,6 +15,11 @@ import (
 // cannot drift.
 type Surface struct {
 	Types []*Type // the entities with a GraphQL type, in the SDL's order
+	// Warnings say which M2M edges have a create or update input without
+	// the field that adds links, as their edge schema has a column Add
+	// cannot fill: "User.following: no add inputs; Follow.Note has no
+	// default", once per edge.
+	Warnings []string
 }
 
 // Type is an entity's GraphQL type, and the types named after it.
@@ -233,7 +238,7 @@ func BuildConfig(m *plugin.Model, cfg Config) (*Surface, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Surface{Types: make([]*Type, 0, len(g.objects))}
+	s := &Surface{Types: make([]*Type, 0, len(g.objects)), Warnings: g.warnings}
 	types := make(map[*object]*Type, len(g.objects))
 	for _, o := range g.objects {
 		types[o] = &Type{}
