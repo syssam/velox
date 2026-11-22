@@ -323,8 +323,9 @@ jobs:
           go vet ./...
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-  # bench/compare's checks (the measurements run only from run.sh), and the
-  # benchmarks against the committed baselines.
+  # bench/compare's checks (the measurements run only from run.sh), velox's
+  # case of its generation test, and the benchmarks against the committed
+  # baselines.
   bench:
     needs: changes
     if: needs.changes.outputs.bench == 'true'
@@ -335,6 +336,11 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+      # TestGenerateCompiles builds velox-gen and a generated app offline: it
+      # needs the root's whole module graph, as the scale job does.
+      - run: |
+          go mod download all
+          go mod tidy # download all adds to go.sum what tidy leaves out
       - name: bench/compare
         working-directory: bench/compare
         run: |
@@ -342,6 +348,10 @@ jobs:
           go vet ./...
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           go test -race -short -count=1 ./...
+          # -short skips TestGenerateCompiles; its velox case runs here.
+          go mod download all
+          go mod tidy # download all adds to go.sum what tidy leaves out
+          go test -count=1 -run '^TestGenerateCompiles$/^velox$' .
       # Report-only: the baselines in bench/baseline come from other hardware, so
       # the time deltas are informational. Allocation counts are enforced by the
       # budget tests.

@@ -30,7 +30,8 @@ each.
 - `examples`: the runnable examples. Each has its schema, its generated code and
   its migrations.
 - `bench/compare`: the harness that compares velox's build and runtime cost
-  with veloxe and ent. CI checks it but does not run it. `bench/compare/veloxe`
+  with veloxe and ent. CI checks it, and generates and vets a velox app with
+  it, but does not run the measurements. `bench/compare/veloxe`
   is a small module beside it that pins veloxe, whose `go.mod` declares this
   module's path. It is not tidied, and a test keeps it at the harness's versions.
 
@@ -147,7 +148,9 @@ group.
   the tests with a coverage profile, in `contrib/veloxotel`.
 - `examples_otel` (otel): `examples/otel`'s tests.
 - `bench_compare` (bench): the tidy check, `go vet`, golangci-lint and
-  `go test -race -short` in `bench/compare`. The measurements never run here.
+  `go test -race -short` in `bench/compare`, then the velox case of
+  `TestGenerateCompiles`, which `-short` skips. The measurements never run
+  here.
 
 After the lanes come the finals, one after another: the coverage floors
 (full), and then `scripts/bench-compare.sh` (bench), which only reports. It runs

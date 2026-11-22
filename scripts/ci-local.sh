@@ -316,14 +316,20 @@ lane_examples_otel() (
   go test -race -count=1 -coverprofile="$root/cover-examples-otel.out" ./otel/...
 )
 
-# bench/compare is its own module: the comparison harness. CI checks it; the
-# measurements run only from bench/compare/run.sh.
+# bench/compare is its own module: the comparison harness. CI checks it, and
+# runs velox's case of its generation test; the measurements run only from
+# bench/compare/run.sh.
 lane_bench_compare() (
   cd bench/compare
   go mod tidy -diff
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   go test -race -short -count=1 ./...
+  # -short skips TestGenerateCompiles, which builds velox-gen and a
+  # generated app offline; its velox case runs here.
+  go mod download all
+  go mod tidy # download all adds to go.sum what tidy leaves out
+  go test -count=1 -run '^TestGenerateCompiles$/^velox$' .
 )
 
 # The finals run after the lanes, one after another.
