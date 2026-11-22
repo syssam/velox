@@ -10,7 +10,8 @@ each.
 
 - The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
   `plugin`, `veloxtype` (the plain data types the root re-exports), `veloxpgx`
-  (pgx's native path), `generate` (velox-gen's generate as a Go API) and
+  (pgx's native path), `generate` (velox-gen's generate as a Go API),
+  `veloxtest` (a test's database with the schema's tables) and
   `cmd/velox-gen`. `bench/` holds the baselines and the
   scale check. `scripts/` holds CI's scripts and their configuration. Under
   `internal/`:

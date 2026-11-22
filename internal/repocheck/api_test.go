@@ -23,7 +23,7 @@ var updateAPI = flag.Bool("update-api", false, "rewrite testdata/api.txt from th
 // and say so.
 var apiPackages = []string{
 	".", "veloxtype", "veloxpgx", "schema", "schema/edge", "schema/field", "schema/index", "dialect", "dialect/sqlschema", "schema/mixin", "schema/mixin/softdelete",
-	"migrate", "plugin", "generate", "privacy", "scope", "scope/scopetest", "untyped", "contrib/graphql", "contrib/graphql/graphqlgen", "contrib/graphql/veloxgql", "contrib/graphql/veloxgql/gqlgenx", "contrib/graphql/veloxgql/graphqlgo", "contrib/veloxotel",
+	"migrate", "plugin", "generate", "privacy", "scope", "scope/scopetest", "veloxtest", "untyped", "contrib/graphql", "contrib/graphql/graphqlgen", "contrib/graphql/veloxgql", "contrib/graphql/veloxgql/gqlgenx", "contrib/graphql/veloxgql/graphqlgo", "contrib/veloxotel",
 }
 
 // TestPublicAPISnapshot compares the exported API with testdata/api.txt, so that

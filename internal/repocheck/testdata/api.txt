@@ -1437,6 +1437,10 @@ package scope/scopetest
 func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E) (err error)
 func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E)
 
+package veloxtest
+func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...velox.Option) *velox.DB
+func Schema(d velox.Dialect, schemas ...schema.Interface) (*migrate.Schema, error)
+
 package untyped
 PredOp is uint8
 Rows.At(i int) any

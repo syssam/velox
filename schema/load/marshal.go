@@ -1,7 +1,8 @@
-// Package load is for the program velox-gen writes, and for nothing else. That
-// program imports the schema package, passes its schemas to Marshal and prints
-// the result, which velox-gen reads back. The JSON is internal to velox: its
-// format changes with velox-gen, which is the only reader.
+// Package load is for the program velox-gen writes, and for veloxtest, and
+// for nothing else. That program imports the schema package, passes its
+// schemas to Marshal and prints the result, which velox-gen reads back;
+// veloxtest calls Marshal in a test's process. The JSON is internal to
+// velox: its format changes with velox-gen, and only velox reads it.
 package load
 
 import (
