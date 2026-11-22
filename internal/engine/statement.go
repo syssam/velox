@@ -95,36 +95,40 @@ func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.ke
 // Entity at an EntityInfo of its own (a copy with another Table, say), but
 // must never change the shared one. Pointing it at another table does not
 // change the tables inside an EXISTS (see Rewrite).
+//
+// The one-byte fields sit together, a word of them at a time, so that a
+// Statement fits the heap's 640-byte size class: an update allocates one
+// (TestStatementSize).
 type Statement struct {
+	Entity       *EntityInfo // shared and read-only: replace it, never edit it
 	Op           Op
-	Entity       *EntityInfo  // shared and read-only: replace it, never edit it
 	Count        bool         // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
 	Exists       bool         // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
 	Distinct     bool         // SELECT DISTINCT: Query.Distinct, of a projection or a read of one column (Values) only; a Rewrite hook may not change it
 	Aggregate    Aggregate    // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
+	Lock         Lock         // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
+	LockWait     LockWait     // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
+	Writable     bool         // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
 	GroupBy      int          // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
 	Joins        []JoinClause // SELECT: to-one relations joined in, each by Join or LeftJoin; a Rewrite hook may not change them
 	Each         *EachClause  // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
 	Project      *Projection  // SELECT: terms read in place of the entity's columns, grouped and filtered; read by Query.Rows; a Rewrite hook may not change it
-	Lock         Lock         // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
-	LockWait     LockWait     // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
 	Columns      []int        // SELECT: the selected columns, nil selects all; INSERT: the columns written
 	Where        []Predicate  // all must hold
 	OrderBy      []OrderTerm
 	Limit        int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
 	Offset       int
-	Unbounded    bool            // the query said AllowUnbounded
-	Writable     bool            // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
 	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or, with Each, its bound by construction (Rel.MaxRows sets it)
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry; no Columns sends DEFAULT VALUES (MySQL: () VALUES ()), and in an InsertAll on PostgreSQL or MySQL a zero value that the rows leave to a declared default is sent as DEFAULT (ADR 0093)
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
 	Returning    []int           // INSERT, a recorded UPDATE (DB.Record), and a recorded DELETE (its key; on PostgreSQL 18 its old row): columns read back (PostgreSQL and SQLite); a Rewrite hook may not change it on any recorded write, nor on an UPDATE
-	AllRows      bool            // UPDATE and DELETE: the statement said All
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
+	Tx           *TxInfo         // the transaction the statement runs in, when the DB has hooks; nil otherwise
+	Unbounded    bool            // the query said AllowUnbounded
+	AllRows      bool            // UPDATE and DELETE: the statement said All
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool            // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
-	Tx           *TxInfo         // the transaction the statement runs in, when the DB has hooks; nil otherwise
 	Dialect      Dialect         // the DB's: an Around hook has only the statement
 	// Tags are the context's WithTags tags, set before the hooks run. A
 	// Rewrite hook gets its own copy; it may change them, and the SQL
@@ -153,26 +157,13 @@ type Statement struct {
 
 	ran Target // where exec sent it; its With loads run there
 	pin Target // a With load's: the connection its query ran on, which its reads go to; zero otherwise
-	// handed is set once Iter has handed the caller a row: a broken
-	// connection is then not failed over, as the read cannot start again.
-	handed bool
-	// iter says Iter runs the statement: its rows are open while the caller's
-	// loop body runs.
-	iter bool
 	// iterCtx is the context Iter was given: a statement under it while the
 	// loop holds a pool's one connection is refused (iterconn.go).
 	iterCtx context.Context
-	// loaded says a With load runs it, for owners read under this statement's scope:
-	// its join rows need no condition of their own.
-	loaded bool
 	// recordState is how velox reads back what the statement writes: as a
 	// recording, and as a lean insert. It is one value, which the Rewrite
 	// snapshot keeps and puts back whole.
 	recordState
-	// upsertPolicy is set by the scope when it added the policy's conditions to
-	// the upsert's update branch: an upsert that then affected fewer rows than it
-	// sent met a row the policy hides.
-	upsertPolicy bool
 	// upsertRows is the number of rows the statement had when the scope
 	// conditioned it: CheckUpserted compares with it, not with Rows, which
 	// an Around hook may change.
@@ -183,6 +174,19 @@ type Statement struct {
 	// keep holds the columns of an UPDATE whose UpdateDefault does not fire
 	// (KeepDefaults).
 	keep []int
+	// handed is set once Iter has handed the caller a row: a broken
+	// connection is then not failed over, as the read cannot start again.
+	handed bool
+	// iter says Iter runs the statement: its rows are open while the caller's
+	// loop body runs.
+	iter bool
+	// loaded says a With load runs it, for owners read under this statement's scope:
+	// its join rows need no condition of their own.
+	loaded bool
+	// upsertPolicy is set by the scope when it added the policy's conditions to
+	// the upsert's update branch: an upsert that then affected fewer rows than it
+	// sent met a row the policy hides.
+	upsertPolicy bool
 	// skipped says the UPDATE was given a setter that was skipped (a SetPtr
 	// of a nil pointer): with no other setter left it sends nothing.
 	skipped bool
@@ -227,8 +231,10 @@ type recordState struct {
 	dflt bool
 	// keyed is the number of columns at the end of ret that placeByKey
 	// added, the conflict columns, by which the returned rows are matched to
-	// the entities; they are not copied into them.
-	keyed int
+	// the entities; they are not copied into them. It is an int16, which
+	// sits beside the flags above in one word: no dialect's table has more
+	// than 32767 columns (SQLite's ceiling; PostgreSQL's is 1600).
+	keyed int16
 	// fill is an insert's columns that the database's defaults fill, which
 	// MySQL reads back after it (PlanInsert); ret is the RETURNING list
 	// PlanInsert set, which the rows are scanned by while Returning holds it.

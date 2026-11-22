@@ -11,8 +11,9 @@ import (
 // TestWriteAllocationBudgets pins, on an entity with no hooks, filters or
 // recorder, the allocations of a cached update by key and a count, at the
 // numbers measured when the budgets were set: a feature that is off costs
-// these paths nothing. The count also has a byte budget: it keeps its
-// Statement on the stack.
+// these paths nothing. Each also has a byte budget: the count keeps its
+// Statement on the stack, and the update's, which escapes, stays in the
+// 640-byte size class.
 func TestWriteAllocationBudgets(t *testing.T) {
 	measure := func(name string, allocBudget, byteBudget float64, run func() error) {
 		t.Helper()
@@ -35,7 +36,7 @@ func TestWriteAllocationBudgets(t *testing.T) {
 	}
 	upd := &fakeconn.Exec{}
 	updates := openFake(velox.SQLite, upd)
-	measure("an update by key", 5, 0, func() error {
+	measure("an update by key", 5, 1000, func() error {
 		_, err := updates.Update[testmodel.Sample]().Set(testmodel.Samples.Name.Set("x")).Where(testmodel.Samples.ID.EQ(1)).Exec(ctx)
 		upd.Log, upd.ArgLog = upd.Log[:0], upd.ArgLog[:0] // the fake keeps every statement
 		return err

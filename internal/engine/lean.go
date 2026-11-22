@@ -286,7 +286,7 @@ func keyReturning(d Dialect, st *Statement) {
 			n++
 		}
 	}
-	st.Returning, st.ret, st.keyed = ret, ret, n
+	st.Returning, st.ret, st.keyed = ret, ret, int16(n)
 }
 
 // readPlaced reads the rows r holds, the RETURNING columns of st, each into
@@ -308,7 +308,7 @@ func readPlaced(r Rows, st *Statement, rows []unsafe.Pointer) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	cols := st.ret[:len(st.ret)-st.keyed]
+	cols := st.ret[:len(st.ret)-int(st.keyed)]
 	for i, p := range got {
 		for _, c := range cols {
 			SetElem(fieldAddr(in, dst[i], c), Elem(fieldAddr(in, p, c)))
