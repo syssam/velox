@@ -62,7 +62,7 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 	switch u.kind {
 	case useEdge:
 		if e.Edge(u.name) == nil {
-			refuse(u.call, "%s has no relation %q", who, u.name)
+			refuse(u.call, "%s has no relation %q%s", who, u.name, suggest(u.name, edgeNamesOf(e)))
 		}
 		return
 	case useSub:
@@ -75,7 +75,7 @@ func (ck *behaviourCheck) check(r edgeRoot, u use) {
 		if u.named != nil {
 			at = u.named
 		}
-		refuse(at, "%s has no column %q", who, u.name)
+		refuse(at, "%s has no column %q%s", who, u.name, suggest(u.name, columnsOf(e)))
 		return
 	}
 	col := namedColumn{e: e, f: f, id: i == 0}
@@ -148,7 +148,7 @@ func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast
 	if u.name != "" {
 		f, i := columnOf(e, u.name)
 		if f == nil {
-			refuse(u.call, "%s has no column %q", who, u.name)
+			refuse(u.call, "%s has no column %q%s", who, u.name, suggest(u.name, columnsOf(e)))
 			return
 		}
 		own = &namedColumn{e: e, f: f, id: i == 0}
@@ -156,7 +156,7 @@ func (ck *behaviourCheck) checkSub(e *Entity, who string, u use, refuse func(ast
 	if u.key != "" {
 		f, i := columnOf(target, u.key)
 		if f == nil {
-			refuse(u.call, "%s has no column %q", target.Name, u.key)
+			refuse(u.call, "%s has no column %q%s", target.Name, u.key, suggest(u.key, columnsOf(target)))
 			return
 		}
 		tgt = &namedColumn{e: target, f: f, id: i == 0}
@@ -229,6 +229,24 @@ func (ck *behaviourCheck) entity(name string) (*Entity, string) {
 }
 
 // columnOf returns e's field whose column is name, and its index.
+// columnsOf are the columns of e, which a behaviour names.
+func columnsOf(e *Entity) []string {
+	cols := make([]string, len(e.Fields))
+	for i, f := range e.Fields {
+		cols[i] = f.Column
+	}
+	return cols
+}
+
+// edgeNamesOf are the names of e's relations.
+func edgeNamesOf(e *Entity) []string {
+	names := make([]string, len(e.Edges))
+	for i, ed := range e.Edges {
+		names[i] = ed.Name
+	}
+	return names
+}
+
 func columnOf(e *Entity, name string) (*Field, int) {
 	for i, f := range e.Fields {
 		if f.Column == name {

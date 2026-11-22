@@ -186,15 +186,15 @@ func (c *checkEnv) accepts(t *testing.T, cases map[string]string) {
 func TestCheckColumnsRefusesUnknown(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"FieldEQ", read("User", `velox.FieldEQ("nme", "x")`), `"nme"`, `velox.FieldEQ("nme", "x"): User has no column "nme" (User.Policy)`},
-		{"in Interceptors", "func (User) Interceptors() []velox.Interceptor {\n\t_ = velox.FieldIsNull(\"nme\")\n\treturn nil\n}\n", `"nme"`, `velox.FieldIsNull("nme"): User has no column "nme" (User.Interceptors)`},
-		{"HasEdge", read("Comment", `velox.HasEdge("dco")`), `"dco"`, `velox.HasEdge("dco"): Comment has no relation "dco" (Comment.Policy)`},
-		{"Mutation.Set", hook("Doc", `return m.Set("titel", "x")`), `"titel"`, `m.Set("titel", "x"): Doc has no column "titel" (Doc.Hooks)`},
-		{"Mutation.Fill", hook("Doc", `return m.Fill("titel", "x")`), `"titel"`, `m.Fill("titel", "x"): Doc has no column "titel" (Doc.Hooks)`},
-		{"Mutation.Value", hook("Doc", "_, _ = m.Value(\"titel\")\n\t\treturn nil"), `"titel"`, `m.Value("titel"): Doc has no column "titel" (Doc.Hooks)`},
-		{"Row.Value", insert("Doc", "_ = r.Value(\"titel\")\n\t\treturn nil"), `"titel"`, `r.Value("titel"): Doc has no column "titel" (Doc.Policy)`},
-		{"Row.IsZero", insert("Doc", "_ = r.IsZero(\"titel\")\n\t\treturn nil"), `"titel"`, `r.IsZero("titel"): Doc has no column "titel" (Doc.Policy)`},
-		{"Row.Set", insert("Doc", `return r.Set("titel", "x")`), `"titel"`, `r.Set("titel", "x"): Doc has no column "titel" (Doc.Policy)`},
+		{"FieldEQ", read("User", `velox.FieldEQ("nme", "x")`), `"nme"`, `velox.FieldEQ("nme", "x"): User has no column "nme"; did you mean "name"? (User.Policy)`},
+		{"in Interceptors", "func (User) Interceptors() []velox.Interceptor {\n\t_ = velox.FieldIsNull(\"nme\")\n\treturn nil\n}\n", `"nme"`, `velox.FieldIsNull("nme"): User has no column "nme"; did you mean "name"? (User.Interceptors)`},
+		{"HasEdge", read("Comment", `velox.HasEdge("dco")`), `"dco"`, `velox.HasEdge("dco"): Comment has no relation "dco"; did you mean "doc"? (Comment.Policy)`},
+		{"Mutation.Set", hook("Doc", `return m.Set("titel", "x")`), `"titel"`, `m.Set("titel", "x"): Doc has no column "titel"; did you mean "title"? (Doc.Hooks)`},
+		{"Mutation.Fill", hook("Doc", `return m.Fill("titel", "x")`), `"titel"`, `m.Fill("titel", "x"): Doc has no column "titel"; did you mean "title"? (Doc.Hooks)`},
+		{"Mutation.Value", hook("Doc", "_, _ = m.Value(\"titel\")\n\t\treturn nil"), `"titel"`, `m.Value("titel"): Doc has no column "titel"; did you mean "title"? (Doc.Hooks)`},
+		{"Row.Value", insert("Doc", "_ = r.Value(\"titel\")\n\t\treturn nil"), `"titel"`, `r.Value("titel"): Doc has no column "titel"; did you mean "title"? (Doc.Policy)`},
+		{"Row.IsZero", insert("Doc", "_ = r.IsZero(\"titel\")\n\t\treturn nil"), `"titel"`, `r.IsZero("titel"): Doc has no column "titel"; did you mean "title"? (Doc.Policy)`},
+		{"Row.Set", insert("Doc", `return r.Set("titel", "x")`), `"titel"`, `r.Set("titel", "x"): Doc has no column "titel"; did you mean "title"? (Doc.Policy)`},
 	})
 	// Every refusal is reported, joined.
 	decls := read("User", `velox.And(velox.FieldEQ("a", 1), velox.FieldEQ("b", 1))`)
@@ -243,7 +243,7 @@ func TestCheckColumnsFollowsHelpers(t *testing.T) {
 	c.refuses(t, []checkRefusal{
 		{"function", helpers + read("Doc", "member()") + read("User", "member()"), `velox.FieldEQ("owner_id"`, `velox.FieldEQ("owner_id", 1): User has no column "owner_id" (User.Policy)`},
 		{"method", "func (User) own() velox.Predicate { return velox.FieldEQ(\"owner\", 1) }\n\n" + read("User", "User{}.own()"), `velox.FieldEQ("owner"`, `velox.FieldEQ("owner", 1): User has no column "owner" (User.Policy)`},
-		{"variable", "var titled = velox.FieldEQ(\"titel\", \"x\")\n\n" + read("Doc", `titled`), `velox.FieldEQ("titel"`, `velox.FieldEQ("titel", "x"): Doc has no column "titel" (Doc.Policy)`},
+		{"variable", "var titled = velox.FieldEQ(\"titel\", \"x\")\n\n" + read("Doc", `titled`), `velox.FieldEQ("titel"`, `velox.FieldEQ("titel", "x"): Doc has no column "titel"; did you mean "title"? (Doc.Policy)`},
 	})
 }
 
@@ -251,7 +251,7 @@ func TestCheckColumnsFollowsHelpers(t *testing.T) {
 func TestCheckColumnsConstName(t *testing.T) {
 	c := newCheckEnv(t)
 	c.refuses(t, []checkRefusal{
-		{"const", "const titleCol = \"titel\"\n\n" + read("Doc", `velox.FieldEQ(titleCol, "x")`), "FieldEQ(titleCol", `velox.FieldEQ(titleCol, "x"): Doc has no column "titel" (Doc.Policy)`},
+		{"const", "const titleCol = \"titel\"\n\n" + read("Doc", `velox.FieldEQ(titleCol, "x")`), "FieldEQ(titleCol", `velox.FieldEQ(titleCol, "x"): Doc has no column "titel"; did you mean "title"? (Doc.Policy)`},
 		{"expression", "const prefix = \"tit\"\n\n" + read("Doc", `velox.FieldEQ(prefix+"el", "x")`), `prefix+"el"`, `Doc has no column "titel"`},
 	})
 	c.accepts(t, map[string]string{"const": "const titleCol = \"title\"\n\n" + read("Doc", `velox.FieldEQ(titleCol, "x")`)})
@@ -317,7 +317,7 @@ func TestCheckColumnsHasWithTarget(t *testing.T) {
 		{"two deep", read("Comment", `velox.HasEdgeWith("doc", velox.HasEdgeWith("owner", velox.FieldEQ("title", "x")))`), `"doc"`, `velox.FieldEQ("title", "x"): User, the target of Doc's relation owner, has no column "title" (Comment.Policy)`},
 		{"value", read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("title", 1))`), `"doc"`, `column "title" of Doc, the target of Comment's relation doc, is a string, not an int`},
 		{"a helper", "func titled() velox.Predicate { return velox.FieldEQ(\"titel\", \"x\") }\n\n" + read("Comment", `velox.HasEdgeWith("doc", titled())`), `velox.FieldEQ("titel"`, `Doc, the target of Comment's relation doc, has no column "titel"`},
-		{"unknown inner relation", read("Comment", `velox.HasEdgeWith("doc", velox.HasEdge("ownr"))`), `"doc"`, `velox.HasEdge("ownr"): Doc, the target of Comment's relation doc, has no relation "ownr" (Comment.Policy)`},
+		{"unknown inner relation", read("Comment", `velox.HasEdgeWith("doc", velox.HasEdge("ownr"))`), `"doc"`, `velox.HasEdge("ownr"): Doc, the target of Comment's relation doc, has no relation "ownr"; did you mean "owner"? (Comment.Policy)`},
 	})
 	c.accepts(t, map[string]string{"target": read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("title", "x"))`)})
 }

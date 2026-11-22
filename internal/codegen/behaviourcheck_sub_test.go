@@ -31,8 +31,8 @@ func TestCheckFieldInSelectRefusals(t *testing.T) {
 	c.refuses(t, []checkRefusal{
 		{"entity", read("Comment", `velox.FieldInSelect("doc_id", "Docc", "id")`), `FieldInSelect`, `"Docc" is neither a schema nor a table of this package (Comment.Policy)`},
 		{"condition by table", read("Comment", `velox.FieldInSelect("doc_id", "docs", "id", velox.FieldEQ("name", "x"))`), `FieldInSelect`, `Doc, the subquery of Comment's FieldInSelect, has no column "name"`},
-		{"own column", read("Comment", `velox.FieldInSelect("docc_id", "Doc", "id")`), `FieldInSelect`, `Comment has no column "docc_id" (Comment.Policy)`},
-		{"key", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "ids")`), `FieldInSelect`, `Doc has no column "ids" (Comment.Policy)`},
+		{"own column", read("Comment", `velox.FieldInSelect("docc_id", "Doc", "id")`), `FieldInSelect`, `Comment has no column "docc_id"; did you mean "doc_id"? (Comment.Policy)`},
+		{"key", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "ids")`), `FieldInSelect`, `Doc has no column "ids"; did you mean "id"? (Comment.Policy)`},
 		{"types", read("Doc", `velox.FieldInSelect("title", "Comment", "doc_id")`), `FieldInSelect`, `column "title" of Doc is a string and column "doc_id" of Comment is an int64: a subquery compares columns of one type, or an integer column with a text key`},
 		{"a float and text", read("User", `velox.FieldInSelect("score", "Doc", "title")`), `FieldInSelect`, `a subquery compares columns of one type`},
 		{"condition", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("name", "x"))`), `FieldInSelect`, `Doc, the subquery of Comment's FieldInSelect, has no column "name" (Comment.Policy)`},

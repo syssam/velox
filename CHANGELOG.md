@@ -1305,6 +1305,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   which run SQL from a string, and an `@` right before a name, a MySQL
   variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass
   when a space follows them.
+- velox-gen's check of a behaviour's column and relation names adds "did
+  you mean" with the nearest name, as its other unknown-name errors do.
 - Rule 38, an Optional foreign key of an edge that is not Required, says
   the fix: make the field `.Optional().Nillable()`, or mark the edge
   `Required()` and drop the field's `Optional()`.
