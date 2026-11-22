@@ -2,9 +2,9 @@
 
 An `Author` has many `Post`s, a `Post` belongs to its `Author` and has many
 `Comment`s, `Post`s and `Tag`s are many-to-many, and `Author`s and `Club`s
-are many-to-many through the edge schema `Membership`. Relations are `velox.Many[T]` and `velox.One[T]` fields
-of each entity's `Edges` struct (`author.Edges.Posts`), never columns, and never
-loaded lazily.
+are many-to-many through the edge schema `Membership`. Relations are
+`velox.Many[T]` and `velox.One[T]` fields of each entity's `Edges` struct
+(`author.Edges.Posts`), never columns, and never loaded lazily.
 
 ```sh
 cd examples

@@ -2,9 +2,10 @@
 
 What to do when `migrate apply` refuses, and how to turn a join table into
 an edge schema's. Each recovery here is run by `TestOperationsDoc` in
-`cmd/velox-gen`, and the conversion by `TestConvertJoinTable`. The commands take `-dir` and `-db`, or
-`$VELOX_DB`; they are left out below. None of them changes the schema: `resolve` only
-writes the history table.
+`cmd/velox-gen`, and the conversion by `TestConvertJoinTable`. The commands
+take `-dir` and `-db`, or `$VELOX_DB`; they are left out below. None of the
+recoveries changes the schema: `resolve` only writes the history table. The
+conversion is a migration, and changes it.
 
 | Way out | When | What it does |
 | --- | --- | --- |
@@ -251,16 +252,26 @@ The second way needs one line by hand:
 1. Run `migrate diff -allow drop-table=user_groups -name memberships`. The
    file creates `memberships`, its foreign keys and the unique index over
    `(user_id, group_id)`, then drops `user_groups`.
-2. Above the drop, add the statement that copies the links:
+2. Above the drop, add the statement that copies the links. It must list
+   every NOT NULL column that has no column DEFAULT, with a value. A
+   field's `Default(time.Now)` or `DefaultFunc` is Go's, not the
+   database's, so its column has none: here `joined_at`.
 
    ```sql
-   INSERT INTO memberships (user_id, group_id) SELECT user_id, group_id FROM user_groups;
+   INSERT INTO memberships (user_id, group_id, joined_at) SELECT user_id, group_id, CURRENT_TIMESTAMP FROM user_groups;
    ```
 
    The statement is the same on PostgreSQL, MySQL and SQLite. Each new row
-   takes the next `id`, and the defaults of the other columns.
+   takes the next `id`. A column with a column DEFAULT, such as `role`
+   with `Default("member")`, takes it.
 3. Run `migrate hash`, as the file changed.
 4. `apply` runs it. `drift` then finds nothing.
+
+Stop writes to the relation while the file runs: a link written to the
+join table after the copy is lost with it. On PostgreSQL and SQLite the
+file is one transaction. On MySQL it is not: a failed `INSERT` leaves
+`memberships` created and `user_groups` as it was. Fix the statement, run
+`migrate hash`, and run `apply -resume` (see "A dirty MySQL version").
 
 A plain join table's keys are `ON DELETE CASCADE`. An edge schema's keys
 have the actions their edges declare, and none without `OnDelete`.

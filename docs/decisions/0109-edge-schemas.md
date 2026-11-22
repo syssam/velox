@@ -25,9 +25,10 @@ through the entity pipeline. The gap analysis lists the edge schema as row
   side's type. velox-gen adds the edge `Through` names to the owner: an O2M
   to the edge schema, whose `Ref` names the key edge. The key edge does not
   name it back. No join entity is written.
-- The edge schema is keyed by its own `id`. velox-gen adds a unique index over the two keys, named as any index is
-  (0090), unless the schema declares one, unique and over every row, on the
-  two columns in either order. `Add`'s `ON CONFLICT` names it.
+- The edge schema is keyed by its own `id`. velox-gen adds a unique index
+  over the two keys, named as any index is (0090), unless the schema
+  declares one, unique and over every row, on the two columns in either
+  order. `Add`'s `ON CONFLICT` names its two columns.
 - velox-gen refuses, at the edge's line, as numbered rules:
   - 63: `Through` on an edge that is not many-to-many.
   - 64: `Through` names a type that is not a schema of the package, the
@@ -63,7 +64,8 @@ through the entity pipeline. The gap analysis lists the edge schema as row
   entity pipeline, and keeps a link that exists. `Remove` and `Clear`
   delete rows through it too. The edge schema's hooks run on both, and a
   link its Write policy hides stays through `Clear`. ent fills only
-  defaults on `AddGroupIDs`, and runs neither hooks nor privacy.
+  defaults on `AddGroupIDs`, and runs neither hooks nor privacy (veloxe's
+  `compiler/gen/sql/helper.go:96`).
 - velox-gen warns:
   - of an edge schema whose key edges declare no `OnDelete`: its keys get
     no action, where a plain join table's are `ON DELETE CASCADE`;

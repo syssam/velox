@@ -12,7 +12,8 @@ import (
 
 // joinTableSchema is a schema package of users in groups: a plain
 // many-to-many relation, or with through, one through the edge schema
-// Membership, whose role has a default; with table, Membership's table is
+// Membership, whose role has a default and whose joined_at has a function
+// default, which no column DEFAULT fills; with table, Membership's table is
 // table.
 func joinTableSchema(through bool, table ...string) string {
 	edges, ms := `edge.To("groups", Group.Type)`, ""
@@ -24,7 +25,7 @@ func joinTableSchema(through bool, table ...string) string {
 type Membership struct{ schema.Schema }
 
 func (Membership) Fields() []schema.Field {
-	return []schema.Field{field.String("role").Default("member"), field.Int64("user_id"), field.Int64("group_id")}
+	return []schema.Field{field.String("role").Default("member"), field.Time("joined_at").Default(time.Now), field.Int64("user_id"), field.Int64("group_id")}
 }
 
 func (Membership) Edges() []schema.Edge {
@@ -38,10 +39,14 @@ func (Membership) Edges() []schema.Edge {
 			ms += "\nfunc (Membership) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table(\"" + table[0] + "\")} }\n"
 		}
 	}
+	imports := ""
+	if through {
+		imports = "\t\"time\"\n\n"
+	}
 	return `package veloxschema
 
 import (
-	"github.com/syssam/velox/schema"
+` + imports + `	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 )

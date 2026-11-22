@@ -156,14 +156,14 @@ ADR 0109).
 
 **An edge schema's hooks and policies run on Add and Remove.** ent fills
 only defaults when `AddGroupIDs` inserts an edge schema's rows; its hooks
-and privacy do not run. velox inserts and deletes them as Membership rows,
-so Membership's hooks run, and a link its Write policy hides stays through
-`Clear`. velox is stricter on reads too. An edge schema cannot have a Read
-or Query policy, Interceptors or `softdelete.Mixin`, its own or a mixin's:
-`Has` and `With` through the many-to-many edge would not apply them.
-velox-gen refuses each. `Add` fails before any statement when a column it
-would insert is required and has no default; ent leaves that to the
-database.
+and privacy do not run (veloxe's `compiler/gen/sql/helper.go:96`). velox
+inserts and deletes them as Membership rows, so Membership's hooks run, and
+a link its Write policy hides stays through `Clear`. velox is stricter on
+reads too. An edge schema cannot have a Read or Query policy, Interceptors
+or `softdelete.Mixin`, its own or a mixin's: `Has` and `With` through the
+many-to-many edge would not apply them. velox-gen refuses each. `Add` fails
+before any statement when a column it would insert is required and has no
+default; ent leaves that to the database.
 
 **An edge schema is keyed by its own `id`.** ent's
 `field.ID("user_id", "group_id")` annotation, a composite key, is not in
@@ -178,10 +178,14 @@ with no inverse, is refused (rule 69). Declare the inverse,
 link once, in one direction.
 
 **A tenant column on an edge schema is a plain column.** A scope mixin's
-Policy sets Read, which an edge schema cannot have. Keep the column, set it
-with a Default or a hook, and read the links through the edge velox-gen
-adds: `U.Memberships.HasWith(M.OrgID.EQ(org))`, or
-`db.Query[veloxgen.Membership]()` with a condition on it.
+Policy sets Read, which an edge schema cannot have. Keep the column, and
+make it Optional and set it in a hook, or give it a Default: a required
+field with no default makes `Add` fail before any hook runs. A `WithFilter`
+filter that restricts the edge schema fails `Has` and `With` through the
+many-to-many edge (ADR 0098's amendment). A filter that exempts the edge
+schema leaves `db.Query[veloxgen.Membership]()` unfiltered too. So read the
+links through the edge velox-gen adds, with the tenant's condition written
+out: `U.Memberships.HasWith(M.OrgID.EQ(org))`.
 
 **On MySQL, a link that collides only on another unique key is dropped.**
 `Add`'s `ON DUPLICATE KEY UPDATE` applies to every unique key of the edge
