@@ -91,7 +91,8 @@ func (db *DB) txAround(caller, ctx context.Context, info *TxInfo, attempts func(
 		return nil, errors.New("velox: transaction: a TxAround hook recovered a panic from next")
 	}
 	if s.last != nil {
-		return nil, errors.New("velox: transaction: a TxAround hook discarded the error from next")
+		// Rolled back: s.after holds the AfterRollback functions only.
+		return s.after, errors.New("velox: transaction: a TxAround hook discarded the error from next")
 	}
 	return s.after, nil
 }

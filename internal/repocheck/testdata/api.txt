@@ -664,6 +664,7 @@ func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func AfterCommit(tx *DB, fn func(context.Context)) error
+func AfterRollback(tx *DB, fn func(context.Context)) error
 func Allow() Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
 func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
@@ -671,6 +672,7 @@ func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c N
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func Before(f MutateFunc, ops ...Op) Hook
+func BeforeCommit(tx *DB, fn func(context.Context) error) error
 func Calc[E any](text string, args ...any) Term[E]
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error

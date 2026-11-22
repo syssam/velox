@@ -312,9 +312,10 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		cause = ErrTimeout
 	}
 	info := db.newTxInfo(o, sh)
-	// after is the committed attempt's AfterCommit functions, which run once
-	// Tx's work is done: the TxAround hooks have returned and the
-	// connection is back in the pool.
+	// after is the AfterRollback functions of the attempts that rolled back,
+	// then the committed attempt's due AfterRollback and AfterCommit
+	// functions, which run once Tx's work is done: the TxAround hooks have
+	// returned and the connection is back in the pool.
 	if len(db.Cfg.TxArounds) == 0 {
 		// No closure here: one passed to the hooks escapes, and would cost
 		// a DB with nothing configured an allocation per transaction.
@@ -441,8 +442,14 @@ func waitRetry(ctx, tctx context.Context, d time.Duration) bool {
 // fn gets ctx, marked as the transaction's; the mark ends when transaction
 // returns, after the commit or the rollback.
 //
+// fn's nil runs the BeforeCommit functions it queued (runBefore); an error
+// of theirs rolls back as fn's does.
+//
 // committed reports whether COMMIT was sent, whether or not it then failed.
-// after gets the AfterCommit functions fn queued, once COMMIT has succeeded.
+// after gets appended what Tx runs once it is done: the AfterRollback
+// functions of an attempt that rolled back, and, once COMMIT has
+// succeeded, those a rolled back savepoint made due, then the AfterCommit
+// functions. A panic or Goexit in fn appends none.
 func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shardConn, after *[]func(context.Context)) (committed bool, _ error) {
 	primary := db.Ex
 	var txShard *shardConn // its statements check their shard against it
@@ -468,10 +475,18 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		}
 		if !committedOK {
 			f.unkeep(0) // rolled back, or a COMMIT that failed; and before a retry
-			f.closeAfter()
+			rolled := f.closeAfter()
+			if finished {
+				// Not on a panic or a Goexit: Tx does not return, and runs none.
+				*after = append(*after, rolled...)
+			}
 		}
 	}()
-	if err := fn(&f.ctx, &f.db); err != nil {
+	err = fn(&f.ctx, &f.db)
+	if err == nil {
+		err = f.runBefore(&f.ctx)
+	}
+	if err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
 			endTx(info, TxError)
@@ -527,7 +542,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	endTx(info, TxCommit)
 	committedOK = true
-	*after = f.takeAfter()
+	*after = append(*after, f.takeAfter()...)
 	return true, nil
 }
 
@@ -571,7 +586,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
-	mark, kmark, amark, poison := db.batch.len(), len(db.txRoot.kept), db.txRoot.afterLen(), db.batch.failed()
+	mark, kmark, amark, poison := db.batch.len(), len(db.txRoot.kept), db.txRoot.queueMark(), db.batch.failed()
 	finished := false
 	defer func() {
 		if !finished {
@@ -767,9 +782,20 @@ type txFrame struct {
 	// savepoint that rolls back drops those after its mark (unqueue), and
 	// they run once the transaction has committed (runAfter).
 	after []func(context.Context)
-	// afterMu guards after and afterClosed, which is set once the
-	// transaction's end has taken the queue (takeAfter, closeAfter): a later
-	// AfterCommit fails instead of queuing what nothing would run.
+	// before is, on the root, the functions BeforeCommit queued, in order,
+	// which run before COMMIT (runBefore); a savepoint that rolls back drops
+	// those after its mark. beforeDone is set once they have run.
+	before     []func(context.Context) error
+	beforeDone bool
+	// rolled is, on the root, the functions AfterRollback queued, in order.
+	// A savepoint that rolls back marks those after its mark due: they run
+	// whatever the transaction then does. The others run only when it does
+	// not commit.
+	rolled []rolledFn
+	// afterMu guards the queues and afterClosed, which is set once the
+	// transaction's end has taken them (takeAfter, closeAfter): a later
+	// AfterCommit, BeforeCommit or AfterRollback fails instead of queuing
+	// what nothing would run.
 	afterMu     sync.Mutex
 	afterClosed bool
 }
