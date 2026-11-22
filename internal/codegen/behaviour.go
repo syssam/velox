@@ -77,6 +77,9 @@ func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 				if pos := policyConds(f, fd); pos.IsValid() {
 					b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
 				}
+				if pos := readsConds(f, fd); pos.IsValid() {
+					b.ReadConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
+				}
 			case "Interceptors":
 				b.Interceptors = true
 			default:

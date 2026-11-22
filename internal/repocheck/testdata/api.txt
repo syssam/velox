@@ -108,7 +108,7 @@ const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
 const EdgePage
-const GeneratedCodeIsVersion25
+const GeneratedCodeIsVersion26
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -581,7 +581,7 @@ func Deny(reason string) error
 func Diff[E any, PE Entity[E]](before, after *E) []FieldChange
 func DriverCode(err error) (string, bool)
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
-func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor
+func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int, unfilled ...int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
 func Explain[E any](ctx context.Context, q Query[E]) (string, error)
 func Expr[E any](text string, args ...any) Pred[E]

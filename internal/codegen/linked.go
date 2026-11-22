@@ -59,6 +59,9 @@ import (
 // conditions are not checked. A call in another package is not seen: velox
 // checks it when its statement runs, against the package's EntityTable.
 func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) ([]string, error) {
+	if err := edgeSchemaBehaviour(g, bound, mixins); err != nil {
+		return nil, err
+	}
 	var roots []edgeRoot
 	pkgs := []string{g.Package}
 	for _, e := range g.Entities {

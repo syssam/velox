@@ -285,7 +285,8 @@ func (l *Log) pluginWarn(name, text string) {
 // methods the schema package declares (codegen.Behaviour), the behaviour of
 // the entities' mixins (codegen.MixinBehaviour), and the relations that
 // behaviour names (codegen.CheckBehaviour), whose warnings go to log
-// with codegen.SoftDeleteWarnings' and codegen.DefaultWarnings'.
+// with codegen.SoftDeleteWarnings', codegen.DefaultWarnings' and
+// codegen.EdgeSchemaWarnings'.
 // UserDoc is left for the caller.
 func genConfig(ctx context.Context, gm *Model, dir, pattern, out, pkg string, env []string, log *Log) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.ImportPath, SchemaName: gm.Name}
@@ -307,6 +308,7 @@ func genConfig(ctx context.Context, gm *Model, dir, pattern, out, pkg string, en
 	warnings, err := codegen.CheckBehaviour(dir, pattern, gm.Graph, bound, mixins, env)
 	warnings = append(warnings, codegen.SoftDeleteWarnings(gm.Graph)...)
 	warnings = append(warnings, codegen.DefaultWarnings(gm.Graph)...)
+	warnings = append(warnings, codegen.EdgeSchemaWarnings(gm.Graph)...)
 	for _, w := range warnings {
 		log.warn(RelWarning(dir, w))
 	}

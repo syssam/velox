@@ -1184,6 +1184,9 @@ func (l *lowerer) relations() {
 // through writes the expression of the many-to-many edge ed of e, making its
 // join entity when no edge has yet.
 func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
+	if ed.Rel.EdgeSchema != "" {
+		return l.edgeSchema(s, t, ed)
+	}
 	where := edgeAt(ed.Name)
 	// The join entity's columns are the assoc edge's owner's, then its
 	// target's. An inverse edge lists them the other way round.
@@ -1242,6 +1245,40 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	}
 	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, %s, %s, %s, %s)", j.ent.Name, t.Name, ed.Name,
 		colConst(s.out, 0), colConst(j.ent, jo), colConst(j.ent, jt), colConst(l.state[t.Name].out, 0))
+}
+
+// edgeSchema writes the expression of the many-to-many edge ed whose links
+// the edge schema named by ed.Rel.EdgeSchema holds: its entity stands where
+// a join entity would, and the columns Add cannot fill follow the keys.
+func (l *lowerer) edgeSchema(s *entState, t *Entity, ed *Edge) string {
+	es := l.g.Entity(ed.Rel.EdgeSchema)
+	jo, jt := columnIndex(es, ed.Rel.Columns[0]), columnIndex(es, ed.Rel.Columns[1])
+	out := l.state[es.Name].out
+	args := []string{colConst(s.out, 0), colConst(out, jo), colConst(out, jt), colConst(l.state[t.Name].out, 0)}
+	for _, i := range unfilled(es, jo, jt) {
+		args = append(args, colConst(out, i))
+	}
+	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, %s)", es.Name, t.Name, ed.Name, strings.Join(args, ", "))
+}
+
+// unfilled are the columns of the edge schema es, other than its keys jo and
+// jt, that an insert of a row Add makes cannot fill: a field that is
+// required and has no default of any kind, and a key that velox neither
+// generates nor fills with a DefaultFunc. An Optional field is written as
+// its zero (ADR 0090); an Optional JSON field and a Nillable one have a
+// default or NULL; a Version starts at its zero.
+func unfilled(es *Entity, jo, jt int) []int {
+	var cols []int
+	for i, f := range es.Fields {
+		filled := f.Optional || f.Nillable || f.Pointer || f.Default != nil || f.DefaultFunc || f.Version || len(f.SchemaDefault) > 0
+		if i == 0 {
+			filled = filled || f.AutoID || integer(f.Type)
+		}
+		if i != jo && i != jt && !filled {
+			cols = append(cols, i)
+		}
+	}
+	return cols
 }
 
 // finish completes the entities' files, adds the join entities, and checks

@@ -73,6 +73,8 @@ type Link struct {
 	Join       *EntityInfo // many-to-many: the join entity; nil otherwise
 	JoinOwner  int         // join's column equal to owner.Columns[ownerCol]
 	JoinTarget int         // join's column equal to target.Columns[targetCol]
+	// JoinUnfilled are the join's columns Add cannot fill (Through.Unfilled).
+	JoinUnfilled []int
 	// TextKey compares the owner's integer column with the target's text
 	// column as text, casting the owner's side: a FieldInSelect whose key
 	// column holds ids as text (ADR 0091).
@@ -169,7 +171,12 @@ func (r *relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...
 			return fail("its key names column %d of %s, which has %d", c, j.Name, len(j.Columns))
 		}
 	}
-	l.Join, l.JoinOwner, l.JoinTarget = j, r.through.OwnerCol, r.through.TargetCol
+	for _, c := range r.through.Unfilled {
+		if c < 0 || c >= len(j.Columns) {
+			return fail("it names unfilled column %d of %s, which has %d", c, j.Name, len(j.Columns))
+		}
+	}
+	l.Join, l.JoinOwner, l.JoinTarget, l.JoinUnfilled = j, r.through.OwnerCol, r.through.TargetCol, r.through.Unfilled
 	if err := sameKey(owner, l.OwnerCol, j, l.JoinOwner); err != nil {
 		return fail("%v", err)
 	}

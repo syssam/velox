@@ -21,6 +21,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- Edge schemas, as ent's `edge.Through`: a many-to-many edge names a schema
+  whose rows are its links, with an ID, fields and two Required to-one key
+  edges. velox-gen generates it as any entity, adds the through edge and a
+  unique index over the pair of keys, and writes no join table. `Rel.Add`
+  inserts its rows with their defaults, keeps a link that exists, and fails
+  before any statement when a field is required and has no default. An edge
+  schema cannot have a Read or Query policy, Interceptors or
+  `softdelete.Mixin` (rule 70), and a `WithFilter` filter that restricts a
+  join entity fails Has, Of and With through it. velox-gen warns of an edge
+  schema whose keys declare no `OnDelete`. Regenerate:
+  `velox.GeneratedCodeIsVersion26` replaces Version25, as `EdgeThrough`
+  takes the columns Add cannot fill. `loadjson.Version` is 9, for
+  `Edge.Through`.
 - velox-graphql takes `engine=graphql-go` (ADR 0107), and so does
   `graphqlgen.Plugin(opts)`: velox.graphql and the Go are for
   github.com/syssam/graphql-go's generator gqlc, which binds every field but

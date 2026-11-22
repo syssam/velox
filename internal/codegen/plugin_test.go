@@ -669,3 +669,40 @@ func TestNullableMatchesCore(t *testing.T) {
 		}
 	}
 }
+
+// TestPluginModelEdgeSchemaGolden pins the JSON a plugin receives, which
+// describe -json prints, for the edge schema golden case. Run it with
+// -update to write testdata/golden/edgeschema/plugin.json.
+func TestPluginModelEdgeSchemaGolden(t *testing.T) {
+	g := goldenGraph(t, "edgeschema")
+	o, err := Lower(g, Config{Package: "gen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := PluginModel(g, o)
+	if len(m.Entities) != 4 {
+		t.Fatalf("%d entities, want User, Group, Membership and Follow alone", len(m.Entities))
+	}
+	if ms := pluginEntity(t, m, "Membership"); ms.Join || len(ms.PrimaryKey) != 1 || len(ms.Edges) != 2 {
+		t.Fatalf("Membership %+v", ms)
+	}
+	got, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, '\n')
+	path := filepath.Join("testdata", "golden", "edgeschema", "plugin.json")
+	if *update {
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("plugin model differs from %s at line %d", path, firstDiff(string(got), string(want)))
+	}
+}

@@ -35,6 +35,9 @@ var goldenCases = []struct {
 		"Project": {Policy: true},
 	}}},
 	{"mixinplain", Config{Package: "gen"}},
+	// Edge schemas: Membership, which Add fills, and Follow, a relation to
+	// its own schema whose note Add cannot fill.
+	{"edgeschema", Config{Package: "gen"}},
 }
 
 // TestGolden loads each case's schema package, generates it and compares every

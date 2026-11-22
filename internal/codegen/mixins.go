@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"go/ast"
@@ -23,6 +24,9 @@ type MixinBound struct {
 	// Methods are the kinds the mixin declares ("Policy", "Hooks",
 	// "Interceptors"), each with whether its receiver is a pointer.
 	Methods map[string]bool
+	// Reads is "path:line" of the first Read or Query key of its Policy's
+	// literal, "" when none. An edge schema cannot have one (rule 70).
+	Reads string
 }
 
 // MixinBehaviour finds the Policy, Hooks and Interceptors methods of the
@@ -97,6 +101,7 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 					continue
 				}
 				mb.Methods[k] = fm.ptr
+				mb.Reads = cmp.Or(mb.Reads, fm.reads)
 			}
 			out[e.Name] = append(out[e.Name], mb)
 		}
@@ -160,6 +165,9 @@ type mixinMethodDecl struct {
 // foundMethod is a behaviour method a mixin has.
 type foundMethod struct {
 	ptr bool // a pointer receiver
+	// reads is "path:line" of the first Read or Query key of a Policy
+	// method's literal, "" when none.
+	reads string
 }
 
 // pkg parses the package at path, once.
@@ -276,7 +284,13 @@ func (w *methodWalk) own(p *mixinPkg, t *mixinType, name string, d int) error {
 		if err := mixinMethodShape(p, m, name); err != nil {
 			return err
 		}
-		w.found[k] = foundMethod{ptr: recvPtr(m.fd)}
+		fm := foundMethod{ptr: recvPtr(m.fd)}
+		if k == "Policy" {
+			if at := readsConds(m.file, m.fd); at.IsValid() {
+				fm.reads = fmt.Sprintf("%s:%d", m.path, p.fset.Position(at).Line)
+			}
+		}
+		w.found[k] = fm
 		w.depth[k] = d
 	}
 	return nil

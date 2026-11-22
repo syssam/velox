@@ -128,6 +128,17 @@ func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path s
 	return nil
 }
 
+// writeKeys and readKeys are the keys of a velox.Policy that hold
+// conditions: policyConds looks for writeKeys, readsConds for readKeys.
+var (
+	writeKeys = []string{"Read", "Write", "Query", "Mutation"}
+	readKeys  = []string{"Read", "Query"}
+)
+
+// readsConds is policyConds of the Read and Query keys alone: the position
+// of a condition on the rows a read sees.
+func readsConds(f *ast.File, d *ast.FuncDecl) token.Pos { return policyKeys(f, d, readKeys) }
+
 // policyConds returns the position of the first Read, Write, Query or
 // Mutation key, with a value other than nil, of a composite literal of type
 // velox.Policy or privacy.Policy (its alias) in the body of d, the Policy
@@ -135,7 +146,10 @@ func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path s
 // Policy built another way, by a positional literal, by assigning its fields
 // or in another function, is left to the runtime's check when the entity
 // loads.
-func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
+func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos { return policyKeys(f, d, writeKeys) }
+
+// policyKeys is policyConds of the keys given.
+func policyKeys(f *ast.File, d *ast.FuncDecl, keys []string) token.Pos {
 	names := policyPkgNames(f)
 	if len(names) == 0 || d.Body == nil {
 		return token.NoPos
@@ -154,7 +168,7 @@ func policyConds(f *ast.File, d *ast.FuncDecl) token.Pos {
 				if v, ok := kv.Value.(*ast.Ident); ok && v.Name == "nil" {
 					continue
 				}
-				if k, ok := kv.Key.(*ast.Ident); ok && slices.Contains([]string{"Read", "Write", "Query", "Mutation"}, k.Name) {
+				if k, ok := kv.Key.(*ast.Ident); ok && slices.Contains(keys, k.Name) {
 					found = k.Pos()
 					return false
 				}

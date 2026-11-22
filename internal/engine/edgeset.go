@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"unsafe"
 )
 
@@ -209,7 +210,9 @@ func PlanEdges(owner *EntityInfo, edges []*EdgeSet) (EdgePlan, error) {
 		case EdgeRemove:
 			w.remove, err = w.keys(w.remove, e.Keys)
 		case EdgeAdd:
-			w.add, err = w.keys(w.add, e.Keys)
+			if err = w.fillable(); err == nil {
+				w.add, err = w.keys(w.add, e.Keys)
+			}
 		default:
 			err = fmt.Errorf("velox: %s: edge %s: no edge operation %d", owner.Name, w.link.Name, e.Op)
 		}
@@ -263,6 +266,27 @@ func resolveEdge(owner *EntityInfo, ref RelRef) (edgeWrite, error) {
 	}
 	w.kind, w.key = edgeChild, t.PrimaryKey[0]
 	return w, nil
+}
+
+// fillable refuses Add of a many-to-many edge whose edge schema has columns
+// Add cannot fill: through a struct, an unset column cannot be told from a
+// zero one, so Add would write a zero the schema calls required.
+func (w *edgeWrite) fillable() error {
+	cols := w.link.JoinUnfilled
+	if w.kind != edgeThrough || len(cols) == 0 {
+		return nil
+	}
+	j := w.link.Join
+	fields, names := make([]string, len(cols)), make([]string, len(cols))
+	for i, c := range cols {
+		fields[i], names[i] = j.Name+"."+j.Columns[c].Field, j.Columns[c].Name
+	}
+	has := "has"
+	if len(cols) > 1 {
+		has = "have"
+	}
+	return fmt.Errorf("velox: %s: edge %s: Add cannot fill %s, which %s no default; insert %s rows, or give %s a Default or Optional",
+		w.owner.Name, w.link.Name, strings.Join(fields, ", "), has, j.Name, strings.Join(names, ", "))
 }
 
 // keys is have with each of ks, converted to w's key column's Go type, that

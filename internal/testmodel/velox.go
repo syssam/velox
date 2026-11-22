@@ -4,7 +4,7 @@ package testmodel
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion25
+const _ = velox.GeneratedCodeIsVersion26
 
 var veloxEntities velox.EntityTable
 
@@ -18,8 +18,11 @@ func veloxEntityTable() *velox.EntityTable {
 			velox.LinkEntity[Ledger]("Ledger", "ledgers"),
 			velox.LinkEntity[Line]("Line", "line"),
 			velox.LinkEntity[Paper]("Paper", "papers"),
+			velox.LinkEntity[Player]("Player", "players"),
 			velox.LinkEntity[Remark]("Remark", "remarks"),
+			velox.LinkEntity[Roster]("Roster", "rosters"),
 			velox.LinkEntity[Sample]("Sample", "samples"),
+			velox.LinkEntity[Team]("Team", "teams"),
 			velox.LinkEntity[Ticket]("Ticket", "tickets"),
 			velox.LinkEntity[Topic]("Topic", "topics"),
 			velox.LinkEntity[PaperTopic]("PaperTopic", "paper_topics"),

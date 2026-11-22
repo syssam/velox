@@ -199,20 +199,29 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescripto
 
 // EdgeThrough is a many-to-many relation to T through the join entity J:
 // owner.Columns[ownerCol] = J.Columns[joinOwner] and J.Columns[joinTarget] =
-// T.Columns[targetCol]. For generated code. Its field is a Many[T]. J's rows
-// are written like any entity's, with Insert and Delete.
+// T.Columns[targetCol]. For generated code. Its field is a Many[T]. J is a
+// join table's entity or an edge schema (edge.Through), and its rows are
+// written like any entity's, with Insert and Delete.
 //
 // Loading it reads J's rows for the owners' keys, then T's rows for the keys
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's Read
-// policy, a scope included, applies, as it does to any relation's target. J
-// cannot have a Read policy of its own: it is read through its two sides,
-// whose Read policies apply, and the relation is refused when it resolves. velox does not check that an endpoint is a row the
-// caller's policies let it see or change: an application that writes links, or
-// deletes them, checks both endpoints itself, in J's Policy (Insert, and Write for
-// updates and deletes) or in a hook on J. When J is the join entity of a bidirectional edge (Descriptor.Bidi), its Policy cannot
-// have Write either, since a condition would delete one row of a link: check
-// deletes in a hook on J.
-func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDescriptor {
+// policy, a scope included, applies, as it does to any relation's target.
+// J cannot have a Read policy or an interceptor of its own, and a WithFilter
+// filter must return NoFilter() for it: J is read through its two sides,
+// whose Read policies apply, and the relation is refused when it resolves.
+//
+// Add inserts J's rows, filling their defaults, and keeps a link that
+// exists. unfilled are J's columns Add cannot fill, an edge schema's fields
+// that have no default and are not Optional: Add of the relation then fails
+// before any statement, and the application inserts J's rows itself.
+//
+// velox does not check that an endpoint is a row the caller's policies let it
+// change: an application that writes links, or deletes them, checks both
+// endpoints itself, in J's Policy (Insert, and Write for updates and deletes)
+// or in a hook on J. When J is the join entity of a bidirectional edge
+// (Descriptor.Bidi), its Policy cannot have Write either, since a condition
+// would delete one row of a link: check deletes in a hook on J.
+func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int, unfilled ...int) EdgeDescriptor {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	engine.SetEdgeThrough(&r, &engine.Through{
 		Join: func() (*EntityInfo, error) {
@@ -221,6 +230,7 @@ func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, jo
 		},
 		OwnerCol:  joinOwner,
 		TargetCol: joinTarget,
+		Unfilled:  unfilled,
 	})
 	return r
 }

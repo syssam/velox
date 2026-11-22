@@ -353,7 +353,8 @@ func TestModuleGoVersion(t *testing.T) {
 }
 
 // SchemaMethods records the first Read or Write key, not nil, of the entity's
-// Policy literal in its Policy method, where velox-gen can see it.
+// Policy literal in its Policy method, where velox-gen can see it, and the
+// first Read or Query key apart.
 func TestSchemaMethodsFindsPolicyConds(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
 		// Read is nil, and the other literal is another type's: the Write
@@ -368,7 +369,7 @@ func TestSchemaMethodsFindsPolicyConds(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]Bound{
-		"UserFriend": {Policy: true, PolicyConds: filepath.Join(dir, "friend.go") + ":10"},
+		"UserFriend": {Policy: true, PolicyConds: filepath.Join(dir, "friend.go") + ":10", ReadConds: filepath.Join(dir, "friend.go") + ":11"},
 		"UserGroup":  {Policy: true},
 		"UserPair":   {Policy: true},
 	}
@@ -412,7 +413,7 @@ func TestSchemaMethodsPrivacyPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]Bound{
-		"Doc":  {Policy: true, Privacy: true, PolicyConds: filepath.Join(dir, "doc.go") + ":9"},
+		"Doc":  {Policy: true, Privacy: true, PolicyConds: filepath.Join(dir, "doc.go") + ":9", ReadConds: filepath.Join(dir, "doc.go") + ":9"},
 		"Note": {Policy: true, Privacy: true, PolicyConds: filepath.Join(dir, "note.go") + ":6"},
 		"Tag":  {Policy: true, Privacy: true},
 	}

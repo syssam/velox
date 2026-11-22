@@ -1,0 +1,318 @@
+{
+  "version": 3,
+  "schema_path": "example.com/tmp/schema",
+  "entities": [
+    {
+      "name": "Follow",
+      "label": "follow",
+      "handles": "Follows",
+      "table": "follows",
+      "fields": [
+        {
+          "name": "id",
+          "go_name": "ID",
+          "column": "id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64",
+          "auto_id": true
+        },
+        {
+          "name": "note",
+          "go_name": "Note",
+          "column": "note",
+          "type": "string",
+          "go_type": "string",
+          "elem_type": "string"
+        },
+        {
+          "name": "user_id",
+          "go_name": "UserID",
+          "column": "user_id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64"
+        },
+        {
+          "name": "follower_id",
+          "go_name": "FollowerID",
+          "column": "follower_id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64"
+        }
+      ],
+      "edges": [
+        {
+          "name": "user",
+          "go_name": "User",
+          "target": "User",
+          "kind": "M2O",
+          "unique": true,
+          "required": true,
+          "field": "user_id",
+          "field_on": "Follow",
+          "owns_key": true
+        },
+        {
+          "name": "follower",
+          "go_name": "Follower",
+          "target": "User",
+          "kind": "M2O",
+          "unique": true,
+          "required": true,
+          "field": "follower_id",
+          "field_on": "Follow",
+          "owns_key": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "follows_follow_user_id_follower_id",
+          "fields": [
+            "user_id",
+            "follower_id"
+          ],
+          "unique": true
+        }
+      ],
+      "primary_key": [
+        0
+      ]
+    },
+    {
+      "name": "Group",
+      "label": "group",
+      "handles": "Groups",
+      "table": "groups",
+      "fields": [
+        {
+          "name": "id",
+          "go_name": "ID",
+          "column": "id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64",
+          "auto_id": true
+        },
+        {
+          "name": "name",
+          "go_name": "Name",
+          "column": "name",
+          "type": "string",
+          "go_type": "string",
+          "elem_type": "string"
+        }
+      ],
+      "edges": [
+        {
+          "name": "users",
+          "go_name": "Users",
+          "target": "User",
+          "ref": "groups",
+          "kind": "M2M",
+          "inverse": true
+        },
+        {
+          "name": "memberships",
+          "go_name": "Memberships",
+          "target": "Membership",
+          "ref": "group",
+          "kind": "O2M",
+          "inverse": true,
+          "field": "group_id",
+          "field_on": "Membership"
+        }
+      ],
+      "indexes": [],
+      "primary_key": [
+        0
+      ]
+    },
+    {
+      "name": "Membership",
+      "label": "membership",
+      "handles": "Memberships",
+      "table": "memberships",
+      "fields": [
+        {
+          "name": "id",
+          "go_name": "ID",
+          "column": "id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64",
+          "auto_id": true
+        },
+        {
+          "name": "role",
+          "go_name": "Role",
+          "column": "role",
+          "type": "enum",
+          "go_type": "MembershipRole",
+          "elem_type": "MembershipRole",
+          "has_default": true,
+          "default": "member",
+          "enum": "MembershipRole",
+          "enum_values": [
+            "owner",
+            "member"
+          ]
+        },
+        {
+          "name": "joined_at",
+          "go_name": "JoinedAt",
+          "column": "joined_at",
+          "type": "time",
+          "go_type": "time.Time",
+          "elem_type": "time.Time",
+          "pkg_path": "time",
+          "imports": [
+            "time"
+          ],
+          "immutable": true,
+          "has_default": true
+        },
+        {
+          "name": "user_id",
+          "go_name": "UserID",
+          "column": "user_id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64"
+        },
+        {
+          "name": "group_id",
+          "go_name": "GroupID",
+          "column": "group_id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64"
+        }
+      ],
+      "edges": [
+        {
+          "name": "user",
+          "go_name": "User",
+          "target": "User",
+          "kind": "M2O",
+          "unique": true,
+          "required": true,
+          "field": "user_id",
+          "field_on": "Membership",
+          "owns_key": true
+        },
+        {
+          "name": "group",
+          "go_name": "Group",
+          "target": "Group",
+          "kind": "M2O",
+          "unique": true,
+          "required": true,
+          "field": "group_id",
+          "field_on": "Membership",
+          "owns_key": true
+        }
+      ],
+      "indexes": [
+        {
+          "name": "memberships_membership_user_id_group_id",
+          "fields": [
+            "user_id",
+            "group_id"
+          ],
+          "unique": true
+        }
+      ],
+      "primary_key": [
+        0
+      ]
+    },
+    {
+      "name": "User",
+      "label": "user",
+      "handles": "Users",
+      "table": "users",
+      "fields": [
+        {
+          "name": "id",
+          "go_name": "ID",
+          "column": "id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64",
+          "auto_id": true
+        },
+        {
+          "name": "name",
+          "go_name": "Name",
+          "column": "name",
+          "type": "string",
+          "go_type": "string",
+          "elem_type": "string"
+        }
+      ],
+      "edges": [
+        {
+          "name": "groups",
+          "go_name": "Groups",
+          "target": "Group",
+          "ref": "users",
+          "kind": "M2M"
+        },
+        {
+          "name": "following",
+          "go_name": "Following",
+          "target": "User",
+          "ref": "followers",
+          "kind": "M2M"
+        },
+        {
+          "name": "followers",
+          "go_name": "Followers",
+          "target": "User",
+          "ref": "following",
+          "kind": "M2M",
+          "inverse": true
+        },
+        {
+          "name": "memberships",
+          "go_name": "Memberships",
+          "target": "Membership",
+          "ref": "user",
+          "kind": "O2M",
+          "inverse": true,
+          "field": "user_id",
+          "field_on": "Membership"
+        },
+        {
+          "name": "follows",
+          "go_name": "Follows",
+          "target": "Follow",
+          "ref": "user",
+          "kind": "O2M",
+          "inverse": true,
+          "field": "user_id",
+          "field_on": "Follow"
+        }
+      ],
+      "indexes": [],
+      "primary_key": [
+        0
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "type": "MembershipRole",
+      "values": [
+        "owner",
+        "member"
+      ],
+      "consts": [
+        "MembershipRoleOwner",
+        "MembershipRoleMember"
+      ]
+    }
+  ]
+}

@@ -33,6 +33,9 @@ type Bound struct {
 	// Policy method's body, "" when it has none. The join entity of a
 	// bidirectional edge cannot have any of them.
 	PolicyConds string
+	// ReadConds is "path:line" of the first Read or Query key there, ""
+	// when it has none. An edge schema cannot have one (rule 70).
+	ReadConds string
 }
 
 // Out is everything Render writes: the Graph lowered to Go names, types,
@@ -148,4 +151,4 @@ const privacyPkg = "github.com/syssam/velox/privacy"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 25
+const GeneratedCodeVersion = 26
