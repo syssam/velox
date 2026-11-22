@@ -118,7 +118,13 @@ func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums
 	}
 	// The settings change only this connection, which is closed after.
 	defer discard(conn)
+	return inspectConn(ctx, conn, d, tables, enums)
+}
+
+// inspectConn is inspectWith on conn, whose settings it changes.
+func inspectConn(ctx context.Context, conn *sql.Conn, d velox.Dialect, tables, enums []TableRef) (*Schema, []note, error) {
 	var s *Schema
+	var err error
 	var notes []note
 	switch d {
 	case velox.MySQL:

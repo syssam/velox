@@ -9,8 +9,8 @@
 // of their values, not by their text.
 //
 // [Diff], [Lint], [Render] and [NewPlan] are pure: they read schemas and
-// open no connection. [Up], [Status], [Resolve], [Inspect], [Drift] and
-// [Baseline] take a *sql.DB and use one connection of it, with the session
+// open no connection. [Up], [Status], [Resolve], [Inspect], [Drift],
+// [Baseline] and [Create] take a *sql.DB and use one connection of it, with the session
 // in UTC on PostgreSQL and MySQL, and close that connection after rather
 // than return it to the pool; when a file run statement by statement fails
 // and that connection is lost, Up writes the error to its dirty row, and
@@ -117,6 +117,8 @@
 //   - "baseline": Baseline found none of the schema's tables, a foreign key
 //     to a table outside them, or a sequence default the column does not
 //     own; or Up was given WithBaseline where it cannot record.
+//   - "create": Create was given a database that holds part of the
+//     schema, or holds it otherwise.
 //
 // On PostgreSQL 18, PostgreSQL names the NOT NULL constraints; migrate
 // neither models nor renames them, and after a table rename they keep the
@@ -220,6 +222,15 @@
 // version make on a scratch database, which Drift compares a database behind
 // the directory with. [Rebase] moves a branch's files past the others when
 // two branches took one version.
+//
+// # Tests and development
+//
+// [Create] makes a schema's tables in a new database without a migration
+// directory, as ent's client.Schema.Create does: for a test, or a
+// development database. It writes no history, and it never alters a table:
+// it refuses a database that holds the schema otherwise. Package veloxtest
+// opens a database with the schema package's tables made by Create. A
+// production database keeps versioned migrations.
 //
 // # Adopting a database
 //

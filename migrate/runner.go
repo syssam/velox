@@ -275,7 +275,7 @@ func up(ctx context.Context, db *sql.DB, d *Dir, o options) (*Report, error) {
 	}
 	defer s.close()
 	s.notify = o.notify(ctx)
-	if err := s.lasting(ctx); err != nil {
+	if err := s.lasting(ctx, "Up"); err != nil {
 		return nil, err
 	}
 	unlock, err := s.lock(ctx, o.lockWait)
@@ -361,7 +361,7 @@ func upCopy(ctx context.Context, db *sql.DB, d *Dir, o options) (*Report, error)
 		return nil, err
 	}
 	defer s.close()
-	if err := s.lasting(ctx); err != nil {
+	if err := s.lasting(ctx, "Up"); err != nil {
 		return nil, err
 	}
 	var fk int

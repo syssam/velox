@@ -362,11 +362,11 @@ func (s *session) close() {
 const probeTable = "velox_migrate_memory_probe"
 
 // lasting refuses a SQLite database in memory that ends with the session's
-// connection: Up would apply to it, report success and leave nothing. A second
-// connection of the pool that sees a table made on the first shares the database,
+// connection: who, Up or Create, would apply to it, report success and
+// leave nothing. A second connection of the pool that sees a table made on the first shares the database,
 // a shared-cache one, and is held to the end of the run. The pool's connection,
 // which may hold the application's only copy, goes back untouched.
-func (s *session) lasting(ctx context.Context) error {
+func (s *session) lasting(ctx context.Context, who string) error {
 	if s.d != velox.SQLite {
 		return nil
 	}
@@ -380,7 +380,7 @@ func (s *session) lasting(ctx context.Context) error {
 	refuse := func() error {
 		s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", s.busyWas))
 		s.tidy = true
-		return refuseSession("the SQLite database is in memory, which ends with this connection, so Up would leave nothing; name a file, or a shared-cache database (file:x?mode=memory&cache=shared) in a pool of two or more connections")
+		return refuseSession("the SQLite database is in memory, which ends with this connection, so %s would leave nothing; name a file, or a shared-cache database (file:x?mode=memory&cache=shared) in a pool of two or more connections", who)
 	}
 	if s.pool.Stats().MaxOpenConnections == 1 {
 		return refuse()

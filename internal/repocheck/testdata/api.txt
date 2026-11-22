@@ -1274,6 +1274,7 @@ func (t *Table) Ref() TableRef
 func (w Warning) String() string
 func Baseline(ctx context.Context, db *sql.DB, want *Schema) (*Schema, []Warning, error)
 func Blocked(findings []Finding, allow []Allow) []Finding
+func Create(ctx context.Context, db *sql.DB, schema *Schema) error
 func Diff(from, to *Schema, opts DiffOptions) ([]Change, error)
 func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error)
 func History(ctx context.Context, db *sql.DB, dir fs.FS) ([]Applied, error)
