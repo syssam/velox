@@ -201,7 +201,7 @@ func TestInterceptorReachesWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if i, j := strings.Index(q, `ON CONFLICT`), strings.Index(q, `"notes"."hidden" = `); i < 0 || j < i {
+	if i, j := strings.Index(q, `ON CONFLICT`), strings.Index(q, `NOT "notes"."hidden"`); i < 0 || j < i {
 		t.Errorf("the upsert's update branch lacks the interceptor: %s", q)
 	}
 }
@@ -251,12 +251,12 @@ func TestInterceptorRunsBeforePolicy(t *testing.T) {
 	if _, err := db.Update[fixture.INote]().Set(fixture.INotes.OwnerID.Set(1)).Where(fixture.INotes.ID.EQ(7)).Exec(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	want := `UPDATE "notes" SET "owner_id" = $1 WHERE "id" = $2 AND "hidden" = $3 AND "body" <> $4 AND "body" <> $5`
+	want := `UPDATE "notes" SET "owner_id" = $1 WHERE "id" = $2 AND NOT "hidden" AND "body" <> $3 AND "body" <> $4`
 	if e.SQL != want {
 		t.Errorf("SQL\n%s\nwant\n%s", e.SQL, want)
 	}
 	q, _, err := db.Query[fixture.INote]().Where(fixture.INotes.ID.EQ(7)).Limit(1).SQL(context.Background())
-	if err != nil || !strings.Contains(q, `WHERE "id" = $1 AND "hidden" = $2 AND "body" <> $3`) {
+	if err != nil || !strings.Contains(q, `WHERE "id" = $1 AND NOT "hidden" AND "body" <> $2`) {
 		t.Errorf("SELECT: %s, %v", q, err)
 	}
 }
@@ -324,7 +324,7 @@ func TestInterceptorRenderCacheKeepsContextsApart(t *testing.T) {
 		}
 		got = append(got, e.SQL)
 	}
-	if !strings.Contains(got[0], `"hidden" = `) || strings.Contains(got[1], `"hidden" = `) || got[2] != got[0] {
+	if !strings.Contains(got[0], `NOT "hidden"`) || strings.Contains(got[1], `NOT "hidden"`) || got[2] != got[0] {
 		t.Errorf("statements %q", got)
 	}
 }

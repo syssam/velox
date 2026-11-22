@@ -22,8 +22,8 @@ func TestGroupedSQL(t *testing.T) {
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Desc()).Limit(5).Offset(2).Columns(I.Number).AllowUnbounded()
 	check := func(sel string) {
 		t.Helper()
-		want := `SELECT "org_id", ` + sel + ` FROM "invoices" WHERE "paid" = $1 GROUP BY "org_id" ORDER BY "org_id"`
-		if e.SQL != want || !reflect.DeepEqual(e.Args, []any{true}) {
+		want := `SELECT "org_id", ` + sel + ` FROM "invoices" WHERE "paid" GROUP BY "org_id" ORDER BY "org_id"`
+		if e.SQL != want || len(e.Args) != 0 {
 			t.Errorf("sent %s %v, want %s", e.SQL, e.Args, want)
 		}
 	}
@@ -149,11 +149,11 @@ func TestGroupedIsScoped(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, []velox.Group[string, int64]{{Key: "ann", Value: 3}}) {
 		t.Fatalf("%v, %v", got, err)
 	}
-	wantSent(t, e, `SELECT "owner", SUM("invoice_id") FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3 GROUP BY "owner" ORDER BY "owner"`, false, int64(1), "ann")
+	wantSent(t, e, `SELECT "owner", SUM("invoice_id") FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 GROUP BY "owner" ORDER BY "owner"`, int64(1), "ann")
 	if _, err := velox.CountBy(asUser("ann"), q, Tk.Owner.Key()); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3 GROUP BY "owner" ORDER BY "owner"`, false, int64(1), "ann")
+	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 GROUP BY "owner" ORDER BY "owner"`, int64(1), "ann")
 
 	// No org, no statement; a Read policy that refuses, no statement.
 	calls := e.Calls

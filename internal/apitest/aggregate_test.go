@@ -20,8 +20,8 @@ func TestAggregateSQL(t *testing.T) {
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).Limit(5).Offset(2).Columns(I.Number)
 	check := func(fn string) {
 		t.Helper()
-		want := `SELECT ` + fn + `("total") FROM "invoices" WHERE "paid" = $1`
-		if e.SQL != want || !reflect.DeepEqual(e.Args, []any{true}) {
+		want := `SELECT ` + fn + `("total") FROM "invoices" WHERE "paid"`
+		if e.SQL != want || len(e.Args) != 0 {
 			t.Errorf("%s sent %s %v, want %s", fn, e.SQL, e.Args, want)
 		}
 	}

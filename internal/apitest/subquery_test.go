@@ -26,7 +26,7 @@ func TestInSelectSQL(t *testing.T) {
 	// The other way: items whose invoice is paid, a subquery on a column
 	// that is not a key.
 	text, _ = sqlOK(t)(db.Query[testmodel.Item]().Where(It.InvoiceID.InSelect(I.ID.Select(I.Paid.EQ(true)))).Limit(5).SQL(ctx))
-	if !strings.Contains(text, `EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "items"."invoice_id" AND "paid" = $1)`) {
+	if !strings.Contains(text, `EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "items"."invoice_id" AND "paid")`) {
 		t.Errorf("items: %s", text)
 	}
 	if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.InSelect(big)).Exec(ctx); err != nil || !strings.Contains(e.SQL, `UPDATE "invoices" SET`) || !strings.Contains(e.SQL, `WHERE EXISTS (SELECT 1 FROM "items"`) {

@@ -161,7 +161,7 @@ func TestResolveByName(t *testing.T) {
 		{"text on a number", engine.FieldContains("rank", "1"), "", nil, "rank is not a text column"},
 		{"fold on a number", engine.FieldContainsFold("rank", "1"), "", nil, "rank is not a text column"},
 		{"in a group", velox.And(engine.FieldEQ("rank", 1), velox.Or(engine.FieldEQ("title", "a"), engine.FieldEQ("nope", 1))), "", nil, `no column "nope"`},
-		{"not", velox.Not(engine.FieldEQ("visible", true)), `NOT ("visible" = $1)`, []any{true}, ""},
+		{"not", velox.Not(engine.FieldEQ("visible", true)), `NOT ("visible")`, nil, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sql, args, err := nmSQL(t, cond(tc.c))

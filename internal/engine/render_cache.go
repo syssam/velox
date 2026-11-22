@@ -28,7 +28,8 @@ type cached struct{ Text, Fp string }
 
 // Fingerprint names a statement's shape: the first 8 bytes, as 16 lowercase hex
 // characters, of the SHA-256 of its SQL text without any comment. velox sends
-// every value as a parameter but SQLite's LIMIT, so the text is the shape.
+// every value as a parameter but SQLite's LIMIT and a bool column's constant
+// (boolCmp), which the shape key holds, so the text is the shape.
 func Fingerprint(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:8])
@@ -311,7 +312,18 @@ func nodeKey(k []byte, n Node) []byte {
 	k = binary.AppendUvarint(k, uint64(n.Col))
 	switch n.Op {
 	case OpEQ, OpNEQ:
-		k = append(k, bit(isNilArg(n.V)))
+		// A nil is IS NULL and a bool is written as text (boolCmp), so
+		// both shape it: 1 for nil, 2 for false, 3 for true. A bool
+		// compared with a column of another type is keyed too, though it
+		// is bound: that only splits its shape in two.
+		var v byte
+		switch b, ok := n.V.(bool); {
+		case isNilArg(n.V):
+			v = 1
+		case ok:
+			v = 2 + bit(b)
+		}
+		k = append(k, v)
 	case OpIn, OpNotIn:
 		k = binary.AppendUvarint(k, uint64(inLen(len(n.V.([]any)))))
 	case OpJSON:

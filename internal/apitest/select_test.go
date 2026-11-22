@@ -37,14 +37,14 @@ func TestSelectSQL(t *testing.T) {
 		args []any
 	}{
 		{velox.Postgres,
-			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = $1 GROUP BY "org_id" HAVING (SUM("total") > $2) ORDER BY SUM("total") DESC LIMIT $3`,
-			[]any{true, 100, 10}},
+			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" GROUP BY "org_id" HAVING (SUM("total") > $1) ORDER BY SUM("total") DESC LIMIT $2`,
+			[]any{100, 10}},
 		{velox.MySQL,
-			"SELECT `org_id`, SUM(`total`), COUNT(*) FROM `invoices` WHERE `paid` = ? GROUP BY `org_id` HAVING (SUM(`total`) > ?) ORDER BY SUM(`total`) IS NULL DESC, SUM(`total`) DESC LIMIT ?",
-			[]any{true, 100, 10}},
+			"SELECT `org_id`, SUM(`total`), COUNT(*) FROM `invoices` WHERE `paid` = 1 GROUP BY `org_id` HAVING (SUM(`total`) > ?) ORDER BY SUM(`total`) IS NULL DESC, SUM(`total`) DESC LIMIT ?",
+			[]any{100, 10}},
 		{velox.SQLite,
-			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = ? GROUP BY "org_id" HAVING (SUM("total") > ?) ORDER BY SUM("total") IS NULL DESC, SUM("total") DESC LIMIT 10`,
-			[]any{true, 100}},
+			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = 1 GROUP BY "org_id" HAVING (SUM("total") > ?) ORDER BY SUM("total") IS NULL DESC, SUM("total") DESC LIMIT 10`,
+			[]any{100}},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})
 		text, args, err := report(db).SQL(ctx)
@@ -347,7 +347,7 @@ func TestSelectRaw(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	got, _, err := db.Query[inv]().Where(I.Paid.EQ(true)).Limit(3).
 		SelectRaw("LOWER(?) || ?", I.Number, "!").SQL(ctx)
-	want := `SELECT (LOWER("number") || $1) FROM "invoices" WHERE "paid" = $2 LIMIT $3`
+	want := `SELECT (LOWER("number") || $1) FROM "invoices" WHERE "paid" LIMIT $2`
 	if err != nil || got != want {
 		t.Errorf("got %s %v\nwant %s", got, err, want)
 	}

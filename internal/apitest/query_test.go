@@ -96,7 +96,7 @@ func TestCount(t *testing.T) {
 	if err != nil || n != 3 {
 		t.Fatalf("%d, %v", n, err)
 	}
-	if want := `SELECT COUNT(*) FROM "invoices" WHERE "paid" = $1`; e.SQL != want {
+	if want := `SELECT COUNT(*) FROM "invoices" WHERE "paid"`; e.SQL != want {
 		t.Errorf("SQL %s", e.SQL)
 	}
 }
@@ -164,12 +164,12 @@ func TestQueryCanRunAgain(t *testing.T) {
 	}
 	db := openFake(velox.Postgres, e, velox.WithRewrite(scopeTo7))
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5)
-	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2 LIMIT $3`
+	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT $2`
 	for run := range 3 {
 		if _, err := q.All(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if e.SQL != want || !reflect.DeepEqual(e.Args, []any{true, int64(7), 5}) {
+		if e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(7), 5}) {
 			t.Fatalf("run %d:\n got %s %v\nwant %s", run, e.SQL, e.Args, want)
 		}
 	}
@@ -188,7 +188,7 @@ func TestChainingCopiesTheQuery(t *testing.T) {
 
 	paid := base.Where(I.Paid.EQ(true))
 	big := base.Where(I.Total.GT(100))
-	if text, args := sqlOK(t)(paid.SQL(ctx)); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "paid" = $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), true}) {
+	if text, args := sqlOK(t)(paid.SQL(ctx)); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "paid" ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1)}) {
 		t.Errorf("first branch: %s %v", text, args)
 	}
 	if text, args := sqlOK(t)(big.SQL(ctx)); !strings.HasSuffix(text, `WHERE "org_id" = $1 AND "total" > $2 ORDER BY "id"`) || !reflect.DeepEqual(args, []any{int64(1), float64(100)}) {
@@ -209,10 +209,10 @@ func TestChainingCopiesTheQuery(t *testing.T) {
 	roomy := db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(1), I.Paid.EQ(true), I.Total.GT(1)).
 		OrderBy(I.ID.Asc(), I.Total.Desc(), I.Number.Asc()).AllowUnbounded()
 	low, high := roomy.Where(I.ID.LT(10)), roomy.Where(I.ID.GT(20))
-	if text, _ := sqlOK(t)(low.SQL(ctx)); !strings.Contains(text, `AND "id" < $4 ORDER`) {
+	if text, _ := sqlOK(t)(low.SQL(ctx)); !strings.Contains(text, `AND "id" < $3 ORDER`) {
 		t.Errorf("first branch of a base with room: %s", text)
 	}
-	if text, _ := sqlOK(t)(high.SQL(ctx)); !strings.Contains(text, `AND "id" > $4 ORDER`) {
+	if text, _ := sqlOK(t)(high.SQL(ctx)); !strings.Contains(text, `AND "id" > $3 ORDER`) {
 		t.Errorf("second branch of a base with room: %s", text)
 	}
 	byPaid, byOrg := roomy.OrderBy(I.Paid.Asc()), roomy.OrderBy(I.OrgID.Asc())
@@ -395,10 +395,10 @@ func TestFirst(t *testing.T) {
 	if err != nil || got == nil || got.ID != 5 {
 		t.Fatalf("%+v, %v", got, err)
 	}
-	if want := `ORDER BY "id" DESC LIMIT $2`; !strings.HasSuffix(e.SQL, want) {
+	if want := `WHERE "paid" ORDER BY "id" DESC LIMIT $1`; !strings.HasSuffix(e.SQL, want) {
 		t.Errorf("SQL %s", e.SQL)
 	}
-	if want := []any{true, 1}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{1}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 	e.Rows = nil
@@ -426,10 +426,10 @@ func TestExists(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("%v, %v", ok, err)
 	}
-	if want := `SELECT 1 FROM "invoices" WHERE "paid" = $1 LIMIT $2`; e.SQL != want {
+	if want := `SELECT 1 FROM "invoices" WHERE "paid" LIMIT $1`; e.SQL != want {
 		t.Errorf("SQL %s", e.SQL)
 	}
-	if want := []any{true, 1}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{1}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 	e.Rows = nil

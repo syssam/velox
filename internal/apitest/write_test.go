@@ -172,11 +172,11 @@ func TestSaveSQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `UPDATE "invoices" SET "number" = $1, "updated_at" = $2 WHERE "id" = $3 AND "total" = $4 AND "paid" = $5`
+	const want = `UPDATE "invoices" SET "number" = $1, "updated_at" = $2 WHERE "id" = $3 AND "total" = $4 AND NOT "paid"`
 	if text != want {
 		t.Errorf("\n got %s\nwant %s", text, want)
 	}
-	if len(args) != 5 || args[0] != "X" || args[2] != int64(3) || args[3] != 5.0 || args[4] != false {
+	if len(args) != 4 || args[0] != "X" || args[2] != int64(3) || args[3] != 5.0 {
 		t.Errorf("args %v", args)
 	}
 	if e.Calls != 0 {
@@ -197,7 +197,7 @@ func TestSaveSQL(t *testing.T) {
 	if text2, _, err := q.SQL(ctx); err != nil || text2 != want {
 		t.Errorf("q after Where: %s %v", text2, err)
 	}
-	if text2, _, err := q2.SQL(ctx); err != nil || !strings.HasSuffix(text2, ` AND "note" = $6`) {
+	if text2, _, err := q2.SQL(ctx); err != nil || !strings.HasSuffix(text2, ` AND "note" = $5`) {
 		t.Errorf("q2: %s %v", text2, err)
 	}
 	// Errors are the same from SQL(ctx) as from Exec, and nothing is sent.

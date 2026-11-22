@@ -961,7 +961,7 @@ func TestCondsAfterNext(t *testing.T) {
 	if want := []velox.Predicate{velox.Predicate(hSofts.ID.EQ(1)), velox.Predicate(hSofts.ID.LT(9))}; !reflect.DeepEqual(softConds, want) {
 		t.Errorf("Conds after next %v, want %v", softConds, want)
 	}
-	if !strings.Contains(e.SQL, `"org_id" = `) || !strings.Contains(e.SQL, `"id" > `) || strings.Count(e.SQL, `"deleted" = `) != 2 {
+	if !strings.Contains(e.SQL, `"org_id" = `) || !strings.Contains(e.SQL, `"id" > `) || strings.Count(e.SQL, `"deleted"`) != 2 {
 		t.Errorf("SQL %s", e.SQL)
 	}
 }

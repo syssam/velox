@@ -843,7 +843,7 @@ func TestEdgeSetterPostgresStatements(t *testing.T) {
 	}
 	want := []string{
 		`SELECT "id" FROM "s_posts" WHERE "id" = $1 FOR UPDATE`,
-		`SELECT "id" FROM "s_tags" WHERE "id" IN ($1) AND "hidden" = $2 LIMIT $3`,
+		`SELECT "id" FROM "s_tags" WHERE "id" IN ($1) AND NOT "hidden" LIMIT $2`,
 		`INSERT INTO "s_post_tags" ("post_id", "tag_id") VALUES ($1, $2) ON CONFLICT ("post_id", "tag_id") DO NOTHING`,
 	}
 	if got := slices.DeleteFunc(slices.Clone(e.Log), func(s string) bool { return !strings.HasPrefix(s, "SELECT") && !strings.HasPrefix(s, "INSERT") }); !slices.Equal(got, want) {

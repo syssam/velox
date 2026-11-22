@@ -21,7 +21,7 @@ func TestAfter(t *testing.T) {
 		t.Errorf("%v", args)
 	}
 	text, _ = sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(last).Limit(10).SQL(ctx))
-	if !strings.Contains(text, `WHERE "paid" = $1 AND ("id" > $2) ORDER BY "id"`) {
+	if !strings.Contains(text, `WHERE "paid" AND ("id" > $1) ORDER BY "id"`) {
 		t.Errorf("%s", text)
 	}
 }
@@ -133,7 +133,7 @@ func TestAfterMixedDirections(t *testing.T) {
 func TestAfterSecondCaseArgs(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	_, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(&testmodel.Invoice{ID: 7}).Limit(10).SQL(ctx))
-	if !reflect.DeepEqual(args, []any{true, int64(7), 10}) {
+	if !reflect.DeepEqual(args, []any{int64(7), 10}) {
 		t.Errorf("%#v", args)
 	}
 }

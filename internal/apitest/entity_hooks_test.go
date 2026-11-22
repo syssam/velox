@@ -41,7 +41,7 @@ func TestDeleteHookAddsItsCondition(t *testing.T) {
 		if _, err := d.Exec(asUser("admin")); err != nil {
 			t.Fatal(err)
 		}
-		wantSent(t, e, `DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3`, int64(1), true, int64(1))
+		wantSent(t, e, `DELETE FROM "tickets" WHERE "id" = $1 AND "done" AND "org_id" = $2`, int64(1), int64(1))
 	}
 	// SQL(ctx) runs the hook as well, and shows its condition once.
 	for range 2 {
@@ -69,7 +69,7 @@ func TestEntityHooksRunBeforeRewriteAndScope(t *testing.T) {
 	if len(seen) != 1 || seen[0] != 2 {
 		t.Errorf("the Rewrite hook saw %v conditions, want [2]", seen)
 	}
-	wantSent(t, e, `DELETE FROM "tickets" WHERE "id" = $1 AND "done" = $2 AND "org_id" = $3`, int64(1), true, int64(1))
+	wantSent(t, e, `DELETE FROM "tickets" WHERE "id" = $1 AND "done" AND "org_id" = $2`, int64(1), int64(1))
 	// A refusing entity hook stops the statement before the Rewrite hooks.
 	_, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("")).Where(Tk.ID.EQ(1)).Exec(asUser("admin"))
 	if err == nil || len(seen) != 1 {

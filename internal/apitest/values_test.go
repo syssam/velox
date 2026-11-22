@@ -28,19 +28,19 @@ func TestValuesUnderPolicyAndFilter(t *testing.T) {
 	if err != nil || !slices.Equal(titles, []string{"a", "b"}) {
 		t.Fatalf("%v, %v", titles, err)
 	}
-	wantSent(t, e, `SELECT "title" FROM "tickets" WHERE "invoice_id" = $1 AND "done" = $2 AND "org_id" = $3 AND "owner" = $4 ORDER BY "title" LIMIT $5 OFFSET $6`, int64(9), false, int64(1), "ann", 5, 2)
+	wantSent(t, e, `SELECT "title" FROM "tickets" WHERE "invoice_id" = $1 AND NOT "done" AND "org_id" = $2 AND "owner" = $3 ORDER BY "title" LIMIT $4 OFFSET $5`, int64(9), int64(1), "ann", 5, 2)
 
 	e.Rows = [][]any{{int64(4)}, {int64(7)}}
 	ids, err := velox.IDs[int64](asUser("ann"), db.Query[testmodel.Ticket]().AllowUnbounded())
 	if err != nil || !slices.Equal(ids, []int64{4, 7}) {
 		t.Fatalf("IDs: %v, %v", ids, err)
 	}
-	if !strings.HasPrefix(e.SQL, `SELECT "id" FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3`) {
+	if !strings.HasPrefix(e.SQL, `SELECT "id" FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2`) {
 		t.Errorf("IDs sent %s", e.SQL)
 	}
 
 	// WithoutPolicy lifts the policy, not the filter.
-	if _, err := velox.IDs[int64](ctx, db.WithoutPolicy("test").Query[testmodel.Ticket]().Limit(1)); err != nil || !strings.Contains(e.SQL, `WHERE "done" = $1 LIMIT`) {
+	if _, err := velox.IDs[int64](ctx, db.WithoutPolicy("test").Query[testmodel.Ticket]().Limit(1)); err != nil || !strings.Contains(e.SQL, `WHERE NOT "done" LIMIT`) {
 		t.Errorf("WithoutPolicy: %s, %v", e.SQL, err)
 	}
 }

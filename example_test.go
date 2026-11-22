@@ -110,8 +110,8 @@ func ExampleQuery_SQL() {
 	fmt.Println(text)
 	fmt.Println(args, err)
 	// Output:
-	// SELECT "id", "number" FROM "invoices" WHERE "total" > $1 AND "paid" = $2 AND "org_id" = $3 ORDER BY "number" LIMIT $4
-	// [100 false 7 10] <nil>
+	// SELECT "id", "number" FROM "invoices" WHERE "total" > $1 AND NOT "paid" AND "org_id" = $2 ORDER BY "number" LIMIT $3
+	// [100 7 10] <nil>
 }
 
 // Select makes a subquery of one column, and InSelect tests another column
@@ -343,6 +343,6 @@ func ExampleCalc() {
 	fmt.Println(text)
 	fmt.Println(args, err)
 	// Output:
-	// SELECT "id", "number" FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2 ORDER BY (similarity("number", $3)) DESC LIMIT $4
-	// [false 7 INV-42 5] <nil>
+	// SELECT "id", "number" FROM "invoices" WHERE NOT "paid" AND "org_id" = $1 ORDER BY (similarity("number", $2)) DESC LIMIT $3
+	// [7 INV-42 5] <nil>
 }

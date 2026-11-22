@@ -48,7 +48,7 @@ func TestScopeIsAdded(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(testmodel.Org.With(bg, int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2 LIMIT $3`, true, int64(7), 5)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT $2`, int64(7), 5)
 }
 
 func TestScopeOnEveryOperation(t *testing.T) {
@@ -59,7 +59,7 @@ func TestScopeOnEveryOperation(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Count(t7); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT COUNT(*) FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2`, true, int64(7))
+	wantSent(t, e, `SELECT COUNT(*) FROM "invoices" WHERE "paid" AND "org_id" = $1`, int64(7))
 
 	if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(t7); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestScopeOnBothPaths(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" = $1 AND "org_id" = $2 LIMIT $3`, true, int64(7), 5)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT $2`, int64(7), 5)
 	if where != 1 {
 		t.Errorf("the Rewrite hook saw %d conditions, want the caller's 1", where)
 	}
@@ -158,7 +158,7 @@ func TestWithoutPolicyAddsNothing(t *testing.T) {
 	if _, err := db.WithoutPolicy("reason").Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" = $1 LIMIT $2`, true, 5)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" LIMIT $1`, 5)
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
@@ -231,8 +231,8 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 	if _, err := q.All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "qty" > $1 AND NOT (EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "items"."invoice_id" AND "paid" = $2 AND "org_id" = $3)) LIMIT $4`,
-		int64(0), true, int64(7), 1)
+	wantSent(t, e, `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "qty" > $1 AND NOT (EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "items"."invoice_id" AND "paid" AND "org_id" = $2)) LIMIT $3`,
+		int64(0), int64(7), 1)
 
 	_, err := q.All(context.Background())
 	wantNoScope(t, err, "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: ")
@@ -426,7 +426,7 @@ func TestScopeWithSharedDefaults(t *testing.T) {
 			var last []any
 			db := openPolicied(velox.Postgres, &fakeconn.Exec{}, setDefaults,
 				velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-					if len(st.Args) != 3 || st.Args[1] != id {
+					if len(st.Args) != 2 || st.Args[0] != id {
 						wrong, last = wrong+1, st.Args
 					}
 					return next(ctx)

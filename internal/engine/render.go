@@ -754,13 +754,7 @@ func (w *writer) pred(n Node) {
 		// Every condition that holds a value; IsNull and NotNull hold none.
 		w.fail(errCodecCondition(w.in, int(n.Col)))
 	}
-	if (n.Op == OpEQ || n.Op == OpNEQ) && isNilArg(n.V) {
-		w.predCol(n.Col)
-		if n.Op == OpEQ {
-			w.str(" IS NULL")
-		} else {
-			w.str(" IS NOT NULL")
-		}
+	if w.constCmp(n) {
 		return
 	}
 	switch n.Op {
@@ -868,6 +862,66 @@ func (w *writer) pred(n Node) {
 		w.rowIn(n)
 	default:
 		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
+	}
+}
+
+// constCmp writes n and reports true when it is an = or <> whose value is
+// written as text: a nil, as IS NULL or IS NOT NULL, or a bool (boolCmp).
+func (w *writer) constCmp(n Node) bool {
+	if (n.Op == OpEQ || n.Op == OpNEQ) && isNilArg(n.V) {
+		w.predCol(n.Col)
+		if n.Op == OpEQ {
+			w.str(" IS NULL")
+		} else {
+			w.str(" IS NOT NULL")
+		}
+		return true
+	}
+	if b, ok := w.boolConst(n); ok {
+		w.boolCmp(n, b)
+		return true
+	}
+	return false
+}
+
+// boolConst reports whether n compares a bool column, outside a JSON path,
+// with = or <> to a constant bool, and gives the constant. Such a
+// comparison is written without an argument (boolCmp), so its value is
+// shape, which nodeKey keys.
+func (w *writer) boolConst(n Node) (bool, bool) {
+	if (n.Op != OpEQ && n.Op != OpNEQ) || w.path != nil {
+		return false, false
+	}
+	b, ok := n.V.(bool)
+	if !ok || w.in.Columns[n.Col].fast&^fastPtr != fastBool {
+		return false, false
+	}
+	return b, true
+}
+
+// boolCmp writes the comparison of n's bool column with the constant b. On
+// PostgreSQL it is the column alone or NOT the column, as ent writes it: a
+// bound bool leads PostgreSQL's generic plan, which pgx's statement cache
+// reaches after five runs, to misjudge the selectivity. col = true is col
+// and col = false is NOT col in SQL's three-valued logic, NULL included. NOT
+// binds tighter than AND and OR, and every And, Or and Not is parenthesised.
+// MySQL and SQLite store a bool as an integer, and SQLite's planner uses an
+// index for a comparison and not for a bare column: there the constant is
+// the literal 1 or 0, the value their drivers bind for true and false.
+func (w *writer) boolCmp(n Node, b bool) {
+	if w.d == Postgres {
+		if b == (n.Op == OpNEQ) {
+			w.str("NOT ")
+		}
+		w.predCol(n.Col)
+		return
+	}
+	w.predCol(n.Col)
+	w.str(cmpText[n.Op])
+	if b {
+		w.str("1")
+	} else {
+		w.str("0")
 	}
 }
 

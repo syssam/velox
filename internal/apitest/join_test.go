@@ -40,7 +40,7 @@ func TestJoinToOneFillsTheRelationInOneStatement(t *testing.T) {
 	want := `SELECT "items"."id", "items"."invoice_id", "items"."sku", "items"."qty", ` +
 		`"vxj1"."id", "vxj1"."created_at", "vxj1"."updated_at", "vxj1"."org_id", "vxj1"."number", "vxj1"."total", "vxj1"."paid", "vxj1"."paid_at", "vxj1"."note", "vxj1"."data" ` +
 		`FROM "items" JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id" ` +
-		`WHERE "items"."qty" > $1 AND "vxj1"."paid" = $2 ORDER BY "vxj1"."number" DESC LIMIT $3`
+		`WHERE "items"."qty" > $1 AND "vxj1"."paid" ORDER BY "vxj1"."number" DESC LIMIT $2`
 	if e.Log[0] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[0], want)
 	}
@@ -84,7 +84,7 @@ func TestJoinedConditionsReachCountAndExists(t *testing.T) {
 	if err != nil || n != 3 {
 		t.Fatalf("count %d, %v", n, err)
 	}
-	want := `SELECT COUNT(*) FROM "items" JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id" WHERE "vxj1"."paid" = $1`
+	want := `SELECT COUNT(*) FROM "items" JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id" WHERE "vxj1"."paid"`
 	if e.Log[0] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[0], want)
 	}

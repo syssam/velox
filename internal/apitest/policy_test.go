@@ -34,13 +34,13 @@ func TestPolicyReadPredicate(t *testing.T) {
 	if _, err := q.All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3 LIMIT $4`, false, int64(1), "ann", 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 LIMIT $3`, int64(1), "ann", 5)
 
 	// Allow adds nothing.
 	if _, err := q.All(asUser("admin")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 LIMIT $3`, false, int64(1), 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 LIMIT $2`, int64(1), 5)
 
 	calls := e.Calls
 	_, err := q.All(asUser(""))
@@ -112,8 +112,8 @@ func TestPolicyDeleteOrder(t *testing.T) {
 	if _, err := db.Delete[testmodel.Ticket]().Where(Tk.Done.EQ(true), Tk.Title.NEQ("x")).Exec(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `DELETE FROM "tickets" WHERE "done" = $1 AND "title" <> $2 AND "done" = $3 AND "org_id" = $4 AND "owner" = $5 AND "owner" = $6`,
-		true, "x", true, int64(1), "ann", "ann")
+	wantSent(t, e, `DELETE FROM "tickets" WHERE "done" AND "title" <> $1 AND "done" AND "org_id" = $2 AND "owner" = $3 AND "owner" = $4`,
+		"x", int64(1), "ann", "ann")
 }
 
 // TestPolicyOnBothPaths: the policy applies with hooks (run) as without
@@ -128,7 +128,7 @@ func TestPolicyOnBothPaths(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3 LIMIT $4`, false, int64(1), "ann", 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 LIMIT $3`, int64(1), "ann", 5)
 	if where != 1 {
 		t.Errorf("the Rewrite hook saw %d conditions, want the caller's 1", where)
 	}
@@ -157,8 +157,8 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 	if _, err := q.All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE NOT (EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND "locked" = $1 AND "owner" = $2)) LIMIT $3`,
-		true, "ann", 1)
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE NOT (EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND "locked" AND "owner" = $1)) LIMIT $2`,
+		"ann", 1)
 
 	// A delete reads the target: only its Read policy applies.
 	if _, err := db.Delete[pbox]().Where(pboxNote.Has()).Exec(context.Background()); err != nil {
@@ -214,7 +214,7 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 		_, err := db.Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(nested).Exec(bg)
 		return err
 	})
-	if strings.Count(e.SQL, `"owner" = $`) != 3 || strings.Count(e.SQL, `"locked" = $`) != 1 {
+	if strings.Count(e.SQL, `"owner" = $`) != 3 || strings.Count(e.SQL, `NOT "locked"`) != 1 {
 		t.Errorf("update: %s", e.SQL)
 	}
 	count("EXISTS alone", 1, 0, func() error {
@@ -241,8 +241,8 @@ func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	if _, err := q.All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "pnotes"."invoice_id" AND "paid" = $1 AND "org_id" = $2) LIMIT $3`,
-		true, int64(7), 1)
+	wantSent(t, e, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "pnotes"."invoice_id" AND "paid" AND "org_id" = $1) LIMIT $2`,
+		int64(7), 1)
 	_, err := q.All(ctx)
 	wantNoScope(t, err, "velox: fixture.Pnote: in the EXISTS on testmodel.Invoice: ")
 	// The same condition as an EXISTS target's Read: the error names the
@@ -252,8 +252,8 @@ func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	if _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "paid" = $1 AND "org_id" = $2)) LIMIT $3`,
-		true, int64(7), 1)
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "paid" AND "org_id" = $1)) LIMIT $2`,
+		int64(7), 1)
 
 	calls := e.Calls
 	_, err = q.All(pnoteReading(velox.Or(velox.FieldEQ("owner", "ann"), velox.Predicate{}), nil))
@@ -292,7 +292,7 @@ func TestSkipPolicy(t *testing.T) {
 	if _, err := db.WithoutPolicy("support").Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(asUser("")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 LIMIT $2`, false, 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" LIMIT $1`, 5)
 	if _, err := db.Query[testmodel.Ticket]().Limit(5).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -350,8 +350,8 @@ func TestPolicyIsInherited(t *testing.T) {
 	if _, err := db.Query[pcomment]().Where(pcommentNote.HasWith(fixture.Pn.Locked.EQ(true))).Limit(1).All(bg); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "locked" = $1 AND "owner" = $2) AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "owner" = $3) LIMIT $4`,
-		true, "ann", "ann", 1)
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "locked" AND "owner" = $1) AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "owner" = $2) LIMIT $3`,
+		"ann", "ann", 1)
 	if n := fixture.PnoteReads.Load(); n != 1 {
 		t.Errorf("pnote's Read called %d times", n)
 	}
@@ -377,14 +377,14 @@ func TestPolicyCycleIsCut(t *testing.T) {
 		want string
 	}{
 		"direct": {func() (string, []any, error) { return db.Query[fixture.Pnote]().Limit(1).SQL(self) },
-			`SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND "locked" = $1) LIMIT $2`},
+			`SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND NOT "locked") LIMIT $1`},
 		"from an EXISTS": {func() (string, []any, error) { return db.Query[pbox]().Where(pboxNote.Has()).Limit(1).SQL(self) },
-			`SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND "locked" = $1)) LIMIT $2`},
+			`SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND NOT "locked")) LIMIT $1`},
 		"from another policy": {func() (string, []any, error) { return db.Query[pcomment]().Limit(1).SQL(self) },
-			`SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND "locked" = $1)) LIMIT $2`},
+			`SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND NOT "locked")) LIMIT $1`},
 		"on an update": {func() (string, []any, error) {
 			return db.Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(fixture.Pn.ID.EQ(1)).SQL(self)
-		}, `UPDATE "pnotes" SET "invoice_id" = $1 WHERE "id" = $2 AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND "locked" = $3) AND "locked" = $4`},
+		}, `UPDATE "pnotes" SET "invoice_id" = $1 WHERE "id" = $2 AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND NOT "locked") AND NOT "locked"`},
 	} {
 		got, _, err := c.run()
 		if err != nil || got != c.want {
@@ -641,7 +641,7 @@ func TestPolicyWritable(t *testing.T) {
 	if _, err := q.Writable().Count(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1 AND "owner" = $2 AND "locked" = $3`, int64(1), "ann", false)
+	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1 AND "owner" = $2 AND NOT "locked"`, int64(1), "ann")
 	// q is a value: Writable left it as it was.
 	if _, err := q.Count(context.Background()); err != nil {
 		t.Fatal(err)

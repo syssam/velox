@@ -107,7 +107,7 @@ func TestPolicyBodyMayBuildHas(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		want := `SELECT "id", "project_id" FROM "lz_tasks" WHERE EXISTS (SELECT 1 FROM "lz_projects" AS "vx1" WHERE "vx1"."id" = "lz_tasks"."project_id" AND "done" = $1) LIMIT $2`
+		want := `SELECT "id", "project_id" FROM "lz_tasks" WHERE EXISTS (SELECT 1 FROM "lz_projects" AS "vx1" WHERE "vx1"."id" = "lz_tasks"."project_id" AND NOT "done") LIMIT $1`
 		if text != want {
 			t.Errorf("got  %s\nwant %s", text, want)
 		}

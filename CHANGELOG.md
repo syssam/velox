@@ -599,6 +599,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A bool column compared with a constant true or false binds no argument.
+  PostgreSQL gets the column alone or `NOT` the column, as ent writes it: a
+  bound bool led PostgreSQL's generic plan, which pgx's statement cache
+  reaches after five runs, to misjudge the selectivity of the condition
+  inside an EXISTS. MySQL and SQLite get `= 1` or `= 0`, the value their
+  drivers bind, which SQLite's planner serves from an index and a bare
+  column it does not. The constant is part of the render cache's shape key.
 - velox-gen: `migrate diff -check` applies the directory's files to an empty
   database and fails unless they make `schema.json`, as `migrate.Verify`
   does: a file deleted, or edited and hashed, passed before. A SQLite

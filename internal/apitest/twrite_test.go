@@ -99,7 +99,7 @@ func TestTableWriteParity(t *testing.T) {
 				if gotSQL == "" && werr == nil {
 					t.Error("no SQL")
 				}
-				if gotSQL != wantSQL || !reflect.DeepEqual(gotArgs, wantArgs) {
+				if gotSQL != wantSQL || (len(gotArgs) > 0 || len(wantArgs) > 0) && !reflect.DeepEqual(gotArgs, wantArgs) {
 					t.Errorf("SQL:\n typed   %s %#v\n untyped %s %#v", wantSQL, wantArgs, gotSQL, gotArgs)
 				}
 				run := func(f func() error) ([]string, [][]any, error) {
