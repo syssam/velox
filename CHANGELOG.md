@@ -46,18 +46,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - migrate: `Create(ctx, db, schema)` makes a schema's tables in a new
   database, for tests and development: it plans from empty, writes no
   history, does nothing when the database already holds the schema, and
-  refuses part of it or a difference with Code `create` (ADR 0111).
+  refuses part of it or a difference with Code `create` (ADR 0113).
 - veloxtest: `Open(t, driver, dsn, schemas, opts...)` gives a test a
   database with the schema's tables, as ent's `enttest.Open` does, and
   `Schema(dialect, schemas...)` builds velox-gen's tables in the process
-  (ADR 0111). `Budget` and `NoNPlusOne` fail a test whose context ran a
-  read of one shape too often (ADR 0113).
+  (ADR 0113). `Budget` and `NoNPlusOne` fail a test whose context ran a
+  read of one shape too often (ADR 0117).
 - migrate: an `unindexed-fk` review finding names a foreign key that no
   index leads once a plan has run, on PostgreSQL and SQLite;
-  `-allow unindexed-fk=t.c` takes it out (ADR 0112).
+  `-allow unindexed-fk=t.c` takes it out (ADR 0114).
 - velox: `WithStatementCounting` and `CountStatements` count a context's
   statements by shape; `StatementCounter.Check` with a `StatementBudget`
-  reports an N+1 as a `*BudgetError` (ADR 0113).
+  reports an N+1 as a `*BudgetError` (ADR 0117).
 
 - velox-gen: `migrate rebase <file>...` moves a branch's migration files to
   the versions after the directory's others, as they are, writes the schema

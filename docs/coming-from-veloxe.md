@@ -109,7 +109,7 @@ A veloxe application often migrates with a program like this:
 velox has no auto-migration at deploy ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
 A test or a development database gets its tables from `veloxtest.Open` or
 `migrate.Create`, which make them in an empty database and never alter one
-([ADR 0111](decisions/0111-test-schema-create.md)).
+([ADR 0113](decisions/0113-test-schema-create.md)).
 It writes numbered SQL files from the schema, which you read and commit,
 and applies them in order. The database is adopted once, then each schema
 change is one file.
@@ -399,7 +399,7 @@ Queries and runtime:
   its mixins' policies itself.
 - **Auto-migration at deploy** ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
   Tests and development databases have `veloxtest.Open` and
-  `migrate.Create` ([ADR 0111](decisions/0111-test-schema-create.md)).
+  `migrate.Create` ([ADR 0113](decisions/0113-test-schema-create.md)).
 
 GraphQL:
 

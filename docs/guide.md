@@ -425,7 +425,7 @@ that adds a key no index leads, or drops the last index that did: `With`,
 `Has`, joins and deletes of the referenced row scan the table without one.
 Declare `index.Fields("author_id")` in the schema, or pass
 `-allow unindexed-fk=posts.author_id` when the scan is meant
-([ADR 0112](decisions/0112-unindexed-foreign-keys.md)). MySQL indexes
+([ADR 0114](decisions/0114-unindexed-foreign-keys.md)). MySQL indexes
 every key itself.
 
 You can also apply migrations from your program, which is handy in tests and
@@ -449,7 +449,7 @@ if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 `migrate.Create`, and closes the database when the test ends, as ent's
 `enttest.Open` does. The tables are the ones `migrate diff` would plan,
 built in the test's process from the schema values you list
-([ADR 0111](decisions/0111-test-schema-create.md)):
+([ADR 0113](decisions/0113-test-schema-create.md)):
 
 ```go
 var schemas = []schema.Interface{veloxschema.User{}, veloxschema.Post{}}
@@ -1960,7 +1960,7 @@ N+1. `velox.WithStatementCounting()` counts each statement in the
 `StatementCounter` that `velox.CountStatements(ctx)` puts in a context, by
 shape, the statement's text without its arguments. `Check` reports a read
 of one shape run more often than a `StatementBudget` allows, naming it
-([ADR 0113](decisions/0113-statement-counting.md)):
+([ADR 0117](decisions/0117-statement-counting.md)):
 
 ```go
 ctx, n := velox.CountStatements(ctx)

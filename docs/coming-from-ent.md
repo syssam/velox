@@ -387,7 +387,7 @@ ent's `client.Schema.Create` is an auto-migration that may run anywhere.
 velox migrates with versioned files: `velox-gen migrate diff` writes them,
 and `migrate apply` or `migrate.Up` runs them. For tests and development
 databases it has the bootstrap ent's tests use
-([decision 0111](decisions/0111-test-schema-create.md)).
+([decision 0113](decisions/0113-test-schema-create.md)).
 
 | ent | velox |
 |---|---|
@@ -399,13 +399,13 @@ databases it has the bootstrap ent's tests use
 ent leaves a foreign key without an index unremarked. velox declares
 none either, but `migrate diff` writes an `unindexed-fk` review line for
 a key it adds that no index leads, which `-allow unindexed-fk=t.c`
-silences ([decision 0112](decisions/0112-unindexed-foreign-keys.md)).
+silences ([decision 0114](decisions/0114-unindexed-foreign-keys.md)).
 
 ent has no N+1 check. velox's `veloxtest.NoNPlusOne(t, ctx)` fails a test
 whose context ran one shape of read twice, as a loop over rows that reads
 a relation per row does; `velox.CountStatements` and `StatementBudget` are
 the same check outside veloxtest
-([decision 0113](decisions/0113-statement-counting.md)).
+([decision 0117](decisions/0117-statement-counting.md)).
 
 ## Running the generator from Go
 
