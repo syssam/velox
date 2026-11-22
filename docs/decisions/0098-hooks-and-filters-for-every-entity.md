@@ -1,6 +1,7 @@
 # 98. Hooks and row filters for every entity
 
-Status: accepted, 2026-11-21.
+Status: accepted, 2026-11-21. Amended 2026-11-22: a filter that restricts
+a join entity fails the statements that read through it.
 
 ## Context
 
@@ -86,6 +87,9 @@ asked for both at run time.
   join entity is read through its sides; the godoc asks for it. An
   interceptor on a join entity stays refused: a schema can be checked when
   it is built, a run-time filter only when it runs.
+  Amended 2026-11-22: velox calls the filter for a join entity inside
+  Has, Of, With, LoadEach and CountEach through it too, and fails them
+  unless it returns `NoFilter` (see the amendment below).
 - MySQL's `ON DUPLICATE KEY UPDATE` takes no condition. An upsert that
   updates is refused there with `ErrPolicyUpsert` when a filter returns a
   condition for its entity under `OpInsert`, and runs when every filter
@@ -105,3 +109,17 @@ asked for both at run time.
   where filter, which reads them to treat a foreign key whose target is
   hidden as null, does not see a run-time filter on the target.
 - No change to generated code, and none to `EntityInfo`'s export data.
+
+## Amendment (2026-11-22)
+
+A filter that restricts a join entity, of a plain many-to-many edge or an
+edge schema (`edge.Through`), now fails `Has`, `Of`, a `With` load (with
+`LimitEach` too), `LoadEach` and `CountEach` through it, where it was
+ignored inside `Has` and applied to a `With` load. The two disagreed: a
+`With` load and a `Has` gave different answers for the same link. The scope
+asks the filters about each join entity it reads through, once per
+statement, with `OpSelect`, and accepts only `NoFilter`. Statements that
+read or write the join entity's rows as their own, such as `Rel.Add`,
+`Remove` and `Clear`, still get its condition. An edge schema is also
+refused by velox-gen when it has a Read or Query policy, Interceptors or
+`softdelete.Mixin` (rule 70).

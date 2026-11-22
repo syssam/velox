@@ -609,7 +609,8 @@ func TestFilterSelfRelationUpdate(t *testing.T) {
 }
 
 // TestFilterOnJoinEntityRefused: a filter that restricts the join entity of
-// a many-to-many relation fails a Has, an Of and a With load through it,
+// a many-to-many relation fails a Has, an Of, a With load (LimitEach
+// included), LoadEach and CountEach through it,
 // which read the join rows through the relation's two sides and would not
 // apply it. A query of the join entity's own applies it.
 func TestFilterOnJoinEntityRefused(t *testing.T) {
@@ -633,6 +634,19 @@ func TestFilterOnJoinEntityRefused(t *testing.T) {
 	_, err = db.Query[fixture.IOwner]().With(fixture.IOwners.Tagged).AllowUnbounded().All(ctx)
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("With: %v", err)
+	}
+	_, err = db.Query[fixture.IOwner]().With(fixture.IOwners.Tagged.LimitEach(1)).AllowUnbounded().All(ctx)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("With LimitEach: %v", err)
+	}
+	owners := []*fixture.IOwner{{ID: 1}, {ID: 2}}
+	_, err = velox.LoadEach(ctx, db.Query[fixture.INote]().AllowUnbounded(), fixture.IOwners.Tagged, owners)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("LoadEach: %v", err)
+	}
+	_, err = velox.CountEach(ctx, db.Query[fixture.INote](), fixture.IOwners.Tagged, owners)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("CountEach: %v", err)
 	}
 	js, err := db.Query[fixture.IJoin]().AllowUnbounded().All(ctx)
 	if err != nil || len(js) != 2 {

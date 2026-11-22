@@ -557,6 +557,13 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	}
 	in := st.Entity
 	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters, Reads: st.Op == OpSelect && !st.Writable}
+	// LimitEach, LoadEach and CountEach join a many-to-many relation's join
+	// entity, which reads it through its two sides as Has does.
+	if st.Each != nil && st.Each.Join != nil {
+		if err := sc.joinFree(st.Each.Join); err != nil {
+			return err
+		}
+	}
 	// The entity's own conditions first, so that a denial is reported as the
 	// statement's, and an EXISTS on the same entity reuses its row condition.
 	var read, write Predicate

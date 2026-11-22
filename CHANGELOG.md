@@ -28,8 +28,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   inserts its rows with their defaults, keeps a link that exists, and fails
   before any statement when a field is required and has no default. An edge
   schema cannot have a Read or Query policy, Interceptors or
-  `softdelete.Mixin` (rule 70), and a `WithFilter` filter that restricts a
-  join entity fails Has, Of and With through it. velox-gen warns of an edge
+  `softdelete.Mixin` (rule 70). velox-gen warns of an edge
   schema whose keys declare no `OnDelete`. Regenerate:
   `velox.GeneratedCodeIsVersion26` replaces Version25, as `EdgeThrough`
   takes the columns Add cannot fill. `loadjson.Version` is 9, for
@@ -568,6 +567,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A `WithFilter` filter that restricts the join entity of a many-to-many
+  edge, plain or an edge schema, fails `Has`, `Of`, a `With` load,
+  `LoadEach` and `CountEach` through it (ADR 0098's amendment). It was
+  ignored inside `Has` and applied to a `With` load, so the two disagreed.
+  Return `NoFilter()` for a join entity.
 - `veloxgql` is an engine-free core, and gqlgen's adapter is the new
   package `veloxgql/gqlgenx` (ADR 0104): `NewExtension`, `Extension`,
   `Setup`, `Server`, `ErrorPresenter`, `OnCanceled`, `PresenterOption` and
