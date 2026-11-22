@@ -109,7 +109,7 @@ func apiLines(t *testing.T, dir string) []string {
 	t.Helper()
 	fset := token.NewFileSet()
 	var lines []string
-	engine := map[string]bool{}
+	engine := map[string][]string{}
 	for _, f := range parseDir(t, fset, dir) {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
@@ -119,8 +119,8 @@ func apiLines(t *testing.T, dir string) []string {
 				}
 			case *ast.GenDecl:
 				lines = append(lines, genLines(fset, d)...)
-				for _, name := range engineAliases(d) {
-					engine[name] = true
+				for name, as := range engineAliases(d) {
+					engine[name] = append(engine[name], as...)
 				}
 			}
 		}
@@ -264,9 +264,10 @@ func exportedEmbedded(x ast.Expr) bool {
 	return false
 }
 
-// engineAliases is the names d declares as aliases of a type of internal/engine.
-func engineAliases(d *ast.GenDecl) []string {
-	var names []string
+// engineAliases maps each type of internal/engine that d aliases to the
+// names it declares for it, which may differ from the engine's.
+func engineAliases(d *ast.GenDecl) map[string][]string {
+	names := map[string][]string{}
 	for _, s := range d.Specs {
 		ts, ok := s.(*ast.TypeSpec)
 		if !ok || !ts.Name.IsExported() || !ts.Assign.IsValid() {
@@ -276,16 +277,17 @@ func engineAliases(d *ast.GenDecl) []string {
 		if i, ok := x.(*ast.IndexExpr); ok {
 			x = i.X
 		}
-		if sel, ok := x.(*ast.SelectorExpr); ok && aliasedPackage(sel) == "engine" && sel.Sel.Name == ts.Name.Name {
-			names = append(names, ts.Name.Name)
+		if sel, ok := x.(*ast.SelectorExpr); ok && aliasedPackage(sel) == "engine" {
+			names[sel.Sel.Name] = append(names[sel.Sel.Name], ts.Name.Name)
 		}
 	}
 	return names
 }
 
-// descAliases is the names files declare as aliases of a type of schema/internal/desc.
-func descAliases(files []*ast.File) map[string]bool {
-	names := map[string]bool{}
+// descAliases maps each type of schema/internal/desc that files alias to the
+// names they declare for it.
+func descAliases(files []*ast.File) map[string][]string {
+	names := map[string][]string{}
 	for _, f := range files {
 		for _, d := range f.Decls {
 			g, ok := d.(*ast.GenDecl)
@@ -294,7 +296,9 @@ func descAliases(files []*ast.File) map[string]bool {
 			}
 			for _, s := range g.Specs {
 				if ts, ok := s.(*ast.TypeSpec); ok && ts.Assign.IsValid() && ts.Name.IsExported() && aliasedPackage(ts.Type) == "desc" {
-					names[ts.Name.Name] = true
+					if sel, ok := aliasTarget(ts.Type); ok {
+						names[sel] = append(names[sel], ts.Name.Name)
+					}
 				}
 			}
 		}
@@ -367,8 +371,9 @@ func promotedLines(fset *token.FileSet, files []*ast.File) []string {
 }
 
 // membersIn is the exported fields and methods of the named types of the package
-// in dir, or, for a type that is not a struct, what it is.
-func membersIn(t *testing.T, dir string, names map[string]bool) []string {
+// in dir, or, for a type that is not a struct, what it is, each listed under
+// every name the package being snapshotted gives that type.
+func membersIn(t *testing.T, dir string, names map[string][]string) []string {
 	t.Helper()
 	fset := token.NewFileSet()
 	var lines []string
@@ -376,24 +381,28 @@ func membersIn(t *testing.T, dir string, names map[string]bool) []string {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
-				if r := receiver(d); names[r] && d.Name.IsExported() {
-					lines = append(lines, r+"."+d.Name.Name+strings.TrimPrefix(source(fset, d.Type), "func"))
+				if r := receiver(d); d.Name.IsExported() {
+					for _, as := range names[r] {
+						lines = append(lines, as+"."+d.Name.Name+strings.TrimPrefix(source(fset, d.Type), "func"))
+					}
 				}
 			case *ast.GenDecl:
 				for _, s := range d.Specs {
 					ts, ok := s.(*ast.TypeSpec)
-					if !ok || !names[ts.Name.Name] {
-						continue
-					}
-					st, ok := ts.Type.(*ast.StructType)
 					if !ok {
-						lines = append(lines, ts.Name.Name+" is "+source(fset, ts.Type))
 						continue
 					}
-					for _, fl := range st.Fields.List {
-						for _, n := range fl.Names {
-							if n.IsExported() {
-								lines = append(lines, ts.Name.Name+"."+n.Name+" "+source(fset, fl.Type))
+					for _, as := range names[ts.Name.Name] {
+						st, ok := ts.Type.(*ast.StructType)
+						if !ok {
+							lines = append(lines, as+" is "+source(fset, ts.Type))
+							continue
+						}
+						for _, fl := range st.Fields.List {
+							for _, n := range fl.Names {
+								if n.IsExported() {
+									lines = append(lines, as+"."+n.Name+" "+source(fset, fl.Type))
+								}
 							}
 						}
 					}
@@ -402,4 +411,20 @@ func membersIn(t *testing.T, dir string, names map[string]bool) []string {
 		}
 	}
 	return lines
+}
+
+// aliasTarget is the name of the type x, an alias's right-hand side, selects
+// from another package, through one instantiation.
+func aliasTarget(x ast.Expr) (string, bool) {
+	if i, ok := x.(*ast.IndexExpr); ok {
+		x = i.X
+	}
+	if i, ok := x.(*ast.IndexListExpr); ok {
+		x = i.X
+	}
+	sel, ok := x.(*ast.SelectorExpr)
+	if !ok {
+		return "", false
+	}
+	return sel.Sel.Name, true
 }

@@ -1280,9 +1280,12 @@ var ErrStale
 
 package privacy
 Decision.Error() string
+Filter is interface { Where(ps ...Predicate) }
+Mutation is interface { Op() Op Filter() PrivacyFilter Value(name string) (any, bool) }
 MutationPolicy is []MutationRule
 MutationPolicy.EvalMutation(ctx context.Context, m PrivacyMutation) error
 MutationRule is interface { EvalMutation(ctx context.Context, m PrivacyMutation) error }
+Query is interface { Filter() PrivacyFilter }
 QueryPolicy is []QueryRule
 QueryPolicy.EvalQuery(ctx context.Context, q PrivacyQuery) error
 QueryRule is interface { EvalQuery(ctx context.Context, q PrivacyQuery) error }
@@ -1346,6 +1349,8 @@ func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.
 
 package untyped
 PredOp is uint8
+Rows.At(i int) any
+Rows.Len() int
 Table.Assign(col int, v any) (Assignment, error)
 Table.Convert(col int, v any) (any, error)
 Table.Err() error
