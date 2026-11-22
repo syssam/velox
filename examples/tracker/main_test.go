@@ -22,6 +22,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/examples/tracker/principal"
 	"github.com/syssam/velox/examples/tracker/veloxgen"
+	"github.com/syssam/velox/internal/dbenv"
 )
 
 func TestMain(m *testing.M) {
@@ -40,7 +41,7 @@ func targets(t *testing.T, f func(t *testing.T, c *client)) {
 		t.Cleanup(closeDB)
 		f(t, serve(t, db))
 	})
-	dsn := os.Getenv("VELOX_TEST_POSTGRES")
+	dsn := dbenv.Optional(t, "VELOX_TEST_POSTGRES")
 	if dsn == "" {
 		return
 	}

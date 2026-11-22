@@ -2,7 +2,6 @@ package veloxotel_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/internal/dbenv"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/veloxpgx"
 )
@@ -26,10 +26,7 @@ const pgInvoices = `CREATE TABLE velox_otel.invoices (created_at timestamptz NOT
 // call site is another statement, and a tag the comment does not list changes
 // nothing.
 func TestPgxPreparesACommentedStatementOnce(t *testing.T) {
-	dsn := os.Getenv("VELOX_TEST_POSTGRES")
-	if dsn == "" {
-		t.Skip("VELOX_TEST_POSTGRES is not set")
-	}
+	dsn := dbenv.Need(t, "VELOX_TEST_POSTGRES")
 	bg := context.Background()
 	admin, err := pgx.Connect(bg, dsn)
 	if err != nil {
@@ -91,10 +88,7 @@ func TestPgxPreparesACommentedStatementOnce(t *testing.T) {
 // TestPgxOmitCallersPreparesOnce: with App and OmitCallers, one shape run
 // from two call sites is one SQL text, so pgx prepares one statement.
 func TestPgxOmitCallersPreparesOnce(t *testing.T) {
-	dsn := os.Getenv("VELOX_TEST_POSTGRES")
-	if dsn == "" {
-		t.Skip("VELOX_TEST_POSTGRES is not set")
-	}
+	dsn := dbenv.Need(t, "VELOX_TEST_POSTGRES")
 	bg := context.Background()
 	admin, err := pgx.Connect(bg, dsn)
 	if err != nil {
@@ -146,10 +140,7 @@ func TestPgxOmitCallersPreparesOnce(t *testing.T) {
 // TestPgStatusCode: a duplicate insert on PostgreSQL gives the span
 // db.response.status_code 23505, the SQLSTATE of a unique violation.
 func TestPgStatusCode(t *testing.T) {
-	dsn := os.Getenv("VELOX_TEST_POSTGRES")
-	if dsn == "" {
-		t.Skip("VELOX_TEST_POSTGRES is not set")
-	}
+	dsn := dbenv.Need(t, "VELOX_TEST_POSTGRES")
 	bg := context.Background()
 	admin, err := pgx.Connect(bg, dsn)
 	if err != nil {

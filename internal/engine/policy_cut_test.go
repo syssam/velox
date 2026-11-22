@@ -2,7 +2,6 @@ package engine_test
 
 import (
 	"context"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/dbenv"
 )
 
 // The entities of ADR 0091, on real databases. A conversation, its
@@ -260,10 +260,10 @@ func pcDBs(t *testing.T) map[string]*velox.DB {
 		out[name] = db
 	}
 	open("sqlite", "sqlite", ":memory:", velox.SQLite)
-	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
+	if dsn := dbenv.Optional(t, "VELOX_TEST_POSTGRES"); dsn != "" {
 		open("postgres", "pgx", dsn, velox.Postgres)
 	}
-	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
+	if dsn := dbenv.Optional(t, "VELOX_TEST_MYSQL"); dsn != "" {
 		open("mysql", "mysql", dsn, velox.MySQL)
 	}
 	return out

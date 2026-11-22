@@ -22,7 +22,8 @@ each.
     (`integration`) and of the repository itself (`repocheck`).
   - What the tests use: the generated models (`testmodel`, `testbind`), a fake
     executor (`fakeconn`), a repository layer for caller capture (`testrepo`),
-    temporary modules (`tempmod`) and build measurement (`buildcost`).
+    temporary modules (`tempmod`), build measurement (`buildcost`) and the
+    database variables (`dbenv`).
 - `contrib/graphql`: the annotations, the `velox-graphql` plugin (its answer
   in `internal/gqlplugin`, and in the process as `graphqlgen`) and the
   `veloxgql` runtime.
@@ -224,7 +225,7 @@ runs.
 | `VELOX_TEST_POSTGRES` | The PostgreSQL DSN. It must name a database. |
 | `VELOX_TEST_MYSQL` | The MySQL DSN of the test database. |
 | `VELOX_TEST_MYSQL_ADMIN` | MySQL's root DSN. The routing and migrate tests use it to make databases beside the test one. |
-| `VELOX_ITEST_REQUIRE` | When it is `1`, a test run fails if a database variable it needs is unset, rather than skipping. CI and `ci-local.sh` set it. |
+| `VELOX_ITEST_REQUIRE` | When it is `1`, a test run fails if a database variable it needs is unset, rather than skipping. CI and `ci-local.sh` set it. A test reads a database variable with `internal/dbenv`'s `Need` or `Optional`, or its package's `TestMain` checks them all. |
 | `VELOX_DB` | The database DSN that `velox-gen migrate apply`, `status`, `drift`, `baseline` and `resolve` read when `-db` is not given. It is not a test variable. |
 | `VELOX_CI_POSTGRES_IMAGE` | The PostgreSQL image of `scripts/docker-compose.ci.yml`. The default is PostgreSQL 18. `VELOX_CI_MATRIX=1` sets it to 14. |
 

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/conn"
+	"github.com/syssam/velox/internal/dbenv"
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/testbind/bindtype"
 	"github.com/syssam/velox/internal/testmodel"
@@ -93,7 +93,7 @@ func TestSQLiteAndMySQLKeepPlainRows(t *testing.T) {
 	if rowsAreColumnScanning(velox.Open(velox.SQLite, openSQL(t, "sqlite", ":memory:"))) {
 		t.Error("SQLite's rows are colRows")
 	}
-	dsn := os.Getenv("VELOX_TEST_MYSQL")
+	dsn := dbenv.Optional(t, "VELOX_TEST_MYSQL")
 	if dsn == "" {
 		return
 	}
@@ -182,7 +182,7 @@ func TestColumnScanRowsKeepCallerSlice(t *testing.T) {
 		}
 	}
 
-	dsn := os.Getenv("VELOX_TEST_POSTGRES")
+	dsn := dbenv.Optional(t, "VELOX_TEST_POSTGRES")
 	if dsn == "" {
 		return
 	}
@@ -324,11 +324,9 @@ func TestColumnScanMatchesPlain(t *testing.T) {
 	sqlite.SetMaxOpenConns(1)
 	targets := []target{{"sqlite", velox.SQLite, sqlite,
 		append(append([]string{}, common...), "x'00ff'", "'2026-10-29 01:02:03.456789+08'")}}
-	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
+	if dsn := dbenv.Optional(t, "VELOX_TEST_POSTGRES"); dsn != "" {
 		targets = append(targets, target{"postgres", velox.Postgres, openSQL(t, "pgx", dsn),
 			append(append([]string{}, common...), `'\x00ff'::bytea`, "'2026-10-29 01:02:03.456789+08'::timestamptz")})
-	} else if os.Getenv("VELOX_ITEST_REQUIRE") == "1" {
-		t.Fatal("VELOX_ITEST_REQUIRE=1 and VELOX_TEST_POSTGRES is unset")
 	}
 	for _, tg := range targets {
 		wrapped, plain := openColumnScan(tg.d, tg.db, true), openColumnScan(tg.d, tg.db, false)
