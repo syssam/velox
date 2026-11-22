@@ -44,11 +44,14 @@ repository, and in the quick start run
   `ErrUnbounded`, unless it says `AllowUnbounded()`. An update or delete without
   `Where` fails with `ErrNoWhere`, unless it says `All()`. Both are refused
   before anything reaches the database.
-- **Policies that fail closed.** Read, write and insert policies live in the
-  schema. A policy that returns no condition fails the statement rather than
-  matching every row, a scoped entity read without its tenant fails with
-  `scope.ErrNoScope`, and lifting policies takes a DB made by
-  `db.WithoutPolicy(reason)` ([ADR 0054](docs/decisions/0054-fail-closed-runtime.md)).
+- **Policies that fail closed.** Read, Write and Insert policies live in the
+  schema and fail closed. A policy that returns no condition fails the
+  statement rather than matching every row, a scoped entity read without its
+  tenant fails with `scope.ErrNoScope`, and lifting policies takes a DB made
+  by `db.WithoutPolicy(reason)` ([ADR 0054](docs/decisions/0054-fail-closed-runtime.md)).
+  The Query and Mutation rule lists follow ent's privacy: a list whose rules
+  all skip allows, and `privacy.DecisionContext` lifts them. To deny by
+  default, end a list with `privacy.AlwaysDenyRule()`.
 - **Migrations included, or Atlas if you prefer.** velox-gen diffs the schema
   into SQL files and refuses a destructive change unless you allow it with
   `-allow`. For Atlas, it prints the schema's `CREATE` statements instead

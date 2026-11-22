@@ -1216,10 +1216,14 @@ func (Invoice) Policy() velox.Policy {
 }
 ```
 
-Policies fail closed. Returning the zero `velox.Predicate{}` fails the
-statement instead of matching everything, and `velox.Deny(reason)` returns
-an error that matches `velox.ErrDenied`. A mixin's policy is ANDed before the
-entity's own, so an entity cannot widen what its mixin allows.
+Read, Write and Insert fail closed. Returning the zero `velox.Predicate{}`
+fails the statement instead of matching everything, and
+`velox.Deny(reason)` returns an error that matches `velox.ErrDenied`. A
+mixin's policy is ANDed before the entity's own, so an entity cannot widen
+what its mixin allows. The Query and Mutation rule lists of package
+`privacy` follow ent's privacy instead: a list whose rules all skip allows,
+and `privacy.DecisionContext` lifts them. To deny by default, end a list
+with `privacy.AlwaysDenyRule()`.
 
 One behaviour is worth knowing in advance: a `Write` condition filters rather
 than errors. An update aimed only at rows the caller may not change affects 0

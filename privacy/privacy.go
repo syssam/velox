@@ -19,7 +19,9 @@
 // the next, Allow to end the list with no further restriction, Deny or any
 // other error to deny the statement, which then fails with a
 // *velox.PolicyError that wraps the error. A list that runs out allows the
-// statement. Conditions a rule gives the filter (Filter.Where) before the
+// statement, as ent's privacy does: velox.Policy's Read, Write and Insert
+// fail closed, and these lists do not. To deny by default, end a list with
+// AlwaysDenyRule(). Conditions a rule gives the filter (Filter.Where) before the
 // list ends stay, Allow or not: they are ANDed into the statement. Each
 // Policy's list ends on its own, so an Allow in an entity's list does not
 // lift a mixin's, as veloxe's generated runtime did not.

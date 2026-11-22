@@ -146,9 +146,10 @@ not `Optional`.
 
 **Many-to-many links are join rows.** An `edge.To` whose inverse is not
 `Unique` either is many-to-many. velox-gen writes the join entity (`PostTag`
-for `post_tags`), and you link and unlink by inserting and deleting its rows.
-The core API has no `AddTagIDs` or `RemoveTagIDs`; the GraphQL update input
-has `add<Edge>IDs` and `remove<Edge>IDs`.
+for `post_tags`). ent's `AddTagIDs(ids...)`, `RemoveTagIDs(ids...)` and
+`ClearTags()` are the setters `P.Tags.Add(ids...)`, `P.Tags.Remove(ids...)`
+and `P.Tags.Clear()`, given to `Insert`'s or `Update`'s `Set`; the GraphQL
+update input has `add<Edge>IDs` and `remove<Edge>IDs`.
 [examples/relations](../examples/relations/README.md#many-to-many) shows how.
 With `Through`, the links are an edge schema's rows, as in ent, and
 velox-gen writes no join entity
@@ -220,6 +221,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 | `client.User.Create().OnConflict(...).UpdateNewValues()` | `db.Insert(&u).OnConflict(U.Email).UpdateAll().Exec(ctx)` |
+| `client.User.Query().Select(user.FieldName, user.FieldAge).All(ctx)` | `db.Query[veloxgen.User]().Columns(U.Name, U.Age).Limit(n).All(ctx)`: the other fields stay zero. velox's `Select` is a projection: terms read by position with `Rows`, not entities |
 | `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
@@ -258,10 +260,9 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sqlgraph.HasNeighbors` (`user.HasPets()`) | `velox.HasEdge("pets")` |
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
-| `privacy.Allow` | `velox.Allow()` |
+| `privacy.Allow` | `privacy.Allow`; `velox.Allow()` is the condition that matches every row |
 
-ent's `sql.FieldContainsFold` has no velox form: the engine has no
-case-insensitive substring match. A `velox.Predicate` is a `Pred` of no
+A `velox.Predicate` is a `Pred` of no
 entity, so `And`, `Or` and `Not` take it, and `velox.Predicate(p)` turns a
 typed handle's `Pred[E]` into one. Its zero value fails the statement: it
 is a struct, not an interface, so it cannot be nil, and a policy that
