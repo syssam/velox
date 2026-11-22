@@ -274,8 +274,8 @@ func TestFilterNotLiftedByWithoutPolicy(t *testing.T) {
 }
 
 // TestFiltersAndInOrder: two filters AND together, the first called first,
-// once per statement for each entity it reads, with the statement's
-// context.
+// once per statement for each entity it reads, a join entity included, with
+// the statement's context.
 func TestFiltersAndInOrder(t *testing.T) {
 	var calls []string
 	type key struct{}
@@ -305,7 +305,9 @@ func TestFiltersAndInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"f1:IOwner:stmt", "f2:IOwner:stmt", "f1:INote:stmt", "f2:INote:stmt"}; !slices.Equal(calls, want) {
+	// The join entity of Tagged is asked too, once, to check that it is
+	// left unrestricted.
+	if want := []string{"f1:IOwner:stmt", "f2:IOwner:stmt", "f1:INote:stmt", "f2:INote:stmt", "f1:IJoin:stmt", "f2:IJoin:stmt"}; !slices.Equal(calls, want) {
 		t.Errorf("calls %v, want %v", calls, want)
 	}
 	// A second statement calls them again: nothing is kept between
@@ -603,5 +605,37 @@ func TestFilterSelfRelationUpdate(t *testing.T) {
 	}
 	if !slices.Contains(e.Args, any("read")) || !slices.Contains(e.Args, any("write")) {
 		t.Errorf("the update lacks a condition: %s %v", e.SQL, e.Args)
+	}
+}
+
+// TestFilterOnJoinEntityRefused: a filter that restricts the join entity of
+// a many-to-many relation fails a Has, an Of and a With load through it,
+// which read the join rows through the relation's two sides and would not
+// apply it. A query of the join entity's own applies it.
+func TestFilterOnJoinEntityRefused(t *testing.T) {
+	db := interceptorDB(t, velox.WithFilter(func(_ context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
+		if entity != "IJoin" {
+			return velox.NoFilter(), nil
+		}
+		return velox.FieldEQ("note_id", 2), nil
+	}))
+	ctx := context.Background()
+	const want = "fixture.IJoin: filter [0] restricts it, the join entity of a many-to-many relation, which Has and With read through its two sides; return NoFilter() for it"
+	_, err := db.Query[fixture.IOwner]().Where(fixture.IOwners.Tagged.Has()).AllowUnbounded().All(ctx)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Has: %v", err)
+	}
+	owner := fixture.IOwner{ID: 1}
+	_, err = db.Query[fixture.INote]().Where(fixture.IOwners.Tagged.Of(&owner)).AllowUnbounded().All(ctx)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Of: %v", err)
+	}
+	_, err = db.Query[fixture.IOwner]().With(fixture.IOwners.Tagged).AllowUnbounded().All(ctx)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("With: %v", err)
+	}
+	js, err := db.Query[fixture.IJoin]().AllowUnbounded().All(ctx)
+	if err != nil || len(js) != 2 {
+		t.Errorf("the join entity's own query: %v, %v", js, err)
 	}
 }

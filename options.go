@@ -80,8 +80,9 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // subquery. A filter that should narrow reads only, as ent's interceptors
 // do, returns NoFilter() when op is not OpSelect.
 //
-// Return NoFilter() for the join entities of many-to-many edges: restricting
-// one makes With loads and Has disagree.
+// Return NoFilter() for the join entities of many-to-many edges, edge
+// schemas included: Has, Of and a With load through one fail when a filter
+// restricts it, as they read its rows through the relation's two sides.
 type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
@@ -110,9 +111,9 @@ type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 // that the GraphQL batcher keeps callers apart.
 //
 // A join entity of a many-to-many edge is an entity too: f is called for it
-// where its rows are read or written as its own, as a With load through it
-// and Rel.Add and the like do, and is not called for it inside a Has
-// through it, which reads it through its two sides. On MySQL, an upsert that
+// where its rows are read or written as its own, as Rel.Add and the like
+// do. A Has, an Of or a With load through it calls f for it with OpSelect,
+// once per statement, and fails unless f returns NoFilter(). On MySQL, an upsert that
 // updates an entity f returns a condition for (given OpInsert) is refused
 // with ErrPolicyUpsert. A nil f panics.
 func WithFilter(f Filter) Option {

@@ -75,6 +75,7 @@ type Scoper struct {
 	skipped bool // a policy that would have applied was skipped
 
 	reads     []readCond
+	joins     []*EntityInfo // the join entities joinFree has passed
 	computing []*EntityInfo // the entities whose row condition is being made, outermost first
 	cut       int           // the outermost place (from 1) in computing that the condition being made was cut at; 0 for none
 }
@@ -335,6 +336,8 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 			return sc.scopeKey(n)
 		}
 	case OpExists:
+	case OpThrough:
+		return n, false, sc.joinFree(n.V.(*EntityInfo))
 	default:
 		return n, false, nil
 	}
@@ -348,6 +351,11 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		var err error
 		if l, err = existsLink(n); err != nil {
 			return n, false, err
+		}
+		if l.Join != nil {
+			if err := sc.joinFree(l.Join); err != nil {
+				return n, false, err
+			}
 		}
 		t = l.Target
 	}
@@ -395,6 +403,40 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	}
 	n.Kids = kids // n is a copy
 	return n, true, nil
+}
+
+// joinFree refuses a statement that reads through the join entity j of a
+// many-to-many relation when a WithFilter filter restricts j: Has reads
+// j's rows through the relation's two sides and would not apply it. It
+// asks the filters once per statement for each join entity.
+func (sc *Scoper) joinFree(j *EntityInfo) error {
+	if len(sc.Filters) == 0 || slices.Contains(sc.joins, j) {
+		return nil
+	}
+	if err := joinUnfiltered(sc.Ctx, sc.Filters, j); err != nil {
+		return err
+	}
+	sc.joins = append(sc.joins, j)
+	return nil
+}
+
+// joinUnfiltered returns an error when one of filters, a DB's WithFilter
+// filters, restricts the join entity j of a many-to-many relation: given
+// OpSelect, it returns anything but NoFilter(), or an error. Has and With
+// read j's rows through the relation's two sides, so a condition on j
+// would make them disagree with a query of j's own.
+func joinUnfiltered(ctx context.Context, filters []EntityFilterFn, j *EntityInfo) error {
+	name := EntityName(j)
+	for i, f := range filters {
+		p, err := f(ctx, name, OpSelect)
+		switch {
+		case err != nil:
+			return fmt.Errorf("velox: %s: filter [%d]: %w", j.Name, i, err)
+		case p.n.Op != OpAllow:
+			return fmt.Errorf("velox: %s: filter [%d] restricts it, the join entity of a many-to-many relation, which Has and With read through its two sides; return NoFilter() for it", j.Name, i)
+		}
+	}
+	return nil
 }
 
 // scopedKey marks the V of the And or Or that scopedKeyNode makes: its kids
