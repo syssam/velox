@@ -280,9 +280,9 @@ func joinFields(g *Graph, oe *OutEntity) []*plugin.Field {
 
 // nullable reports whether the column of gf holds NULL: a Nillable field's,
 // and an Optional JSON field's whose Go type holds nil: a slice, a map or a
-// pointer (rule 48 refuses one of another type, and rule 49 a func, a chan or
-// an interface). It is the one nullability rule, as the core's
-// ColumnDescriptor.Nullable and pointers say, and the planner's.
+// pointer (rule 49 refuses a func, a chan or an interface). It is the one
+// nullability rule, as the core's ColumnDescriptor.Nullable and pointers
+// say, and the planner's.
 func nullable(gf *Field) bool {
 	return gf.Nillable || gf.Optional && gf.Type == "json" && gf.GoType != nil && nilKinds[gf.GoType.Kind]
 }

@@ -693,8 +693,8 @@ func (jsonFuncField) Fields() []schema.Field {
 	return []schema.Field{field.JSON("cb", JSONCallback(nil))}
 }
 
-// jsonOptionalFuncField is an Optional JSON func: rule 49 refuses it, and
-// rule 48's advice to add Nillable would lead into rule 49.
+// jsonOptionalFuncField is an Optional JSON func: rule 49 refuses it, as
+// Nillable would not make it encodable.
 type jsonOptionalFuncField struct{ schema.Schema }
 
 func (jsonOptionalFuncField) Fields() []schema.Field {
