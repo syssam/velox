@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"math/big"
 	"path/filepath"
@@ -262,6 +263,7 @@ func TestInsertAllDatabaseDefaultsMySQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
+		"SELECT @@auto_increment_increment",
 		"INSERT INTO `ddefs` (`name`) VALUES (?), (?)",
 		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `id` IN (?, ?)",
 	}
@@ -270,6 +272,39 @@ func TestInsertAllDatabaseDefaultsMySQL(t *testing.T) {
 	}
 	if xs[0].ID != 20 || xs[1].ID != 21 || *xs[0].Note != "m" || *xs[1].Note != "n" || xs[1].Score != 7 {
 		t.Errorf("read back: %+v %+v", xs[0], xs[1])
+	}
+}
+
+// TestInsertAllKeysMySQLIncrement: a MySQL multi-row insert's keys are
+// @@auto_increment_increment apart, read once per DB, before the first such
+// INSERT. A failed read refuses the insert unsent.
+func TestInsertAllKeysMySQLIncrement(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 2, LastID: 21, HasLastID: true, AutoIncrement: 2,
+		Answer: func(q string, _ []any) ([][]any, bool) {
+			return nil, strings.HasPrefix(q, "SELECT `id`")
+		}}
+	db := openFake(velox.MySQL, e)
+	for range 2 {
+		xs := []dDef{{Name: "a"}, {Name: "b"}}
+		if err := db.InsertAll(xs).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if xs[0].ID != 21 || xs[1].ID != 23 {
+			t.Errorf("keys %d, %d; want 21, 23", xs[0].ID, xs[1].ID)
+		}
+	}
+	if n := slices.Index(e.Log, "SELECT @@auto_increment_increment"); n != 0 || slices.Contains(e.Log[1:], e.Log[0]) {
+		t.Errorf("the step is read once, first: %q", e.Log)
+	}
+
+	boom := errors.New("boom")
+	e = &fakeconn.Exec{Affected: 2, LastID: 21, HasLastID: true, Errs: []error{boom}}
+	err := openFake(velox.MySQL, e).InsertAll([]dDef{{Name: "a"}, {Name: "b"}}).Exec(ctx)
+	if !errors.Is(err, boom) || !strings.Contains(err.Error(), "@@auto_increment_increment") {
+		t.Errorf("a failed read: %v", err)
+	}
+	if want := []string{"SELECT @@auto_increment_increment"}; !slices.Equal(e.Log, want) {
+		t.Errorf("sent %q, want %q", e.Log, want)
 	}
 }
 
@@ -385,8 +420,8 @@ func TestInsertAllEmptyUsesDefaults(t *testing.T) {
 	if err := openFake(velox.MySQL, e).InsertAll([]dAll{{}, {}}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := "INSERT INTO `dalls` () VALUES (), ()"; len(e.Log) == 0 || e.Log[0] != want {
-		t.Errorf("MySQL InsertAll: %q, want first %q", e.Log, want)
+	if want := "INSERT INTO `dalls` () VALUES (), ()"; len(e.Log) < 2 || e.Log[1] != want {
+		t.Errorf("MySQL InsertAll: %q, want it second %q", e.Log, want)
 	}
 }
 
@@ -444,6 +479,7 @@ func TestInsertAllOneStatementWithDefaultCells(t *testing.T) {
 		t.Fatal(err)
 	}
 	want = []string{
+		"SELECT @@auto_increment_increment",
 		"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, ?), (?, DEFAULT), (?, ?), (?, DEFAULT)",
 		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
 	}

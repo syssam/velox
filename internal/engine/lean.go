@@ -581,6 +581,13 @@ func SendBatch(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointer
 		}
 		return back, CheckUpserted(st, back)
 	}
+	step := int64(1)
+	if db.D == MySQL && st.Conflict == nil && gen >= 0 && len(rows) > 1 && !IsDryRun(ctx) {
+		var err error
+		if step, err = autoIncrementStep(ctx, db); err != nil {
+			return 0, stmtErr(st, fmt.Errorf("the keys of a multi-row insert need MySQL's @@auto_increment_increment, which could not be read: %w", err))
+		}
+	}
 	res, err := ExecWrite(ctx, db, st)
 	if err != nil {
 		return 0, err
@@ -592,10 +599,12 @@ func SendBatch(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointer
 		return res.Affected, nil
 	}
 	if gen >= 0 && res.HasLastID && res.Affected == int64(len(rows)) {
-		// MySQL gives a multi-row INSERT consecutive auto-increment values,
-		// from the first row's, as ent's batch insert reads them.
+		// MySQL gives a multi-row INSERT auto-increment values from the first
+		// row's, @@auto_increment_increment apart, as ent's batch insert reads
+		// them. The step is read before the INSERT, so that a failed read
+		// sends nothing.
 		for i, p := range rows {
-			if err := setKey(st.Entity, gen, fieldAddr(st.Entity, p, gen), res.LastID+int64(i)); err != nil {
+			if err := setKey(st.Entity, gen, fieldAddr(st.Entity, p, gen), res.LastID+step*int64(i)); err != nil {
 				return 0, err
 			}
 		}

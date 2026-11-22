@@ -132,6 +132,7 @@ func TestEnumSchemaDefaultZeroDefaultCell(t *testing.T) {
 			`INSERT INTO "denums" ("name", "status") VALUES ($1, DEFAULT), ($2, $3) RETURNING "id", "status"`,
 		}},
 		{velox.MySQL, &fakeconn.Exec{Affected: 2, LastID: 1, HasLastID: true, Rows: [][]any{{int64(1), "new"}, {int64(2), "paid"}}}, []string{
+			"SELECT @@auto_increment_increment",
 			"INSERT INTO `denums` (`name`, `status`) VALUES (?, DEFAULT), (?, ?)",
 			"SELECT `id`, `status` FROM `denums` WHERE `id` IN (?, ?)",
 		}},

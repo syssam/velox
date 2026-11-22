@@ -115,10 +115,12 @@ InsertAll gives every row what it would get alone:
   one statement.
 - Every row gets its generated key back, which before needed a loop of
   `Insert`. RETURNING returns rows in the order of `VALUES` on all three
-  databases. MySQL's keys are consecutive from `LastInsertId` for one
-  multi-row INSERT under the default `innodb_autoinc_lock_mode`, as ent
-  assumes too. They are taken only when the INSERT has no ON CONFLICT and
-  wrote every row.
+  databases. MySQL's keys are `@@auto_increment_increment` apart from
+  `LastInsertId` for one multi-row INSERT under the default
+  `innodb_autoinc_lock_mode`, as ent assumes too (with a step of 1). velox
+  reads the step once per DB, before the first such INSERT, and refuses the
+  insert unsent when it cannot. The keys are taken only when the INSERT has
+  no ON CONFLICT and wrote every row.
 - An InsertAll with `DoNothing` and more than one row reads nothing back.
   RETURNING leaves out the rows kept, so the rows returned do not line up
   with the rows sent.

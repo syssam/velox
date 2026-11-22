@@ -118,6 +118,7 @@ func TestRecordInsert(t *testing.T) {
 				}}}
 		},
 		manyLog: []string{
+			"SELECT @@auto_increment_increment",
 			"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, DEFAULT), (?, ?), (?, ?), (?, DEFAULT)",
 			"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
 		},
@@ -133,6 +134,7 @@ func TestRecordInsert(t *testing.T) {
 				Rows: [][]any{row(1, "c", 7), row(2, "d", 5), row(3, "e", 6), row(4, "f", 7)}}
 		},
 		rmanyLog: []string{
+			"SELECT @@auto_increment_increment",
 			"INSERT INTO `ddefs` (`name`, `score`) VALUES (?, DEFAULT), (?, ?), (?, ?), (?, DEFAULT)",
 			"SELECT " + allMy + " FROM `ddefs` WHERE `id` IN (?, ?, ?, ?)",
 		},

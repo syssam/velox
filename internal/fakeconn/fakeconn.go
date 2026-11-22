@@ -29,9 +29,13 @@ type Exec struct {
 	// Answer, when set, gives the rows of a query it reports true for, ahead of
 	// Results.
 	Answer func(sql string, args []any) ([][]any, bool)
-	SQL    string
-	Args   []any
-	Calls  int
+	// AutoIncrement is what SELECT @@auto_increment_increment returns, which
+	// velox asks before a MySQL multi-row insert; 0 returns 1. That query is
+	// answered ahead of Answer and Results, and logged like any other.
+	AutoIncrement int64
+	SQL           string
+	Args          []any
+	Calls         int
 	// Closed counts the rows values returned by query that have been closed.
 	Closed int
 	// Scanned counts the rows scanned, across queries.
@@ -174,7 +178,10 @@ func (e *Exec) Query(ctx context.Context, sql string, args []any) (conn.Rows, er
 	}
 	data := e.Rows
 	answered := false
-	if e.Answer != nil {
+	if sql == "SELECT @@auto_increment_increment" {
+		data, answered = [][]any{{fmt.Sprint(max(e.AutoIncrement, 1))}}, true
+	}
+	if !answered && e.Answer != nil {
 		var rows [][]any
 		if rows, answered = e.Answer(sql, args); answered {
 			data = rows

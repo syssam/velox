@@ -315,8 +315,11 @@ func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E] {
 // 0093).
 //
 // InsertAll reads every row's key back too, and the columns the database
-// filled: on MySQL the keys of one statement are consecutive from
-// LastInsertId, for one without OnConflict that wrote every row. An InsertAll
+// filled: on MySQL the keys of one statement are @@auto_increment_increment
+// apart from LastInsertId, for one without OnConflict that wrote every row.
+// velox reads that step once per DB, before the first multi-row INSERT, and
+// refuses the insert unsent when the read fails; a session that sets its own
+// step later is not seen. An InsertAll
 // with DoNothing reads nothing back. Give every entity its key, or leave
 // every key at zero for the database to assign. Rows that leave different
 // columns to the database go in different statements. An InsertAll that needs several

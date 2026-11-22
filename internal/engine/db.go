@@ -46,6 +46,9 @@ type config struct {
 	// version is the PostgreSQL server_version_num a recording handle read
 	// (serverVersion): 0 unknown, versionLoading while being read.
 	version atomic.Int64
+	// autoInc is MySQL's @@auto_increment_increment, read for a multi-row
+	// insert's keys (autoIncrementStep): 0 unknown.
+	autoInc atomic.Int64
 }
 
 // Option configures a DB's pipeline. The With functions make them; the zero

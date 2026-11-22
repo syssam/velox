@@ -246,6 +246,7 @@ type shardConn struct {
 	Replicas []*replica
 	next     atomic.Uint32 // the reads sent to replicas: the round-robin's turn
 	version  atomic.Int64  // the shard's server version, as config's
+	autoInc  atomic.Int64  // the shard's auto-increment step, as config's
 }
 
 // replica is one of a shard's replicas.

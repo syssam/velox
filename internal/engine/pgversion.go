@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -124,29 +125,49 @@ func loadVersion(ctx context.Context, db *DB) (int, error) {
 // transaction or of ctx on a sharded DB, else in db's configuration, which
 // the handles of one pool share. nil when ctx names no shard.
 func versionSlot(ctx context.Context, db *DB) *atomic.Int64 {
+	return serverSlot(ctx, db, func(sh *shardConn) *atomic.Int64 { return &sh.version }, &db.Cfg.version)
+}
+
+// serverSlot is where a fact about db's server is kept, as versionSlot says:
+// pick's slot of the shard, or else cfg.
+func serverSlot(ctx context.Context, db *DB, pick func(*shardConn) *atomic.Int64, cfg *atomic.Int64) *atomic.Int64 {
 	switch {
 	case db.txShard != nil:
-		return &db.txShard.version
+		return pick(db.txShard)
 	case !db.InTx && db.Rt != nil && db.Rt.One == nil:
 		sh, err := db.ctxShard(ctx)
 		if err != nil {
 			return nil
 		}
-		return &sh.version
+		return pick(sh)
 	}
-	return &db.Cfg.version
+	return cfg
 }
 
-// readVersion sends SHOW server_version_num and returns it. It is velox's
-// own statement, not the caller's: it goes to the executor directly, past
-// the Rewrite and Around hooks, on db's transaction's connection, or else
-// on the primary, under db's statement deadlines.
+// readVersion sends SHOW server_version_num and returns it, through
+// readSetting.
 func readVersion(ctx context.Context, db *DB) (int, error) {
+	s, err := readSetting(ctx, db, "SHOW server_version_num")
+	if err != nil {
+		return 0, err
+	}
+	v, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || v <= 0 {
+		return 0, errors.New("velox: SHOW server_version_num gave no version")
+	}
+	return v, nil
+}
+
+// readSetting sends q, velox's own one-value query, and returns its value, ""
+// when it returns no row. It goes to the executor directly, past the Rewrite
+// and Around hooks, on db's transaction's connection, or else on the primary,
+// under db's statement deadlines.
+func readSetting(ctx context.Context, db *DB, q string) (string, error) {
 	ex := db.Ex
 	if !db.InTx && db.Rt != nil {
 		sh, err := db.ctxShard(ctx)
 		if err != nil {
-			return 0, err
+			return "", err
 		}
 		ex = sh.Primary
 	}
@@ -157,23 +178,39 @@ func readVersion(ctx context.Context, db *DB) (int, error) {
 		}
 		ctx = tctx
 	}
-	r, err := ex.Query(ctx, "SHOW server_version_num", nil)
+	r, err := ex.Query(ctx, q, nil)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	defer r.Close()
 	var s string
 	if r.Next() {
 		if err := r.Scan(&s); err != nil {
-			return 0, err
+			return "", err
 		}
 	}
-	if err := r.Err(); err != nil {
+	return s, r.Err()
+}
+
+// autoIncrementStep is MySQL's @@auto_increment_increment, the gap between the
+// keys a multi-row INSERT assigns, read once per pool (per shard on a sharded
+// DB) and kept. A session that sets its own after the read is not seen.
+func autoIncrementStep(ctx context.Context, db *DB) (int64, error) {
+	slot := serverSlot(ctx, db, func(sh *shardConn) *atomic.Int64 { return &sh.autoInc }, &db.Cfg.autoInc)
+	if slot == nil {
+		return 0, errors.New("no shard for the statement")
+	}
+	if v := slot.Load(); v > 0 {
+		return v, nil
+	}
+	s, err := readSetting(ctx, db, "SELECT @@auto_increment_increment")
+	if err != nil {
 		return 0, err
 	}
-	v, err := strconv.Atoi(strings.TrimSpace(s))
+	v, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 	if err != nil || v <= 0 {
-		return 0, errors.New("velox: SHOW server_version_num gave no version")
+		return 0, fmt.Errorf("it gave %q", s)
 	}
+	slot.Store(v)
 	return v, nil
 }
