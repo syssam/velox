@@ -205,7 +205,7 @@ func parseConfig(data []byte) (Config, error) {
 	}
 	c, err = c.check(false)
 	if err != nil {
-		e := err.(*Error)
+		e, _ := errors.AsType[*Error](err)
 		e.Pos = "velox.json"
 		return Config{}, e
 	}

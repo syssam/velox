@@ -82,9 +82,11 @@ func refuseSession(format string, args ...any) error {
 // notAnswering is the refusal of a connection whose database answers err
 // to a query of d's, with err as its cause.
 func notAnswering(d velox.Dialect, err error) error {
-	e := refuseSession("the database does not answer as %s, velox.json's dialect: %v", dialectName(d), err).(*Error)
-	e.cause = err
-	return e
+	return &Error{
+		Code:   "session",
+		Reason: fmt.Sprintf("the database does not answer as %s, velox.json's dialect: %v", dialectName(d), err),
+		cause:  err,
+	}
 }
 
 // dialectName is d as its documentation names it.

@@ -181,7 +181,8 @@ func (g *rebuildGuard) checkRowid(ctx context.Context, seen rebuildSeen) error {
 	}
 	rows, err := g.s.conn.QueryContext(ctx, "SELECT "+name+" FROM "+sqliteRef(seen.table)+" LIMIT 0")
 	if err == nil {
-		return rows.Close()
+		defer func() { _ = rows.Close() }()
+		return rows.Err()
 	}
 	if !strings.Contains(err.Error(), "no such column") {
 		return fmt.Errorf("reading %s's %s: %w", seen.table, name, err)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -74,7 +75,7 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 	f.generated = strings.HasPrefix(string(data), generatedPrefix)
 	s := splitter{d: d, src: string(data)}
 	if err := s.run(); err != nil {
-		e := err.(*Error)
+		e, _ := errors.AsType[*Error](err)
 		e.Pos = path + ":" + e.Pos
 		return File{}, e
 	}
@@ -208,7 +209,8 @@ func (p *fileParse) setDirective(pc piece, word string, fields []string) error {
 		as, err := ParseAllow(code)
 		switch {
 		case err != nil:
-			return p.malformed(pc, err.(*Error).Reason)
+			e, _ := errors.AsType[*Error](err)
+			return p.malformed(pc, e.Reason)
 		case len(as) != 1 || as[0].Code != code:
 			return p.malformed(pc, "write allow <code> [<target>]")
 		}
