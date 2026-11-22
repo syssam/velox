@@ -24,8 +24,11 @@ import (
 // $, an unbalanced parenthesis, and the words SELECT, WITH, TABLE, VALUES,
 // UNION, INTERSECT, EXCEPT, INTO, RETURNING, PRAGMA and ATTACH are refused
 // when the statement runs, before anything is sent, as are functions that
-// read a table, a file or server state without a subquery, such as
-// PostgreSQL's pg_ and query_to_xml families and MySQL's LOAD_FILE. So a condition on another
+// read a table, a file or server state or run SQL from a string without a
+// subquery, such as PostgreSQL's pg_ and query_to_xml families, ts_rewrite
+// and ts_stat, and MySQL's LOAD_FILE. So is an @ right before a name, a
+// MySQL variable such as @@version; PostgreSQL's @@ and @> operators pass
+// when a space follows them. So a condition on another
 // table is HasWith or InSelect, which apply that table's policies. The words
 // are matched whatever their case, and FROM is allowed for EXTRACT and TRIM.
 //
@@ -36,9 +39,10 @@ import (
 // after WHERE and HAVING, so one belongs in Calc, as a result column. The
 // arguments are bound as given: no codec encodes them.
 //
-// The refusals guard against a policy bypass by mistake. They are not a
-// defence against hostile text: Expr takes text from the program, never from
-// a user. A function that runs SQL from a string argument still would.
+// The refusals are a best-effort guard against a policy bypass by mistake.
+// They are not a defence against hostile text: Expr takes text from the
+// program, never from a user, and a function the database's owner defined
+// can still read what it likes.
 func Expr[E any](text string, args ...any) Pred[E] {
 	slots, vals, err := slotsOf[E](text, args)
 	if err != nil {

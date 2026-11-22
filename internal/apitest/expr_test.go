@@ -91,6 +91,10 @@ func TestExprRefused(t *testing.T) {
 		{"load_file", velox.Expr[testmodel.Ticket]("? = LOAD_FILE('/x')", Tk.Title), "LOAD_FILE"},
 		{"sleep", velox.Expr[testmodel.Ticket]("? = 1 OR SLEEP(5) = 0", Tk.ID), "SLEEP"},
 		{"benchmark", velox.Expr[testmodel.Ticket]("? = BENCHMARK(1, 1)", Tk.ID), "BENCHMARK"},
+		{"ts_rewrite", velox.Expr[testmodel.Ticket]("? = 1 OR ts_rewrite('a'::tsquery, 'x') IS NULL", Tk.ID), "ts_rewrite"},
+		{"ts_stat", velox.Expr[testmodel.Ticket]("? = 1 OR TS_STAT('x') IS NULL", Tk.ID), "TS_STAT"},
+		{"mysql system variable", velox.Expr[testmodel.Ticket]("? = @@version", Tk.Title), "@"},
+		{"mysql user variable", velox.Expr[testmodel.Ticket]("? = @x", Tk.Title), "@"},
 		{"load_extension", velox.Expr[testmodel.Ticket]("? = load_extension('x')", Tk.ID), "load_extension"},
 		{"semicolon", velox.Expr[testmodel.Ticket]("? = 1; DROP TABLE tickets", Tk.ID), ";"},
 		{"line comment", velox.Expr[testmodel.Ticket]("? = 1 -- x", Tk.ID), "--"},
@@ -145,6 +149,11 @@ func TestExprAllowedText(t *testing.T) {
 		"? = '(( ; -- /* # $.a.b \"x\" `y`'",
 		"COALESCE(?, '[]'::jsonb) = '[]'::jsonb",
 		"? = 'caf\u00e9'",
+		// PostgreSQL's @ operators, and an @ inside a literal.
+		"to_tsvector(?) @@ to_tsquery(?)",
+		"? @> ?",
+		"? <@ ?",
+		"? = 'a@b'",
 	} {
 		args := []any{}
 		for range strings.Count(text, "?") {

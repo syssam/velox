@@ -58,9 +58,11 @@ func (d *exprData) seal() *exprData {
 // use it, and it cannot start a subquery.
 //
 // The functions after them read a table, a file or a server's state, write
-// a sequence, or stall the connection, without a subquery: PostgreSQL's
-// query_to_xml family, MySQL's LOAD_FILE and SLEEP, SQLite's
-// load_extension. The list is a backstop for a developer's mistake, not a
+// a sequence, run SQL from a string, or stall the connection, without a
+// subquery: PostgreSQL's query_to_xml family, ts_rewrite and ts_stat,
+// MySQL's LOAD_FILE and SLEEP, SQLite's load_extension.
+//
+// The list is a best-effort guard against a developer's mistake, not a
 // sandbox: the text is the program's, never a user's, and a function the
 // database's owner defined can still read what it likes.
 var exprBanned = map[string]bool{
@@ -71,6 +73,7 @@ var exprBanned = map[string]bool{
 	"CURSOR_TO_XML": true, "CURSOR_TO_XMLSCHEMA": true,
 	"NEXTVAL": true, "SETVAL": true, "CURRVAL": true, "LASTVAL": true,
 	"SET_CONFIG": true, "CURRENT_SETTING": true,
+	"TS_REWRITE": true, "TS_STAT": true,
 	// MySQL
 	"LOAD_FILE": true, "SLEEP": true, "BENCHMARK": true,
 	"GET_LOCK": true, "RELEASE_LOCK": true, "RELEASE_ALL_LOCKS": true,
@@ -156,7 +159,8 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 // backslash and on a doubled quote), and what is inside it is data: not
 // scanned for words, comments or parentheses. Outside a literal the text may
 // hold no other quote, semicolon, backslash, $ or #, no comment, no
-// unbalanced parenthesis and no word exprWordBanned refuses.
+// unbalanced parenthesis, no @ before a name (a MySQL variable) and no word
+// exprWordBanned refuses.
 //
 // window reports whether the text holds the word OVER outside a literal: a
 // window function, such as COUNT(*) OVER () or ROW_NUMBER() OVER
@@ -213,6 +217,8 @@ func exprChar(text string, i int, depth *int, bad func(string) error) error {
 		return bad("a control character")
 	case strings.IndexByte("\"`;\\$#", c) >= 0:
 		return bad(fmt.Sprintf("%q is not allowed", c))
+	case c == '@' && exprVariable(text[i+1:]):
+		return bad("'@' before a name (a MySQL variable) is not allowed")
 	case strings.HasPrefix(text[i:], "--"), strings.HasPrefix(text[i:], "/*"), strings.HasPrefix(text[i:], "*/"):
 		return bad(fmt.Sprintf("%q is not allowed", text[i:i+2]))
 	case c == '(':
@@ -223,6 +229,15 @@ func exprChar(text string, i int, depth *int, bad func(string) error) error {
 		}
 	}
 	return nil
+}
+
+// exprVariable reports whether rest, the text after an @, starts a MySQL
+// variable: a name, a quoted name, or @ and a name (a system variable).
+// PostgreSQL's operators @@, @> and @ are followed by a space or an
+// operand's other start, so they pass.
+func exprVariable(rest string) bool {
+	rest = strings.TrimPrefix(rest, "@")
+	return rest != "" && (isIdentStart(rest[0]) || rest[0] == '\'')
 }
 
 // exprLiteral reads the string literal that starts at text[i], a quote, and

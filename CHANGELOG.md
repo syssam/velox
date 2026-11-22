@@ -1263,6 +1263,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   error's text, which can quote a row's values (MySQL's "Duplicate entry
   'alice@example.com'"). Its status description is error.type, and its
   exception event has exception.type and no exception.message.
+- `Expr` and `SetExpr` refuse PostgreSQL's `ts_rewrite` and `ts_stat`,
+  which run SQL from a string, and an `@` right before a name, a MySQL
+  variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass
+  when a space follows them.
 - A GraphQL filter on a foreign key (`xIDIsNil`, `xIDNotNil`, `xID`,
   `xIDIn` and the rest) reads a key whose target a `velox.WithFilter`
   filter hides as null, as `hasX` does; before, only an interceptor or a
