@@ -46,6 +46,11 @@ func RenderConfig(m *plugin.Model, cfg Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return g.render(cfg)
+}
+
+// render is the SDL of g, checked as RenderConfig says.
+func (g *graph) render(cfg Config) (string, error) {
 	w := writer{app: true, cfg: cfg}
 	g.write(&w)
 	out := w.String()

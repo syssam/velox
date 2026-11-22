@@ -238,6 +238,26 @@ func BuildConfig(m *plugin.Model, cfg Config) (*Surface, error) {
 	if err != nil {
 		return nil, err
 	}
+	return g.surface(), nil
+}
+
+// RenderSurface is RenderConfig and BuildConfig from one build of m: the
+// SDL and its Surface.
+func RenderSurface(m *plugin.Model, cfg Config) (string, *Surface, error) {
+	g, err := build(m, cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	s := g.surface()
+	out, err := g.render(cfg)
+	if err != nil {
+		return "", nil, err
+	}
+	return out, s, nil
+}
+
+// surface is the Surface of g, which it reads before the SDL is written.
+func (g *graph) surface() *Surface {
 	s := &Surface{Types: make([]*Type, 0, len(g.objects)), Warnings: g.warnings}
 	types := make(map[*object]*Type, len(g.objects))
 	for _, o := range g.objects {
@@ -264,7 +284,7 @@ func BuildConfig(m *plugin.Model, cfg Config) (*Surface, error) {
 		}
 		s.Types = append(s.Types, t)
 	}
-	return s, nil
+	return s
 }
 
 // goOf is the Go name gqlgen binds the GraphQL name to: goName, the Go name

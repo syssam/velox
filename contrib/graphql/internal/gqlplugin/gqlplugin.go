@@ -50,11 +50,7 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err
 	}
-	s, err := sdl.RenderConfig(req.Model, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	surface, err := sdl.BuildConfig(req.Model, cfg)
+	s, surface, err := sdl.RenderSurface(req.Model, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
