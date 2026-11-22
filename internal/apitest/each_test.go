@@ -407,22 +407,19 @@ func TestRewriteMayNotChangeEach(t *testing.T) {
 	})
 }
 
-func TestLimitEachRemoved(t *testing.T) {
+// TestLimitEachNotPositive: LimitEach(0) or a negative n is a mistake, not
+// a way to remove an earlier LimitEach: the query fails before it is sent.
+func TestLimitEachNotPositive(t *testing.T) {
 	db, log := eachDB(t)
-	run := func(r velox.Rel[testmodel.Invoice, testmodel.Item]) []string {
-		t.Helper()
+	for _, n := range []int{0, -1} {
 		log.reset()
-		if _, err := db.Query[testmodel.Invoice]().With(r).Limit(10).All(ctx); err != nil {
-			t.Fatal(err)
+		_, err := db.Query[testmodel.Invoice]().With(I.Items.LimitEach(2).LimitEach(n)).Limit(10).All(ctx)
+		if err == nil || !strings.Contains(err.Error(), "LimitEach must be positive") {
+			t.Errorf("LimitEach(%d): %v, want LimitEach must be positive", n, err)
 		}
-		return log.of("testmodel.Item")
-	}
-	plain := run(I.Items)
-	if got := run(I.Items.LimitEach(2).LimitEach(0)); !reflect.DeepEqual(got, plain) {
-		t.Errorf("LimitEach(0) sent %q, want the plain load's %q", got, plain)
-	}
-	if got := run(I.Items.LimitEach(2).LimitEach(-1)); !reflect.DeepEqual(got, plain) {
-		t.Errorf("LimitEach(-1) sent %q, want the plain load's %q", got, plain)
+		if got := log.of("testmodel.Invoice"); len(got) != 0 {
+			t.Errorf("LimitEach(%d): sent %q", n, got)
+		}
 	}
 }
 

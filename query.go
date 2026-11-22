@@ -84,10 +84,18 @@ func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
 // uses it to refuse a query already ordered.
 func (q Query[E]) Ordered[_ Lazy[E]]() bool { return len(q.s.St.OrderBy) > 0 }
 
-// Limit returns the query returning at most n rows. n <= 0 removes the limit;
-// a query with no limit fails with ErrUnbounded unless it says AllowUnbounded.
+// Limit returns the query returning at most n rows. n must be positive:
+// Limit(0) or a negative n fails the query when it runs, before anything is
+// sent. A query with no Limit fails with ErrUnbounded unless it says
+// AllowUnbounded.
 func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E] {
-	q.s.St.Limit = max(n, 0)
+	if n <= 0 {
+		if q.s.Err == nil {
+			q.s.Err = fmt.Errorf("velox: %s: Limit(%d): Limit must be positive; AllowUnbounded reads every row", q.s.St.Entity.Name, n)
+		}
+		n = 0
+	}
+	q.s.St.Limit = n
 	return q
 }
 

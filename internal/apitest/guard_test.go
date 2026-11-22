@@ -17,8 +17,17 @@ func TestReadWithoutLimitIsRefused(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().All(ctx); !errors.Is(err, velox.ErrUnbounded) {
 		t.Errorf("All: %v", err)
 	}
-	if _, err := db.Query[testmodel.Invoice]().Limit(0).All(ctx); !errors.Is(err, velox.ErrUnbounded) {
-		t.Errorf("Limit(0): %v", err)
+	for _, n := range []int{0, -1} {
+		_, err := db.Query[testmodel.Invoice]().Limit(n).AllowUnbounded().All(ctx)
+		if err == nil || errors.Is(err, velox.ErrUnbounded) || !strings.Contains(err.Error(), "Limit must be positive") {
+			t.Errorf("Limit(%d): %v, want Limit must be positive", n, err)
+		}
+	}
+	if _, err := db.Query[testmodel.Invoice]().Limit(0).Limit(5).All(ctx); err == nil {
+		t.Error("Limit(0).Limit(5): the first mistake stays")
+	}
+	if _, err := db.Query[testmodel.Invoice]().With(testmodel.Invoices.Items.LimitEach(0)).Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "LimitEach must be positive") {
+		t.Errorf("LimitEach(0): %v, want LimitEach must be positive", err)
 	}
 	for _, err := range db.Query[testmodel.Invoice]().Iter(ctx) {
 		if !errors.Is(err, velox.ErrUnbounded) {

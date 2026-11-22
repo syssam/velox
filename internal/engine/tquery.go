@@ -80,7 +80,8 @@ func (q TableQuery) OrderBy(os ...OrderTerm) TableQuery {
 // Ordered reports whether the query has an OrderBy, as Query.Ordered.
 func (q TableQuery) Ordered() bool { return len(q.st.OrderBy) > 0 }
 
-// Limit is Query.Limit.
+// Limit is Query.Limit, except that n <= 0 removes the limit: a caller
+// such as veloxgql reuses a query and clears its Limit for a batch.
 func (q TableQuery) Limit(n int) TableQuery {
 	q.st.Limit = max(n, 0)
 	return q

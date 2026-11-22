@@ -226,7 +226,7 @@ func TestLockLastWins(t *testing.T) {
 			{q.ForUpdate().SkipLocked().NoWait(), " FOR UPDATE NOWAIT"},
 			{q.SkipLocked().ForShare(), " FOR SHARE SKIP LOCKED"},
 			{q.ForUpdate().Offset(5).ForUpdate(), " LIMIT ? OFFSET ? FOR UPDATE"},
-			{q.Limit(0).AllowUnbounded().Offset(5).ForShare(), " OFFSET ? FOR SHARE"},
+			{tx.Query[testmodel.Invoice]().AllowUnbounded().Offset(5).ForShare(), " OFFSET ? FOR SHARE"},
 		} {
 			sql, _, err := c.q.SQL(ctx)
 			if err != nil || !strings.HasSuffix(sql, c.want) {

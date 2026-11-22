@@ -2,6 +2,7 @@ package velox
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"unsafe"
 
@@ -88,7 +89,8 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 }
 
 // LimitEach returns the relation loading at most n entities for each owner,
-// the first in its order: each owner's own page. n <= 0 removes the limit.
+// the first in its order: each owner's own page. n must be positive:
+// LimitEach(0) or a negative n fails the query that loads the relation.
 //
 // The load is one statement for every owner (per chunk of owners, under the
 // dialect's parameter limit), which ranks each owner's rows with
@@ -108,7 +110,13 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 // The ranking names its rank vx_rn and, through a join, the owner's key
 // vx_owner: a target column of either name cannot be read with LimitEach.
 func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T] {
-	r.each = max(n, 0)
+	if n <= 0 {
+		if r.err == nil {
+			r.err = fmt.Errorf("velox: LimitEach(%d): LimitEach must be positive", n)
+		}
+		n = 0
+	}
+	r.each = n
 	return r
 }
 
