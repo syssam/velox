@@ -60,7 +60,7 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 		if f.code != "" {
 			span.SetAttributes(attribute.String(attrStatusCode, f.code))
 		}
-		setFailed(span, err)
+		setFailed(span, err, f)
 	}
 	ended = true
 	span.End()

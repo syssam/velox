@@ -32,6 +32,7 @@ const (
 	attrServerAddress  = "server.address"
 	attrServerPort     = "server.port"
 	attrStatusCode     = "db.response.status_code"
+	attrExceptionType  = "exception.type"
 
 	// errorTypeOther is error.type's value when no other fits, and the one a
 	// span that ends on a panic gets: the convention's fallback, as a panic
@@ -60,8 +61,9 @@ const (
 // The span, event and instrument names, and the statement instruments' units
 // and descriptions, which are v1.43.0's too.
 const (
-	spanTx     = "velox.tx"
-	eventRetry = "retry"
+	spanTx         = "velox.tx"
+	eventRetry     = "retry"
+	eventException = "exception"
 
 	metricDuration     = "db.client.operation.duration"
 	unitDuration       = "s"

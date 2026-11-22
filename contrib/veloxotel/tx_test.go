@@ -149,12 +149,10 @@ func TestTxOutcomes(t *testing.T) {
 			if got, has := a["db.response.status_code"]; has != (c.code != "") || got.AsString() != c.code {
 				t.Errorf("db.response.status_code %q (%v), want %q", got.AsString(), has, c.code)
 			}
-			if s.Status.Code != codes.Error || s.Status.Description != err.Error() {
-				t.Errorf("status %v, want Error %q", s.Status, err)
+			if s.Status.Code != codes.Error || s.Status.Description != c.errType {
+				t.Errorf("status %v, want Error %q", s.Status, c.errType)
 			}
-			if msg := exception(s); msg != err.Error() {
-				t.Errorf("exception.message %q, want %q", msg, err)
-			}
+			checkException(t, s, err)
 		})
 	}
 }

@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -338,8 +340,8 @@ func TestNoSpanFromSQL(t *testing.T) {
 }
 
 // TestErrorTypes runs failing statements through the hook: each span has
-// the status Error, its error.type and an exception event with the error's
-// text.
+// the status Error described by its error.type, and an exception event of
+// the error's Go type without its text, which may hold a row's values.
 func TestErrorTypes(t *testing.T) {
 	boom := errors.New("boom")
 	canceled, cancel := context.WithCancel(ctx)
@@ -354,7 +356,7 @@ func TestErrorTypes(t *testing.T) {
 		ctx  context.Context
 		want string
 	}{
-		{"unique", &fakeDB{errs: []error{&pgconn.PgError{Code: "23505", ConstraintName: "invoices_org_number_uq"}}}, nil, ctx, "constraint.unique"},
+		{"unique", &fakeDB{errs: []error{&pgconn.PgError{Code: "23505", ConstraintName: "invoices_org_number_uq", Message: "duplicate key", Detail: "Key (email)=(alice@example.com) already exists."}}}, nil, ctx, "constraint.unique"},
 		{"too many rows", &fakeDB{rows: three}, []velox.Option{velox.WithMaxRows(2)}, ctx, "velox.too_many_rows"},
 		{"canceled", &fakeDB{}, nil, canceled, "context.canceled"},
 		{"deadline", &fakeDB{}, nil, past, "context.deadline_exceeded"},
@@ -378,33 +380,49 @@ func TestErrorTypes(t *testing.T) {
 				t.Fatal("the hooks saw no error")
 			}
 			s := only(t, exp)
-			if s.Status.Code != codes.Error || s.Status.Description != err.Error() {
-				t.Errorf("status %v, want Error %q", s.Status, err)
+			if s.Status.Code != codes.Error || s.Status.Description != c.want {
+				t.Errorf("status %v, want Error %q", s.Status, c.want)
 			}
 			if got := attrs(s)["error.type"].AsString(); got != c.want {
 				t.Errorf("error.type %q, want %q (%v)", got, c.want, err)
 			}
-			if msg := exception(s); msg != err.Error() {
-				t.Errorf("exception.message %q, want %q", msg, err)
-			}
+			checkException(t, s, err)
 		})
 	}
 }
 
-// exception returns the exception.message of s's exception event; "" when
-// it has none.
-func exception(s tracetest.SpanStub) string {
+// checkException checks that s has one exception event, whose
+// exception.type is err's Go type, and that no event or status of s holds
+// err's text.
+func checkException(t *testing.T, s tracetest.SpanStub, err error) {
+	t.Helper()
+	n := 0
 	for _, e := range s.Events {
+		for _, kv := range e.Attributes {
+			if kv.Key == "exception.message" || strings.Contains(kv.Value.String(), err.Error()) {
+				t.Errorf("event %s has %s %q: the error's text", e.Name, kv.Key, kv.Value.String())
+			}
+		}
 		if e.Name != "exception" {
 			continue
 		}
+		n++
+		typ := ""
 		for _, kv := range e.Attributes {
-			if kv.Key == "exception.message" {
-				return kv.Value.AsString()
+			if kv.Key == "exception.type" {
+				typ = kv.Value.AsString()
 			}
 		}
+		if want := fmt.Sprintf("%T", err); typ != want {
+			t.Errorf("exception.type %q, want %q", typ, want)
+		}
 	}
-	return ""
+	if n != 1 {
+		t.Errorf("%d exception events, want 1", n)
+	}
+	if strings.Contains(s.Status.Description, err.Error()) {
+		t.Errorf("status %q holds the error's text", s.Status.Description)
+	}
 }
 
 // TestOneSpanPerAttempt: an Around hook of the application's own, given

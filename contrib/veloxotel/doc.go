@@ -102,6 +102,13 @@
 // transaction's span gets the same. The code names the database's internals:
 // it is for spans and metrics, not for a message a client sees.
 //
+// Such a span's status is Error, and its description is error.type. Its
+// exception event has exception.type, the error's Go type, and no
+// exception.message. No span holds an error's text: a driver's message can
+// quote a row's values, as MySQL's "Duplicate entry 'alice@example.com'"
+// does. The application logs the error it is returned when it wants the
+// text.
+//
 // # Where it ran
 //
 // The adapter sees no connection string, so the application names the

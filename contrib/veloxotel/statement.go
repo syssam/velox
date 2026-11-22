@@ -2,6 +2,7 @@ package veloxotel
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -67,7 +68,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	if span.IsRecording() {
 		a.endAttributes(span, st, fellOver, tkv, f)
 		if err != nil {
-			setFailed(span, err)
+			setFailed(span, err, f)
 		}
 	}
 	ended = true
@@ -76,12 +77,14 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	return err
 }
 
-// setFailed marks span as failed with err: its status and an exception
-// event. error.type is the caller's, as a statement and a transaction build
-// it differently.
-func setFailed(span trace.Span, err error) {
-	span.SetStatus(codes.Error, err.Error())
-	span.RecordError(err)
+// setFailed marks span as failed with err, whose failure is f: the status
+// Error described by f's error.type, and an exception event of err's Go
+// type. Neither holds err's text: a driver's message can quote a row's
+// values, as MySQL's "Duplicate entry" does. error.type is the caller's to
+// set, as a statement and a transaction build it differently.
+func setFailed(span trace.Span, err error, f failure) {
+	span.SetStatus(codes.Error, f.errType)
+	span.AddEvent(eventException, trace.WithAttributes(attribute.String(attrExceptionType, fmt.Sprintf("%T", err))))
 }
 
 // endPanicked ends a span whose hook's next panicked or called

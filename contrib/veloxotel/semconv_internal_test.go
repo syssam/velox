@@ -35,6 +35,8 @@ func TestNamesMatchSemconv(t *testing.T) {
 		{attrServerAddress, string(semconv.ServerAddressKey)},
 		{attrServerPort, string(semconv.ServerPortKey)},
 		{attrStatusCode, string(semconv.DBResponseStatusCodeKey)},
+		{attrExceptionType, string(semconv.ExceptionTypeKey)},
+		{eventException, semconv.ExceptionEventName},
 		{errorTypeOther, semconv.ErrorTypeOther.Value.AsString()},
 
 		{dbSystem(velox.Postgres), semconv.DBSystemNamePostgreSQL.Value.AsString()},

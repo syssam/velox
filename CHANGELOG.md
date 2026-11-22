@@ -1204,6 +1204,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- veloxotel: a failed statement's or transaction's span no longer holds the
+  error's text, which can quote a row's values (MySQL's "Duplicate entry
+  'alice@example.com'"). Its status description is error.type, and its
+  exception event has exception.type and no exception.message.
 - A GraphQL filter on a foreign key (`xIDIsNil`, `xIDNotNil`, `xID`,
   `xIDIn` and the rest) reads a key whose target a `velox.WithFilter`
   filter hides as null, as `hasX` does; before, only an interceptor or a
