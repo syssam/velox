@@ -98,8 +98,9 @@
 // they are compiled once for every where input. Each helper adds nothing
 // for a field the input does not set, and the first error stops the filter:
 //   - gqlgraph.Not, And and Or nest inputs one level deeper, and HasWith
-//     through an edge (untyped.Table.Has); an empty and, or or has…With list
-//     adds nothing, and an input that sets nothing holds for every row;
+//     through an edge (untyped.Table.Has); an empty and or has…With list
+//     adds nothing, an empty or matches no row, as an empty In does, and an
+//     input that sets nothing holds for every row, so not: {} matches none;
 //   - gqlgraph.Field adds the predicates a gqlgraph.Ops sets on a column (EQ,
 //     In, Contains…, IsNil, untyped.Table.Pred), converting the input's values
 //     to the column's Go type where they differ (untyped.Table.Convert);

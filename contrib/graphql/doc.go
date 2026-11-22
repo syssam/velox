@@ -453,6 +453,14 @@
 //     entgql, and every key of a schema is of one Go type (see "IDs"). An
 //     application finds a row by its ID through a where input's id or idIn,
 //     or a query field of its own.
+//   - A where input reads some values as SQL does, where entgql adds nothing
+//     for them: <field>IsNil: false is IS NOT NULL, as <field>NotNil: true
+//     is; an empty <field>In matches no row; or: [] matches no row; and not:
+//     {}, the negation of an input that holds for every row, matches none,
+//     where entgql refuses an empty input.
+//   - An orderBy through an edge (graphql.OrderVia) keeps every row of the
+//     connection, and its totalCount: a row whose target is missing or
+//     hidden sorts as NULL.
 //
 // # Loading
 //

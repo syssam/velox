@@ -431,6 +431,14 @@ is out of date. `velox-gen -check` does not know such a plugin.
   for int64, `gqlgenx.UUID` for UUID, gqlgen's `graphql.ID` for string.
   velox-graphql refuses a schema whose keys differ. An application that
   needs `node(id:)` declares and resolves it itself (ADR 0061).
+- **Where inputs read empty values as SQL does.** entgql adds nothing for
+  them; velox-graphql gives each its meaning: `xIsNil: false` is `IS NOT
+  NULL`, an empty `xIn` matches no row, `or: []` matches no row, and `not:
+  {}` matches none, where entgql refuses an empty input. An empty `and` or
+  `hasXWith` adds nothing.
+- **OrderVia keeps every row.** An `orderBy` through an edge reads it with a
+  LEFT JOIN: a row whose target is missing or hidden sorts as NULL, and the
+  connection's rows and `totalCount` are the same as without the order.
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,
   `[]int64`, `[]float64` or `[]bool` (`field.Strings` and the like) is
   `[String!]` and so on, as in entgql, in the type and in the inputs. Other JSON
