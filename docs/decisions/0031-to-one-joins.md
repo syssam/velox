@@ -1,6 +1,7 @@
 # 31. A query joins a to-one relation, and conditions and orderings reach its columns
 
-Status: accepted, 2026-11-02.
+Status: accepted, 2026-11-02. Its `After` of a left join and the GraphQL
+plugin's inner join are amended by the review of 2026-11-22, at the end.
 
 ## Context
 
@@ -85,3 +86,16 @@ NULL as null, as for an `OrderField`. Evidence: `TestJoinOrderByANullableColumn`
 `TestJoinAfterANullableColumn`, `TestJoinAfterNullsExact` (SQLite,
 PostgreSQL through pgx and database/sql, MySQL), `TestPaginateNullableVia`,
 `TestNullableViaServed`.
+
+2026-11-22, OrderVia's inner join: ordering a connection by a related field
+dropped each row whose target was missing or hidden, from the page and from
+`totalCount`, so the order told a caller how many rows a policy hid. The
+connection now reads the edge with a left join. `After` of a left join pages
+from a row that has no joined entity as from NULL, and treats the joined
+column as nullable, as the ordering already did; of an inner join such a row
+is still refused, as it was not read with the join. The cursor holds the
+missing target's term as null. Evidence: `TestJoinAfterARowWithoutAJoinedRow`
+in `internal/apitest`; `TestJoinedTermPages` and `TestOrderViaKeepsRows` (a
+missing and a hidden target: the same rows and `totalCount` with and without
+the order, paged both ways) in `contrib/graphql/veloxgql/gqlgraph`;
+`TestConnectionOrderedByAnEdge`, served by `TestConnectionsRun`.

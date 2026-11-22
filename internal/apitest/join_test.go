@@ -322,17 +322,37 @@ func TestJoinAfterPagesOverAJoinedColumn(t *testing.T) {
 	}
 }
 
-// A left join that found nothing has no value to page from.
-func TestJoinAfterARowWithoutAJoinedRowIsRefused(t *testing.T) {
-	e := &fakeconn.Exec{Results: [][][]any{{itemInvoiceRow(itemRow(11, 0, "B", 2), nulls(10))}}}
+// A row that a left join found nothing for pages from NULL, which sorts
+// after every value ascending: past it are the rows of NULL with a greater
+// key. Past a value, the rows of NULL follow too, though the column holds
+// none.
+func TestJoinAfterARowWithoutAJoinedRow(t *testing.T) {
+	e := &fakeconn.Exec{Results: [][][]any{
+		{itemInvoiceRow(itemRow(11, 0, "B", 2), nulls(10))},
+		{},
+		{itemInvoiceRow(itemRow(10, 1, "A", 1), invoiceRow(1))},
+		{},
+	}}
 	db := openFake(velox.Postgres, e)
 	q := db.Query[testmodel.Item]().LeftJoin(It.Invoice).OrderBy(It.Invoice.By(I.Number.Asc()), It.ID.Asc()).Limit(1)
 	page, err := q.All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = q.After(&page[0]).All(ctx); err == nil || !strings.Contains(err.Error(), "After") {
-		t.Fatalf("got %v", err)
+	if _, err = q.After(&page[0]).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := ` WHERE (("vxj1"."number" IS NULL AND "items"."id" > $1)) `; !strings.Contains(e.Log[1], want) {
+		t.Errorf("past NULL:\n got %s\nwant …%s", e.Log[1], want)
+	}
+	if page, err = q.All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = q.After(&page[0]).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := ` WHERE (("vxj1"."number" > $1 OR "vxj1"."number" IS NULL) OR ("vxj1"."number" = $2 AND "items"."id" > $3)) `; !strings.Contains(e.Log[3], want) {
+		t.Errorf("past a value:\n got %s\nwant …%s", e.Log[3], want)
 	}
 }
 

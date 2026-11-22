@@ -1204,6 +1204,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- GraphQL: a connection ordered by `graphql.OrderVia` reads the edge with a
+  LEFT JOIN, so the order no longer drops a row whose target is missing or
+  hidden, nor changes `totalCount`, which told a caller how many rows a
+  policy hid. Such a row sorts as NULL: last ascending, first descending.
+  `After` of a `LeftJoin` pages from a row with no joined entity as NULL,
+  where it failed.
 - GraphQL, compat=veloxe: a where argument has a budget of 10 times
   `Limits.MaxFilterNodes` (10000 by default), where it had none; and any
   where argument's budget is held to 30000, so a huge `idIn` is

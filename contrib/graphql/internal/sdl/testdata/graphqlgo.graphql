@@ -261,7 +261,7 @@ input PostOrder @goModel(model: "example.com/app/gen.PostOrder") {
 enum PostOrderField @goModel(model: "example.com/app/gen.PostOrderField") {
   TITLE
   VIEWS
-  """Orders through author: leaves out each Post without one, or whose author the reader may not see."""
+  """Orders through author: each Post without one, or whose author the reader may not see, sorts as null, after every value ascending."""
   AUTHOR_NAME
 }
 

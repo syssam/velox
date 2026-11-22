@@ -30,7 +30,8 @@ import (
 // Read policy is in the join's ON clause. A query joins a relation once, and
 // a locking read, an aggregate and a per-owner read through a join table cannot join. After pages over a joined column
 // from the joined entity of the row it is given, which must have been read with
-// the same join and have one. With still loads other relations in its own queries.
+// the same join and have one; of a LeftJoin, a row with none pages from NULL.
+// With still loads other relations in its own queries.
 func (q Query[E]) Join[T any](r Rel[E, T]) Query[E] { return q.join(r, false) }
 
 // LeftJoin is Join as LEFT JOIN: a row with no related entity stays, with r's

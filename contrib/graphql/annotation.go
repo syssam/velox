@@ -410,11 +410,11 @@ func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
 //	edge.To("author", User.Type).Unique().Annotations(graphql.OrderVia("name", "AUTHOR_NAME"))
 //
 // orderBy: {field: AUTHOR_NAME} then orders a Post connection by its author's name,
-// paged by cursors that hold it. The connection reads the edge with an inner JOIN, so
-// a row whose target is missing, or that the target's Read policy hides from the
-// caller, is not in the connection, nor in its totalCount, when it is ordered so. A
-// nullable field orders as an OrderField does: NULL after every value ascending, and
-// a cursor holds it as null. The plugin refuses it on a to-many edge, for a sensitive,
+// paged by cursors that hold it. The connection reads the edge with a LEFT JOIN, so
+// the order changes neither which rows the connection holds nor its totalCount: a
+// row whose target is missing, or that the target's Read policy hides from the
+// caller, sorts as NULL. A NULL orders as in an OrderField of a nullable field: after
+// every value ascending, before them descending, and a cursor holds it as null. The plugin refuses it on a to-many edge, for a sensitive,
 // json or bytes field or one the type leaves out, and for a field or an edge with an
 // application directive, which guards neither the cursors nor the order. Call it once
 // for each field.

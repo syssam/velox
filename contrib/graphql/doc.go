@@ -193,7 +193,9 @@
 // below for how it reads its rows and their edges. An OrderField, or an
 // OrderVia of a to-one edge's target, may be on a nullable field: NULL sorts
 // after every value ascending and before them descending, on every dialect,
-// and a cursor holds it as null. A where
+// and a cursor holds it as null. An OrderVia reads the edge with a LEFT JOIN,
+// so a row whose target is missing or hidden sorts as NULL, and the order
+// changes neither the connection's rows nor its totalCount. A where
 // argument's Pred is gqlgraph.Predicate of the input, which adds each
 // predicate the input sets as the type's WhereFields describe it; it refuses a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
 // or larger in all than MaxFilterNodes, before any query runs. A list edge

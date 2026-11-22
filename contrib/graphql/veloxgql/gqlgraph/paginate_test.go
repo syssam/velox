@@ -521,8 +521,9 @@ func ownerNameOrder(dir veloxgql.OrderDirection) []gqlgraph.OrderTerm[child] {
 	return []gqlgraph.OrderTerm[child]{gqlgraph.JoinedTermOf[child, owner]("OWNER_NAME", dir, int(children.Owner.I), int(owners.Name.I))}
 }
 
-// A joined term orders by the related row's column, pages by cursors that hold
-// it, and leaves out a row with no related row, from the page and the count.
+// A joined term orders by the related row's column and pages by cursors that
+// hold it. A row with no related row stays, in the page and in the count, its
+// term NULL: after every value ascending, before them descending.
 func TestJoinedTermPages(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	ctx := context.Background()
@@ -546,17 +547,17 @@ func TestJoinedTermPages(t *testing.T) {
 
 	// Children 1-4 are owner a's, 5 and 6 owner b's; 7 has no owner.
 	all, n := page(gqlgraph.Args{}, asc)
-	if got := childIDs(all.Rows); !reflect.DeepEqual(got, []int64{1, 2, 3, 4, 5, 6}) || n != 6 {
+	if got := childIDs(all.Rows); !reflect.DeepEqual(got, []int64{1, 2, 3, 4, 5, 6, 7}) || n != 7 {
 		t.Errorf("ascending: %v, totalCount %d", got, n)
 	}
-	if all, _ = page(gqlgraph.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{5, 6, 1, 2, 3, 4}) {
+	if all, _ = page(gqlgraph.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{7, 5, 6, 1, 2, 3, 4}) {
 		t.Errorf("descending: %v", childIDs(all.Rows))
 	}
 
 	// Forward by twos, each page after the last cursor of the one before.
 	var got []int64
 	args := gqlgraph.Args{First: new(2)}
-	for range 4 {
+	for range 5 {
 		p, _ := page(args, desc)
 		got = append(got, childIDs(p.Rows)...)
 		if !p.Info.HasNextPage {
@@ -570,16 +571,17 @@ func TestJoinedTermPages(t *testing.T) {
 			t.Fatalf("the cursor's value is %v, the owner's name", v)
 		}
 	}
-	if !reflect.DeepEqual(got, []int64{5, 6, 1, 2, 3, 4}) {
+	if !reflect.DeepEqual(got, []int64{7, 5, 6, 1, 2, 3, 4}) {
 		t.Errorf("descending by twos: %v", got)
 	}
 
-	// Backward from the end, through a cursor that crossed the wire as JSON.
+	// Backward from the end, through a cursor that crossed the wire as JSON:
+	// child 7's, whose owner's name is null.
 	last, _ := page(gqlgraph.Args{Last: new(2)}, asc)
-	if got := childIDs(last.Rows); !reflect.DeepEqual(got, []int64{5, 6}) || !last.Info.HasPreviousPage {
+	if got := childIDs(last.Rows); !reflect.DeepEqual(got, []int64{6, 7}) || !last.Info.HasPreviousPage {
 		t.Errorf("last 2: %v %+v", got, last.Info)
 	}
-	enc, err := veloxgql.EncodeCursor(*last.Info.StartCursor)
+	enc, err := veloxgql.EncodeCursor(last.Cursors[1])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,8 +589,14 @@ func TestJoinedTermPages(t *testing.T) {
 	if err := wire.UnmarshalGQLContext(ctx, enc); err != nil {
 		t.Fatal(err)
 	}
-	if p, _ := page(gqlgraph.Args{Last: new(2), Before: &wire}, asc); !reflect.DeepEqual(childIDs(p.Rows), []int64{3, 4}) {
-		t.Errorf("last 2 before 5: %v", childIDs(p.Rows))
+	if wire.Terms[0].Value != nil {
+		t.Errorf("child 7's cursor holds %v, want null", wire.Terms[0].Value)
+	}
+	if p, _ := page(gqlgraph.Args{Last: new(2), Before: &wire}, asc); !reflect.DeepEqual(childIDs(p.Rows), []int64{5, 6}) {
+		t.Errorf("last 2 before 7: %v", childIDs(p.Rows))
+	}
+	if p, _ := page(gqlgraph.Args{First: new(2), After: &wire}, asc); len(p.Rows) != 0 || p.Info.HasNextPage {
+		t.Errorf("first 2 after 7: %v %+v", childIDs(p.Rows), p.Info)
 	}
 
 	// The same relation named by two terms is joined once.
@@ -597,8 +605,91 @@ func TestJoinedTermPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, err := c.Page(ctx); err != nil || len(p.Rows) != 6 {
+	if p, err := c.Page(ctx); err != nil || len(p.Rows) != 7 {
 		t.Errorf("two terms of one relation: %v %v", err, p)
+	}
+}
+
+// TestOrderViaKeepsRows: ordering by a related row's column changes neither
+// which rows a connection holds nor its totalCount, when the related row is
+// missing (child 7) or a filter hides it from the caller (owner 1): its term
+// is NULL, and paging by twos through it, forward and backward, gives the
+// whole order.
+func TestOrderViaKeepsRows(t *testing.T) {
+	_, raw, _ := edgeDB(t)
+	db := velox.Open(velox.SQLite, raw, velox.WithFilter(hideOwnerFilter))
+	ctx := context.WithValue(context.Background(), hideOwnerKey{}, true)
+	conn := func(args gqlgraph.Args, order []gqlgraph.OrderTerm[child]) (*gqlgraph.PageOf[child], int) {
+		t.Helper()
+		c, err := gqlgraph.NewConnectionOf(ctx, db.Query[child](), "Child", args, order, childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := c.Page(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := c.TotalCount(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p, n
+	}
+	plain, pn := conn(gqlgraph.Args{}, nil)
+	members := childIDs(plain.Rows)
+	if !reflect.DeepEqual(members, []int64{1, 2, 3, 4, 5, 6, 7}) || pn != 7 {
+		t.Fatalf("unordered: %v, totalCount %d", members, pn)
+	}
+	for _, c := range []struct {
+		dir  veloxgql.OrderDirection
+		want []int64
+	}{
+		// Owner 1 ("a") is hidden: only children 5 and 6 have an owner's name.
+		{veloxgql.OrderDirectionAsc, []int64{5, 6, 1, 2, 3, 4, 7}},
+		{veloxgql.OrderDirectionDesc, []int64{1, 2, 3, 4, 7, 5, 6}},
+	} {
+		order := ownerNameOrder(c.dir)
+		all, n := conn(gqlgraph.Args{}, order)
+		got := childIDs(all.Rows)
+		if !reflect.DeepEqual(got, c.want) || n != pn {
+			t.Errorf("%s: %v, totalCount %d; want %v, %d", c.dir, got, n, c.want, pn)
+		}
+		sorted := slices.Clone(got)
+		slices.Sort(sorted)
+		if !reflect.DeepEqual(sorted, members) {
+			t.Errorf("%s: members %v, want %v", c.dir, sorted, members)
+		}
+		for i, r := range all.Rows {
+			if v := all.Cursors[i].Terms[0].Value; (v == nil) != (r.ID <= 4 || r.ID == 7) {
+				t.Errorf("%s: child %d's cursor holds %v", c.dir, r.ID, v)
+			}
+		}
+		var fwd []int64
+		args := gqlgraph.Args{First: new(2)}
+		for range len(c.want) {
+			p, _ := conn(args, order)
+			fwd = append(fwd, childIDs(p.Rows)...)
+			if !p.Info.HasNextPage {
+				break
+			}
+			args.After = p.Info.EndCursor
+		}
+		if !reflect.DeepEqual(fwd, c.want) {
+			t.Errorf("%s forward by twos: %v, want %v", c.dir, fwd, c.want)
+		}
+		var back []int64
+		args = gqlgraph.Args{Last: new(2)}
+		for range len(c.want) {
+			p, _ := conn(args, order)
+			back = append(childIDs(p.Rows), back...)
+			if !p.Info.HasPreviousPage {
+				break
+			}
+			args.Before = p.Info.StartCursor
+		}
+		if !reflect.DeepEqual(back, c.want) {
+			t.Errorf("%s backward by twos: %v, want %v", c.dir, back, c.want)
+		}
 	}
 }
 

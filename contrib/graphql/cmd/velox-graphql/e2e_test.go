@@ -286,7 +286,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"input AccountOrder {\n",
 		"  direction: OrderDirection! = ASC\n  \"\"\"The field to order by.\"\"\"\n  field: AccountOrderField!\n",
 		"enum AccountOrderField {\n  NAME\n}\n",
-		"enum PostOrderField {\n  TITLE\n  \"\"\"Orders through author: leaves out each Post without one, or whose author the reader may not see.\"\"\"\n  AUTHOR_NAME\n}\n",
+		"enum PostOrderField {\n  TITLE\n  \"\"\"Orders through author: each Post without one, or whose author the reader may not see, sorts as null, after every value ascending.\"\"\"\n  AUTHOR_NAME\n}\n",
 		"  displayNameHasSuffix: String\n  displayNameEqualFold: String\n  displayNameContainsFold: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
 		"input CreatePostInput {\n  title: String!\n  \"\"\"The ID of the Account the edge author leads to.\"\"\"\n  authorID: ID!\n}\n",
@@ -536,9 +536,9 @@ func keys[E any](t *testing.T, ctx context.Context, c interface {
 	return out, info
 }
 
-// TestConnectionOrderedByAnEdge orders posts by their author's name: one JOIN,
-// paged by cursors that hold the name, and cid, whose org the caller's scope hides,
-// has no posts in the connection, nor in its totalCount.
+// TestConnectionOrderedByAnEdge orders posts by their author's name: one LEFT
+// JOIN, paged by cursors that hold the name. cid, whose org the caller's scope
+// hides, is NULL: its post is last ascending, and stays in the totalCount.
 func TestConnectionOrderedByAnEdge(t *testing.T) {
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -556,7 +556,8 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	by := func(d veloxgql.OrderDirection) *gen.PostOrder {
 		return &gen.PostOrder{Direction: d, Field: gen.PostOrderFieldAuthorName}
 	}
-	// ann's posts 1, 2 and 4, then bob's 3; post 5 is cid's, in org 8.
+	// ann's posts 1, 2 and 4, then bob's 3, then post 5, whose author cid is in
+	// org 8, hidden.
 	ps, err := db.Query[gen.Post]().Paginate(ctx, nil, intp(2), nil, nil, gen.WithPostOrder(by(veloxgql.OrderDirectionAsc)))
 	if err != nil {
 		t.Fatal(err)
@@ -565,8 +566,8 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	if !slices.Equal(got, []int64{1, 2}) || !info.HasNextPage {
 		t.Fatalf("by author ASC, first 2: %v %+v", got, info)
 	}
-	if n, err := ps.TotalCount(ctx); err != nil || n != 4 {
-		t.Errorf("totalCount %d %v, want 4: post 5's author is hidden", n, err)
+	if n, err := ps.TotalCount(ctx); err != nil || n != 5 {
+		t.Errorf("totalCount %d %v, want 5: post 5 stays though its author is hidden", n, err)
 	}
 	var after veloxgql.Cursor
 	if s, err := veloxgql.EncodeCursor(*info.EndCursor); err != nil {
@@ -577,8 +578,15 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	if ps, err = db.Query[gen.Post]().Paginate(ctx, &after, intp(2), nil, nil, gen.WithPostOrder(by(veloxgql.OrderDirectionAsc))); err != nil {
 		t.Fatal(err)
 	}
-	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{4, 3}) || info.HasNextPage {
+	got, info = keys(t, ctx, ps, ps.Edges, post)
+	if !slices.Equal(got, []int64{4, 3}) || !info.HasNextPage {
 		t.Errorf("by author ASC after 2: %v %+v", got, info)
+	}
+	if ps, err = db.Query[gen.Post]().Paginate(ctx, info.EndCursor, intp(2), nil, nil, gen.WithPostOrder(by(veloxgql.OrderDirectionAsc))); err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{5}) || info.HasNextPage {
+		t.Errorf("by author ASC after 3: %v %+v", got, info)
 	}
 	// Descending, and backward from the end.
 	if ps, err = db.Query[gen.Post]().Paginate(ctx, nil, nil, nil, intp(2), gen.WithPostOrder(by(veloxgql.OrderDirectionDesc))); err != nil {
@@ -591,7 +599,7 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	if _, err := db.Query[gen.Post]().Paginate(ctx, &after, intp(2), nil, nil); err == nil {
 		t.Error("an author cursor was accepted under the key's order")
 	}
-	// Without the order, no join: post 5 is there.
+	// Without the order, no join: the same posts.
 	if ps, err = db.Query[gen.Post]().Paginate(ctx, nil, nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}

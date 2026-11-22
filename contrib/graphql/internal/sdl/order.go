@@ -106,10 +106,10 @@ func (w *writer) order(o *object) {
 	for i, v := range o.order.values {
 		w.at = o.order.wheres[i]
 		if k := o.order.edges[i] - 1; k >= 0 {
-			// The connection joins the edge with an inner join (0031), so a client is told
-			// which nodes such an order leaves out, of the page and of totalCount.
+			// The connection joins the edge with a left join (0031), so a client is told
+			// where such an order puts the nodes the join finds nothing for.
 			edge, _ := o.edgeName(k) // checked as the type's fields were made
-			w.line(`  """Orders through `, edge, `: leaves out each `, o.name, ` without one, or whose `, edge, ` the reader may not see."""`)
+			w.line(`  """Orders through `, edge, `: each `, o.name, ` without one, or whose `, edge, ` the reader may not see, sorts as null, after every value ascending."""`)
 		}
 		w.line("  ", v)
 	}
@@ -118,7 +118,7 @@ func (w *writer) order(o *object) {
 }
 
 // orderVia adds to ord the values that order by a column of a to-one edge's
-// target (graphql.OrderVia). A connection reads it with a JOIN, and a cursor
+// target (graphql.OrderVia). A connection reads it with a LEFT JOIN, and a cursor
 // holds the column's value, so everything checkField asks of an OrderField is
 // asked here of the target's field, and of the edge, which a directive can guard.
 func (g *graph) orderVia(o *object, ord *order, by map[string]string) error {

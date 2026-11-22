@@ -22,6 +22,8 @@ func sliceOrMap(t any) bool {
 // that it is compiled once; the row's values are read through in's kit. A term
 // of OrderBy on a joined relation reads its value from the joined entity stored
 // in the row's relation field, so the row must have been read with that join.
+// Of a left join, a row with no joined entity pages from NULL, as the join
+// read it.
 func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if len(st.OrderBy) == 0 {
 		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
@@ -50,7 +52,7 @@ func afterSources(st *Statement, in *EntityInfo, after unsafe.Pointer) ([]afterS
 	srcs := make([]afterSource, len(st.OrderBy))
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for i, o := range st.OrderBy {
-		src := afterSource{in, after}
+		src := afterSource{info: in, row: after}
 		if o.Rel != 0 {
 			var err error
 			if src, err = joinedSource(st, in, after, o); err != nil {
@@ -129,21 +131,29 @@ func orderTerm(o OrderTerm, op op, v any) Node {
 // It is (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending
 // columns. NULL sorts after every value (the order puts it there, orderBy),
 // so past a value ascending is > v OR IS NULL, past NULL ascending is
-// nothing, and past NULL descending is IS NOT NULL; NULL equals NULL.
+// nothing, and past NULL descending is IS NOT NULL; NULL equals NULL. A
+// column of a left join is NULL where the join found no row, as a nullable
+// column is.
 func afterCondition(st *Statement, srcs []afterSource) Node {
-	value := func(i int) any { return srcs[i].info.kit.Value(srcs[i].row, st.OrderBy[i].Column) }
+	value := func(i int) any {
+		if srcs[i].row == nil {
+			return nil // a left join found no row
+		}
+		return srcs[i].info.kit.Value(srcs[i].row, st.OrderBy[i].Column)
+	}
+	nullable := func(i int) bool { return srcs[i].left || srcs[i].info.Columns[st.OrderBy[i].Column].Nullable }
 	var or []Node
 	for i, o := range st.OrderBy {
 		var and []Node
 		for k, prev := range st.OrderBy[:i] {
 			v := value(k)
-			if srcs[k].info.Columns[prev.Column].Nullable && nullValue(v) {
+			if nullable(k) && nullValue(v) {
 				and = append(and, orderTerm(prev, OpIsNull, nil))
 			} else {
 				and = append(and, orderTerm(prev, OpEQ, v))
 			}
 		}
-		past, ok := pastValue(o, value(i), srcs[i].info.Columns[o.Column].Nullable)
+		past, ok := pastValue(o, value(i), nullable(i))
 		if !ok {
 			continue // no row is past NULL
 		}
@@ -182,16 +192,18 @@ func pastValue(o OrderTerm, v any, nullable bool) (Node, bool) {
 }
 
 // afterSource is the row After reads one ordered column from, and the entity it is
-// a row of.
+// a row of. Of a left join, row is nil when the join found none.
 type afterSource struct {
 	info *EntityInfo
 	row  unsafe.Pointer
+	left bool // of a left join: the column is NULL where the join found no row
 }
 
 // joinedSource is the joined entity that o, an ordering by a joined relation, reads
 // from the row at after: the one stored in the row's relation field. It fails when
-// the statement does not join the relation, or the row has no joined entity: it was
-// not read with the join, or a left join found nothing, and has no value to page from.
+// the statement does not join the relation, or, of an inner join, the row has no
+// joined entity: it was not read with the join, and has no value to page from. Of a
+// left join, a row with none pages from NULL, as the join reads a missing row.
 func joinedSource(st *Statement, in *EntityInfo, after unsafe.Pointer, o OrderTerm) (afterSource, error) {
 	rel := o.Rel - 1
 	i, ok := joinOf(st.Joins, rel)
@@ -207,11 +219,15 @@ func joinedSource(st *Statement, in *EntityInfo, after unsafe.Pointer, o OrderTe
 		return afterSource{}, err
 	}
 	h := (*Holder)(unsafe.Add(after, off))
+	left := st.Joins[i].Left
+	if h.V == nil && left {
+		return afterSource{info: l.Target, left: true}, nil
+	}
 	if h.V == nil {
-		return afterSource{}, fmt.Errorf("velox: %s: After cannot page over a column of %s: the row has none joined; read it with the same Join, and a row with no %s has no value to page from", in.Name, l.Name, l.Name)
+		return afterSource{}, fmt.Errorf("velox: %s: After cannot page over a column of %s: the row has none joined; read it with the same Join", in.Name, l.Name)
 	}
 	// V holds a *T, which an interface keeps in its data word.
-	return afterSource{l.Target, dataWord(h.V)}, nil
+	return afterSource{info: l.Target, row: dataWord(h.V), left: left}, nil
 }
 
 // nullValue reports whether v, a nullable column's value, is stored as NULL:

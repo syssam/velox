@@ -198,11 +198,13 @@ type Column struct {
 	Index int
 	// Edge is, for a column of the entity that a to-one relation of the node
 	// leads to, the relation's index plus one; 0 for the node's own column.
-	// A connection ordered by it reads the relation with an inner JOIN, in
-	// the page query and in the count: a row with no related entity, or none
-	// that the related entity's Read policy lets the caller read, is not in
-	// the connection. A cursor's row carries a related entity with the
-	// term's value set.
+	// A connection ordered by it reads the relation with a LEFT JOIN, in
+	// the page query and in the count, so the order leaves the connection's
+	// rows and its count as they are: a row with no related entity, or none
+	// that the related entity's Read policy lets the caller read, has NULL
+	// for the term, after every value ascending, and its cursor holds null.
+	// A cursor's row carries a related entity with the term's value set, or
+	// none for null.
 	Edge int
 	// Target is the relation's target, for an Edge.
 	Target func() untyped.Table
@@ -236,6 +238,8 @@ type term struct {
 	tbl   untyped.Table // the column's entity: the node's, or the relation's target
 	base  reflect.Type
 	null  bool // the field is a pointer: nil is NULL, which a cursor holds as null
+	// A term of a related row (edge) is NULL too when the row has none: the
+	// connection reads the relation with a left join.
 }
 
 // newTerm is the term of c, in direction dir, on the connection's entity t.
@@ -310,9 +314,9 @@ func (t *term) row(p any, own untyped.Table) any {
 func (t *term) get(p any, own untyped.Table) any {
 	r := t.row(p, own)
 	if r == nil {
-		// A row read without the join: the zero value, which no cursor of
-		// it is used from.
-		return reflect.Zero(t.base).Interface()
+		// The left join found no related row, or the caller may not read
+		// it: the term is NULL, as the database orders it.
+		return nil
 	}
 	f := t.tbl.Field(r, t.col)
 	// The common types, without reflect.
@@ -348,6 +352,11 @@ func (t *term) get(p any, own untyped.Table) any {
 // the wire, nil for NULL.
 func (t *term) set(p any, own untyped.Table, v any) error {
 	r := t.row(p, own)
+	if r == nil && t.edge != 0 && v == nil && !t.null {
+		// A NULL of a column that cannot hold one: the row has no related
+		// row, as the left join read it.
+		return nil
+	}
 	if r == nil {
 		r = t.tbl.New()
 		if err := own.Fill(p, t.edge-1, t.tbl, r); err != nil {
@@ -568,7 +577,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 	for _, t := range terms {
 		if t.edge != 0 && !slices.Contains(joined, t.edge) {
 			joined = append(joined, t.edge)
-			conn.query = conn.query.Join(t.edge-1, t.tbl)
+			conn.query = conn.query.LeftJoin(t.edge-1, t.tbl)
 		}
 	}
 	for i := range terms {
