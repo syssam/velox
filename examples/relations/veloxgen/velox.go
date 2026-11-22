@@ -6,3 +6,27 @@ package veloxgen
 import "github.com/syssam/velox"
 
 const _ = velox.GeneratedCodeIsVersion26
+
+// MembershipRole is the type of Membership's role field.
+type MembershipRole string
+
+// The values of MembershipRole.
+const (
+	MembershipRoleOwner  MembershipRole = "owner"
+	MembershipRoleMember MembershipRole = "member"
+)
+
+// Values returns the values of MembershipRole in declaration order.
+func (e MembershipRole) Values() []string { return []string{"owner", "member"} }
+
+// String returns the stored value of e.
+func (e MembershipRole) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of MembershipRole.
+func (e MembershipRole) IsValid() bool {
+	switch e {
+	case MembershipRoleOwner, MembershipRoleMember:
+		return true
+	}
+	return false
+}

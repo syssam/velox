@@ -21,6 +21,33 @@
       ]
     },
     {
+      "name": "clubs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "clubs_name_key",
+          "columns": [
+            "name"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
       "name": "comments",
       "columns": [
         {
@@ -54,6 +81,76 @@
           "ref_columns": [
             "id"
           ]
+        }
+      ]
+    },
+    {
+      "name": "memberships",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "default": "'member'"
+        },
+        {
+          "name": "joined_at",
+          "type": "datetime(9)"
+        },
+        {
+          "name": "author_id",
+          "type": "integer",
+          "default": "0"
+        },
+        {
+          "name": "club_id",
+          "type": "integer",
+          "default": "0"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "memberships_membership_author_id_club_id",
+          "columns": [
+            "author_id",
+            "club_id"
+          ],
+          "unique": true
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "memberships_authors_author",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "authors"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "name": "memberships_clubs_club",
+          "columns": [
+            "club_id"
+          ],
+          "ref_table": {
+            "name": "clubs"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
         }
       ]
     },

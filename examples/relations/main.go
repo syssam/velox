@@ -1,6 +1,7 @@
 // Command relations shows one-to-many, belongs-to and many-to-many relations:
 // eager loading with With, EXISTS conditions with Has and HasWith, linking
-// and unlinking through a join entity, and keyset pagination with After.
+// and unlinking through a join entity and through an edge schema, and keyset
+// pagination with After.
 package main
 
 import (
@@ -31,7 +32,8 @@ func main() {
 //
 //	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./relations/migrations ./relations/veloxschema
 //
-// and, once Tag was added, again with -name tags.
+// and, once Tag was added, again with -name tags, and once Club and
+// Membership were, with -name memberships.
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.
 //
@@ -141,7 +143,93 @@ func run(ctx context.Context, w io.Writer) error {
 		say("page %d: %s", i, titles(got))
 		page = page.After(&got[len(got)-1])
 	}
-	return manyToMany(ctx, db, say)
+	if err := manyToMany(ctx, db, say); err != nil {
+		return err
+	}
+	return edgeSchema(ctx, db, say)
+}
+
+// edgeSchema links authors and clubs through the edge schema Membership. A
+// link is a Membership row, with an ID and a role. Clubs.Add inserts the
+// row with its defaults and keeps a link that exists; Remove deletes it.
+// A row inserted directly sets the other columns. Memberships, the edge
+// velox-gen adds, reads the rows.
+func edgeSchema(ctx context.Context, db *velox.DB, say func(string, ...any)) error {
+	A, C, M := veloxgen.Authors, veloxgen.Clubs, veloxgen.Memberships
+	clubs := map[string]int64{}
+	for _, name := range []string{"Chess", "Go"} {
+		c := veloxgen.Club{Name: name}
+		if err := db.Insert(&c).Exec(ctx); err != nil {
+			return err
+		}
+		clubs[name] = c.ID
+	}
+	authors := map[string]int64{}
+	all, err := db.Query[veloxgen.Author]().Limit(10).All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, a := range all {
+		authors[a.Name] = a.ID
+	}
+
+	// Add inserts a Membership per club, role "member" by its default.
+	// Adding Chess again keeps the row.
+	grace := A.ID.EQ(authors["Grace"])
+	if _, err := db.Update[veloxgen.Author]().Set(A.Clubs.Add(clubs["Chess"], clubs["Go"])).Where(grace).Exec(ctx); err != nil {
+		return err
+	}
+	if _, err := db.Update[veloxgen.Author]().Set(A.Clubs.Add(clubs["Chess"])).Where(grace).Exec(ctx); err != nil {
+		return err
+	}
+	// A Membership inserted directly sets its role; an update changes one.
+	owner := veloxgen.Membership{AuthorID: authors["Ada"], ClubID: clubs["Chess"], Role: veloxgen.MembershipRoleOwner}
+	if err := db.Insert(&owner).Exec(ctx); err != nil {
+		return err
+	}
+	if _, err := db.Update[veloxgen.Membership]().Set(M.Role.Set(veloxgen.MembershipRoleOwner)).
+		Where(M.AuthorID.EQ(authors["Grace"]), M.ClubID.EQ(clubs["Go"])).Exec(ctx); err != nil {
+		return err
+	}
+
+	// The many-to-many edge reads the clubs; the through edge reads the
+	// links, with their columns and their own edges.
+	chess, err := db.Query[veloxgen.Club]().Where(C.Name.EQ("Chess")).With(C.Members.OrderBy(A.Name.Asc())).One(ctx)
+	if err != nil {
+		return err
+	}
+	members, _ := chess.Edges.Members.Get()
+	say("edge schema: %s has %s", chess.Name, names(members))
+	g, err := db.Query[veloxgen.Author]().Where(grace).With(A.Memberships.OrderBy(M.ID.Asc()).With(M.Club)).One(ctx)
+	if err != nil {
+		return err
+	}
+	links, _ := g.Edges.Memberships.Get()
+	for _, l := range links {
+		c, _ := l.Edges.Club.Get()
+		say("membership: %s in %s as %s", g.Name, c.Name, l.Role)
+	}
+	owners, err := db.Query[veloxgen.Author]().Where(A.Memberships.HasWith(M.Role.EQ(veloxgen.MembershipRoleOwner))).
+		OrderBy(A.Name.Asc()).Limit(10).All(ctx)
+	if err != nil {
+		return err
+	}
+	say("owners: %s", names(owners))
+
+	// Remove deletes Grace's Chess row; deleting the club Go deletes its
+	// rows, by the keys' ON DELETE CASCADE.
+	if _, err := db.Update[veloxgen.Author]().Set(A.Clubs.Remove(clubs["Chess"])).Where(grace).Exec(ctx); err != nil {
+		return err
+	}
+	if _, err := db.Delete[veloxgen.Club]().Where(C.ID.EQ(clubs["Go"])).Exec(ctx); err != nil {
+		return err
+	}
+	n, err := db.Query[veloxgen.Membership]().Count(ctx)
+	if err != nil {
+		return err
+	}
+	say("memberships left: %d", n)
+	return nil
 }
 
 // manyToMany links posts and tags. A many-to-many edge has no column on either

@@ -20,6 +20,10 @@ type Author struct {
 type AuthorEdges struct {
 	// Posts holds the edge posts, to Post, loaded by With(Authors.Posts).
 	Posts velox.Many[Post] `json:"posts,omitzero"`
+	// Clubs holds the edge clubs, to Club, loaded by With(Authors.Clubs).
+	Clubs velox.Many[Club] `json:"clubs,omitzero"`
+	// Memberships holds the edge memberships, to Membership, loaded by With(Authors.Memberships).
+	Memberships velox.Many[Membership] `json:"memberships,omitzero"`
 }
 
 // The positions of Author's columns, in the order of its table.
@@ -31,6 +35,8 @@ const (
 // The positions of Author's edges.
 const (
 	authorEdgePosts = iota
+	authorEdgeClubs
+	authorEdgeMemberships
 )
 
 // AuthorHandles is the type of Authors, the typed handles of Author's columns and relations.
@@ -41,13 +47,19 @@ type AuthorHandles struct {
 	Name velox.StringCol[Author, string]
 	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
 	Posts velox.Rel[Author, Post]
+	// Clubs is the edge clubs, to Club: With loads it, Has and HasWith test it.
+	Clubs velox.Rel[Author, Club]
+	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it.
+	Memberships velox.Rel[Author, Membership]
 }
 
 // Authors holds the typed handles of Author's columns and relations.
 var Authors = AuthorHandles{
-	ID:    velox.NumberCol[Author, int64]{I: authorColID},
-	Name:  velox.StringCol[Author, string]{I: authorColName},
-	Posts: velox.Rel[Author, Post]{I: authorEdgePosts},
+	ID:          velox.NumberCol[Author, int64]{I: authorColID},
+	Name:        velox.StringCol[Author, string]{I: authorColName},
+	Posts:       velox.Rel[Author, Post]{I: authorEdgePosts},
+	Clubs:       velox.Rel[Author, Club]{I: authorEdgeClubs},
+	Memberships: velox.Rel[Author, Membership]{I: authorEdgeMemberships},
 }
 
 var authorMeta velox.MetaOnce[Author]
@@ -66,6 +78,8 @@ func authorDescriptor() velox.Descriptor[Author] {
 		PrimaryKey: []int{authorColID},
 		Edges: []velox.EdgeDescriptor{
 			velox.EdgeTo[Post]("posts", authorColID, postColAuthorID),
+			velox.EdgeThrough[Membership, Club]("clubs", authorColID, membershipColAuthorID, membershipColClubID, clubColID),
+			velox.EdgeTo[Membership]("memberships", authorColID, membershipColAuthorID),
 		},
 		FieldPtr: func(x *Author, i int) any {
 			switch i {
@@ -80,6 +94,10 @@ func authorDescriptor() velox.Descriptor[Author] {
 			switch i {
 			case authorEdgePosts:
 				return &x.Edges.Posts
+			case authorEdgeClubs:
+				return &x.Edges.Clubs
+			case authorEdgeMemberships:
+				return &x.Edges.Memberships
 			}
 			return nil
 		},

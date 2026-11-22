@@ -18,3 +18,8 @@ many-to-many: Compilers tagged [languages]
 many-to-many: Engines tagged [history]
 many-to-many, the other way: languages tags [COBOL, Compilers]
 unlinked 1: history tags [Engines]
+edge schema: Chess has [Ada, Grace]
+membership: Grace in Chess as member
+membership: Grace in Go as owner
+owners: [Ada, Grace]
+memberships left: 1
