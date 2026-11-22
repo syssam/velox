@@ -577,7 +577,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 		switch {
 		case err != nil:
 			db.noteServerRollback(ctx, err)
-		case db.D == SQLite && st.Op.Raw():
+		case db.D == SQLite && st.Op.Raw(), db.D == Postgres && st.Op.Raw() && multiStatement(st.SQL):
 			return db.noteRawEnd(ctx, st)
 		}
 	}

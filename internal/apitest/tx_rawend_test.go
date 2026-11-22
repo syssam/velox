@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -173,4 +174,57 @@ func TestMySQLDDLInATransaction(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPostgresRawTextEndingTheTransaction: pgx and lib/pq run all of a text sent
+// without arguments, and velox reads its first statement. After a raw statement
+// whose text holds more than one, velox asks with a savepoint, which fails outside
+// a transaction block, and breaks the transaction. Unasked, the Tx went on and
+// committed its later statements alone.
+func TestPostgresRawTextEndingTheTransaction(t *testing.T) {
+	gone := errors.New("SAVEPOINT can only be used in transaction blocks (SQLSTATE 25P01)")
+	t.Run("ended", func(t *testing.T) {
+		e := &fakeconn.Exec{Affected: 1, Errs: []error{nil, gone}}
+		err := openFake(velox.Postgres, e).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			if _, err := tx.Exec(ctx, "test", "UPDATE t SET x = 1; COMMIT"); !errors.Is(err, velox.ErrTxControl) {
+				t.Errorf("the text: %v", err)
+			}
+			if _, err := tx.Exec(ctx, "test", "UPDATE t SET x = 2"); !errors.Is(err, velox.ErrTxControl) {
+				t.Errorf("the next statement: %v", err)
+			}
+			return nil
+		})
+		if !errors.Is(err, velox.ErrTxControl) {
+			t.Errorf("the Tx: %v", err)
+		}
+		for _, q := range e.Log {
+			if q == "UPDATE t SET x = 2" || q == "COMMIT" {
+				t.Errorf("sent %q: %v", q, e.Log)
+			}
+		}
+	})
+	t.Run("open", func(t *testing.T) {
+		e := &fakeconn.Exec{Affected: 1}
+		err := openFake(velox.Postgres, e).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			_, err := tx.Exec(ctx, "test", "UPDATE t SET x = 1; UPDATE t SET y = 1;")
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"BEGIN", "UPDATE t SET x = 1; UPDATE t SET y = 1;", "SAVEPOINT velox_open", "RELEASE SAVEPOINT velox_open", "COMMIT"}
+		if !slices.Equal(e.Log, want) {
+			t.Errorf("sent %q, want %q", e.Log, want)
+		}
+	})
+	t.Run("one statement costs no probe", func(t *testing.T) {
+		e := &fakeconn.Exec{Affected: 1}
+		err := openFake(velox.Postgres, e).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			_, err := tx.Exec(ctx, "test", "UPDATE t SET x = 1;")
+			return err
+		})
+		if want := []string{"BEGIN", "UPDATE t SET x = 1;", "COMMIT"}; err != nil || !slices.Equal(e.Log, want) {
+			t.Errorf("%v, sent %q", err, e.Log)
+		}
+	})
 }

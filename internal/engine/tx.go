@@ -236,12 +236,14 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // ROLLBACK TO), ABORT, BEGIN, START or PREPARE TRANSACTION. On MySQL so is CREATE,
 // ALTER, DROP, TRUNCATE or RENAME, unless of a TEMPORARY table, which commit. That is
 // all velox reads. MySQL also commits on GRANT, REVOKE, LOCK TABLES, SET autocommit
-// and others, and a driver that runs multi-statement text (MySQL's multiStatements,
-// lib/pq without arguments) runs what follows the first statement: do not end the
-// transaction that way, as velox cannot see it, and later statements commit alone.
-// SQLite runs such text too, so there velox asks after each raw statement, and breaks
-// the transaction if it is gone; that costs a statement, and text that ends the
-// transaction and begins another still cannot be told.
+// and others, and a driver that runs multi-statement text (MySQL's multiStatements)
+// runs what follows the first statement: do not end the transaction that way, as
+// velox cannot see it, and later statements commit alone. SQLite runs such text too,
+// so there velox asks after each raw statement, and breaks the transaction if it is
+// gone. On PostgreSQL pgx and lib/pq run all of a text sent by the simple protocol,
+// as one without arguments is, so velox asks after a raw text that holds a semicolon
+// before its trailing ones, with a savepoint. Each probe costs a statement or two,
+// and text that ends the transaction and begins another still cannot be told.
 //
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open

@@ -92,9 +92,13 @@ at the call to a silent outcome.
   function's body holds semicolons. So on SQLite, which runs all of a text, the probe
   above also runs after each raw statement that succeeds in a transaction, and breaks
   it if it is gone: one failed BEGIN per raw statement in a transaction, on SQLite.
-  **Not caught:** text that ends the transaction and begins another, on SQLite;
-  anything past the first statement where a driver runs multi-statement text (MySQL's
-  `multiStatements`, lib/pq without arguments); and MySQL's other implicit commits,
+  On PostgreSQL pgx and lib/pq run all of a text sent by the simple protocol, as
+  one without arguments is, so after a raw text holding a semicolon before its
+  trailing ones velox asks with `SAVEPOINT velox_open`, which fails outside a
+  transaction block, and its RELEASE.
+  **Not caught:** text that ends the transaction and begins another, on SQLite and
+  PostgreSQL; anything past the first statement where MySQL's `multiStatements`
+  runs multi-statement text; and MySQL's other implicit commits,
   such as GRANT, LOCK TABLES or SET autocommit. The Tx docs say so.
 - **Unsent means at the send.** A broken transaction is checked where a statement
   is sent as well as before its hooks, so an Around hook that calls next again

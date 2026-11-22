@@ -184,15 +184,52 @@ func skipComment(d Dialect, q string) string {
 
 // noteRawEnd breaks db's transaction when raw SQL that just succeeded has ended it.
 // On SQLite the rest of a multi-statement text runs too, past refuseTxEnd, so velox
-// asks as it does after a failed statement (sqliteRolledBack). The statement's work
-// may be durable by then; its error and the Tx's say the transaction is gone. Text
-// that ends the transaction and begins another cannot be told.
+// asks as it does after a failed statement (sqliteRolledBack). On PostgreSQL, pgx
+// and lib/pq run all of a text sent by the simple protocol, as one without
+// arguments is, so velox asks after a text that holds more than one statement
+// (postgresTxGone). The statement's work may be durable by then; its error and the
+// Tx's say the transaction is gone. Text that ends the transaction and begins
+// another cannot be told.
 func (db *DB) noteRawEnd(ctx context.Context, st *Statement) error {
-	if db.txRoot.broken != nil || !db.sqliteRolledBack(ctx) {
-		return nil //nolint:nilerr // already broken: the Tx reports that, not this statement
+	if db.txRoot.broken != nil {
+		return nil
+	}
+	gone := false
+	switch db.D {
+	case SQLite:
+		gone = db.sqliteRolledBack(ctx)
+	case Postgres:
+		gone = db.postgresTxGone(ctx)
+	}
+	if !gone {
+		return nil
 	}
 	db.txRoot.broken = fmt.Errorf("raw SQL ended the transaction, so it can only roll back: %w", ErrTxControl)
 	return stmtErr(st, db.txRoot.broken)
+}
+
+// multiStatement reports whether q holds a semicolon before its trailing ones:
+// more than one statement, or a semicolon in a literal, a comment or a function's
+// body, for which the probe is wasted but harmless.
+func multiStatement(q string) bool {
+	return strings.Contains(strings.TrimRight(q, "; \t\r\n"), ";")
+}
+
+// postgresTxGone reports whether PostgreSQL's transaction has gone. A savepoint
+// asks: outside a transaction block SAVEPOINT fails (25P01); inside one it is
+// made and released. Either failing counts as gone: a failed SAVEPOINT aborts an
+// open transaction too. Past the transaction's deadline nothing is sent.
+func (db *DB) postgresTxGone(ctx context.Context) bool {
+	if db.pastTxDeadline() {
+		return false
+	}
+	pctx, cancel := db.rollbackContext(ctx, db.txDeadline)
+	defer cancel()
+	if _, err := db.Ex.Exec(pctx, "SAVEPOINT velox_open", nil); err != nil {
+		return true
+	}
+	_, err := db.Ex.Exec(pctx, "RELEASE SAVEPOINT velox_open", nil)
+	return err != nil
 }
 
 // RawExec is DB.Exec, its arguments given as a slice.
