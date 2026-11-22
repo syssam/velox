@@ -173,6 +173,9 @@ func WithDeadlines(d Deadlines) Option { return engine.WithDeadlines(d) }
 // EXISTS, but a hook that moves tables cannot reach it. With a table per
 // scope value, avoid Has and HasWith, or load the relation with With, which goes
 // through the hooks.
+//
+// For generated code and extensions; outside the 1.0 compatibility promise:
+// the Statement a hook sees changes as velox does.
 type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the
@@ -196,6 +199,9 @@ type Rewrite func(ctx context.Context, st *Statement) error
 // With Iter the caller's loop body runs inside the hooks, so a hook that
 // recovers a panic and returns normally makes Go report that a range function
 // recovered a loop body panic: let panics through.
+//
+// For generated code and extensions; outside the 1.0 compatibility promise:
+// the Statement a hook sees changes as velox does.
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
 
 // Tag is a string a context carries to every statement run with it.

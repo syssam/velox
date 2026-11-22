@@ -148,6 +148,7 @@ func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E] {
 // when it reads a row: the row After pages from needs its joined entity, and
 // code that builds such a row (a cursor's) sets one. Only the columns After
 // orders by need a value. It fails when r is not a relation of E held in a field.
+// For generated code and extensions; outside the 1.0 compatibility promise.
 func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error {
 	m, err := metaOf[E]()
 	if err != nil {
@@ -164,7 +165,8 @@ func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error {
 }
 
 // Filled returns the entity of r's field in owner, and whether it holds one: a row
-// read with Join has it, and so has one Fill was given.
+// read with Join has it, and so has one Fill was given. For generated code
+// and extensions; outside the 1.0 compatibility promise.
 func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool) {
 	m, err := metaOf[E]()
 	if err != nil {

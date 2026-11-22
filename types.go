@@ -33,7 +33,8 @@ const (
 
 // EntityInfo is what velox knows about an entity, built once on its first use.
 // It is the non-generic view that hooks see in a Statement, and the runtime
-// view of the generated Descriptor it is built from.
+// view of the generated Descriptor it is built from. For generated code
+// and extensions; outside the 1.0 compatibility promise.
 //
 // One EntityInfo is shared by every query on the entity, in every goroutine,
 // so it must be treated as read-only, slices included. A hook that needs
@@ -56,7 +57,8 @@ const (
 type EntityInfo = engine.EntityInfo
 
 // ColumnInfo describes one column. It is the runtime view of the generated
-// ColumnDescriptor it is built from.
+// ColumnDescriptor it is built from. For generated code and extensions;
+// outside the 1.0 compatibility promise.
 //
 // Its fields:
 //
@@ -175,7 +177,8 @@ const (
 // Assignment is one column an UPDATE sets.
 type Assignment = veloxtype.Assignment
 
-// ConflictClause is an INSERT's upsert clause.
+// ConflictClause is an INSERT's upsert clause. For generated code and
+// extensions; outside the 1.0 compatibility promise.
 //
 // Its fields:
 //
@@ -199,7 +202,8 @@ type ConflictClause = engine.ConflictClause
 // rows whose owner column holds one of Keys. velox sets it for a With load
 // with Rel.LimitEach, for LoadEach and for CountEach; a Rewrite hook may not
 // change it. With Count, the statement reads each owner's key and its count,
-// one row per owner that has rows.
+// one row per owner that has rows. For generated code and extensions;
+// outside the 1.0 compatibility promise.
 //
 // Its fields:
 //
@@ -220,7 +224,8 @@ type EachClause = engine.EachClause
 // Query.Project: terms, one result column each, grouped by terms and filtered
 // by conditions of the same entity. The rows are read by position, with
 // Query.Rows, and the Read policy, scope and interceptors filter them as
-// they filter every read. A Rewrite hook may not change it.
+// they filter every read. A Rewrite hook may not change it. For generated
+// code and extensions; outside the 1.0 compatibility promise.
 //
 // Its fields:
 //
@@ -232,7 +237,8 @@ type Projection = engine.Projection
 // JoinClause is a to-one relation joined into a SELECT, by Query.Join or LeftJoin: the
 // target's columns follow the statement's own in every row, and the relation's
 // conditions and orderings (Rel.Is and Rel.By) are on them. A Rewrite hook may not
-// change it.
+// change it. For generated code and extensions; outside the 1.0
+// compatibility promise.
 //
 // Its fields:
 //
@@ -248,7 +254,8 @@ type JoinClause = engine.JoinClause
 
 // Statement is one operation on its way to the database. Every query becomes
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
-// is rendered, around hooks while it runs.
+// is rendered, around hooks while it runs. For generated code and
+// extensions; outside the 1.0 compatibility promise.
 //
 // Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not see
 // it, and its SQL, Args and Fingerprint are set when it is made. Its Entity is

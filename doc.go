@@ -178,7 +178,7 @@
 // # Hooks
 //
 // A Hook wraps an entity's writes and receives each as a Mutation. For an
-// update or a delete, Conds returns the conditions the caller and the
+// update or a delete, Predicates returns the conditions the caller and the
 // earlier hooks gave, and not the policy's; it is empty when
 // the statement said All. Value returns the value an update assigns to a
 // column, by name, and whether it assigns one; Set and Fill assign one.
@@ -312,6 +312,15 @@
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
+//
+// A second set is for generated code and extensions, such as tracing,
+// logging and query rewriting: Statement, the clause types (ConflictClause,
+// EachClause and JoinClause), Projection, EntityInfo and ColumnInfo, the
+// Rewrite and Around hooks, package untyped, Rel.Fill and Rel.Filled, and
+// the I field of the column handles. They show how velox builds a
+// statement, which changes as velox does. They are outside the 1.0
+// compatibility promise: a minor release may change them, with a changelog
+// line.
 //
 // Package github.com/syssam/velox/untyped is an entity's queries and writes
 // with its type erased, for code compiled once for every entity: velox-graphql's

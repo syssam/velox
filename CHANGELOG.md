@@ -596,6 +596,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Review `widen-type`, not a destructive `alter-type`: each holds what any
   varchar can. The finding names an index over the column, which MODIFY
   fails on without a prefix length.
+- `Statement`, `ConflictClause`, `EachClause`, `JoinClause`, `Projection`,
+  `EntityInfo`, `ColumnInfo`, `Rewrite`, `Around`, package `untyped`,
+  `Rel.Fill`, `Rel.Filled` and the handles' `I` field are documented as for
+  generated code and extensions, outside the 1.0 compatibility promise
+  (`doc.go`, `docs/stability.md`).
 - `db.WithoutPolicy("")`, or a reason of only white space, returns a DB
   whose every statement and `Tx` fail with "WithoutPolicy needs a reason",
   as `Exec` without a reason fails. It returned `db`, so the policies stayed

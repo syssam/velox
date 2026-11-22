@@ -10,8 +10,8 @@
 // code. Every entry point checks what it is given (a column index, a
 // relation, a row's entity, a value's type) and fails with an error.
 //
-// Its API is outside semantic versioning: it changes only when
-// velox.GeneratedCodeIsVersionN is replaced by the next version.
+// For generated code and extensions; outside the 1.0 compatibility
+// promise: a minor release may change it, with a changelog line.
 package untyped
 
 import (

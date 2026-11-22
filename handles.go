@@ -4,7 +4,7 @@ package velox
 
 import "github.com/syssam/velox/internal/engine"
 
-// Col is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types. I is the column's index; velox-gen sets it.
+// Col is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type Col[E, V any] struct{ I int32 }
 
 func (c Col[E, V]) column(*E) int32 { return c.I }
@@ -78,7 +78,7 @@ func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c Col[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// TimeCol is the handle of a time column: a time field, of time.Time or a type defined on it. I is the column's index; velox-gen sets it.
+// TimeCol is the handle of a time column: a time field, of time.Time or a type defined on it. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type TimeCol[E, V any] struct{ I int32 }
 
 func (c TimeCol[E, V]) column(*E) int32 { return c.I }
@@ -187,7 +187,7 @@ func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c TimeCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// OtherCol is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database. I is the column's index; velox-gen sets it.
+// OtherCol is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type OtherCol[E, V any] struct{ I int32 }
 
 func (c OtherCol[E, V]) column(*E) int32 { return c.I }
@@ -298,7 +298,7 @@ func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](c
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c OtherCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// NumberCol is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal. I is the column's index; velox-gen sets it.
+// NumberCol is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NumberCol[E, V any] struct{ I int32 }
 
 func (c NumberCol[E, V]) column(*E) int32 { return c.I }
@@ -429,7 +429,7 @@ func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NumberCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// StringCol is the handle of a text column. I is the column's index; velox-gen sets it.
+// StringCol is the handle of a text column. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type StringCol[E any, V ~string] struct{ I int32 }
 
 func (c StringCol[E, V]) column(*E) int32 { return c.I }
@@ -570,7 +570,7 @@ func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c StringCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+// NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullCol[E, V any] struct{ I int32 }
 
 func (c NullCol[E, V]) column(*E) int32 { return c.I }
@@ -665,7 +665,7 @@ func (c NullCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](
 // NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](ch, ch.row.New, c.I) }
 
-// NullTimeCol is TimeCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+// NullTimeCol is TimeCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullTimeCol[E, V any] struct{ I int32 }
 
 func (c NullTimeCol[E, V]) column(*E) int32 { return c.I }
@@ -803,7 +803,7 @@ func (c NullTimeCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
 
-// NullOtherCol is OtherCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+// NullOtherCol is OtherCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullOtherCol[E, V any] struct{ I int32 }
 
 func (c NullOtherCol[E, V]) column(*E) int32 { return c.I }
@@ -945,7 +945,7 @@ func (c NullOtherCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
 
-// NullNumberCol is NumberCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+// NullNumberCol is NumberCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullNumberCol[E, V any] struct{ I int32 }
 
 func (c NullNumberCol[E, V]) column(*E) int32 { return c.I }
@@ -1107,7 +1107,7 @@ func (c NullNumberCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
 
-// NullStringCol is StringCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+// NullStringCol is StringCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullStringCol[E any, V ~string] struct{ I int32 }
 
 func (c NullStringCol[E, V]) column(*E) int32 { return c.I }
@@ -1279,7 +1279,7 @@ func (c NullStringCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -1333,7 +1333,7 @@ func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
-// NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+// NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullJSONCol[E, V any] struct{ I int32 }
 
 func (c NullJSONCol[E, V]) column(*E) int32 { return c.I }

@@ -97,6 +97,14 @@ When `v1.0.0` is tagged, the root module, `contrib/graphql` and
   code." change only when the generated-code constant is replaced. That
   happens in a minor release, with a changelog line, and asks you to run
   velox-gen again. It never asks you to change code you wrote.
+- **Except the internals extensions see.** `Statement`, the clause types
+  (`ConflictClause`, `EachClause`, `JoinClause`), `Projection`,
+  `EntityInfo` and `ColumnInfo`, the `Rewrite` and `Around` hooks, package
+  `untyped`, `Rel.Fill` and `Rel.Filled`, and the column handles' `I` field
+  are for generated code and extensions, and outside the 1.0 compatibility
+  promise. They show how velox builds a statement, so a minor release may
+  change them, with a changelog line. The "Generated code" section of the
+  root package's godoc lists them.
 - **Deprecation before removal.** A deprecated identifier carries a
   `// Deprecated:` comment that names its replacement, and stays through
   every release of its major version
