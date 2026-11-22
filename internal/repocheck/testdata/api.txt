@@ -760,6 +760,8 @@ func Reject(ops ...Op) Hook
 func RowScopeFromContext(ctx context.Context) RowScope
 func RowsOf[E any, PE Entity[E]](c Change) (old, cur *E, ok bool)
 func SQLConn(db *sql.DB) Conn
+func ScanOne[T, E any](ctx context.Context, q Query[E]) (T, error)
+func Scan[T, E any](ctx context.Context, q Query[E]) ([]T, error)
 func SetExpr[E any](c Column[E], text string, args ...any) Setter[E]
 func Show[T any](p *T) any
 func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
