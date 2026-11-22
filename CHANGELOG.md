@@ -56,6 +56,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   handle of another entity is a misuse, which fails the write. They are
   methods of the shared handle types, not generated per entity; an entity
   package's export data grows by about 1 KB.
+- A test fails when the golden generated code changes shape and
+  `GeneratedCodeIsVersionN` does not. `internal/codegen/testdata/golden/shape.txt`
+  records the version with a hash of the code without its comments, and
+  `-update` rewrites it only with a new version.
 - Edge schemas, as ent's `edge.Through`: a many-to-many edge names a schema
   whose rows are its links, with an ID, fields and two Required to-one key
   edges. velox-gen generates it as any entity, adds the through edge and a

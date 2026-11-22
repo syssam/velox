@@ -41,8 +41,12 @@ var goldenCases = []struct {
 }
 
 // TestGolden loads each case's schema package, generates it and compares every
-// file with want/. Run it with -update to write want/.
+// file with want/. Run it with -update to write want/; it then records their
+// shape (checkShape).
 func TestGolden(t *testing.T) {
+	if *update {
+		defer checkShape(t)
+	}
 	for _, c := range goldenCases {
 		t.Run(c.name, func(t *testing.T) {
 			dir := filepath.Join("testdata", "golden", c.name)

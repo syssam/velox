@@ -289,6 +289,11 @@ CI fails when a generated file is stale.
 
 A change to the generated code's shape replaces `GeneratedCodeIsVersionN` with
 `N+1`, in a minor release, with a line in `CHANGELOG.md`.
+`internal/codegen/testdata/golden/shape.txt` records the version with a hash
+of the golden code, without its comments and blank lines.
+`TestGeneratedCodeShape` fails when the hash changes and the version does
+not, and `go test ./internal/codegen -update` records a new hash only with a
+new version.
 
 ## Coverage floors
 

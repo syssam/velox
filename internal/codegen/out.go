@@ -151,4 +151,6 @@ const privacyPkg = "github.com/syssam/velox/privacy"
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
+// testdata/golden/shape.txt records it with a hash of the golden code's
+// shape, and a test fails when the shape changes and it does not.
 const GeneratedCodeVersion = 26
