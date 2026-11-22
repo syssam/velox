@@ -18,6 +18,7 @@ type MutationState struct {
 	Op       Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
 	St       *Statement       // the update or delete; nil for an insert
 	Rows     []unsafe.Pointer // an insert's rows
+	Edges    []*EdgeSet       // the write's edge setters, for Mutation.Edges
 	Affected int64            // the rows the write affected, for Mutation.Affected
 	Where    []Predicate      // st.Where when next was called, for Mutation.Conds
 	Own      bool             // the hook called SetAffected: it made the write itself

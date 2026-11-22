@@ -204,6 +204,12 @@ func SetElem(p, v any) {
 // first, before any hook runs, so that a refused write has no hook's side
 // effects.
 func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
+	return writeWith(ctx, db, st, dry, save, nil)
+}
+
+// writeWith is Write of st with the edge setters edges, which its hooks see
+// (Mutation.Edges) and which the caller writes.
+func writeWith(ctx context.Context, db *DB, st *Statement, dry, save bool, edges []*EdgeSet) (int64, string, []any, error) {
 	if st.Op == OpUpdate && InfoBidi(st.Entity) {
 		return 0, "", nil, errBidiUpdate(st.Entity)
 	}
@@ -224,7 +230,7 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 	if save {
 		core = func(ctx context.Context, mu *MutationState) error { return saveCore(ctx, db, mu) }
 	}
-	mu := &MutationState{Op: st.Op, St: st, Dry: dry}
+	mu := &MutationState{Op: st.Op, St: st, Dry: dry, Edges: edges}
 	if err := Mutate(ctx, db, st.Entity, mu, core); err != nil && !DryRefused(mu, err) {
 		return 0, "", nil, err
 	}

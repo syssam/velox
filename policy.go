@@ -198,6 +198,46 @@ func (m *Mutation) Predicates() []Predicate {
 	return slices.Clone(w)
 }
 
+// Columns returns the names of the columns the write assigns, in the
+// entity's order, as ent's Mutation.Fields does: an update's assignments,
+// Set, SetNull, Add, Sub and SetExpr alike, the UpdateDefault ones once next
+// has run; an insert's columns that some row holds a value other than the
+// Go zero value in, its Defaults included, as an insert counts a zero field
+// as unset. A delete assigns none. A Set edge setter's foreign key is an
+// assigned column.
+func (m *Mutation) Columns() []string { return m.mu.ColumnNames() }
+
+// Cleared reports whether an update sets the column of the given name to
+// NULL, as ent's FieldCleared does: SetNull, Set of nil, or a Save of a nil
+// field. It is false on an insert and a delete. A name the entity has no
+// column of is a misuse.
+func (m *Mutation) Cleared(name string) bool { return m.mu.ClearedByName(name) }
+
+// Edges returns the write's edge setters, a relation handle's Add, Remove,
+// Clear and Set, in the order given, as ent's AddedEdges, RemovedEdges and
+// ClearedEdges tell them. The rows they change are written after next, so a
+// hook sees what will change, not what did. An update whose setters are all
+// edge setters sends no UPDATE and runs no hook; a Set edge setter is an
+// assignment of its foreign key there, as Columns reports.
+func (m *Mutation) Edges() []EdgeChange { return m.mu.EdgeChanges() }
+
+// EdgeChange is one edge setter of a write: the edge's name, as the schema
+// gives it, what the setter does, and its keys, none for EdgeClear.
+// Mutation.Edges returns them.
+type EdgeChange = engine.EdgeChange
+
+// EdgeOp is what an edge setter does.
+type EdgeOp = engine.EdgeOp
+
+// The edge setters' operations: a relation handle's Add, Remove, Clear and
+// Set.
+const (
+	EdgeAdd    = engine.EdgeAdd    // link the keys
+	EdgeRemove = engine.EdgeRemove // unlink the keys
+	EdgeClear  = engine.EdgeClear  // unlink every row
+	EdgeSet    = engine.EdgeSetKey // set the owner's foreign key to the one key
+)
+
 // DB returns the DB the write runs on: the transaction's, inside db.Tx, or
 // else the database's. A hook that reads or writes other rows uses it:
 //

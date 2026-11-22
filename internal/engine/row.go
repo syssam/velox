@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 	"reflect"
+	"slices"
 	"time"
 	"unsafe"
 )
@@ -582,4 +583,67 @@ func (mu *MutationState) RowsByName() iter.Seq[Row] {
 			}
 		}
 	}
+}
+
+// ColumnNames returns the names of the columns the write assigns, in the
+// entity's order: an update's assignments, whatever their operator, and an
+// insert's columns that some row holds a value other than the Go zero value
+// in, as an insert counts a zero field as unset. A delete assigns none.
+func (mu *MutationState) ColumnNames() []string {
+	in := mu.entity()
+	if in == nil || mu.op() == OpDelete {
+		return nil
+	}
+	var out []string
+	for i := range in.Columns {
+		c := &in.Columns[i]
+		if mu.St != nil {
+			if slices.ContainsFunc(mu.St.Set, func(a Assignment) bool { return a.Column == i && a.Op != AssignSkip }) {
+				out = append(out, c.Name)
+			}
+			continue
+		}
+		for _, p := range mu.Rows {
+			if !zeroColumn(c, p) {
+				out = append(out, c.Name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// ClearedByName reports whether an update sets the column of the given name
+// to NULL: a SetNull, a Set of nil, or a Save of a nil field. It is false on
+// an insert and a delete. A name the entity has no column of is a misuse.
+func (mu *MutationState) ClearedByName(name string) bool {
+	i := mu.column("Cleared", name)
+	if i < 0 || mu.St == nil || mu.op() != OpUpdate {
+		return false
+	}
+	v, ok := Assigned(mu.St, i)
+	return ok && isNil(v)
+}
+
+// EdgeChange is an edge setter of a write, as a hook sees it: the
+// relation's name, what the setter does, and its keys (none for a Clear).
+type EdgeChange struct {
+	Name string
+	Op   EdgeOp
+	Keys []any
+}
+
+// EdgeChanges returns the write's edge setters, in the order given; a copy.
+// A setter whose relation does not resolve is left out: the write fails on
+// it.
+func (mu *MutationState) EdgeChanges() []EdgeChange {
+	var out []EdgeChange
+	for _, e := range mu.Edges {
+		l, err := e.Ref.Link()
+		if err != nil {
+			continue
+		}
+		out = append(out, EdgeChange{Name: l.Name, Op: e.Op, Keys: slices.Clone(e.Keys)})
+	}
+	return out
 }

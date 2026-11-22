@@ -414,7 +414,7 @@ func (q InsertQuery[E]) fillDefaults[_ Lazy[E]]() {
 
 // mutation is the insert as its entity's hooks see it: its rows.
 func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *engine.MutationState {
-	mu := &engine.MutationState{Op: OpInsert, Dry: dry}
+	mu := &engine.MutationState{Op: OpInsert, Dry: dry, Edges: q.set.Edges}
 	if q.one != nil {
 		mu.Rows = []unsafe.Pointer{unsafe.Pointer(q.one)}
 		return mu

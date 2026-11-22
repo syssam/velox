@@ -27,6 +27,10 @@ EachClause.JoinTarget int
 EachClause.Keys []any
 EachClause.Limit int
 EachClause.Target int
+EdgeChange.Keys []any
+EdgeChange.Name string
+EdgeChange.Op EdgeOp
+EdgeOp is uint8
 EntityInfo.Column(name string) (int, bool)
 EntityInfo.Columns []ColumnInfo
 EntityInfo.Indexes []IndexInfo
@@ -110,7 +114,11 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
+const EdgeAdd
+const EdgeClear
 const EdgePage
+const EdgeRemove
+const EdgeSet
 const GeneratedCodeIsVersion26
 const LockForShare
 const LockForUpdate
@@ -532,7 +540,10 @@ func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
 func (m *Mutation) Affected() int64
+func (m *Mutation) Cleared(name string) bool
+func (m *Mutation) Columns() []string
 func (m *Mutation) DB() *DB
+func (m *Mutation) Edges() []EdgeChange
 func (m *Mutation) Entity() string
 func (m *Mutation) Fill(name string, v any) error
 func (m *Mutation) Op() Op
@@ -693,9 +704,13 @@ func FieldNEQ(name string, v any) Predicate
 func FieldNotIn(name string, vs ...any) Predicate
 func FieldNotNull(name string) Predicate
 func GoType(c ColumnInfo) reflect.Type
+func HasCleared(names ...string) Condition
+func HasColumns(names ...string) Condition
 func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
+func HasOp(ops ...Op) Condition
 func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error)
+func If(h Hook, cond Condition) Hook
 func IsConstraintError(err error) bool
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
@@ -723,6 +738,7 @@ func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
 func RecordIgnore[E any](cols ...Column[E]) RecordOption
 func RecordKeep[E any](cols ...Column[E]) RecordOption
+func Reject(ops ...Op) Hook
 func RowScopeFromContext(ctx context.Context) RowScope
 func RowsOf[E any, PE Entity[E]](c Change) (old, cur *E, ok bool)
 func SQLConn(db *sql.DB) Conn
@@ -737,6 +753,7 @@ func TxReadOnly() TxOption
 func TxRetries(opts ...TxOption) int
 func TxRetrySerializable(n int) TxOption
 func TxTimeout(d time.Duration) TxOption
+func Unless(h Hook, cond Condition) Hook
 func UseTx(db *DB, tx *sql.Tx) (*DB, error)
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
@@ -775,6 +792,7 @@ type Col[E, V any] struct { I int32 }
 type ColumnDescriptor = veloxtype.ColumnDescriptor
 type ColumnInfo = engine.ColumnInfo
 type Column[E any] interface{ column(*E) int32 }
+type Condition func(ctx context.Context, m *Mutation) bool
 type ConflictClause = engine.ConflictClause
 type Conn = engine.Conn
 type ConstraintError = veloxtype.ConstraintError
@@ -786,8 +804,10 @@ type Descriptor[E any] struct { Table string TableSchema string Columns []Column
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type Edge = schema.Edge
+type EdgeChange = engine.EdgeChange
 type EdgeDescriptor = engine.EdgeDescriptor
 type EdgeError = veloxtype.EdgeError
+type EdgeOp = engine.EdgeOp
 type EntityInfo = engine.EntityInfo
 type EntityLink = engine.EntityLink
 type EntityTable = engine.EntityTable

@@ -239,7 +239,7 @@ func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsaf
 		return err
 	}
 	run := func(ctx context.Context, db *DB) (int64, error) {
-		mu := &MutationState{Op: OpInsert, Rows: rows}
+		mu := &MutationState{Op: OpInsert, Rows: rows, Edges: s.Edges}
 		if !db.HasHooks(in) {
 			err := send(ctx, db, mu)
 			return mu.Affected, err
@@ -294,7 +294,7 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 			return "", nil, db.guard(st)
 		}
 	}
-	_, q, args, err := Write(ctx, db, st, true, false)
+	_, q, args, err := writeWith(ctx, db, st, true, false, edges)
 	return q, args, err
 }
 
@@ -368,7 +368,7 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		if len(st.Set) > 0 {
 			st.InTx = true
 			st.Where = key // the row read, locked, matches st's conditions
-			n, _, _, err := Write(ctx, tx, st, false, false)
+			n, _, _, err := writeWith(ctx, tx, st, false, false, p.sets)
 			if err != nil {
 				return err
 			}

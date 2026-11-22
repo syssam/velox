@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"unsafe"
 
@@ -102,6 +103,95 @@ func Before(f MutateFunc, ops ...Op) Hook {
 			return next.Mutate(ctx, m)
 		})
 	}, ops...)
+}
+
+// Condition reports whether a hook applies to a write: If and Unless take
+// one. HasOp, HasColumns and HasCleared make the common ones; any function
+// of the Mutation is one, as in ent's hook package.
+type Condition func(ctx context.Context, m *Mutation) bool
+
+// If returns h applied only to the writes cond holds for; the others skip
+// it, as ent's hook.If does:
+//
+//	velox.If(audit, velox.HasColumns("status"))
+//
+// It works alike for a schema's hooks and WithHooks's. cond runs before h,
+// on the write as the hooks outside h left it. If of a nil h, or with a nil
+// cond, is nil, which a schema's Hooks and WithHooks refuse.
+func If(h Hook, cond Condition) Hook {
+	if h == nil || cond == nil {
+		return nil
+	}
+	return func(next Mutator) Mutator {
+		wrapped := h(next)
+		return MutateFunc(func(ctx context.Context, m *Mutation) error {
+			if cond(ctx, m) {
+				return wrapped.Mutate(ctx, m)
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
+}
+
+// Unless returns h applied only to the writes cond does not hold for, as
+// ent's hook.Unless does. Unless of a nil h, or with a nil cond, is nil.
+func Unless(h Hook, cond Condition) Hook {
+	if cond == nil {
+		return nil
+	}
+	return If(h, func(ctx context.Context, m *Mutation) bool { return !cond(ctx, m) })
+}
+
+// HasOp is the condition that the write is of one of the given kinds:
+// OpInsert, OpUpdate, OpDelete. With no op it holds for none.
+func HasOp(ops ...Op) Condition {
+	return func(_ context.Context, m *Mutation) bool { return slices.Contains(ops, m.Op()) }
+}
+
+// HasColumns is the condition that the write assigns every one of the
+// given columns, by name, as Mutation.Columns reports them, as ent's
+// hook.HasFields is. With no name it holds for every write.
+func HasColumns(names ...string) Condition {
+	return func(_ context.Context, m *Mutation) bool {
+		cols := m.Columns()
+		for _, n := range names {
+			if !slices.Contains(cols, n) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// HasCleared is the condition that an update sets every one of the given
+// columns to NULL, as Mutation.Cleared reports it, as ent's
+// hook.HasClearedFields is. A name the entity has no column of is a
+// misuse that fails the write.
+func HasCleared(names ...string) Condition {
+	return func(_ context.Context, m *Mutation) bool {
+		for _, n := range names {
+			if !m.Cleared(n) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// Reject returns the hook that refuses the given kinds of write, as ent's
+// hook.Reject does: such a write fails before anything is sent, with an
+// error that matches ErrDenied. Other writes pass.
+//
+//	func (Ledger) Hooks() []velox.Hook { return []velox.Hook{velox.Reject(velox.OpUpdate, velox.OpDelete)} }
+func Reject(ops ...Op) Hook {
+	return func(next Mutator) Mutator {
+		return MutateFunc(func(ctx context.Context, m *Mutation) error {
+			if slices.Contains(ops, m.Op()) {
+				return fmt.Errorf("%v is rejected: %w", m.Op(), ErrDenied)
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
 }
 
 // WithHooks adds hs to the hooks of entity E, for the DB and every Tx and

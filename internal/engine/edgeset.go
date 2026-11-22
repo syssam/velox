@@ -100,6 +100,8 @@ type EdgePlan struct {
 	// Set are the owner's column assignments of the Set edge setters, which
 	// the write makes as it makes the caller's own.
 	Set []Assignment
+	// sets are the edge setters planned, for the hooks (Mutation.Edges).
+	sets []*EdgeSet
 }
 
 // keyCheck is a Set edge setter's key, which must name a row of the target
@@ -181,7 +183,7 @@ func planSetKey(owner *EntityInfo, e *EdgeSet) (Assignment, keyCheck, error) {
 // Table.Convert converts, and made distinct. A Set gives the plan the
 // assignment of the owner's foreign key, in Set, and a check of its key.
 func PlanEdges(owner *EntityInfo, edges []*EdgeSet) (EdgePlan, error) {
-	var p EdgePlan
+	p := EdgePlan{sets: edges}
 	at := map[int32]int{}
 	for _, e := range edges {
 		if e.Op == EdgeSetKey {
@@ -400,7 +402,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 			}
 			st.InTx = true
 			var err error
-			n, _, _, err = Write(ctx, tx, st, false, false)
+			n, _, _, err = writeWith(ctx, tx, st, false, false, p.sets)
 			return err
 		})
 		return n, err
@@ -424,7 +426,7 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 		n = int64(len(owners))
 		if len(st.Set) > 0 {
 			st.InTx = true
-			if n, _, _, err = Write(ctx, tx, st, false, false); err != nil {
+			if n, _, _, err = writeWith(ctx, tx, st, false, false, p.sets); err != nil {
 				return err
 			}
 		}
