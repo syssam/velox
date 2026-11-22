@@ -24,7 +24,7 @@
 //	  "out_package": "veloxgen",
 //	  "out_path": "example.com/app/gen",
 //	  "options": {"mode": "strict", "out": "pb"},
-//	  "model": {"version": 2, "schema_path": "example.com/app/schema", "entities": [...], "enums": [...]}
+//	  "model": {"version": 3, "schema_path": "example.com/app/schema", "entities": [...], "enums": [...]}
 //	}
 //
 // Its keys:

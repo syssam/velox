@@ -1,8 +1,8 @@
 // Package veloxschema declares the tour's entities, as a team that owns invoices
 // would write them: the structure of Invoice and Line, the InOrg mixin that
-// confines both to an organization, and their policies and hook, typed with
-// the generated handles. go tool velox-gen reads it and writes the veloxgen package
-// beside it.
+// confines both to an organization, and their policies and hook, which name
+// columns by name, as velox-gen checks. go tool velox-gen reads it and writes
+// the veloxgen package beside it.
 package veloxschema
 
 import (
