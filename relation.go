@@ -207,6 +207,53 @@ func (r Rel[E, T]) HasWith[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpExists, Col: r.I, V: engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, Kids: nodes(ps)}))
 }
 
+// Count is the number of entities each row's relation holds, as a Term:
+// a subquery correlated with the row, (SELECT COUNT(*) FROM target WHERE
+// key = the row's key AND …), 0 when it holds none. r's Where conditions
+// apply; its OrderBy, With, LimitEach and MaxRows, which say how to load,
+// do not. Order by it, select it, or compare it in an Expr:
+//
+//	db.Query[veloxgen.User]().OrderBy(veloxgen.Users.Posts.Count().Desc(), veloxgen.Users.ID.Asc())
+//	velox.Expr[veloxgen.User]("? >= ?", veloxgen.Users.Posts.Count(), 3)
+//
+// The target's interceptors, WithFilter filters and Read policy, a scope or
+// a soft delete included, apply inside, as they apply inside Has: a row they
+// hide is not counted. A many-to-many relation counts the targets the join
+// entity links to the row, each once. After and a cursor page over it, with
+// the key as the tie-break; the value of the After row is computed by the
+// same subquery, bound to that row's key. It cannot be grouped by, selected
+// beside an aggregate, aggregated, assigned or put in a Having.
+func (r Rel[E, T]) Count[_ Lazy[T]]() Term[E] {
+	return r.agg(engine.AggTerm(engine.TermCountAll, engine.Term{}))
+}
+
+// Sum is SUM of s, a column handle or a Term of the target, over each row's
+// related entities, as Count is made: NULL when it holds none, or none with
+// a value.
+func (r Rel[E, T]) Sum[_ Lazy[T]](s Selectable[T]) Term[E] {
+	return r.agg(engine.AggTerm(engine.TermSum, termOf[T](s)))
+}
+
+// Avg is AVG of s over each row's related entities, as Sum is made.
+func (r Rel[E, T]) Avg[_ Lazy[T]](s Selectable[T]) Term[E] {
+	return r.agg(engine.AggTerm(engine.TermAvg, termOf[T](s)))
+}
+
+// Min is MIN of s over each row's related entities, as Sum is made.
+func (r Rel[E, T]) Min[_ Lazy[T]](s Selectable[T]) Term[E] {
+	return r.agg(engine.AggTerm(engine.TermMin, termOf[T](s)))
+}
+
+// Max is MAX of s over each row's related entities, as Sum is made.
+func (r Rel[E, T]) Max[_ Lazy[T]](s Selectable[T]) Term[E] {
+	return r.agg(engine.AggTerm(engine.TermMax, termOf[T](s)))
+}
+
+// agg is the aggregate a of the target over each row's related entities.
+func (r Rel[E, T]) agg[_ Lazy[T]](a engine.Term) Term[E] {
+	return Term[E]{engine.RelAgg(engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, r.where, r.err, a)}
+}
+
 // Of is true for the entities related through r to any of owners: the
 // rows of T that loading r for owners would load, without r's ordering.
 // r's Where conditions apply too; its OrderBy and With, which say how to

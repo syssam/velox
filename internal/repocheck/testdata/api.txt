@@ -643,8 +643,10 @@ func (r *Recorder) Len() int
 func (r *Recorder) Record(_ context.Context, _ *DB, changes []Change) error
 func (r *Recorder) Reset()
 func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E]
+func (r Rel[E, T]) Avg[_ Lazy[T]](s Selectable[T]) Term[E]
 func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E]
 func (r Rel[E, T]) Clear[_ Lazy[T]]() Setter[E]
+func (r Rel[E, T]) Count[_ Lazy[T]]() Term[E]
 func (r Rel[E, T]) Fill[_ Lazy[T]](owner *E, t *T) error
 func (r Rel[E, T]) Filled[_ Lazy[T]](owner *E) (*T, bool)
 func (r Rel[E, T]) HasWith[_ Lazy[T]](ps ...Pred[T]) Pred[E]
@@ -652,10 +654,13 @@ func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E]
 func (r Rel[E, T]) Is[_ Lazy[T]](ps ...Pred[T]) Pred[E]
 func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T]
 func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T]
+func (r Rel[E, T]) Max[_ Lazy[T]](s Selectable[T]) Term[E]
+func (r Rel[E, T]) Min[_ Lazy[T]](s Selectable[T]) Term[E]
 func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T]
 func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T]
 func (r Rel[E, T]) Remove[_ Lazy[T]](keys ...any) Setter[E]
 func (r Rel[E, T]) Set[_ Lazy[T]](key any) Setter[E]
+func (r Rel[E, T]) Sum[_ Lazy[T]](s Selectable[T]) Term[E]
 func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T]
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
 func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
@@ -1479,6 +1484,7 @@ Table.New() any
 Table.NewRows(n int) TableRows
 Table.Of(edge int, target Table, owners ...any) Predicate
 Table.Pred(col int, op PredOp, v any) Predicate
+Table.RelAgg(edge int, target Table, agg Term, ps ...Predicate) Term
 Table.ScopedKey(p Predicate, edge int, target Table) Predicate
 Table.SetField(row any, col int, v any) error
 Table.Validate(row any, cols ...int) error

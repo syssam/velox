@@ -1023,6 +1023,16 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 	w.str(".")
 	w.col(int32(col))
 	w.str(" = ")
+	w.in = from
+	w.outerCol(w.alias, fromCol, text)
+	w.in = in
+	w.alias = alias
+}
+
+// outerCol writes column col of w.in, the table around a subquery, named by
+// outer, its alias, or by its table when there is no alias yet. With text,
+// it is an integer made text, as subquery says.
+func (w *writer) outerCol(outer string, col int, text bool) {
 	if text {
 		if w.d == MySQL {
 			w.str("CONCAT(")
@@ -1030,15 +1040,13 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 			w.str("CAST(")
 		}
 	}
-	if w.alias != "" {
-		w.ident(w.alias)
+	if outer != "" {
+		w.ident(outer)
 	} else {
-		w.in = from
 		w.table()
-		w.in = in
 	}
 	w.str(".")
-	w.ident(from.Columns[fromCol].Name)
+	w.col(int32(col))
 	if text {
 		if w.d == MySQL {
 			w.str(")")
@@ -1046,7 +1054,6 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 			w.str(" AS TEXT)")
 		}
 	}
-	w.alias = alias
 }
 
 // RenderStmt returns a statement's SQL and arguments, or why it cannot be

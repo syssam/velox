@@ -83,3 +83,36 @@ func TestAndInserts(t *testing.T) {
 		t.Errorf("b denies: err %v, order %v", err, order)
 	}
 }
+
+// TestRelTermRefusals: a relation's aggregate is of a relation, and of an
+// aggregate of its target; an invalid relation, aggregate or condition,
+// and a relation handle's error, give an invalid term.
+func TestRelTermRefusals(t *testing.T) {
+	boom := errors.New("boom")
+	rel := Node{Op: OpExists, Col: 0, V: RelRef{I: 0}}
+	count := AggTerm(TermCountAll, Term{})
+	withKid := func(k Node) Node { r := rel; r.Kids = []Node{k}; return r }
+	for _, c := range []struct {
+		name string
+		term Term
+		want string
+	}{
+		{"invalid relation", RelTerm(Node{Op: OpInvalid, V: boom}, count), "boom"},
+		{"not a relation", RelTerm(Node{Op: OpEQ}, count), "is of a relation"},
+		{"a column's subquery", RelTerm(Node{Op: OpExists, Col: -1}, count), "is of a relation"},
+		{"invalid aggregate", RelTerm(rel, InvalidTerm(boom)), "boom"},
+		{"not an aggregate", RelTerm(rel, ColumnTerm(0)), "an aggregate of its target"},
+		{"invalid condition", RelTerm(withKid(Node{Op: OpInvalid, V: boom}), count), "boom"},
+		{"zero condition", RelTerm(withKid(Node{}), count), "zero Pred"},
+		{"handle's error", RelAgg(RelRef{}, nil, boom, count), "boom"},
+		{"aggregated", AggTerm(TermSum, RelTerm(rel, count)), "relation's aggregate"},
+		{"aggregated in an expression", AggTerm(TermSum, ExprTerm("? + 1", []ExprSlot{{Col: -1, Term: new(RelTerm(rel, count))}}, nil)), "relation's aggregate"},
+	} {
+		if err := c.term.problem(); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", c.name, err, c.want)
+		}
+	}
+	if !hasRel(RelTerm(rel, count)) || relNullable(RelTerm(rel, count)) || !relNullable(RelTerm(rel, AggTerm(TermSum, ColumnTerm(0)))) {
+		t.Error("hasRel or relNullable")
+	}
+}

@@ -380,8 +380,16 @@ var genericObjects = []struct {
 	// so the 1 KB is in the engine types its package reaches, such as Term
 	// with its JSON path and name; entityDescHooks and entityDescMixin
 	// stayed within their bounds.
-	{"entityDescUse", "", entityDescUseSrc, 791552},       // measured 782384
-	{"entityDescHooks", "", entityDescHooksBound, 877568}, // measured 867722
+	//
+	// A relation's aggregates, Rel's Count, Sum, Avg, Min and Max (ADR 0112),
+	// took entityDescUse from 776890 to 779982 bytes, entityDescHooks from
+	// 861928 to 865016 and entityDescMixin from 907370 to 910488: about 3 KB
+	// a package, the methods' declarations, flat in the number of Rel
+	// instantiations (a package with five took the same 3 KB more). One
+	// method cost about 1.3 KB and each more about 0.4 KB; the engine's part
+	// of the change about 0.2 KB.
+	{"entityDescUse", "", entityDescUseSrc, 795648},       // measured 785572
+	{"entityDescHooks", "", entityDescHooksBound, 881664}, // measured 870926
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -389,7 +397,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 923648}, // measured 912240
+	{"entityDescMixin", "", entityDescMixinSrc, 927744}, // measured 916382
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

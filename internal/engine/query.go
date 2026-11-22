@@ -23,13 +23,15 @@ func sliceOrMap(t any) bool {
 // of OrderBy on a joined relation reads its value from the joined entity stored
 // in the row's relation field, so the row must have been read with that join.
 // Of a left join, a row with no joined entity pages from NULL, as the join
-// read it.
+// read it. A term that is a relation's aggregate is compared with the same
+// aggregate bound to the row's key (relSource); any other expression is
+// refused.
 func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if len(st.OrderBy) == 0 {
 		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
 	}
 	for _, o := range st.OrderBy {
-		if o.Expr != nil {
+		if t, _ := o.Expr.(Term); o.Expr != nil && t.kind != termRel {
 			return errAfterExpr(in.Name)
 		}
 	}
@@ -53,6 +55,13 @@ func afterSources(st *Statement, in *EntityInfo, after unsafe.Pointer) ([]afterS
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for i, o := range st.OrderBy {
 		src := afterSource{info: in, row: after}
+		if o.Expr != nil {
+			var err error
+			if srcs[i], err = relSource(st, in, after, o.Expr.(Term)); err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
 		if o.Rel != 0 {
 			var err error
 			if src, err = joinedSource(st, in, after, o); err != nil {
@@ -82,6 +91,22 @@ func afterSources(st *Statement, in *EntityInfo, after unsafe.Pointer) ([]afterS
 		ordered[o.Column] = true
 	}
 	return srcs, ordered, nil
+}
+
+// relSource is the afterSource of an ordering by t, a relation's aggregate:
+// t bound to the row's key, which the subquery is correlated with, so that
+// the row's value is computed by the statement, under the same row
+// conditions as the ordering's.
+func relSource(st *Statement, in *EntityInfo, after unsafe.Pointer, t Term) (afterSource, error) {
+	l, err := existsLink(t.r.n)
+	if err != nil {
+		return afterSource{}, err
+	}
+	if st.Columns != nil && !slices.Contains(st.Columns, l.OwnerCol) {
+		return afterSource{}, fmt.Errorf("velox: %s: After needs the column %s, the key of the relation %s it orders by, selected; add it to Columns", in.Name, in.Columns[l.OwnerCol].Name, l.Name)
+	}
+	b := boundRel(t, in.kit.Value(after, l.OwnerCol))
+	return afterSource{info: in, row: after, rel: &b}, nil
 }
 
 // orderIsTotal reports whether the columns of in that ordered holds cover
@@ -146,6 +171,10 @@ func afterCondition(st *Statement, srcs []afterSource) Node {
 	for i, o := range st.OrderBy {
 		var and []Node
 		for k, prev := range st.OrderBy[:i] {
+			if r := srcs[k].rel; r != nil {
+				and = append(and, relEqual(prev.Expr.(Term), *r))
+				continue
+			}
 			v := value(k)
 			if nullable(k) && nullValue(v) {
 				and = append(and, orderTerm(prev, OpIsNull, nil))
@@ -153,9 +182,14 @@ func afterCondition(st *Statement, srcs []afterSource) Node {
 				and = append(and, orderTerm(prev, OpEQ, v))
 			}
 		}
-		past, ok := pastValue(o, value(i), nullable(i))
-		if !ok {
-			continue // no row is past NULL
+		var past Node
+		if r := srcs[i].rel; r != nil {
+			past = relPast(o, *r)
+		} else {
+			var ok bool
+			if past, ok = pastValue(o, value(i), nullable(i)); !ok {
+				continue // no row is past NULL
+			}
 		}
 		switch {
 		case len(and) > 0:
@@ -167,6 +201,41 @@ func afterCondition(st *Statement, srcs []afterSource) Node {
 		}
 	}
 	return Group(OpOr, or)
+}
+
+// relEqual is the condition that the relation's aggregate t has, for a row,
+// the value b, t bound to the After row, has: NULL equals NULL. Neither is
+// known before the statement runs, so both are in the SQL.
+func relEqual(t, b Term) Node {
+	if !relNullable(t) {
+		return relExpr("? = ?", t, b)
+	}
+	return relExpr("(? = ? OR (? IS NULL AND ? IS NULL))", t, b, t, b)
+}
+
+// relPast is the condition that the relation's aggregate o orders by is
+// past b, its value for the After row: NULL sorts after every value
+// ascending, as orderTerm puts it.
+func relPast(o OrderTerm, b Term) Node {
+	t := o.Expr.(Term)
+	switch {
+	case !relNullable(t) && o.Desc:
+		return relExpr("? < ?", t, b)
+	case !relNullable(t):
+		return relExpr("? > ?", t, b)
+	case o.Desc:
+		return relExpr("((? IS NULL AND ? IS NOT NULL) OR ? < ?)", b, t, t, b)
+	}
+	return relExpr("(? IS NOT NULL AND (? > ? OR ? IS NULL))", b, t, b, t)
+}
+
+// relExpr is the condition text with each ? filled by the next of ts.
+func relExpr(text string, ts ...Term) Node {
+	slots := make([]ExprSlot, len(ts))
+	for i := range ts {
+		slots[i] = ExprSlot{Col: -1, Term: &ts[i]}
+	}
+	return ExprNode(text, slots, nil)
 }
 
 // pastValue returns the condition on o's column for the rows past the
@@ -196,7 +265,8 @@ func pastValue(o OrderTerm, v any, nullable bool) (Node, bool) {
 type afterSource struct {
 	info *EntityInfo
 	row  unsafe.Pointer
-	left bool // of a left join: the column is NULL where the join found no row
+	left bool  // of a left join: the column is NULL where the join found no row
+	rel  *Term // of an ordering by a relation's aggregate: it, bound to the row's key
 }
 
 // joinedSource is the joined entity that o, an ordering by a joined relation, reads

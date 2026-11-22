@@ -57,6 +57,9 @@ func checkSetExpr(st *Statement, who string, a Assignment) error {
 	if hasWindow(t) {
 		return fmt.Errorf("velox: %s: the expression assigned to %s holds a window function, which an UPDATE cannot compute", in.Name, in.Columns[a.Column].Field)
 	}
+	if hasRel(t) {
+		return fmt.Errorf("velox: %s: the expression assigned to %s holds a relation's aggregate; read it with a query, then set the value", in.Name, in.Columns[a.Column].Field)
+	}
 	if in.Columns[a.Column].Codec {
 		return errCodecSetExpr(in, a.Column)
 	}

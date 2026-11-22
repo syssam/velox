@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strconv"
 )
 
 // Projection is what a statement reads in place of its entity's columns: a
@@ -29,6 +30,7 @@ const (
 	termInvalid
 	termExcluded
 	termJSON
+	termRel // an aggregate of a relation's rows: a correlated subquery (RelTerm)
 )
 
 // TermFn is an aggregate function of a term.
@@ -60,7 +62,17 @@ type Term struct {
 	path  *JSONPath // a termJSON's
 	name  string    // the result column's name, NamedTerm's; "" for none
 	err   error
-	shape string // what shapes it in the render cache's key: see seal
+	r     *relAgg // a termRel's relation
+	shape string  // what shapes it in the render cache's key: see seal
+}
+
+// relAgg is the relation of a termRel: the EXISTS HasWith would make, whose
+// kids are the conditions on the target, and, for After's value of one row,
+// the owner's key the subquery is correlated with in place of the outer row.
+type relAgg struct {
+	n     Node // an OpExists of a relation: Col its index, V its RelRef or, once scoped, its Link
+	bound bool // correlated with key, not with the outer row
+	key   any
 }
 
 // seal sets t's shape from its kind, function, column and the shapes of what
@@ -85,6 +97,10 @@ func (t Term) seal() Term {
 		// The keys are arguments; the kind and their number shape the text.
 		b = append(b, byte(t.path.Kind))
 		b = binary.AppendUvarint(b, uint64(len(t.path.Keys)))
+	case termRel:
+		b = append(b, bit(t.r.bound))
+		b = nodeKey(b, t.r.n)
+		b = append(b, t.of.shape...)
 	}
 	b = binary.AppendUvarint(b, uint64(len(t.name)))
 	b = append(b, t.name...)
@@ -180,10 +196,91 @@ func AggTerm(fn TermFn, of Term) Term {
 	case termAgg:
 		return InvalidTerm(errors.New("velox: an aggregate of an aggregate: SUM(MAX(x)) is not allowed in one statement"))
 	}
+	if hasRel(of) {
+		return InvalidTerm(errors.New("velox: an aggregate of a relation's aggregate, such as SUM of a Rel's Count, is not allowed"))
+	}
 	if hasWindow(of) {
 		return InvalidTerm(errors.New("velox: an aggregate of a window function: SQL computes windows after aggregates"))
 	}
 	return Term{kind: termAgg, fn: fn, of: &of}.seal()
+}
+
+// RelTerm is agg, an aggregate of the target of the relation rel (HasWith's
+// EXISTS, whose kids are conditions on the target), over each row's related
+// rows: (SELECT agg FROM target WHERE key = the row's key AND kids…). Over
+// no rows COUNT is 0 and the other aggregates NULL. The scope adds the
+// target's row condition to the kids, as to an EXISTS's. agg must be an
+// aggregate of the target, which AggTerm keeps from holding a relation's
+// term; anything else is an InvalidTerm.
+func RelTerm(rel Node, agg Term) Term {
+	switch {
+	case rel.Op == OpInvalid:
+		return InvalidTerm(rel.V.(error))
+	case rel.Op != OpExists || rel.Col < 0:
+		return InvalidTerm(errors.New("velox: a relation's aggregate is of a relation"))
+	case agg.kind == termInvalid:
+		return agg
+	case agg.kind != termAgg:
+		return InvalidTerm(errors.New("velox: a relation's term is an aggregate of its target: Count, Sum, Avg, Min or Max"))
+	}
+	for _, k := range rel.Kids {
+		if hasZero(k) {
+			return InvalidTerm(errors.New("velox: a relation's aggregate: a condition holds the zero Pred"))
+		}
+		if named(k) {
+			return InvalidTerm(errors.New("velox: a relation's aggregate takes typed conditions, not conditions by name"))
+		}
+		if err := PredErr(k); err != nil {
+			return InvalidTerm(err)
+		}
+	}
+	return Term{kind: termRel, fn: agg.fn, of: &agg, r: &relAgg{n: rel}}.seal()
+}
+
+// RelAgg is RelTerm of the relation ref with the conditions where, or err's
+// InvalidTerm when the relation's handle carries one: Rel's Count and Agg.
+// It is not generic, so that the work is compiled once.
+func RelAgg(ref RelRef, where []Predicate, err error, agg Term) Term {
+	if err != nil {
+		return InvalidTerm(err)
+	}
+	kids := make([]Node, len(where))
+	for i, p := range where {
+		kids[i] = p.n
+	}
+	return RelTerm(Node{Op: OpExists, Col: ref.I, V: ref, Kids: kids}, agg)
+}
+
+// hasRel reports whether t is or holds a relation's aggregate (RelTerm).
+func hasRel(t Term) bool {
+	switch t.kind {
+	case termRel:
+		return true
+	case termAgg:
+		return t.of != nil && hasRel(*t.of)
+	case termExpr:
+		return t.x.rel
+	}
+	return false
+}
+
+// relNullable reports whether t, a termRel, can be NULL: every aggregate
+// but a count is NULL over no rows.
+func relNullable(t Term) bool {
+	switch t.fn {
+	case TermCount, TermCountAll, TermCountDistinct:
+		return false
+	}
+	return true
+}
+
+// boundRel is t, a termRel, correlated with the owner's key value key in
+// place of the outer row: the value t has for the row whose key it is.
+func boundRel(t Term, key any) Term {
+	r := *t.r
+	r.bound, r.key = true, key
+	t.r = &r
+	return t.seal()
 }
 
 // problem is the error t carries: an invalid expression, an aggregate of an
@@ -196,7 +293,7 @@ func (t Term) problem() error {
 		return errors.New("velox: the zero Term; make terms with Pick, Calc and CountAll")
 	case termInvalid:
 		return t.err
-	case termAgg:
+	case termAgg, termRel:
 		if t.of != nil {
 			return t.of.problem()
 		}
@@ -250,9 +347,94 @@ func (w *writer) term(t Term) {
 			w.term(*t.of)
 		}
 		w.str(")")
+	case termRel:
+		w.relTerm(t)
 	default:
 		w.fail(t.problem())
 	}
+}
+
+// relTerm writes the termRel t: a subquery on the relation's target, aliased
+// as an EXISTS's is, correlated with the outer row's key (or, bound, with a
+// value), holding the conditions on the target. A many-to-many relation reads
+// the target's rows that a row of the join entity links to the owner: a link
+// the join table holds twice counts once, as a load reads it.
+func (w *writer) relTerm(t Term) {
+	l, err := existsLink(t.r.n)
+	if err != nil {
+		w.fail(err)
+		return
+	}
+	owner, outer, depth := w.in, w.alias, w.depth
+	w.depth++
+	alias := "vx" + strconv.Itoa(w.depth)
+	w.in = l.Target
+	w.str("(SELECT ")
+	w.term(*t.of)
+	w.str(" FROM ")
+	w.table()
+	w.str(" AS ")
+	w.ident(alias)
+	w.str(" WHERE ")
+	if l.Join == nil {
+		w.ident(alias)
+		w.str(".")
+		w.col(int32(l.TargetCol))
+		w.str(" = ")
+		w.relOwner(t, owner, outer, l.OwnerCol, l.TextKey)
+	} else {
+		w.depth++
+		inner := "vx" + strconv.Itoa(w.depth)
+		w.str("EXISTS (SELECT 1 FROM ")
+		w.in = l.Join
+		w.table()
+		w.str(" AS ")
+		w.ident(inner)
+		w.str(" WHERE ")
+		w.ident(inner)
+		w.str(".")
+		w.col(int32(l.JoinTarget))
+		w.str(" = ")
+		w.ident(alias)
+		w.str(".")
+		w.ident(l.Target.Columns[l.TargetCol].Name)
+		w.str(" AND ")
+		w.ident(inner)
+		w.str(".")
+		w.col(int32(l.JoinOwner))
+		w.str(" = ")
+		if t.r.bound {
+			w.argOf(int32(l.JoinOwner), t.r.key)
+		} else {
+			w.relOwner(t, owner, outer, l.OwnerCol, false)
+		}
+		w.str(")")
+		w.in = l.Target
+	}
+	w.alias = alias
+	for _, k := range t.r.n.Kids {
+		w.str(" AND ")
+		w.pred(k)
+	}
+	w.str(")")
+	w.in, w.alias, w.depth = owner, outer, depth
+}
+
+// relOwner writes the owner's side of a relation term's correlation: the
+// bound key, or the outer row's column col, named by outer, the alias of
+// the table around, or by the owner's table at the top.
+func (w *writer) relOwner(t Term, owner *EntityInfo, outer string, col int, text bool) {
+	if t.r.bound {
+		in := w.in
+		w.in = owner
+		w.argOf(int32(col), t.r.key)
+		w.in = in
+		return
+	}
+	in := w.in
+	w.in = owner
+	w.outerCol(outer, col, text)
+	w.in = in
 }
 
 // terms writes ts, separated by commas.
@@ -320,8 +502,10 @@ func (w *writer) resultTerm(t Term, distinct bool) {
 // NULL whatever its columns are, so there it always does.
 func (w *writer) orderTerm(o OrderTerm) {
 	t, _ := o.Expr.(Term)
+	// A relation's count is never NULL.
+	null := w.d != Postgres && (t.kind != termRel || relNullable(t))
 	for k := range 2 {
-		if k == 0 && w.d == Postgres {
+		if k == 0 && !null {
 			continue
 		}
 		w.term(t)
@@ -375,6 +559,20 @@ func checkTermCols(t Term, bad func(int) error) error {
 		if t.of != nil {
 			return checkTermCols(*t.of, bad)
 		}
+	case termRel:
+		l, err := existsLink(t.r.n)
+		if err != nil {
+			return err
+		}
+		if err := bad(l.OwnerCol); err != nil {
+			return err
+		}
+		return checkTermCols(*t.of, func(c int) error {
+			if c < 0 || c >= len(l.Target.Columns) {
+				return fmt.Errorf("velox: a relation's aggregate names column %d of %s, which has %d", c, l.Target.Name, len(l.Target.Columns))
+			}
+			return nil
+		})
 	}
 	return nil
 }
@@ -470,6 +668,9 @@ func checkProject(st *Statement, who string) error {
 	if slices.ContainsFunc(p.GroupBy, hasWindow) {
 		return fmt.Errorf("velox: %s: GroupBy holds a window function, which SQL computes after GROUP BY; group by its terms and select the window with Calc", name)
 	}
+	if slices.ContainsFunc(p.Terms, hasRel) && (len(p.GroupBy) > 0 || slices.ContainsFunc(p.Terms, hasAgg)) || slices.ContainsFunc(p.GroupBy, hasRel) {
+		return fmt.Errorf("velox: %s: a relation's aggregate (Rel's Count, Sum, …) is a value of each row, and cannot be selected beside GroupBy or an aggregate, nor grouped by", name)
+	}
 	bad := func(c int) error { return badColumn(st, who, c) }
 	for _, ts := range [][]Term{p.Terms, p.GroupBy} {
 		for _, t := range ts {
@@ -486,13 +687,16 @@ func checkProject(st *Statement, who string) error {
 	return checkConds(st, who, p.Having)
 }
 
-// hasSubquery reports whether n or a kid at any depth is an EXISTS: a
-// relation, typed or by name, or a column's subquery. Having refuses one: the
+// hasSubquery reports whether n or a kid at any depth is an EXISTS (a
+// relation, typed or by name, or a column's subquery) or an expression
+// holding a relation's aggregate. Having refuses one: the
 // scope adds a target's Read conditions to the EXISTS of Where only.
 func hasSubquery(n Node) bool {
 	switch n.Op {
 	case OpExists, OpThrough, opNamedEdge, opNamedSub:
 		return true
+	case OpExpr:
+		return n.V.(*exprData).rel
 	}
 	return slices.ContainsFunc(n.Kids, hasSubquery)
 }

@@ -111,7 +111,9 @@ type OrderTerm struct {
 	Rel int32
 	// Expr, when not nil, is an expression to order by, made by velox.Term's
 	// Asc or Desc: an engine.Term. Column is then 0 and Rel 0, and After and
-	// a cursor refuse the ordering, as they read each term's value from a row.
+	// a cursor refuse the ordering, as they read each term's value from a
+	// row, unless it is a relation's aggregate, whose value for a row the
+	// statement computes from the row's key.
 	Expr any
 }
 

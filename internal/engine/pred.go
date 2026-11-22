@@ -71,7 +71,7 @@ const (
 // Node is a condition, typed by nothing: the generic API wraps it.
 type Node struct {
 	Op     op
-	Deep   bool // an OpExists or OpThrough is among the kids, at any depth; set by group
+	Deep   bool // an OpExists or OpThrough is among the kids, at any depth, set by group; or the node is an OpExpr holding a relation's aggregate, set by ExprNode
 	ByName bool // a condition by name is among the kids, at any depth; set by group
 	Col    int32
 	V, W   any

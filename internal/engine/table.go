@@ -510,6 +510,15 @@ func (t Table) Has(edge int, target Table, ps ...Predicate) Predicate {
 	return NewPredicate(Node{Op: OpExists, ByName: byName, Col: int32(edge), V: RelRef{Owner: s.target.Get, Target: ts.target, I: int32(edge)}, Kids: kids})
 }
 
+// RelAgg is agg, an aggregate of target's columns, over each row's
+// entities of relation edge that meet every condition of ps: Rel's Count,
+// Sum, Avg, Min and Max, untyped. The conditions are typed, not by name. As
+// Has, it reads no metadata: a relation that does not resolve fails the
+// statement that holds the term.
+func (t Table) RelAgg(edge int, target Table, agg Term, ps ...Predicate) Term {
+	return RelTerm(PredNode(t.Has(edge, target, ps...)), agg)
+}
+
 // ScopedKey is p, a condition on the foreign key of relation edge, read as
 // the relation lets the statement see its target: a row whose target the
 // target's row condition hides reads as having a null key. With a row

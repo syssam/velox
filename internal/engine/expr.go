@@ -25,6 +25,9 @@ type exprData struct {
 	// window says the text holds the word OVER: a window function, which
 	// only a result column or an ordering may hold (hasWindow).
 	window bool
+	// rel says a slot's term is or holds a relation's aggregate (RelTerm),
+	// which the scope gives its target's row condition.
+	rel bool
 }
 
 // seal sets d's shape from its text pieces and what each slot holds. The
@@ -123,7 +126,8 @@ func ExprNode(text string, slots []ExprSlot, args []any) Node {
 	if err != nil {
 		return Node{Op: OpInvalid, V: err}
 	}
-	return Node{Op: OpExpr, V: d}
+	// Deep: the scope walks it, as an EXISTS, and Group marks what holds it.
+	return Node{Op: OpExpr, V: d, Deep: d.rel}
 }
 
 // exprHasWindow reports whether d's text, or a term among its slots, holds
@@ -154,7 +158,11 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 		}
 		return nil, fmt.Errorf("velox: Expr %q has %d ?, and %d arguments", text, n, len(slots))
 	}
-	return (&exprData{parts: strings.Split(text, "?"), slots: slots, args: args, window: window}).seal(), nil
+	d := &exprData{parts: strings.Split(text, "?"), slots: slots, args: args, window: window}
+	for _, s := range slots {
+		d.rel = d.rel || s.Term != nil && hasRel(*s.Term)
+	}
+	return d.seal(), nil
 }
 
 // checkExprText refuses text that could name another table, end the

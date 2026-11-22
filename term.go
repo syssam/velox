@@ -7,8 +7,8 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// Term is one SQL value over entity E: a column, an expression, or an
-// aggregate of either. A column handle's Sum, Avg, Min, Max, Count and
+// Term is one SQL value over entity E: a column, an expression, an
+// aggregate of either, or an aggregate of a relation's rows (Rel's Count). A column handle's Sum, Avg, Min, Max, Count and
 // CountDistinct make one, as do Calc and CountAll, and the same methods on a
 // Term take an aggregate of an expression. A Term is a result column of
 // Query.Select, a key of GroupBy, an operand of Expr (a HAVING is an Expr of
@@ -93,7 +93,8 @@ func (t Term[E]) CountDistinct[_ Lazy[E]]() Term[E] {
 func (t Term[E]) As[_ Lazy[E]](name string) Term[E] { return Term[E]{engine.NamedTerm(t.t, name)} }
 
 // Asc orders by t, ascending, NULL last as every ordering puts it. An entity
-// query ordered by an expression cannot be read After a row or by a cursor.
+// query ordered by an expression cannot be read After a row or by a cursor,
+// except by a relation's aggregate, Rel's Count, Sum, Avg, Min or Max.
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E] { return Order[E]{OrderTerm{Expr: t.t}} }
 
 // Desc orders by t, descending, NULL first as every descending ordering

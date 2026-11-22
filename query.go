@@ -244,7 +244,10 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // be a row a query returned: its values carry the columns' stored precision,
 // which a value made in memory (a time with nanoseconds in a column that keeps
 // microseconds) may not, and the comparison would then skip or repeat a row.
-// Count applies After's condition too.
+// Count applies After's condition too. An ordering by a relation's
+// aggregate (Rel's Count, Sum, Avg, Min, Max) pages too: x's value is the
+// same aggregate, computed by the statement for x's key, so the key column
+// of the relation must be read.
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 	if x == nil {
 		if q.s.Err == nil && q.meta.Err == nil {

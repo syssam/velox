@@ -339,6 +339,8 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	case OpExists:
 	case OpThrough:
 		return n, false, sc.joinFree(n.V.(*EntityInfo))
+	case OpExpr:
+		return sc.exprNode(n)
 	default:
 		return n, false, nil
 	}
@@ -403,6 +405,21 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		return n, resolved, nil
 	}
 	n.Kids = kids // n is a copy
+	return n, true, nil
+}
+
+// exprNode is Node of the OpExpr n: with its relations' aggregates scoped
+// (term), when it holds any.
+func (sc *Scoper) exprNode(n Node) (Node, bool, error) {
+	d := n.V.(*exprData)
+	if !d.rel {
+		return n, false, nil
+	}
+	d, err := sc.expr(d)
+	if err != nil {
+		return n, false, err
+	}
+	n.V = d // n is a copy
 	return n, true, nil
 }
 
@@ -611,8 +628,109 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if err := sc.scopeJoins(st); err != nil {
 		return err
 	}
+	if err := sc.scopeTerms(st); err != nil {
+		return err
+	}
 	sc.Record(st)
 	return nil
+}
+
+// scopeTerms gives the relation's aggregates among st's ordering and result
+// columns their targets' row conditions, as an EXISTS gets them: a row the
+// target's interceptors, filters or Read policy hide is not counted. The
+// ordering and the projection are replaced by copies: the query's may be
+// shared with other runs.
+func (sc *Scoper) scopeTerms(st *Statement) error {
+	var order []OrderTerm
+	for i, o := range st.OrderBy {
+		t, ok := o.Expr.(Term)
+		if !ok || !hasRel(t) {
+			continue
+		}
+		t, err := sc.term(t)
+		if err != nil {
+			return err
+		}
+		if order == nil {
+			order = slices.Clone(st.OrderBy)
+		}
+		order[i].Expr = t
+	}
+	if order != nil {
+		st.OrderBy = order
+	}
+	if p := st.Project; p != nil && slices.ContainsFunc(p.Terms, hasRel) {
+		c := cloneProject(p)
+		for i, t := range c.Terms {
+			if !hasRel(t) {
+				continue
+			}
+			var err error
+			if c.Terms[i], err = sc.term(t); err != nil {
+				return err
+			}
+		}
+		st.Project = c
+	}
+	return nil
+}
+
+// term returns t, which holds a relation's aggregate, with the target's row
+// condition added to each such aggregate's conditions, and the conditions
+// already there scoped, as Node scopes an EXISTS: a copy, sealed again, since
+// the render cache keys the conditions. The relation is resolved.
+func (sc *Scoper) term(t Term) (Term, error) {
+	switch t.kind {
+	case termRel:
+		n, _, err := sc.Node(t.r.n)
+		if err != nil {
+			return t, err
+		}
+		if _, lazy := n.V.(linkRef); lazy {
+			// A target with nothing to add leaves the node as it was.
+			l, err := existsLink(n)
+			if err != nil {
+				return t, err
+			}
+			n.V = l
+		}
+		r := *t.r
+		r.n = n
+		t.r = &r
+	case termAgg:
+		o, err := sc.term(*t.of)
+		if err != nil {
+			return t, err
+		}
+		t.of = &o
+	case termExpr:
+		d, err := sc.expr(t.x)
+		if err != nil {
+			return t, err
+		}
+		t.x = d
+	default:
+		return t, nil
+	}
+	return t.seal(), nil
+}
+
+// expr returns a copy of d, which holds a relation's aggregate, with its
+// terms scoped by term.
+func (sc *Scoper) expr(d *exprData) (*exprData, error) {
+	c := *d
+	c.slots = slices.Clone(d.slots)
+	for i, s := range c.slots {
+		if s.Term == nil || !hasRel(*s.Term) {
+			continue
+		}
+		t, err := sc.term(*s.Term)
+		if err != nil {
+			return nil, err
+		}
+		c.slots[i].Term = &t
+	}
+	return c.seal(), nil
 }
 
 // scopeJoins gives each joined target its row condition, in the join's ON
