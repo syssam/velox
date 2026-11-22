@@ -284,6 +284,30 @@ have the actions their edges declare, and none without `OnDelete`.
 velox-gen warns of an edge schema whose key edges declare no `OnDelete`.
 Declare `OnDelete(edge.Cascade)` on both to keep deletes as they were.
 
+## A trigger or a routine in a file
+
+The split reads a file by its `;`. A SQLite trigger, a MySQL trigger, procedure,
+function or event, a `BEGIN … END` block, and a PostgreSQL `BEGIN ATOMIC` body hold
+`;` inside, so the split refuses them:
+
+    0002_count.sql:3: the split cannot read a trigger's or procedure's body; put the statement between -- velox:statement begin and -- velox:statement end lines
+
+Put the statement between those two lines. The text between them is one statement,
+run as written, without its last `;`:
+
+```sql
+-- velox:statement begin
+CREATE TRIGGER a_count AFTER INSERT ON a BEGIN
+  UPDATE n SET c = c + 1;
+END;
+-- velox:statement end
+```
+
+Each line starts its own line, between statements. A block with no end line, or
+another `-- velox:` line inside one, is refused. The lines are statements' text, so
+the history's checksum covers them. `TestUpStatementBlock` runs a block on SQLite,
+MySQL and PostgreSQL. A PostgreSQL function written `AS $$ … $$` needs no block.
+
 ## Notes
 
 `apply` and `resolve` print `velox-gen: note:` lines for what stops nothing: a SQLite

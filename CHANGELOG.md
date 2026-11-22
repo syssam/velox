@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- migrate: `-- velox:statement begin` and `-- velox:statement end` lines
+  mark one statement the split does not cut, so a SQLite or MySQL trigger,
+  a MySQL routine, or a PostgreSQL `BEGIN ATOMIC` body can be in a file.
+  docs/migrations-operations.md, "A trigger or a routine in a file".
 - migrate: `diff`'s refusal of a dropped column, when a column of its type
   is added to the same table, ends with the `-rename-column table.old=new`
   that plans the two as a rename.

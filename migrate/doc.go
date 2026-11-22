@@ -53,8 +53,9 @@
 //     name, an unterminated quote, comment or dollar quote, a directive
 //     that is unknown, malformed, repeated, misplaced or refused on its
 //     dialect, or on SQLite or MySQL a trigger, a MySQL routine or event, or
-//     a BEGIN … END block, or on PostgreSQL a BEGIN ATOMIC body or a psql
-//     meta-command line; or LintFile found a statement that cannot run in
+//     a BEGIN … END block, or on PostgreSQL a BEGIN ATOMIC body, outside
+//     -- velox:statement begin and end lines, or a psql meta-command line,
+//     or such a block with no end line; or LintFile found a statement that cannot run in
 //     the file's transaction, or Up, before its run, one that begins or
 //     ends a transaction in a file run in one.
 //   - "config": velox.json, or the Config NewDir was given, is missing or
@@ -203,7 +204,10 @@
 // unit. A trigger, a MySQL routine or event and a BEGIN … END block are
 // refused on SQLite and MySQL, whose bodies the splitter would cut at their
 // inner semicolons; a BEGIN ATOMIC body and a psql meta-command line, one
-// that starts with a backslash, are refused on PostgreSQL. An applied file
+// that starts with a backslash, are refused on PostgreSQL. Such a statement
+// runs when the file puts it between a -- velox:statement begin line and a
+// -- velox:statement end line: the text between is one statement, run as
+// written, without a last ";". An applied file
 // edited or gone is a [*ChecksumError], and a lock held past the wait
 // [ErrLockWait]. [Verify] applies a directory to an empty database and fails
 // when Drift then finds a change against schema.json, or the database holds a

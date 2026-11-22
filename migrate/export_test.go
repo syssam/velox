@@ -26,6 +26,7 @@ func WriteScript(s Script) string {
 type Piece struct {
 	SQL, Directive string
 	Line           int
+	Block          bool
 }
 
 // Split is split.

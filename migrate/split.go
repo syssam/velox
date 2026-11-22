@@ -13,6 +13,7 @@ type piece struct {
 	SQL       string // a statement, from its first token to its last, without ";"; "" for a directive
 	Directive string // a directive line's text after "-- velox:"; "" for a statement
 	Line      int    // its first line, from 1
+	Block     bool   // a statement between -- velox:statement begin and end lines, which is not split
 }
 
 // directivePrefix starts a directive line.
@@ -22,7 +23,9 @@ const directivePrefix = "-- velox:"
 // comments and dollar quotes. Comments before a statement's first token and
 // after its last are not part of it; MySQL's executable comments, "/*!",
 // are statement text. A "-- velox:" line between statements is a directive;
-// one inside a statement, or not at the start of its line, is an error.
+// one inside a statement, or not at the start of its line, is an error. The
+// text between "-- velox:statement begin" and "-- velox:statement end" lines
+// is one statement, which is not split.
 func split(d velox.Dialect, src string) ([]piece, error) {
 	s := splitter{d: d, src: src}
 	if err := s.run(); err != nil {
@@ -72,6 +75,14 @@ func (s *splitter) run() error {
 				return err
 			}
 			i++
+			continue
+		case s.lineComment(i) && start < 0 && s.directiveAt(i) == blockBegin:
+			j, lines, err := s.block(i, line)
+			if err != nil {
+				return err
+			}
+			line += lines
+			i = j
 			continue
 		case s.lineComment(i):
 			j, err := s.skipLineComment(i, line, start >= 0)
@@ -129,8 +140,138 @@ func (s *splitter) skipLineComment(i, line int, inStmt bool) (int, error) {
 	if inStmt {
 		return 0, fileErr(line, "a directive inside a statement")
 	}
+	if strings.TrimRight(text, " \t\r\f\v") == blockEnd {
+		return 0, fileErr(line, "-- velox:statement end with no -- velox:statement begin before it")
+	}
 	s.out = append(s.out, piece{Directive: strings.TrimRight(text, " \t\r\f\v"), Line: line})
 	return j, nil
+}
+
+// The directives that mark a statement the split does not read: the text
+// between their lines is one statement, run as it is.
+const (
+	blockBegin = "statement begin"
+	blockEnd   = "statement end"
+)
+
+// directiveAt is the directive of the line comment at s.src[i] that starts
+// its line, its text after "-- velox:" without trailing white space; "" for
+// any other comment.
+func (s *splitter) directiveAt(i int) string {
+	if !lineStart(s.src, i) {
+		return ""
+	}
+	j := strings.IndexByte(s.src[i:], '\n')
+	if j < 0 {
+		j = len(s.src) - i
+	}
+	text, ok := strings.CutPrefix(s.src[i:i+j], directivePrefix)
+	if !ok {
+		return ""
+	}
+	return strings.TrimRight(text, " \t\r\f\v")
+}
+
+// block reads the statement marked by the -- velox:statement begin line at
+// s.src[i], on line line, to the -- velox:statement end line, and adds it
+// to s.out: the text between them from its first token, without a last
+// ";" and the white space around it. It is not split or refused, so a
+// trigger's or routine's body keeps its ";". It returns the index after the
+// end line and the lines it read. Another directive before the end line is
+// an error, as is no end line or nothing between.
+func (s *splitter) block(i, line int) (int, int, error) {
+	src := s.src
+	from := strings.IndexByte(src[i:], '\n')
+	if from < 0 {
+		return 0, 0, fileErr(line, "-- velox:statement begin with no -- velox:statement end after it")
+	}
+	from += i + 1
+	n := 1 // lines read, the begin line's
+	for at := from; at < len(src); {
+		eol := strings.IndexByte(src[at:], '\n')
+		next := len(src)
+		if eol >= 0 {
+			next = at + eol + 1
+		}
+		k := at
+		for k < next && space(src[k]) && src[k] != '\n' {
+			k++
+		}
+		if d := s.directiveAt(k); strings.HasPrefix(src[k:], directivePrefix) {
+			if d != blockEnd {
+				return 0, 0, fileErr(line+n, "a directive inside a -- velox:statement block; end the block first")
+			}
+			body, first := blockBody(src[from:at])
+			if body == "" {
+				return 0, 0, fileErr(line, "the -- velox:statement block holds no statement")
+			}
+			s.scanLiterals(body)
+			s.out = append(s.out, piece{SQL: body, Line: line + 1 + first, Block: true})
+			return next, n + strings.Count(src[at:next], "\n"), nil
+		}
+		n += strings.Count(src[at:next], "\n")
+		at = next
+	}
+	return 0, 0, fileErr(line, "-- velox:statement begin with no -- velox:statement end after it")
+}
+
+// blockBody is the statement of a block's text: from its first token, which
+// skips white space and line comments, to its last, without a last ";". It
+// returns the lines before the first token too.
+func blockBody(text string) (string, int) {
+	lines := 0
+	for {
+		t := strings.TrimLeft(text, " \t\r\f\v")
+		switch {
+		case strings.HasPrefix(t, "\n"):
+			text, lines = t[1:], lines+1
+			continue
+		case strings.HasPrefix(t, "--"):
+			j := strings.IndexByte(t, '\n')
+			if j < 0 {
+				return "", lines
+			}
+			text, lines = t[j+1:], lines+1
+			continue
+		}
+		text = t
+		break
+	}
+	text = strings.TrimRightFunc(text, func(r rune) bool { return r < 128 && space(byte(r)) })
+	text = strings.TrimSuffix(text, ";")
+	return strings.TrimRightFunc(text, func(r rune) bool { return r < 128 && space(byte(r)) }), lines
+}
+
+// scanLiterals reads body's literals as the split reads a statement's, for
+// what MySQL's modes need to know of them: a backslash, a "…" literal.
+func (s *splitter) scanLiterals(body string) {
+	sub := splitter{d: s.d, src: body}
+	for i := 0; i < len(body); {
+		switch {
+		case sub.lineComment(i):
+			j := strings.IndexByte(body[i:], '\n')
+			if j < 0 {
+				i = len(body)
+			} else {
+				i += j
+			}
+		case strings.HasPrefix(body[i:], "/*") && !sub.executable(i):
+			if j := sub.commentEnd(i); j > 0 {
+				i = j
+			} else {
+				i = len(body)
+			}
+		default:
+			j, reason := sub.token(i)
+			if reason != "" {
+				i = len(body)
+			} else {
+				i = j
+			}
+		}
+	}
+	s.backslash = s.backslash || sub.backslash
+	s.dquote = s.dquote || sub.dquote
 }
 
 // metaCommand is the error for the psql meta-command whose backslash is
@@ -152,12 +293,12 @@ func (s *splitter) metaCommand(i, line int) error {
 // whose ";" the split cannot tell from the end of the statement; the other
 // bodies are dollar-quoted and split whole.
 func (s *splitter) refusal(sql string) string {
-	const body = "triggers and procedures are not supported in migration files"
+	const body = "the split cannot read a trigger's or procedure's body; put the statement between -- velox:statement begin and -- velox:statement end lines"
 	ws := lex(s.d, sql)
 	if s.d == velox.Postgres {
 		for i := 1; i < len(ws); i++ {
 			if !ws[i-1].quoted && !ws[i].quoted && strings.EqualFold(ws[i-1].text, "BEGIN") && strings.EqualFold(ws[i].text, "ATOMIC") {
-				return "BEGIN ATOMIC bodies are not supported in migration files; write the body as a string, AS $$ … $$"
+				return "the split cannot read a BEGIN ATOMIC body; write the body as a string, AS $$ … $$, or put the statement between -- velox:statement begin and -- velox:statement end lines"
 			}
 		}
 		return ""

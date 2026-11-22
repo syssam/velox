@@ -20,7 +20,15 @@ func directive(text string, line int) migrate.Piece {
 }
 
 // atomic is the refusal of a BEGIN ATOMIC body.
-const atomic = "BEGIN ATOMIC bodies are not supported in migration files; write the body as a string, AS $$ … $$"
+const atomic = "the split cannot read a BEGIN ATOMIC body; write the body as a string, AS $$ … $$, or put the statement between -- velox:statement begin and -- velox:statement end lines"
+
+// body is the refusal of a trigger's or a routine's body.
+const body = "the split cannot read a trigger's or procedure's body; put the statement between -- velox:statement begin and -- velox:statement end lines"
+
+// block is a statement piece between statement begin and end lines.
+func block(sql string, line int) migrate.Piece {
+	return migrate.Piece{SQL: sql, Line: line, Block: true}
+}
 
 var splitCases = []struct {
 	d    velox.Dialect
@@ -84,17 +92,17 @@ var splitCases = []struct {
 	{d: velox.MySQL, src: "SELECT /* /* */ 1; SELECT 2", want: []migrate.Piece{stmt("SELECT /* /* */ 1", 1), stmt("SELECT 2", 1)}},
 	{d: velox.Postgres, src: "SELECT 'a\nb\nc';\n\nSELECT 2;", want: []migrate.Piece{stmt("SELECT 'a\nb\nc'", 1), stmt("SELECT 2", 5)}},
 	// Triggers and procedures, whose bodies hold ";", are refused at their statement.
-	{d: velox.SQLite, src: "SELECT 1;\nCREATE TRIGGER t AFTER INSERT ON a BEGIN UPDATE a SET x = 1; END;", err: "triggers and procedures are not supported in migration files", line: 2},
-	{d: velox.SQLite, src: "create temp trigger t after insert on a begin select 1; end;", err: "triggers and procedures are not supported in migration files", line: 1},
-	{d: velox.SQLite, src: "CREATE TEMPORARY TRIGGER IF NOT EXISTS t AFTER INSERT ON a BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
-	{d: velox.MySQL, src: "CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: "triggers and procedures are not supported in migration files", line: 1},
-	{d: velox.MySQL, src: "\nCREATE PROCEDURE p() BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 2},
-	{d: velox.MySQL, src: "CREATE FUNCTION f() RETURNS int RETURN 1;", err: "triggers and procedures are not supported in migration files", line: 1},
-	{d: velox.MySQL, src: "CREATE EVENT e ON SCHEDULE EVERY 1 DAY DO DELETE FROM a;", err: "triggers and procedures are not supported in migration files", line: 1},
-	{d: velox.MySQL, src: "CREATE DEFINER = `u`@`%` TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.SQLite, src: "SELECT 1;\nCREATE TRIGGER t AFTER INSERT ON a BEGIN UPDATE a SET x = 1; END;", err: body, line: 2},
+	{d: velox.SQLite, src: "create temp trigger t after insert on a begin select 1; end;", err: body, line: 1},
+	{d: velox.SQLite, src: "CREATE TEMPORARY TRIGGER IF NOT EXISTS t AFTER INSERT ON a BEGIN SELECT 1; END;", err: body, line: 1},
+	{d: velox.MySQL, src: "CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: body, line: 1},
+	{d: velox.MySQL, src: "\nCREATE PROCEDURE p() BEGIN SELECT 1; END;", err: body, line: 2},
+	{d: velox.MySQL, src: "CREATE FUNCTION f() RETURNS int RETURN 1;", err: body, line: 1},
+	{d: velox.MySQL, src: "CREATE EVENT e ON SCHEDULE EVERY 1 DAY DO DELETE FROM a;", err: body, line: 1},
+	{d: velox.MySQL, src: "CREATE DEFINER = `u`@`%` TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: body, line: 1},
 	{d: velox.MySQL, src: "CREATE DEFINER = `TRIGGER`@`%` VIEW v AS SELECT 1", want: []migrate.Piece{stmt("CREATE DEFINER = `TRIGGER`@`%` VIEW v AS SELECT 1", 1)}},
-	{d: velox.MySQL, src: "BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
-	{d: velox.SQLite, src: "SELECT 1; BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "BEGIN SELECT 1; END;", err: body, line: 1},
+	{d: velox.SQLite, src: "SELECT 1; BEGIN SELECT 1; END;", err: body, line: 1},
 	{d: velox.SQLite, src: "BEGIN; BEGIN TRANSACTION; begin work; BEGIN IMMEDIATE; BEGIN EXCLUSIVE TRANSACTION",
 		want: []migrate.Piece{stmt("BEGIN", 1), stmt("BEGIN TRANSACTION", 1), stmt("begin work", 1), stmt("BEGIN IMMEDIATE", 1), stmt("BEGIN EXCLUSIVE TRANSACTION", 1)}},
 	{d: velox.MySQL, src: "BEGIN; BEGIN WORK; SELECT 'CREATE TRIGGER'; CREATE TABLE `trigger` (id int)",
@@ -117,6 +125,19 @@ var splitCases = []struct {
 	{d: velox.Postgres, src: "-- c\n\\x\n", err: `a psql meta-command (\x) is not SQL; remove it`, line: 2},
 	{d: velox.Postgres, src: "SELECT 1; \\dt", err: `a psql meta-command (\dt) is not SQL; remove it`, line: 1},
 	{d: velox.MySQL, src: "SELECT 1\n\\g\n", want: []migrate.Piece{stmt("SELECT 1\n\\g", 1)}},
+	// A statement between statement begin and end lines is one, as written.
+	{d: velox.SQLite, src: "CREATE TABLE a (x int);\n-- velox:statement begin\n-- bump\nCREATE TRIGGER t AFTER INSERT ON a BEGIN\n  UPDATE a SET x = x + 1;\nEND;\n-- velox:statement end\nSELECT 1;",
+		want: []migrate.Piece{stmt("CREATE TABLE a (x int)", 1), block("CREATE TRIGGER t AFTER INSERT ON a BEGIN\n  UPDATE a SET x = x + 1;\nEND", 4), stmt("SELECT 1", 8)}},
+	{d: velox.MySQL, src: "-- velox:statement begin\nCREATE PROCEDURE p() BEGIN SELECT 1; SELECT 'a;b'; END\n  -- velox:statement end  \n",
+		want: []migrate.Piece{block("CREATE PROCEDURE p() BEGIN SELECT 1; SELECT 'a;b'; END", 2)}},
+	{d: velox.Postgres, src: "-- velox:statement begin\nCREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT 1; END;\n-- velox:statement end",
+		want: []migrate.Piece{block("CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT 1; END", 2)}},
+	{d: velox.SQLite, src: "SELECT 1;\n-- velox:statement begin\nCREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT 1; END;\n", err: "-- velox:statement begin with no -- velox:statement end after it", line: 2},
+	{d: velox.SQLite, src: "-- velox:statement begin", err: "-- velox:statement begin with no -- velox:statement end after it", line: 1},
+	{d: velox.SQLite, src: "-- velox:statement begin\n-- only a comment\n-- velox:statement end\n", err: "the -- velox:statement block holds no statement", line: 1},
+	{d: velox.SQLite, src: "SELECT 1;\n-- velox:statement end\n", err: "-- velox:statement end with no -- velox:statement begin before it", line: 2},
+	{d: velox.MySQL, src: "-- velox:statement begin\nCREATE PROCEDURE p() BEGIN SELECT 1; END;\n-- velox:unit\n-- velox:statement end\n", err: "a directive inside a -- velox:statement block; end the block first", line: 3},
+	{d: velox.SQLite, src: "SELECT 1\n-- velox:statement begin\nSELECT 2;\n-- velox:statement end\n", err: "a directive inside a statement", line: 2},
 	{d: velox.SQLite, src: "SELECT 1\n\\g\n", want: []migrate.Piece{stmt("SELECT 1\n\\g", 1)}},
 }
 
@@ -167,7 +188,7 @@ func FuzzSplit(f *testing.F) {
 		}
 		var stmts []string
 		for _, p := range pieces {
-			if p.SQL == "" {
+			if p.SQL == "" || p.Block { // a block is not split, so not split again
 				continue
 			}
 			if strings.Trim(p.SQL, " \t\n\r\f\v") != p.SQL {
