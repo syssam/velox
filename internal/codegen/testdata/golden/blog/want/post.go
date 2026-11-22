@@ -92,8 +92,8 @@ func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor
 
 // postDescriptor describes Post to velox: its table, columns, edges and hooks.
 func postDescriptor() velox.Descriptor[Post] {
-	f0 := veloxschema.FieldDescriptor(&schema.Post{}, "slug")
-	d0 := f0.Validators[0].(func(string) error)
+	fds := veloxschema.FieldDescriptors(&schema.Post{}, "slug")
+	d0 := fds[0].Validators[0].(func(string) error)
 	return velox.Descriptor[Post]{
 		Table: "posts",
 		Columns: []velox.ColumnDescriptor{

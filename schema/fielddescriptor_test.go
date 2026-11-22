@@ -18,23 +18,38 @@ func (Doc) Fields() []schema.Field {
 }
 
 // Holey lists a nil mixin and a nil field, which velox-gen refuses and
-// FieldDescriptor skips.
+// FieldDescriptors skips.
 type Holey struct{ schema.Schema }
 
 func (Holey) Mixin() []schema.Mixin { return []schema.Mixin{nil} }
 
 func (Holey) Fields() []schema.Field { return []schema.Field{nil, field.String("name")} }
 
-// FieldDescriptor finds a field by its name, the schema's own or a mixin's,
-// and panics, naming the schema and the field, when there is none.
-func TestFieldDescriptor(t *testing.T) {
-	if d := schema.FieldDescriptor(&Doc{}, "token"); d.DefaultFunc.(func() string)() != "tok" {
-		t.Errorf("token: %+v", d)
+// Counted counts the calls of its Mixin and Fields.
+type Counted struct {
+	schema.Schema
+	mixins, fields *int
+}
+
+func (c Counted) Mixin() []schema.Mixin { *c.mixins++; return []schema.Mixin{mixin.Time{}} }
+
+func (c Counted) Fields() []schema.Field {
+	*c.fields++
+	return []schema.Field{field.String("a"), field.String("b")}
+}
+
+// FieldDescriptors finds fields by their names, the schema's own or a
+// mixin's, in the order of the names, and panics, naming the schema and the
+// field, when there is none.
+func TestFieldDescriptors(t *testing.T) {
+	ds := schema.FieldDescriptors(&Doc{}, "token", "updated_at")
+	if ds[0].DefaultFunc.(func() string)() != "tok" {
+		t.Errorf("token: %+v", ds[0])
 	}
-	if d := schema.FieldDescriptor(Doc{}, "updated_at"); d.UpdateDefault == nil {
-		t.Errorf("updated_at, from the mixin, has no UpdateDefault: %+v", d)
+	if ds[1].UpdateDefault == nil {
+		t.Errorf("updated_at, from the mixin, has no UpdateDefault: %+v", ds[1])
 	}
-	if d := schema.FieldDescriptor(Holey{}, "name"); d.Name != "name" {
+	if d := schema.FieldDescriptors(Holey{}, "name")[0]; d.Name != "name" {
 		t.Errorf("name: %+v", d)
 	}
 	defer func() {
@@ -43,5 +58,19 @@ func TestFieldDescriptor(t *testing.T) {
 			t.Errorf("panic %q", msg)
 		}
 	}()
-	schema.FieldDescriptor(&Doc{}, "slug")
+	schema.FieldDescriptors(&Doc{}, "token", "slug")
+}
+
+// TestFieldDescriptorsReadOnce: the descriptors of several fields cost one
+// call of the schema's Mixin and of its Fields, where a call per field made
+// one each per field.
+func TestFieldDescriptorsReadOnce(t *testing.T) {
+	var m, f int
+	ds := schema.FieldDescriptors(Counted{mixins: &m, fields: &f}, "b", "created_at", "a")
+	if ds[0].Name != "b" || ds[1].Name != "created_at" || ds[2].Name != "a" {
+		t.Errorf("order: %s %s %s", ds[0].Name, ds[1].Name, ds[2].Name)
+	}
+	if m != 1 || f != 1 {
+		t.Errorf("Mixin called %d times, Fields %d; want 1 each", m, f)
+	}
 }

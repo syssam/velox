@@ -141,8 +141,8 @@ func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor
 
 // userDescriptor describes User to velox: its table, columns, edges and hooks.
 func userDescriptor() velox.Descriptor[User] {
-	f0 := veloxschema.FieldDescriptor(&schema.User{}, "created_by")
-	d0 := f0.Validators[0].(func(string) error)
+	fds := veloxschema.FieldDescriptors(&schema.User{}, "created_by")
+	d0 := fds[0].Validators[0].(func(string) error)
 	re0 := regexp.MustCompile("^[^@]+@[^@]+$")
 	return velox.Descriptor[User]{
 		Table: "users",

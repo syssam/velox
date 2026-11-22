@@ -120,7 +120,7 @@ const EdgeClear
 const EdgePage
 const EdgeRemove
 const EdgeSet
-const GeneratedCodeIsVersion26
+const GeneratedCodeIsVersion27
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -1020,7 +1020,7 @@ func (Schema) Indexes() []Index
 func (Schema) Mixin() []Mixin
 func (Schema) Type()
 func Comment(text string) *CommentAnnotation
-func FieldDescriptor(s Interface, name string) *desc.Field
+func FieldDescriptors(s Interface, names ...string) []*desc.Field
 type Annotation = desc.Annotation
 type CommentAnnotation struct { Text string }
 type Edge interface{ Descriptor() *desc.Edge }

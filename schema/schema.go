@@ -86,28 +86,44 @@ func (Schema) Mixin() []Mixin { return nil }
 // Annotations returns no annotations.
 func (Schema) Annotations() []Annotation { return nil }
 
-// FieldDescriptor returns the descriptor of the field name of s, declared
-// by s or by one of its mixins. It is for the code velox-gen writes, which
-// reads from it a default or a validator it cannot call by name. It panics
-// when s has no such field, which means the generated code is older than
-// the schema: run velox-gen.
-func FieldDescriptor(s Interface, name string) *desc.Field {
-	var lists [][]Field
-	for _, m := range s.Mixin() {
-		if m != nil {
-			lists = append(lists, m.Fields())
-		}
-	}
-	lists = append(lists, s.Fields())
-	for _, l := range lists {
-		for _, f := range l {
+// FieldDescriptors returns the descriptors of the fields names of s, in the
+// order of names, each declared by s or by one of its mixins. It is for the
+// code velox-gen writes, which reads from them the defaults and validators
+// it cannot call by name; it calls s's Mixin and Fields once for all of
+// them. It panics when s has no field of one of the names, which means the
+// generated code is older than the schema: run velox-gen.
+func FieldDescriptors(s Interface, names ...string) []*desc.Field {
+	out := make([]*desc.Field, len(names))
+	left := len(names)
+	find := func(fields []Field) {
+		for _, f := range fields {
 			if f == nil {
 				continue
 			}
-			if d := f.Descriptor(); d != nil && d.Name == name {
-				return d
+			d := f.Descriptor()
+			if d == nil {
+				continue
+			}
+			for i, name := range names {
+				if out[i] == nil && d.Name == name {
+					out[i] = d
+					left--
+				}
 			}
 		}
 	}
-	panic(fmt.Sprintf("schema: %T has no field %q: the generated code is older than the schema; run velox-gen", s, name))
+	for _, m := range s.Mixin() {
+		if m != nil && left > 0 {
+			find(m.Fields())
+		}
+	}
+	if left > 0 {
+		find(s.Fields())
+	}
+	for i, d := range out {
+		if d == nil {
+			panic(fmt.Sprintf("schema: %T has no field %q: the generated code is older than the schema; run velox-gen", s, names[i]))
+		}
+	}
+	return out
 }

@@ -5,7 +5,7 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion26
+const _ = velox.GeneratedCodeIsVersion27
 
 // InvoiceStatus is the type of Invoice's status field.
 type InvoiceStatus string

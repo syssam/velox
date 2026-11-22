@@ -183,7 +183,9 @@ type entState struct {
 	sch     bool              // the code reads the schema package
 	regexps int
 	reads   int               // values read from descriptors into setup
-	descs   map[string]string // a field's name → the setup variable of its descriptor
+	descs   map[string]string // a field's name → the expression of its descriptor, fds[i]
+	names   []string          // the quoted names FieldDescriptors reads, in the order of fds
+	descsOf string            // the schema value FieldDescriptors reads them from
 	setup   []string
 	cases   []string
 }
@@ -573,12 +575,13 @@ func qualifiers(ident string) []string {
 }
 
 // schemaPkg is the import path of the schema DSL package, whose
-// FieldDescriptor reads a field's descriptor by its name.
+// FieldDescriptors reads fields' descriptors by their names.
 const schemaPkg = "github.com/syssam/velox/schema"
 
-// descriptor returns the variable of the setup block that holds f's
-// descriptor, read from the schema package by the field's name, in plain
-// mode. The first call for f declares it, so each descriptor is read once.
+// descriptor returns the expression of f's descriptor in the setup block,
+// in plain mode: fds[i], an element of the one FieldDescriptors call that
+// complete puts first in the block, which reads the schema's Mixin and
+// Fields once for every descriptor the entity needs.
 func (s *entState) descriptor(e *Entity, f *Field) string {
 	if v, ok := s.descs[f.Name]; ok {
 		return v
@@ -587,9 +590,10 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 	if s.descs == nil {
 		s.descs = map[string]string{}
 	}
-	v := "f" + strconv.Itoa(len(s.descs))
+	v := "fds[" + strconv.Itoa(len(s.names)) + "]"
 	s.descs[f.Name] = v
-	s.setup = append(s.setup, fmt.Sprintf("%s := %s.FieldDescriptor(&%s.%s{}, %s)", v, s.l.vschema, s.l.out.SchemaName, e.Name, strconv.Quote(f.Name)))
+	s.names = append(s.names, strconv.Quote(f.Name))
+	s.descsOf = fmt.Sprintf("&%s.%s{}", s.l.out.SchemaName, e.Name)
 	return v
 }
 
@@ -1452,6 +1456,10 @@ func kindOf(o *OutEntity) string {
 func (l *lowerer) complete(s *entState) {
 	o := s.out
 	o.CheckCode = strings.TrimRight(strings.Join(s.cases, ""), "\n")
+	if len(s.names) > 0 {
+		read := fmt.Sprintf("fds := %s.FieldDescriptors(%s, %s)", s.l.vschema, s.descsOf, strings.Join(s.names, ", "))
+		s.setup = append([]string{read}, s.setup...)
+	}
 	o.CheckSetup = strings.Join(s.setup, "\n")
 	for _, p := range s.paths {
 		o.Imports = append(o.Imports, p)

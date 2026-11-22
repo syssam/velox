@@ -84,8 +84,8 @@ func (*Membership) VeloxMeta() *velox.Meta[Membership] {
 
 // membershipDescriptor describes Membership to velox: its table, columns, edges and hooks.
 func membershipDescriptor() velox.Descriptor[Membership] {
-	f0 := veloxschema.FieldDescriptor(&schema.Membership{}, "joined_at")
-	d0 := f0.Default.(func() time.Time)
+	fds := veloxschema.FieldDescriptors(&schema.Membership{}, "joined_at")
+	d0 := fds[0].Default.(func() time.Time)
 	return velox.Descriptor[Membership]{
 		Table: "memberships",
 		Columns: []velox.ColumnDescriptor{

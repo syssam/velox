@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion26
+const _ = velox.GeneratedCodeIsVersion27
 
 var veloxEntities velox.EntityTable
 

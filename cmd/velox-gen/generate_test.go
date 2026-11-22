@@ -343,7 +343,7 @@ func TestGenerateRefusesSchemaImportingGen(t *testing.T) {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
 	src, _ := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
-	if !strings.Contains(string(src), `"github.com/syssam/velox/schema"`) || !strings.Contains(string(src), `schema.FieldDescriptor(&veloxschema.User{}, "created_at")`) {
+	if !strings.Contains(string(src), `"github.com/syssam/velox/schema"`) || !strings.Contains(string(src), `schema.FieldDescriptors(&veloxschema.User{}, "created_at"`) {
 		t.Fatalf("user.go does not read the closure from the schema:\n%s", src)
 	}
 	writeFile(t, filepath.Join(dir, "veloxschema", "user_policy.go"), schemaUserPolicy)

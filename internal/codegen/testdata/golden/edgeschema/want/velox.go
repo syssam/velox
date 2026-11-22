@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion26
+const _ = velox.GeneratedCodeIsVersion27
 
 // MembershipRole is the type of Membership's role field.
 type MembershipRole string
