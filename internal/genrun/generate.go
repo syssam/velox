@@ -354,7 +354,6 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 		return done(relFileError(dir, err))
 	}
 	want, owners := o.Want, o.Owners
-	warnOldDirs(dir, out, pkg, log)
 	if err := checkWantPaths(dir, out, want); err != nil {
 		return done(err)
 	}

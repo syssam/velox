@@ -274,7 +274,7 @@ CI fails when a generated file is stale.
   imported as `schema`, or as `veloxschema` when the schema package is also
   named `schema`. The schema package never imports veloxgen (decisions 0039,
   0040 and 0065). A run removes the generated files it
-  no longer writes, an older velox-gen's `veloxgen/runtime` among them.
+  no longer writes.
 - Golden files are rewritten with the test package's `-update` flag. Run it for
   one package, and read the diff before you commit it:
 

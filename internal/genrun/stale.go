@@ -14,31 +14,6 @@ import (
 	"strings"
 )
 
-// warnOldDirs warns of each file of the user's in out/entity or out/runtime,
-// where an older velox-gen wrote.
-func warnOldDirs(dir, out, pkg string, log *Log) {
-	// An older velox-gen wrote the entities in out/entity: the sweep removes
-	// its files there, and the user's files stay, and are named.
-	ed := filepath.Join(out, "entity")
-	matches, _ := filepath.Glob(filepath.Join(ed, "*.go"))
-	for _, p := range matches {
-		if !IsGenerated(p) {
-			log.warn(fmt.Sprintf("%s is yours, and stays; velox-gen writes every entity in %s and does not build %s: move the file to %[2]s, as package %[4]s, or delete it",
-				RelPath(dir, p), RelPath(dir, out), RelPath(dir, ed), pkg))
-		}
-	}
-	// An older velox-gen wrote package runtime in out/runtime, which the
-	// sweep removes; the user's files stay, and are named.
-	rd := filepath.Join(out, "runtime")
-	matches, _ = filepath.Glob(filepath.Join(rd, "*.go"))
-	for _, p := range matches {
-		if !IsGenerated(p) {
-			log.warn(fmt.Sprintf("%s is yours, and stays; velox-gen no longer writes package runtime: the generated package binds the schema itself, and no program imports %s: delete the file",
-				RelPath(dir, p), RelPath(dir, rd)))
-		}
-	}
-}
-
 // checkWantPaths refuses a path of want, in order, that is not velox-gen's.
 func checkWantPaths(dir, out string, want map[string][]byte) error {
 	// Nothing is written before every path is known to be velox-gen's: a

@@ -1224,6 +1224,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `velox.NoFilter()`, which was `velox.Allow()` under a second name. A
   `WithFilter` filter returns `velox.Allow()` for an entity it does not
   restrict.
+- velox-gen's warning about a file of yours in `-out/entity` or
+  `-out/runtime`, where a velox-gen before 1.0 wrote. A run still removes
+  the generated files it no longer writes, there as anywhere below `-out`.
 - `schema.Package`, `schema.VeloxeNames`, `load.MarshalPackage` and
   `ddl.VeloxeSymbol`: their index naming is velox-gen's default (ADR 0090).
 

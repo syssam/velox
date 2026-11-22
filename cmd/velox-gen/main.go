@@ -79,11 +79,9 @@
 // in -out, which imports the schema package and binds its methods, and the
 // defaults and validators it cannot call by name. A schema package that
 // imports -out itself, or through another package, is refused with the
-// chain, since -out imports it. velox-gen removes the generated files of
-// -out/entity and -out/runtime, which an older velox-gen wrote, and names a
-// file of yours left there. velox-gen reads
-// the schema package without these methods and the declarations only they
-// use, so it runs when the generated package is stale or missing. velox-gen refuses any .go file of
+// chain, since -out imports it. So the schema package compiles without
+// -out, and velox-gen runs when the generated package is stale or missing.
+// velox-gen refuses any .go file of
 // yours, in -out or in the schema package, that some build would leave out,
 // by its name or its build constraints, such as x_linux.go, //go:build linux
 // or //go:build prod, since the generated code would bind its methods in one
