@@ -86,9 +86,9 @@ func wantTeams(t *testing.T, tg target, what string, p int64, teams ...int64) ma
 
 // TestEdgeSchemaThrough runs the M2M edge setters, With and HasWith on a
 // relation whose links are an edge schema's rows. Add fills the rows'
-// defaults; adding a link again keeps the row, on MySQL too, where its
-// ON DUPLICATE KEY UPDATE holds for the second unique key as well; Remove and
-// Clear delete rows, and a link the Write policy hides stays.
+// defaults. Adding a link again keeps its row, ID and code, on a table with
+// a second unique key, code. Remove and Clear delete rows; under the
+// policies, Clear keeps a link the Write policy hides.
 func TestEdgeSchemaThrough(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		rosterSetup(t, tg)
