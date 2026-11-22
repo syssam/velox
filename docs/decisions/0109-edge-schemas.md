@@ -52,7 +52,7 @@ through the entity pipeline. The gap analysis lists the edge schema as row
     relation read its rows through the two sides and would not apply them.
     The engine refuses such a relation when it resolves, for a policy
     velox-gen cannot read. A `WithFilter` filter that returns anything but
-    `NoFilter` for a join entity or an edge schema fails the statements
+    `Allow` for a join entity or an edge schema fails the statements
     that read through it, as amended in 0098.
 - `velox.EdgeThrough(..., unfilled ...int)` lists the edge schema's
   columns an insert would write as a zero that the schema calls required:

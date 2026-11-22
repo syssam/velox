@@ -18,7 +18,7 @@ type noteFilterFails struct{}
 // noteFilterFails; it restricts no other entity.
 func noteFilter(ctx context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
 	if entity != "INote" {
-		return velox.NoFilter(), nil
+		return velox.Allow(), nil
 	}
 	if ctx.Value(noteFilterFails{}) != nil {
 		return velox.Predicate{}, errNoteFilter

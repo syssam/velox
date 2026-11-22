@@ -66,7 +66,7 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // the statement's context, an entity's name (as Mutation.Entity gives it,
 // "Invoice") and the op the entity is read for, it returns that entity's
 // row condition, by column name as an Interceptor's Filter does: FieldEQ
-// and the like. It returns NoFilter() for an entity it does not restrict.
+// and the like. It returns Allow() for an entity it does not restrict.
 // Its zero Predicate fails the statement, and so does an error, which is
 // not a denial.
 //
@@ -78,9 +78,9 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // policies still see the soft delete as an update. It is OpSelect for every
 // entity the statement reaches: by a With load, a Join, Has, HasWith or a
 // subquery. A filter that should narrow reads only, as ent's interceptors
-// do, returns NoFilter() when op is not OpSelect.
+// do, returns Allow() when op is not OpSelect.
 //
-// Return NoFilter() for the join entities of many-to-many edges, edge
+// Return Allow() for the join entities of many-to-many edges, edge
 // schemas included: Has, Of, a With load, LoadEach and CountEach through one
 // fail when a filter restricts it, as they read its rows through the
 // relation's two sides.
@@ -96,7 +96,7 @@ type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 //
 //	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 //		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
-//			return velox.NoFilter(), nil
+//			return velox.Allow(), nil
 //		}
 //		return velox.FieldIsNull("deleted_at"), nil
 //	}))
@@ -115,7 +115,7 @@ type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 // where its rows are read or written as its own, as Rel.Add and the like
 // do. A Has, an Of, a With load, LoadEach or CountEach through it calls f
 // for it with OpSelect, once per statement, and fails unless f returns
-// NoFilter(). On MySQL, an upsert that updates an entity f returns a condition for (given OpInsert) is refused
+// Allow(). On MySQL, an upsert that updates an entity f returns a condition for (given OpInsert) is refused
 // with ErrPolicyUpsert. A nil f panics.
 func WithFilter(f Filter) Option {
 	if f == nil {

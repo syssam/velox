@@ -165,7 +165,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   interceptor's reach: reads, writes, loads, joins, `Has`/`HasWith`, counts
   and aggregates. `WithoutPolicy` does not lift it; an error, the zero
   `Predicate` or an unknown column fails the statement, and
-  `velox.NoFilter()` restricts nothing.
+  `velox.Allow()` restricts nothing.
 - `SetPtr(p)` on every column handle with `Set` (ADR 0099), as ent's
   `SetNillableX`: a nil `p` gives a setter the builders skip, a non-nil one
   sets `*p`; on a nullable column a nil `p` skips too, and `SetNull()`
@@ -605,7 +605,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   edge, plain or an edge schema, fails `Has`, `Of`, a `With` load,
   `LoadEach` and `CountEach` through it (ADR 0098's amendment). It was
   ignored inside `Has` and applied to a `With` load, so the two disagreed.
-  Return `NoFilter()` for a join entity.
+  Return `Allow()` for a join entity.
 - `veloxgql` is an engine-free core, and gqlgen's adapter is the new
   package `veloxgql/gqlgenx` (ADR 0104): `NewExtension`, `Extension`,
   `Setup`, `Server`, `ErrorPresenter`, `OnCanceled`, `PresenterOption` and
@@ -1196,6 +1196,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Removed
 
+- `velox.NoFilter()`, which was `velox.Allow()` under a second name. A
+  `WithFilter` filter returns `velox.Allow()` for an entity it does not
+  restrict.
 - `schema.Package`, `schema.VeloxeNames`, `load.MarshalPackage` and
   `ddl.VeloxeSymbol`: their index naming is velox-gen's default (ADR 0090).
 

@@ -207,7 +207,7 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescripto
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's Read
 // policy, a scope included, applies, as it does to any relation's target.
 // J cannot have a Read policy or an interceptor of its own, and a WithFilter
-// filter must return NoFilter() for it: J is read through its two sides,
+// filter must return Allow() for it: J is read through its two sides,
 // whose Read policies apply, and the relation is refused when it resolves.
 //
 // Add inserts J's rows, filling their defaults, and keeps a link that

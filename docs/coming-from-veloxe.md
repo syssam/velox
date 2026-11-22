@@ -168,7 +168,7 @@ veloxe's own, or differ in a veloxe port:
 | `velox.Open(dialect.Postgres, dsn)` | `velox.Connect("postgres", dsn, opts...)` |
 | `Modify(func(s *sql.Selector){…})`, `func(*sql.Selector)` predicates, `WhereP` | `velox.Expr` for a condition, `velox.Calc` for a term or an order, `Select` or `SelectRaw` with `Rows` for a projection, `velox.SetExpr` for an update ([sql.md](sql.md#coming-from-ent)) |
 | `COUNT(*) OVER ()` in a `Modify` | `velox.Calc[T]("COUNT(*) OVER ()")` or `SelectRaw`; a window function is refused in `Expr`, `GroupBy`, an aggregate and `SetExpr` ([ADR 0101](decisions/0101-window-terms-soft-delete-options.md)) |
-| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.NoFilter()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
+| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
 | `SkipDefault(user.FieldUpdatedAt)` | `KeepDefaults(U.UpdatedAt)` |
@@ -209,7 +209,7 @@ That context shows deleted parents as well.
 **A filter must not restrict a join entity.** A `WithFilter` filter that
 returns a condition for the join entity of a many-to-many edge, or for an
 edge schema, fails `Has`, `With`, `LoadEach` and `CountEach` through it.
-Return `velox.NoFilter()` for those names. A filter for a tenant column
+Return `velox.Allow()` for those names. A filter for a tenant column
 on an edge schema is covered in
 [Edges](coming-from-ent.md#edges)
 ([ADR 0098](decisions/0098-hooks-and-filters-for-every-entity.md)).
@@ -217,7 +217,7 @@ on an edge schema is covered in
 **A filter is asked about writes.** veloxe's interceptors wrapped queries.
 A velox filter is called with the op, `OpSelect` for reads and the write's
 op for updates and deletes. A filter that narrows reads only returns
-`velox.NoFilter()` when `op != velox.OpSelect`. Otherwise a restore that
+`velox.Allow()` when `op != velox.OpSelect`. Otherwise a restore that
 clears `deleted_at` under the plain context updates no row.
 
 **Back-references are not filled.** veloxe's `FeatureBidiEdgeRefs` set

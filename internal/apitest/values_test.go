@@ -21,7 +21,7 @@ func TestValuesUnderPolicyAndFilter(t *testing.T) {
 		if strings.HasSuffix(entity, "Ticket") {
 			return velox.FieldEQ("done", false), nil
 		}
-		return velox.NoFilter(), nil
+		return velox.Allow(), nil
 	}))
 	q := db.Query[testmodel.Ticket]().Where(Tk.InvoiceID.EQ(9)).OrderBy(Tk.Title.Asc()).Limit(5).Offset(2)
 	titles, err := velox.Values(asUser("ann"), q, Tk.Title.Key())

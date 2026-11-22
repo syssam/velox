@@ -43,9 +43,9 @@ asked for both at run time.
 - What a filter returns is checked as an interceptor's is
   (`Scoper.filterCond`): an error fails the statement and is not a denial;
   the zero `Predicate` fails it, so a filter that forgot an entity fails
-  closed; a column the entity lacks fails it; `velox.NoFilter()` is no
-  condition. `NoFilter` is `Allow` by the name a filter reads best with:
-  a function, as `Allow` is, so no one can reassign it.
+  closed; a column the entity lacks fails it; `velox.Allow()` is no
+  condition. (It was named `NoFilter` at first; see the second
+  amendment.)
 - The filter is given the op. For the statement's own entity it is the
   statement's op: `OpSelect`, `OpUpdate` (an update, a Save, a Writable
   read), `OpDelete`, and `OpInsert` for an upsert's update branch. It is
@@ -56,7 +56,7 @@ asked for both at run time.
   over every op breaks a restore: nextapp's email handler reads a deleted
   user with the deleted included, then clears `deleted_at` under the plain
   context, and that update would match 0 rows and fail silently. So a
-  filter that narrows reads only returns `NoFilter()` when op is not
+  filter that narrows reads only returns `Allow()` when op is not
   `OpSelect`. The fail-closed rules do not depend on op.
 - A soft delete (`schema/mixin/softdelete`) sends an UPDATE, which
   `engine.MarkSoftDelete` marks. `scope()` gives the filter `OpDelete` for
@@ -83,17 +83,17 @@ asked for both at run time.
   for it where its rows are a statement's own (a With load through it, the
   join-row writes of `Rel.Add`, `Remove`, `Clear`), and not inside a `Has`
   through it, which reads it through its two sides. A filter that returns
-  `NoFilter` for names it does not know keeps the interceptor rule that a
+  `Allow` for names it does not know keeps the interceptor rule that a
   join entity is read through its sides; the godoc asks for it. An
   interceptor on a join entity stays refused: a schema can be checked when
   it is built, a run-time filter only when it runs.
   Amended 2026-11-22: velox calls the filter for a join entity inside
   Has, Of, With, LoadEach and CountEach through it too, and fails them
-  unless it returns `NoFilter` (see the amendment below).
+  unless it returns `Allow` (see the amendment below).
 - MySQL's `ON DUPLICATE KEY UPDATE` takes no condition. An upsert that
   updates is refused there with `ErrPolicyUpsert` when a filter returns a
   condition for its entity under `OpInsert`, and runs when every filter
-  returns `NoFilter`. An interceptor or a Read/Write policy still refuses
+  returns `Allow`. An interceptor or a Read/Write policy still refuses
   it without asking the filters. A multi-row upsert on a DB with filters
   runs in a transaction, as one on an entity with an interceptor does.
 
@@ -102,7 +102,7 @@ asked for both at run time.
 - ent's client-wide hooks and interceptors port one to one, with the
   entity name to dispatch on. velox's filter is a row filter, not query
   middleware: it is asked for writes as well as reads, and narrows reads
-  only when it returns `NoFilter()` for other ops, as ent's query-only
+  only when it returns `Allow()` for other ops, as ent's query-only
   interceptors do. It cannot add an ORDER BY or a LIMIT.
 - `Meta.HasRowFilter` and `untyped.Table.HasRowFilter` are about the
   schema: they know no DB, so they do not see `WithFilter`. velox-graphql's
@@ -118,8 +118,14 @@ edge schema (`edge.Through`), now fails `Has`, `Of`, a `With` load (with
 ignored inside `Has` and applied to a `With` load. The two disagreed: a
 `With` load and a `Has` gave different answers for the same link. The scope
 asks the filters about each join entity it reads through, once per
-statement, with `OpSelect`, and accepts only `NoFilter`. Statements that
+statement, with `OpSelect`, and accepts only `Allow`. Statements that
 read or write the join entity's rows as their own, such as `Rel.Add`,
 `Remove` and `Clear`, still get its condition. An edge schema is also
 refused by velox-gen when it has a Read or Query policy, Interceptors or
 `softdelete.Mixin` (rule 70).
+
+## Amendment (2026-11-22, second)
+
+`velox.NoFilter()` was `velox.Allow()` under a second name. It is removed:
+a filter returns `velox.Allow()` for an entity it does not restrict, as a
+policy does for a caller it does not restrict.

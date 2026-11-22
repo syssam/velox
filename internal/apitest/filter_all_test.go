@@ -22,8 +22,8 @@ const (
 	allFail                         // return errAllFilter
 	allZero                         // return the zero Predicate
 	allUnknown                      // name a column INote does not have
-	allNone                         // return NoFilter
-	allNothing                      // return Not(NoFilter()): no row
+	allNone                         // return Allow
+	allNothing                      // return Not(Allow()): no row
 )
 
 type allFilterKey struct{}
@@ -56,7 +56,7 @@ func allFilter(log *allFilterLog) velox.Filter {
 		log.seen = append(log.seen, entity)
 		log.mu.Unlock()
 		if entity != "INote" {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		m, _ := ctx.Value(allFilterKey{}).(allFilterMode)
 		switch m {
@@ -67,9 +67,9 @@ func allFilter(log *allFilterLog) velox.Filter {
 		case allUnknown:
 			return velox.FieldEQ("nope", 1), nil
 		case allNone:
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		case allNothing:
-			return velox.Not(velox.NoFilter()), nil
+			return velox.Not(velox.Allow()), nil
 		}
 		return velox.FieldNEQ("body", "a"), nil
 	}
@@ -121,17 +121,17 @@ func TestFilterEveryRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantIDs(t, "first page", noteIDs(page), 4)
-	// Under NoFilter the filter restricts nothing.
+	// Under Allow the filter restricts nothing.
 	all, err = q.All(allMode(allNone))
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs(t, "All under NoFilter", noteIDs(all), 1, 4)
+	wantIDs(t, "All under Allow", noteIDs(all), 1, 4)
 	all, err = q.All(allMode(allNothing))
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantIDs(t, "All under Not(NoFilter())", noteIDs(all))
+	wantIDs(t, "All under Not(Allow())", noteIDs(all))
 }
 
 // TestFilterReachesRelations: a With load, to-one, to-many and through a
@@ -283,7 +283,7 @@ func TestFiltersAndInOrder(t *testing.T) {
 		return func(ctx context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
 			calls = append(calls, name+":"+entity+":"+ctx.Value(key{}).(string))
 			if entity != "INote" {
-				return velox.NoFilter(), nil
+				return velox.Allow(), nil
 			}
 			return velox.FieldNEQ("body", body), nil
 		}
@@ -328,7 +328,7 @@ func TestFilterErrorText(t *testing.T) {
 	q := db.Query[fixture.INote]().AllowUnbounded()
 	for mode, want := range map[allFilterMode]string{
 		allFail:    "velox: fixture.INote: filter [0]: all filter failed",
-		allZero:    "velox: fixture.INote: filter [0] returned the zero Predicate; return velox.NoFilter() for no restriction",
+		allZero:    "velox: fixture.INote: filter [0] returned the zero Predicate; return velox.Allow() for no restriction",
 		allUnknown: `velox: fixture.INote: filter [0]'s condition: `,
 	} {
 		_, err := q.All(allMode(mode))
@@ -477,7 +477,7 @@ type includeDeletedKey struct{}
 func softDelete(readsOnly bool) velox.Filter {
 	return func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "sdUser" || readsOnly && op != velox.OpSelect || ctx.Value(includeDeletedKey{}) != nil {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		return velox.FieldIsNull("deleted_at"), nil
 	}
@@ -538,7 +538,7 @@ type opCall struct {
 func opLog(calls *[]opCall) velox.Filter {
 	return func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		*calls = append(*calls, opCall{entity, op})
-		return velox.NoFilter(), nil
+		return velox.Allow(), nil
 	}
 }
 
@@ -616,12 +616,12 @@ func TestFilterSelfRelationUpdate(t *testing.T) {
 func TestFilterOnJoinEntityRefused(t *testing.T) {
 	db := interceptorDB(t, velox.WithFilter(func(_ context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
 		if entity != "IJoin" {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		return velox.FieldEQ("note_id", 2), nil
 	}))
 	ctx := context.Background()
-	const want = "fixture.IJoin: filter [0] restricts it, the join entity of a many-to-many relation, which Has and With read through its two sides; return NoFilter() for it"
+	const want = "fixture.IJoin: filter [0] restricts it, the join entity of a many-to-many relation, which Has and With read through its two sides; return Allow() for it"
 	_, err := db.Query[fixture.IOwner]().Where(fixture.IOwners.Tagged.Has()).AllowUnbounded().All(ctx)
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("Has: %v", err)

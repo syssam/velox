@@ -280,7 +280,7 @@ ent's `client.Use(hooks...)` is `velox.WithHooksAll(hooks...)`, and
 condition is `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate,
 error))`, a row filter for every entity with an interceptor's reach
 (decision 0098). ent's interceptor wraps queries only; a filter that
-returns `velox.NoFilter()` when `op != velox.OpSelect` does the same.
+returns `velox.Allow()` when `op != velox.OpSelect` does the same.
 
 ent's `m.OldTitle(ctx)` reads one row's old value, on a one-row update,
 with a query outside the update's lock. In velox the writes through a

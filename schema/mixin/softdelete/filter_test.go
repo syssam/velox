@@ -17,11 +17,11 @@ func TestFilterSeesSoftDeleteAsDelete(t *testing.T) {
 	var ops []velox.Op
 	db, raw, _ := open(t, velox.WithFilter(func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "SDoc" {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		ops = append(ops, op)
 		if op != velox.OpDelete {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		return velox.FieldEQ("owner_id", 2), nil // deletes reach owner 2's docs only
 	}))
@@ -51,7 +51,7 @@ func TestFilterSeesSoftDeleteAsDelete(t *testing.T) {
 func TestRestoreUnderReadsOnlyFilter(t *testing.T) {
 	db, raw, _ := open(t, velox.WithFilter(func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "SDoc" || op != velox.OpSelect {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		return velox.FieldNEQ("title", "hidden"), nil
 	}))

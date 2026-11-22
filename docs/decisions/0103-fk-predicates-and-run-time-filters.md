@@ -30,7 +30,7 @@ check can be right.
 - The scope decides, when the statement runs: the target has a row
   condition when `Scoper.target` gives it one, from the DB's `WithFilter`
   filters, its interceptors, or its Read (and, for a read, Query) policy
-  unless `WithoutPolicy`. A filter that returns `NoFilter()` for the
+  unless `WithoutPolicy`. A filter that returns `Allow()` for the
   target, an interceptor that returns `Allow()`, or a lifted policy adds
   no `Has`, as the target then hides nothing.
 - It is a method of `Table`, not the spec's `untyped.ScopedKey(p, edge,

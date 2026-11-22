@@ -24,7 +24,7 @@ func hideIOwner(ctx context.Context) context.Context {
 // restricts nothing else.
 func hideIOwnerFilter(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 	if entity != "IOwner" || op != velox.OpSelect || ctx.Value(hideIOwnerKey{}) == nil {
-		return velox.NoFilter(), nil
+		return velox.Allow(), nil
 	}
 	return velox.FieldNEQ("id", 1), nil
 }

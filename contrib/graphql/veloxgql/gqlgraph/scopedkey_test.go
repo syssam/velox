@@ -22,7 +22,7 @@ func hideOwner() context.Context {
 // hideOwner's context, and restricts nothing else.
 func hideOwnerFilter(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 	if entity != "owner" || op != velox.OpSelect || ctx.Value(hideOwnerKey{}) == nil {
-		return velox.NoFilter(), nil
+		return velox.Allow(), nil
 	}
 	return velox.FieldNEQ("id", 1), nil
 }

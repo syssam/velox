@@ -1301,7 +1301,7 @@ This soft-delete filter narrows reads only:
 db, err := velox.Connect("postgres", dsn, velox.WithFilter(
 	func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		return velox.FieldIsNull("deleted_at"), nil
 	}))
@@ -1313,11 +1313,11 @@ reach a deleted row: code that reads it with the deleted included and then
 clears `deleted_at` under the plain context would otherwise update 0 rows
 and say nothing.
 
-A filter fails closed. It returns `velox.NoFilter()` for an entity it does
+A filter fails closed. It returns `velox.Allow()` for an entity it does
 not restrict, the join entities of many-to-many edges included: restricting
 one makes `With` loads and `Has` disagree. The zero `velox.Predicate{}`, an
 error, or a column the entity lacks fails the statement, and an error is
-not a denial. `velox.Not(velox.NoFilter())` matches no row, for a caller who
+not a denial. `velox.Not(velox.Allow())` matches no row, for a caller who
 may see none. Several filters AND, in the order given.
 
 A schema written for veloxe keeps its `privacy` rules

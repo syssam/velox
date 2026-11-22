@@ -232,7 +232,7 @@ func (sc *Scoper) filterCond(t *EntityInfo, kind string, i int, p Predicate, err
 	case p.n.Op == opZero:
 		none := "velox.Allow()"
 		if kind == "filter" {
-			none = "velox.NoFilter()"
+			none = "velox.Allow()"
 		}
 		return Predicate{}, fmt.Errorf("velox: %s: %s [%d] returned the zero Predicate; return %s for no restriction", t.Name, kind, i, none)
 	case p.n.Op == OpAllow:
@@ -422,7 +422,7 @@ func (sc *Scoper) joinFree(j *EntityInfo) error {
 
 // joinUnfiltered returns an error when one of filters, a DB's WithFilter
 // filters, restricts the join entity j of a many-to-many relation: given
-// OpSelect, it returns anything but NoFilter(), or an error. Has and With
+// OpSelect, it returns anything but Allow(), or an error. Has and With
 // read j's rows through the relation's two sides, so a condition on j
 // would make them disagree with a query of j's own.
 func joinUnfiltered(ctx context.Context, filters []EntityFilterFn, j *EntityInfo) error {
@@ -433,7 +433,7 @@ func joinUnfiltered(ctx context.Context, filters []EntityFilterFn, j *EntityInfo
 		case err != nil:
 			return fmt.Errorf("velox: %s: filter [%d]: %w", j.Name, i, err)
 		case p.n.Op != OpAllow:
-			return fmt.Errorf("velox: %s: filter [%d] restricts it, the join entity of a many-to-many relation, which Has and With read through its two sides; return NoFilter() for it", j.Name, i)
+			return fmt.Errorf("velox: %s: filter [%d] restricts it, the join entity of a many-to-many relation, which Has and With read through its two sides; return Allow() for it", j.Name, i)
 		}
 	}
 	return nil
@@ -674,7 +674,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 // KEY UPDATE takes no condition, when the update branch would get one: the
 // entity has a Read or Write policy that applies (conditioned) or an
 // interceptor, or a WithFilter filter returns a condition for it. A filter
-// that returns NoFilter for the entity lets the upsert run.
+// that returns Allow for the entity lets the upsert run.
 func (sc *Scoper) mysqlUpsert(in *EntityInfo, conditioned bool) error {
 	refuse := conditioned || len(in.filters) > 0
 	if !refuse && len(sc.Filters) > 0 {

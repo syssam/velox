@@ -620,7 +620,6 @@ func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
-func NoFilter() Predicate
 func Not[E any](p Pred[E]) Pred[E]
 func On(h Hook, ops ...Op) Hook
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB

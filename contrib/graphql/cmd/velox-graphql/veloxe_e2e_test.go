@@ -325,7 +325,7 @@ func TestVeloxeNames(t *testing.T) {
 	// still match customerId 2 and customerIdIn [2].
 	hideBob := func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "Customer" || op != velox.OpSelect {
-			return velox.NoFilter(), nil
+			return velox.Allow(), nil
 		}
 		return velox.FieldNEQ("id", 2), nil
 	}

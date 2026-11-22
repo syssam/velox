@@ -153,8 +153,8 @@ func HasEdge(name string) Predicate { return engine.HasEdge(name) }
 func HasEdgeWith(name string, ps ...Predicate) Predicate { return engine.HasEdgeWith(name, ps...) }
 
 // Allow is the condition that matches every row: what a policy's Read or
-// Write, or an interceptor's Filter, returns for a caller it does not
-// restrict. In a policy it adds nothing to the SQL; in a Where it is 1 = 1,
+// Write, an interceptor's Filter or a WithFilter filter returns for a
+// caller or an entity it does not restrict. In a policy it adds nothing to the SQL; in a Where it is 1 = 1,
 // which an Update or Delete's guard does not count as a condition. A policy
 // that returns the zero Predicate instead fails the statement, so that no
 // restriction is said, never implied.
@@ -164,9 +164,3 @@ func HasEdgeWith(name string, ps ...Predicate) Predicate { return engine.HasEdge
 // row. Typed code that wants a condition that matches every row writes
 // And[E]().
 func Allow() Predicate { return engine.NewPredicate(engine.Node{Op: engine.OpAllow}) }
-
-// NoFilter is what a WithFilter filter returns for an entity it does not
-// restrict: Allow, by the name a filter reads best with. A filter that
-// returns the zero Predicate instead fails the statement, so a filter that
-// forgot an entity fails closed.
-func NoFilter() Predicate { return Allow() }
