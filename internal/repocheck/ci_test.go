@@ -78,14 +78,20 @@ func localLevels(t *testing.T, data string) (map[string]string, map[string][]str
 	return out, lists
 }
 
+// scheduled is the level of ci.yml's jobs that run on its schedule only,
+// which ci-local.sh does not mirror.
+const scheduled = "schedule"
+
 // ciLevel returns the level of a job or a step of ci.yml from its if.
 func ciLevel(t *testing.T, where, expr string) string {
 	t.Helper()
 	switch expr {
-	case "github.event_name == 'push'":
+	case "github.event_name != 'pull_request'":
 		return "full"
 	case "github.event_name == 'pull_request'":
 		return "merge"
+	case "github.event_name == 'schedule'":
+		return scheduled
 	}
 	if m := ciGroup.FindStringSubmatch(expr); m != nil && slices.Contains(groups, m[1]) {
 		return m[1]
@@ -238,7 +244,7 @@ func (c command) String() string { return c.dir + " [" + c.level + "]: " + c.tex
 
 // TestCILocalMirrorsCI: scripts/ci-local.sh runs the commands of ci.yml, each in the
 // same directory and at the same level, so that the merge gate is a pull
-// request's run and --full a push's. A command of the gate level, which runs in
+// request's run and --full a push's. ci.yml's scheduled-only jobs are left out. A command of the gate level, which runs in
 // every run, stands in for the same command at any level. Its
 // VELOX_CI_MATRIX=1 run tests what CI's PostgreSQL 14 leg tests, at the same
 // levels, with that leg's timeout. Each published module and examples are
@@ -251,7 +257,7 @@ func TestCILocalMirrorsCI(t *testing.T) {
 	commands := func(script string) map[command]scriptLine {
 		out := map[command]scriptLine{}
 		for _, l := range scriptLines(t, script) {
-			if ciCommand.MatchString(l.text) && !l.matrix {
+			if ciCommand.MatchString(l.text) && !l.matrix && l.level != scheduled {
 				out[command{l.dir, normalizeCommand(l.text, timeouts["18"]), l.level}] = l
 			}
 		}
@@ -393,9 +399,9 @@ func TestCIGateIsTheORM(t *testing.T) {
 				t.Errorf("%s's full run runs no %q in %s", script, c.prefix, c.dir)
 			}
 		}
-		// Every test of contrib/ is a group's, not the gate's.
+		// Every test of contrib/ is a group's, or the schedule's, not the gate's.
 		for _, l := range lines {
-			if strings.HasPrefix(l.dir, "contrib/") && strings.HasPrefix(l.text, "go test ") && !slices.Contains(groups, l.level) {
+			if strings.HasPrefix(l.dir, "contrib/") && strings.HasPrefix(l.text, "go test ") && !slices.Contains(groups, l.level) && l.level != scheduled {
 				t.Errorf("%s: %s's tests at level %s, not a group's", l.where, l.dir, l.level)
 			}
 		}

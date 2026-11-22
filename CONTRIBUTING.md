@@ -179,7 +179,10 @@ PostgreSQL 14, and 20 minutes on 18.
 job runs `scripts/ci-changes.sh` against the pull request's base, and the
 `graphql`, `otel` and `bench` jobs, and the group steps of the `test` job, run
 on its outputs. A push to `main` is `--full`: every group runs, the root's
-tests measure coverage, and the floors are checked.
+tests measure coverage, and the floors are checked. A weekly scheduled run
+is a push's, so that `gqlgen_latest` and govulncheck meet the newest gqlgen
+and vulnerability database without a commit, and adds `fuzz-long`, which
+runs each fuzz target for 5 minutes. `ci-local.sh` has no `fuzz-long`.
 
 `TestCILocalMirrorsCI` fails when the two scripts stop running the same
 commands in the same directories at the same levels. `TestCIGateIsTheORM`
@@ -306,7 +309,8 @@ value minus 1.0. The checker prints that value. The file's header has the rest.
 
 ## Fuzz targets
 
-There are eleven. CI runs each for 10 or 20 seconds:
+There are eleven. CI runs each for 10 or 20 seconds, and for 5 minutes in
+the weekly `fuzz-long` job:
 
 ```sh
 go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s ./internal/engine
@@ -321,7 +325,8 @@ in `internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and
 them with their packages and times.
 
 There is no committed corpus yet: the targets' seeds are their `f.Add` calls.
-A new target needs a line in `ci.yml` and one in `ci-local.sh`. Anchor its name
+A new target needs a line in each of `ci.yml`'s `fuzz` and `fuzz-long`
+jobs and one in `ci-local.sh`. Anchor its name
 with `^` and `$`. `go test -fuzz` exits 0 when its pattern matches nothing, so
 `TestFuzzLinesNameRealTargets` checks each line against its package. A crash writes a file under `testdata/fuzz`. Commit that
 file with the fix, so that the fix keeps a test.

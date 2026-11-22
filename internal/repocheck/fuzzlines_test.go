@@ -14,9 +14,10 @@ import (
 
 // fuzzLine is one `go test -fuzz` command of a CI script.
 type fuzzLine struct {
-	where  string // the script and line, for a message
-	target string // the anchored target's name
-	dir    string // the package, relative to the repository's root
+	where     string // the script and line, for a message
+	target    string // the anchored target's name
+	dir       string // the package, relative to the repository's root
+	scheduled bool   // in ci.yml's scheduled-only job
 }
 
 var (
@@ -38,7 +39,7 @@ func fuzzLines(t *testing.T, script string) []fuzzLine {
 			t.Errorf("%s: a -fuzz line this test cannot read: %q", l.where, l.text)
 			continue
 		}
-		out = append(out, fuzzLine{l.where, m[1], filepath.ToSlash(filepath.Join(l.dir, m[2]))})
+		out = append(out, fuzzLine{l.where, m[1], filepath.ToSlash(filepath.Join(l.dir, m[2])), l.level == scheduled})
 	}
 	return out
 }
@@ -70,11 +71,13 @@ func fuzzTargets(t *testing.T, dir string) []string {
 // target, so a line left behind by a moved target fuzzes nothing and CI stays
 // green. Each -fuzz line of ci.yml and ci-local.sh must name a target of its
 // package, the two scripts must list the same targets in the same packages, and
-// every target in the repository must be listed.
+// every target in the repository must be listed. ci.yml's scheduled job fuzzes
+// the same targets, for longer.
 func TestFuzzLinesNameRealTargets(t *testing.T) {
 	t.Parallel()
 	listed := map[string]string{}
 	var targets []string // the first script's, sorted
+	var long []string    // ci.yml's scheduled job's, sorted
 	for _, script := range []string{ciWorkflow, ciLocal} {
 		lines := fuzzLines(t, script)
 		if len(lines) == 0 {
@@ -82,7 +85,11 @@ func TestFuzzLinesNameRealTargets(t *testing.T) {
 		}
 		var names []string
 		for _, l := range lines {
-			names = append(names, l.target)
+			if l.scheduled {
+				long = append(long, l.target)
+			} else {
+				names = append(names, l.target)
+			}
 			found := fuzzTargets(t, filepath.Join(repoRoot(), l.dir))
 			if !slices.Contains(found, l.target) {
 				t.Errorf("%s: %s is not in %s, which has %v", l.where, l.target, l.dir, found)
@@ -97,6 +104,9 @@ func TestFuzzLinesNameRealTargets(t *testing.T) {
 			t.Errorf("%s lists %v, the other script %v", script, names, targets)
 		}
 		targets = names
+	}
+	if slices.Sort(long); !slices.Equal(long, targets) {
+		t.Errorf("%s's scheduled job fuzzes %v, want %v", ciWorkflow, long, targets)
 	}
 	if listed["FuzzCost"] != "contrib/graphql/veloxgql/internal/cost" {
 		t.Errorf("FuzzCost is fuzzed in %q, want contrib/graphql/veloxgql/internal/cost", listed["FuzzCost"])
