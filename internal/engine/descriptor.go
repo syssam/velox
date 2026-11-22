@@ -340,9 +340,9 @@ type Through struct {
 	Join      func() (*EntityInfo, error)
 	OwnerCol  int
 	TargetCol int
-	// Unfilled are the join entity's columns that Add cannot fill: an edge
-	// schema's fields that have no default and are not Optional. Add of
-	// such a relation is refused before any statement.
+	// Unfilled are the join entity's columns an insert would write as a
+	// zero that the schema calls required. Add of such a relation is
+	// refused before any statement.
 	Unfilled []int
 }
 

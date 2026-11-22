@@ -211,9 +211,9 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescripto
 // whose Read policies apply, and the relation is refused when it resolves.
 //
 // Add inserts J's rows, filling their defaults, and keeps a link that
-// exists. unfilled are J's columns Add cannot fill, an edge schema's fields
-// that have no default and are not Optional: Add of the relation then fails
-// before any statement, and the application inserts J's rows itself.
+// exists. unfilled are J's columns an insert would write as a zero that the
+// schema calls required: Add of the relation then fails before any
+// statement, and the application inserts J's rows itself.
 //
 // velox does not check that an endpoint is a row the caller's policies let it
 // change: an application that writes links, or deletes them, checks both

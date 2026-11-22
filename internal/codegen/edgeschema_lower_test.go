@@ -47,6 +47,7 @@ func (Ticket) Fields() []schema.Field {
 		field.String("nick").Optional().Nillable(),
 		field.Time("made_at").Default(time.Now),
 		field.String("seat").SchemaDefault(map[string]string{field.Postgres: "'a'", field.MySQL: "'a'", field.SQLite: "'a'"}),
+		field.String("gate").SchemaDefault(map[string]string{field.Postgres: "'g'"}),
 		field.Int64("rider_id"),
 		field.Int64("route_id"),
 	}
@@ -124,13 +125,14 @@ func relDesc(t *testing.T, o *Out, e, name string) string {
 // side, with its columns in that side's order, and the columns Add cannot
 // fill after them: a required field with no default of any kind. Optional
 // fields (ADR 0090), Nillable ones, a Version, a database default and a
-// generated key are filled.
+// generated key are filled; a database default declared for one dialect
+// alone is not.
 func TestEdgeSchemaLowerUnfilled(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, Rider{}, Route{}, Ticket{})
 	if o.entity("RiderRoute") != nil {
 		t.Error("a join entity is generated beside the edge schema")
 	}
-	cols := "ticketColOrigin, ticketColNote, ticketColTouchedAt, ticketColPicked"
+	cols := "ticketColOrigin, ticketColNote, ticketColTouchedAt, ticketColPicked, ticketColGate"
 	if got, want := relDesc(t, o, "Rider", "routes"),
 		`velox.EdgeThrough[Ticket, Route]("routes", riderColID, ticketColRiderID, ticketColRouteID, routeColID, `+cols+`)`; got != want {
 		t.Errorf("routes:\n got %s\nwant %s", got, want)

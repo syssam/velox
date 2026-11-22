@@ -73,7 +73,8 @@ type Link struct {
 	Join       *EntityInfo // many-to-many: the join entity; nil otherwise
 	JoinOwner  int         // join's column equal to owner.Columns[ownerCol]
 	JoinTarget int         // join's column equal to target.Columns[targetCol]
-	// JoinUnfilled are the join's columns Add cannot fill (Through.Unfilled).
+	// JoinUnfilled are the join's columns an insert would write as a zero
+	// that the schema calls required (Through.Unfilled).
 	JoinUnfilled []int
 	// TextKey compares the owner's integer column with the target's text
 	// column as text, casting the owner's side: a FieldInSelect whose key

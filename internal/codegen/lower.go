@@ -1266,11 +1266,12 @@ func (l *lowerer) edgeSchema(s *entState, t *Entity, ed *Edge) string {
 // required and has no default of any kind, and a key that velox neither
 // generates nor fills with a DefaultFunc. An Optional field is written as
 // its zero (ADR 0090); an Optional JSON field and a Nillable one have a
-// default or NULL; a Version starts at its zero.
+// default or NULL; a Version starts at its zero. A database default fills
+// the column only when it is declared for every dialect.
 func unfilled(es *Entity, jo, jt int) []int {
 	var cols []int
 	for i, f := range es.Fields {
-		filled := f.Optional || f.Nillable || f.Pointer || f.Default != nil || f.DefaultFunc || f.Version || len(f.SchemaDefault) > 0
+		filled := f.Optional || f.Nillable || f.Pointer || f.Default != nil || f.DefaultFunc || f.Version || len(dbDefaultDialects(f.SchemaDefault)) == 3
 		if i == 0 {
 			filled = filled || f.AutoID || integer(f.Type)
 		}
