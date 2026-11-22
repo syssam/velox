@@ -448,3 +448,18 @@ while the schema differed, and later files ran from a false base. Rulings, appli
 `TestResolveChecksTheDatabase`, `TestResolveAdoptChecks` and `TestResolveChecksByReplay`
 run each case on SQLite, PostgreSQL and MySQL; `TestOperationsDoc` and
 `TestResolveScratchDB` run the command line.
+
+## Amendment, 2026-11-22: the SQL-reading heuristics are frozen
+
+`Up`'s guard, the splitter, `LintFile` and the predicate reader read SQL by
+words, not by a grammar (`guard*.go`, `split.go`, `lintfile.go`,
+`predicate.go`). Their scope is frozen as of this date:
+
+- A false refusal is expected. A file they read wrongly is refused, the safe
+  side, never let through.
+- `-- velox:allow unmodeled-loss [<object>]` is the way through such a
+  refusal, as for any loss the file means.
+- No new statement shapes are added to them. A case they miss is a Limit
+  above, not a new reading. A shape they cannot split, as a trigger body, is
+  marked by the file with `-- velox:statement begin` and `end`, not taught
+  to the splitter.
