@@ -14,9 +14,9 @@ import (
 // empty schema, as the first file of migrate diff would, and runs the
 // statements: on PostgreSQL and SQLite in one transaction, on MySQL one
 // after another, where a statement that fails leaves the ones before it.
-// It writes no history: a database Create made is not one
-// that Up manages. A production database keeps versioned migrations,
-// written by velox-gen migrate diff and run by Up.
+// It writes no history: a database Create made is not one that Up
+// manages. A production database keeps versioned migrations, written by
+// velox-gen migrate diff and run by Up.
 //
 // Create reads the tables and enum types schema names first. When db holds
 // none of them, it makes them all. When db holds them as schema says, as
