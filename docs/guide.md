@@ -1953,6 +1953,30 @@ otherwise the record names the constraint, velox's own error (such as
 `not found`, or a field's `validation failed`), or the error's type, and
 the driver's code.
 
+### Counting statements: N+1 in tests
+
+A loop that reads a relation once per row sends one statement per row: an
+N+1. `velox.WithStatementCounting()` counts each statement in the
+`StatementCounter` that `velox.CountStatements(ctx)` puts in a context, by
+shape, the statement's text without its arguments. `Check` reports a read
+of one shape run more often than a `StatementBudget` allows, naming it
+([ADR 0113](decisions/0113-statement-counting.md)):
+
+```go
+ctx, n := velox.CountStatements(ctx)
+listPosts(ctx, db)
+if err := n.Check(velox.StatementBudget{Statements: 10, Repeats: 1}); err != nil {
+	t.Error(err) // ran 20 times, of 1 allowed: SELECT ... FROM "users" WHERE "id" = $1
+}
+```
+
+A DB without the option runs none of it. `veloxtest.Open` adds it, and
+`veloxtest.NoNPlusOne(t, ctx)` fails the test when it ends if a read of
+one shape ran twice; `veloxtest.Budget(t, ctx, b)` checks any budget.
+The fix is `With`, which loads a relation for every row in one more
+statement. velox's GraphQL resolvers batch each relation per request, so
+a query through them passes.
+
 ## GraphQL
 
 `contrib/graphql` is a velox-gen plugin that generates a GraphQL schema and

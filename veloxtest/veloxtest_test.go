@@ -2,6 +2,7 @@ package veloxtest_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -129,5 +130,73 @@ func TestSchemaIsVeloxGens(t *testing.T) {
 		if len(changes) != 0 || len(got.Tables) != len(want.Tables) {
 			t.Errorf("%s: Schema differs from velox-gen's: %v", d, changes)
 		}
+	}
+}
+
+// recorder is a testing.TB that keeps its cleanups and errors.
+type recorder struct {
+	testing.TB
+	cleanups []func()
+	errs     []string
+}
+
+func (r *recorder) Helper()           {}
+func (r *recorder) Cleanup(f func())  { r.cleanups = append(r.cleanups, f) }
+func (r *recorder) Error(args ...any) { r.errs = append(r.errs, fmt.Sprint(args...)) }
+func (r *recorder) end() {
+	for _, f := range r.cleanups {
+		f()
+	}
+}
+
+// TestNoNPlusOne: a read of each sample's lines in a loop fails the test
+// when it ends, naming the statement; the lines loaded with With pass; and
+// Budget fails a context over its count of statements.
+func TestNoNPlusOne(t *testing.T) {
+	ctx := context.Background()
+	db := veloxtest.Open(t, "sqlite", "", schemas)
+	for range 2 {
+		s := testmodel.Sample{Name: "a", Status: "new", When: time.Now(), Blob: []byte("b")}
+		if err := db.Insert(&s).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	r := &recorder{}
+	c := veloxtest.NoNPlusOne(r, ctx)
+	samples, err := db.Query[testmodel.Sample]().Limit(10).All(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range samples {
+		if _, err := db.Query[testmodel.Line]().Where(testmodel.Lines.SampleID.EQ(s.ID)).Limit(10).All(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.end()
+	if len(r.errs) != 1 || !strings.Contains(r.errs[0], "ran 2 times") {
+		t.Errorf("an N+1: %q", r.errs)
+	}
+
+	r = &recorder{}
+	c = veloxtest.NoNPlusOne(r, ctx)
+	if _, err := db.Query[testmodel.Sample]().With(testmodel.Samples.Lines).Limit(10).All(c); err != nil {
+		t.Fatal(err)
+	}
+	r.end()
+	if len(r.errs) != 0 {
+		t.Errorf("With: %q", r.errs)
+	}
+
+	r = &recorder{}
+	c = veloxtest.Budget(r, ctx, velox.StatementBudget{Statements: 1})
+	for range 2 {
+		if _, err := db.Query[testmodel.Sample]().Limit(1).All(c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.end()
+	if len(r.errs) != 1 || !strings.Contains(r.errs[0], "2 statements ran, of 1 allowed") {
+		t.Errorf("over the count: %q", r.errs)
 	}
 }

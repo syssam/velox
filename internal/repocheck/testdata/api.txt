@@ -1,4 +1,8 @@
 package .
+BudgetError.Budget StatementBudget
+BudgetError.Error() string
+BudgetError.Repeats []StatementShape
+BudgetError.Total int
 ColumnInfo.Codec bool
 ColumnInfo.Default any
 ColumnInfo.DefaultFunc func() any
@@ -102,6 +106,15 @@ Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
+StatementBudget.Repeats int
+StatementBudget.Statements int
+StatementCounter.Check(b StatementBudget) error
+StatementCounter.Shapes() []StatementShape
+StatementCounter.Total() int
+StatementShape.Count int
+StatementShape.Entity string
+StatementShape.Op Op
+StatementShape.SQL string
 const AggregateAvg
 const AggregateMax
 const AggregateMin
@@ -697,6 +710,7 @@ func Connect(driver, dsn string, opts ...Option) (*DB, error)
 func CountAll[E any]() Term[E]
 func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error)
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
+func CountStatements(ctx context.Context) (context.Context, *StatementCounter)
 func Deny(reason string) error
 func Diff[E any, PE Entity[E]](before, after *E) []FieldChange
 func DriverCode(err error) (string, bool)
@@ -798,6 +812,7 @@ func WithScopeValue(ctx context.Context, name string, value any) context.Context
 func WithSession(ctx context.Context) context.Context
 func WithShard(ctx context.Context, name string) context.Context
 func WithShardFor(f func(ctx context.Context) (string, error)) Option
+func WithStatementCounting() Option
 func WithTags(ctx context.Context, kv ...string) context.Context
 func WithTxAround(h TxAround) Option
 func WithoutTx(ctx context.Context) context.Context
@@ -806,6 +821,7 @@ type Annotation = schema.Annotation
 type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
 type AssignOp = veloxtype.AssignOp
 type Assignment = veloxtype.Assignment
+type BudgetError = engine.BudgetError
 type Caller = veloxtype.Caller
 type Change struct { Entity string Op Op Key any Soft bool }
 type Col[E, V any] struct { I int32 }
@@ -899,6 +915,9 @@ type Setter[E any] struct { }
 type Shard = engine.Shard
 type Sink interface { Record(ctx context.Context, tx *DB, changes []Change) error }
 type Statement = engine.Statement
+type StatementBudget = engine.StatementBudget
+type StatementCounter = engine.StatementCounter
+type StatementShape = engine.StatementShape
 type StringCol[E any, V ~string] struct { I int32 }
 type Subquery[V any] struct { }
 type Tag = veloxtype.Tag
@@ -1438,6 +1457,8 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E)
 
 package veloxtest
+func Budget(t testing.TB, ctx context.Context, b velox.StatementBudget) context.Context
+func NoNPlusOne(t testing.TB, ctx context.Context) context.Context
 func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...velox.Option) *velox.DB
 func Schema(d velox.Dialect, schemas ...schema.Interface) (*migrate.Schema, error)
 

@@ -16,6 +16,7 @@
 package veloxtest
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,7 +104,8 @@ func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, error
 // Open opens a database with velox.Connect(driver, dsn, opts...), makes the
 // tables of schemas in it with migrate.Create, and closes it when t ends.
 // It fails t on an error. The application imports the driver, as for
-// Connect.
+// Connect. The DB counts statements (velox.WithStatementCounting) for
+// NoNPlusOne and Budget, before opts' Around hooks.
 //
 // On SQLite ("sqlite" or "sqlite3") an empty dsn is a new file in
 // t.TempDir(), so each call has a database of its own. Create cannot use
@@ -116,7 +118,7 @@ func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...
 	if dsn == "" && (driver == "sqlite" || driver == "sqlite3") {
 		dsn = filepath.Join(t.TempDir(), "velox.db")
 	}
-	db, err := velox.Connect(driver, dsn, opts...)
+	db, err := velox.Connect(driver, dsn, append([]velox.Option{velox.WithStatementCounting()}, opts...)...)
 	if err != nil {
 		t.Fatalf("veloxtest: %v", err)
 	}
@@ -129,4 +131,31 @@ func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...
 		t.Fatalf("veloxtest: %v", err)
 	}
 	return db
+}
+
+// Budget returns ctx with a velox.StatementCounter, and fails t when the
+// test ends if the statements run with it went over b, naming each read
+// repeated. The DB must count statements, as Open's does.
+func Budget(t testing.TB, ctx context.Context, b velox.StatementBudget) context.Context {
+	t.Helper()
+	ctx, n := velox.CountStatements(ctx)
+	t.Cleanup(func() {
+		if err := n.Check(b); err != nil {
+			t.Error(err)
+		}
+	})
+	return ctx
+}
+
+// NoNPlusOne is Budget with no read of one shape run twice: a loop that
+// reads a relation once per row, rather than with With, fails the test.
+//
+//	ctx := veloxtest.NoNPlusOne(t, t.Context())
+//	posts, err := listPosts(ctx, db) // fails t if it reads each author alone
+//
+// velox's GraphQL resolvers batch the reads of a relation per request, so a
+// query through them passes.
+func NoNPlusOne(t testing.TB, ctx context.Context) context.Context {
+	t.Helper()
+	return Budget(t, ctx, velox.StatementBudget{Repeats: 1})
 }

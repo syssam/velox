@@ -401,6 +401,12 @@ none either, but `migrate diff` writes an `unindexed-fk` review line for
 a key it adds that no index leads, which `-allow unindexed-fk=t.c`
 silences ([decision 0112](decisions/0112-unindexed-foreign-keys.md)).
 
+ent has no N+1 check. velox's `veloxtest.NoNPlusOne(t, ctx)` fails a test
+whose context ran one shape of read twice, as a loop over rows that reads
+a relation per row does; `velox.CountStatements` and `StatementBudget` are
+the same check outside veloxtest
+([decision 0113](decisions/0113-statement-counting.md)).
+
 ## Running the generator from Go
 
 ent's `entc.go` calls `entc.Generate` (veloxe's, `compiler.Generate`) with a

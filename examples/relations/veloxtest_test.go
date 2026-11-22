@@ -56,3 +56,20 @@ func TestVeloxtestIsTheDirectory(t *testing.T) {
 		t.Errorf("veloxtest differs from schema.json: %s", c)
 	}
 }
+
+// TestNoNPlusOne: the authors with their posts and the posts' comments,
+// loaded with With, read each relation once, so veloxtest.NoNPlusOne,
+// which fails the test when a read of one shape runs twice, passes. A loop
+// that read each author's posts alone would fail it.
+func TestNoNPlusOne(t *testing.T) {
+	db := veloxtest.Open(t, "sqlite", "", schemas)
+	if err := seed(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	A, P := veloxgen.Authors, veloxgen.Posts
+	ctx := veloxtest.NoNPlusOne(t, t.Context())
+	authors, err := db.Query[veloxgen.Author]().With(A.Posts.With(P.Comments)).Limit(10).All(ctx)
+	if err != nil || len(authors) != 3 {
+		t.Fatalf("%d authors, %v", len(authors), err)
+	}
+}
