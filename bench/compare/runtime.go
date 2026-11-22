@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -32,12 +33,12 @@ func writeRuntimeApp(dir string, o orm, tools string) error {
 	}
 	if o.Name == veloxORM.Name {
 		for _, d := range []string{"sqlite", "postgres"} {
-			cmd := exec.Command(filepath.Join(tools, "velox-gen"), "migrate", "sql", "-dialect", d, "./schema")
+			cmd := exec.CommandContext(context.Background(), filepath.Join(tools, "velox-gen"), "migrate", "sql", "-dialect", d, "./schema")
 			var stderr bytes.Buffer
 			cmd.Dir, cmd.Env, cmd.Stderr = dir, goEnv(), &stderr
 			out, err := cmd.Output()
 			if err != nil {
-				return fmt.Errorf("velox-gen migrate sql -dialect %s: %v\n%s%s", d, err, stderr.Bytes(), tempmod.Hint(stderr.String()))
+				return fmt.Errorf("velox-gen migrate sql -dialect %s: %w\n%s%s", d, err, stderr.Bytes(), tempmod.Hint(stderr.String()))
 			}
 			if err := os.WriteFile(filepath.Join(dir, "ddl_"+d+".sql"), out, 0o644); err != nil {
 				return err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -150,13 +151,13 @@ func countGenerated(dir, skip string) (lines, bytes int, err error) {
 // uses the ordinary build cache: the generators are run warm, as a developer runs them.
 func codegen(app string, o orm, tools string) (cpu, wall float64, err error) {
 	argv := o.Codegen(tools)
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
 	cmd.Dir, cmd.Env = app, goEnv()
 	start := time.Now()
 	out, err := cmd.CombinedOutput()
 	wall = time.Since(start).Seconds()
 	if err != nil {
-		return 0, wall, fmt.Errorf("%s code generation: %v\n%s%s", o.Name, err, out, tempmod.Hint(string(out)))
+		return 0, wall, fmt.Errorf("%s code generation: %w\n%s%s", o.Name, err, out, tempmod.Hint(string(out)))
 	}
 	return buildcost.CPUSeconds(cmd), wall, nil
 }

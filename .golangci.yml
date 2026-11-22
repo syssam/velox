@@ -1,7 +1,7 @@
 version: "2"
 linters:
   default: standard
-  enable: [revive, errname, modernize, intrange, wastedassign, misspell, nilerr, unconvert, usestdlibvars, bodyclose, gocognit, unparam]
+  enable: [revive, errname, modernize, intrange, wastedassign, misspell, nilerr, unconvert, usestdlibvars, bodyclose, gocognit, unparam, rowserrcheck, sqlclosecheck, errorlint, noctx]
   exclusions:
     generated: disable
     rules:
@@ -12,6 +12,22 @@ linters:
       # every caller happens to pass alike.
       - path: _test\.go$
         linters: [gocognit, unparam]
+      # A test's statements need no caller's context, and a test may require
+      # an error itself, not one that wraps it.
+      - path: _test\.go$
+        linters: [noctx, errorlint]
+      # The DB linters' findings in packages that other work is changing,
+      # left for that work: errorlint's in internal/engine (7),
+      # internal/codegen (4), migrate (4), cmd/velox-gen (2),
+      # internal/genrun (2) and contrib/graphql (12), and rowserrcheck's and sqlclosecheck's in
+      # migrate/guard.go (2) and seven of migrate's tests (9). Remove a file
+      # from these lists once it passes.
+      - path: ^(internal/engine/(hook|insert|scope|sqlitefk|write)|internal/codegen/(behaviourcheck|load)|migrate/(dir|file|session)|cmd/velox-gen/(generate|migrate_db)|internal/genrun/rel)\.go$
+        linters: [errorlint]
+      - path: ^contrib/graphql/(internal/sdl/fields|veloxgql/(gqlgenx/presenter|gqlgraph/input|graphqlgo/presenter|internal/gqlcore/(error|errwalk)))\.go$
+        linters: [errorlint]
+      - path: ^migrate/(guard|guard_sqlite_test|rows_test|inspect_sqlite_test|render_postgres_test|render_test|runner_db_test|stepwise_db_test)\.go$
+        linters: [rowserrcheck, sqlclosecheck]
       # The SQL lexers are state machines: one switch over the next byte,
       # which splitting would scatter.
       - path: ^migrate/(split|predicate|inspect_sqlite_create)\.go$

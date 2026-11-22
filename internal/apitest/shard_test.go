@@ -468,6 +468,7 @@ func TestSQLiteFilePerShard(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		defer func() { _ = rows.Close() }()
 		var got []string
 		for rows.Next() {
 			var org int64
@@ -480,7 +481,6 @@ func TestSQLiteFilePerShard(t *testing.T) {
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
 		}
-		_ = rows.Close()
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s's file holds %q, want %q", name, got, c.want)
 		}

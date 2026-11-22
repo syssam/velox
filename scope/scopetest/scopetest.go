@@ -48,6 +48,8 @@ func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.
 // key. a and b are two values no other test uses, so that no other rows
 // change the counts. row returns a new row each time, valid for an insert:
 // Check inserts two, and the first stays.
+//
+//nolint:errorlint // its messages print an error that may be nil, with %v.
 func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Key[V], column string, a, b V, row func() *E) (err error) {
 	defer func() {
 		if p := recover(); p != nil {

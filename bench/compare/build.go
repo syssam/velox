@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -200,14 +201,14 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 		return filepath.Join(c.Raw, fmt.Sprintf("ag-%s-n%d-r%d-%s.json", o.Name, c.N, c.Run, kind))
 	}
 	build := func(kind string) (cpu, wall float64, err error) {
-		cmd := exec.Command("go", "build", "-toolexec", wrapper, "-debug-actiongraph="+graph(kind), "-o", bin+string(filepath.Separator), "./...")
+		cmd := exec.CommandContext(context.Background(), "go", "build", "-toolexec", wrapper, "-debug-actiongraph="+graph(kind), "-o", bin+string(filepath.Separator), "./...")
 		cmd.Dir = app
 		cmd.Env = goEnv("GOCACHE="+cache, buildcost.LinkMemEnv+"="+filepath.Join(dir, "link-"+kind+".txt"))
 		start := time.Now()
 		out, err := cmd.CombinedOutput()
 		wall = time.Since(start).Seconds()
 		if err != nil {
-			return 0, wall, fmt.Errorf("%s %s build: %v\n%s%s", o.Name, kind, err, out, tempmod.Hint(string(out)))
+			return 0, wall, fmt.Errorf("%s %s build: %w\n%s%s", o.Name, kind, err, out, tempmod.Hint(string(out)))
 		}
 		return buildcost.CPUSeconds(cmd), wall, nil
 	}

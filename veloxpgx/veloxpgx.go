@@ -57,7 +57,7 @@ type executor struct {
 }
 
 func (e executor) Query(ctx context.Context, s string, args []any) (conn.Rows, error) {
-	r, err := e.c.Query(ctx, s, args...)
+	r, err := e.c.Query(ctx, s, args...) //nolint:sqlclosecheck // the caller reads and closes the rows.
 	if err != nil {
 		return nil, err
 	}

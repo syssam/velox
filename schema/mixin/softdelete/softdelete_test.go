@@ -90,6 +90,9 @@ func deleted(t *testing.T, raw *sql.DB) []int64 {
 		}
 		out = append(out, id)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	return out
 }
 

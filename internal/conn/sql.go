@@ -39,7 +39,7 @@ func RowsColumnScanning(r Rows) bool {
 
 // Query runs a statement that returns rows.
 func (e SQL) Query(ctx context.Context, s string, args []any) (Rows, error) {
-	r, err := e.c.QueryContext(ctx, s, args...)
+	r, err := e.c.QueryContext(ctx, s, args...) //nolint:rowserrcheck // the caller reads, checks and closes the rows.
 	if err != nil {
 		return nil, err
 	}

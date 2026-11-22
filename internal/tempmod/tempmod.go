@@ -4,6 +4,7 @@ package tempmod
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -101,7 +102,7 @@ func GoFlags(extra string) string {
 // own GOROOT/bin first on a child's PATH (go help test), so this is the
 // toolchain that runs the caller.
 func Go(dir string, args ...string) (string, error) {
-	cmd := exec.Command("go", args...)
+	cmd := exec.CommandContext(context.Background(), "go", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS="+GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off")
 	var out bytes.Buffer

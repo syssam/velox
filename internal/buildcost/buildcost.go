@@ -5,6 +5,7 @@
 package buildcost
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -53,12 +54,12 @@ func WriteReference(dir string) error {
 // returns its CPU and wall seconds. Its linker's peak memory goes to a file of
 // its own, not the application's.
 func BuildReference(dir, cache, wrapper string) (cpu, wall float64, err error) {
-	cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", filepath.Join(dir, "ref"), ".")
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-toolexec", wrapper, "-o", filepath.Join(dir, "ref"), ".")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS=", "GOPROXY=off", "GOWORK=off", LinkMemEnv+"="+filepath.Join(dir, "linkmem.txt"))
 	start := time.Now()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return 0, 0, fmt.Errorf("building the reference: %v\n%s", err, out)
+		return 0, 0, fmt.Errorf("building the reference: %w\n%s", err, out)
 	}
 	return CPUSeconds(cmd), time.Since(start).Seconds(), nil
 }
@@ -114,10 +115,10 @@ func main() {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module linkmem\n\ngo 1.27.0\n"), 0o644); err != nil {
 		return err
 	}
-	cmd := exec.Command("go", "build", "-o", path, ".")
+	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", path, ".")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("building the toolexec wrapper: %v\n%s", err, out)
+		return fmt.Errorf("building the toolexec wrapper: %w\n%s", err, out)
 	}
 	return nil
 }

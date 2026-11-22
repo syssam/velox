@@ -24,6 +24,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -131,6 +132,7 @@ func repo() (string, error) {
 
 // run builds the application that c describes and returns its build costs.
 func run(c config) (report, error) {
+	ctx := context.Background()
 	r := report{N: c.n, Services: c.services}
 	if c.n < 10 || c.n%10 != 0 || c.services < 1 {
 		return r, fmt.Errorf("-n must be a multiple of 10 and -s at least 1")
@@ -172,8 +174,8 @@ func run(c config) (report, error) {
 		return r, err
 	}
 	gen := filepath.Join(tools, "velox-gen")
-	if out, err := exec.Command("go", "-C", root, "build", "-o", gen, "./cmd/velox-gen").CombinedOutput(); err != nil {
-		return r, fmt.Errorf("building velox-gen: %v\n%s", err, out)
+	if out, err := exec.CommandContext(ctx, "go", "-C", root, "build", "-o", gen, "./cmd/velox-gen").CombinedOutput(); err != nil {
+		return r, fmt.Errorf("building velox-gen: %w\n%s", err, out)
 	}
 	wrapper := filepath.Join(tools, "linkmem")
 	if err := buildcost.BuildWrapper(wrapper); err != nil {
@@ -184,7 +186,7 @@ func run(c config) (report, error) {
 		if c.graphql {
 			args = append(args, "-plugin", "velox-graphql")
 		}
-		cmd := exec.Command(gen, append(args, "./schema")...)
+		cmd := exec.CommandContext(ctx, gen, append(args, "./schema")...)
 		cmd.Dir = app
 		if c.graphql {
 			// The plugin is a tool of the module, built by go tool, offline.
@@ -192,7 +194,7 @@ func run(c config) (report, error) {
 		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return 0, fmt.Errorf("velox-gen: %v\n%s", err, out)
+			return 0, fmt.Errorf("velox-gen: %w\n%s", err, out)
 		}
 		return buildcost.CPUSeconds(cmd), nil
 	}
@@ -204,12 +206,12 @@ func run(c config) (report, error) {
 	}
 	memFile := filepath.Join(tools, "linkmem.txt")
 	build := func() (cpu float64, err error) {
-		cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", bin+string(filepath.Separator), "./...")
+		cmd := exec.CommandContext(ctx, "go", "build", "-toolexec", wrapper, "-o", bin+string(filepath.Separator), "./...")
 		cmd.Dir = app
 		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off", buildcost.LinkMemEnv+"="+memFile)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return 0, fmt.Errorf("go build: %v\n%s%s", err, out, tempmod.Hint(string(out)))
+			return 0, fmt.Errorf("go build: %w\n%s%s", err, out, tempmod.Hint(string(out)))
 		}
 		return buildcost.CPUSeconds(cmd), nil
 	}

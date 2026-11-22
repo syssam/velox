@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -200,7 +201,7 @@ var probeMachine = func() machine {
 
 // output is the trimmed stdout of a command, or "" if it fails.
 func output(name string, args ...string) string {
-	out, err := exec.Command(name, args...).Output()
+	out, err := exec.CommandContext(context.Background(), name, args...).Output()
 	if err != nil {
 		return ""
 	}

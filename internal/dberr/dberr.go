@@ -130,7 +130,7 @@ func Walk(err error, f func(error) bool) bool {
 	if f(err) {
 		return true
 	}
-	switch u := err.(type) {
+	switch u := err.(type) { //nolint:errorlint // Walk is the unwrapping errors.Is does.
 	case interface{ Unwrap() error }:
 		return Walk(u.Unwrap(), f)
 	case interface{ Unwrap() []error }:
@@ -151,7 +151,7 @@ func Is(err, target error) bool {
 	}
 	canEq := reflect.TypeOf(target).Comparable()
 	return Walk(err, func(e error) bool {
-		if canEq && e == target {
+		if canEq && e == target { //nolint:errorlint // e is one error of the tree Walk unwraps.
 			return true
 		}
 		x, ok := e.(interface{ Is(error) bool })
@@ -367,7 +367,7 @@ func Retryable(err error) bool {
 func As[T error](err error) (T, bool) {
 	var found T
 	ok := Walk(err, func(e error) bool {
-		if t, ok := e.(T); ok {
+		if t, ok := e.(T); ok { //nolint:errorlint // e is one error of the tree Walk unwraps.
 			found = t
 			return true
 		}

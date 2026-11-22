@@ -43,9 +43,10 @@ import (
 func main() {
 	addr := flag.String("addr", "localhost:8080", "the address to serve on")
 	flag.Parse()
-	ln, err := net.Listen("tcp", *addr)
+	ctx := context.Background()
+	ln, err := new(net.ListenConfig).Listen(ctx, "tcp", *addr)
 	if err == nil {
-		err = serve(context.Background(), ln)
+		err = serve(ctx, ln)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

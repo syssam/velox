@@ -73,7 +73,7 @@ func run(addr, dsn string) error {
 		return err
 	}
 	defer closeDB()
-	ln, err := net.Listen("tcp", addr)
+	ln, err := new(net.ListenConfig).Listen(ctx, "tcp", addr)
 	if err != nil {
 		return err
 	}

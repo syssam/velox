@@ -47,7 +47,7 @@ func parseUptime(out string) (load, error) {
 // readUptime runs uptime and returns its raw line and the parsed load. It
 // runs in the C locale, so that the decimals have a point.
 func readUptime() (string, load, error) {
-	cmd := exec.Command("uptime")
+	cmd := exec.CommandContext(context.Background(), "uptime")
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.Output()
 	if err != nil {
@@ -150,7 +150,7 @@ func runStep(ctx context.Context, name string, g *gate, timeout time.Duration, l
 	start := time.Now()
 	rec.Start = start.UTC().Format(time.RFC3339)
 
-	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
