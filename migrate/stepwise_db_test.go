@@ -467,21 +467,7 @@ func TestUpPostgresForeignKeyReplacedInPlace(t *testing.T) {
 				t.Fatalf("no online file:\n%s", sqlFiles(fsys))
 			}
 			mustUp(t, db, fsys, migrate.WithTarget(online-1))
-			var keys []string
-			rows, err := db.Query(`SELECT conname || ' ' || convalidated FROM pg_constraint WHERE contype = 'f' ORDER BY 1`)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for rows.Next() {
-				var k string
-				if err := rows.Scan(&k); err != nil {
-					t.Fatal(err)
-				}
-				keys = append(keys, k)
-			}
-			if err := rows.Err(); err != nil {
-				t.Fatal(err)
-			}
+			keys := queryColumn[string](t, db, `SELECT conname || ' ' || convalidated FROM pg_constraint WHERE contype = 'f' ORDER BY 1`)
 			if c := caseNamed(name); len(keys) != countKeys(t, c) {
 				t.Errorf("before the online file the foreign keys are %v; want every one of the model's, NOT VALID or valid\n%s", keys, sqlFiles(fsys))
 			}
@@ -523,22 +509,7 @@ func TestUpMySQLLockWaitTimeout(t *testing.T) {
 		"0001_config.sql", "CREATE TABLE log (n bigint);\n"+log,
 		"0002_off.sql", "-- velox:lock-timeout 0s\n"+log,
 		"0003_directive.sql", "-- velox:lock-timeout 1500ms\n"+log)))
-	rows, err := db.Query(`SELECT n FROM log`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []int64
-	for rows.Next() {
-		var n int64
-		if err := rows.Scan(&n); err != nil {
-			t.Fatal(err)
-		}
-		got = append(got, n)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	_ = rows.Close()
+	got := queryColumn[int64](t, db, `SELECT n FROM log`)
 	if fmt.Sprint(got) != "[5 77 2]" {
 		t.Errorf("lock_wait_timeout in the files: %v; want [5 77 2]", got)
 	}

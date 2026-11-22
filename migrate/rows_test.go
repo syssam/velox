@@ -62,13 +62,7 @@ func insertRows(t *testing.T, db *sql.DB, d velox.Dialect, s *migrate.Schema) {
 	}
 	exec(fk[1])
 	if d == velox.SQLite {
-		rows, err := conn.QueryContext(ctx, "PRAGMA foreign_key_check")
-		if err != nil {
-			t.Fatal(err)
-		}
-		bad := rows.Next()
-		_ = rows.Close()
-		if bad {
+		if hasRows(t, conn, "PRAGMA foreign_key_check") {
 			t.Fatal("the rows break a foreign key")
 		}
 	}
@@ -152,6 +146,76 @@ func textOf(d velox.Dialect, c migrate.Column) string {
 	return "CAST(" + q + " AS TEXT)"
 }
 
+// hasRows reports whether query has a row on db, a transaction or a
+// connection.
+func hasRows(t testing.TB, db interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, query string) bool {
+	t.Helper()
+	rows, err := db.QueryContext(t.Context(), query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	has := rows.Next()
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return has
+}
+
+// queryColumn is the first column of each row that query returns on db, as
+// T.
+func queryColumn[T any](t testing.TB, db interface {
+	Query(string, ...any) (*sql.Rows, error)
+}, query string, args ...any) []T {
+	t.Helper()
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []T
+	for rows.Next() {
+		var v T
+		if err := rows.Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// scanRows runs q, which selects n columns, and returns the last row's
+// values and the number of rows.
+func scanRows(t testing.TB, db *sql.DB, q string, n int) ([]sql.NullString, int) {
+	t.Helper()
+	rows, err := db.Query(q)
+	if err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	defer func() { _ = rows.Close() }()
+	vals := make([]sql.NullString, n)
+	ptrs := make([]any, n)
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	count := 0
+	for rows.Next() {
+		if err := rows.Scan(ptrs...); err != nil {
+			t.Fatal(err)
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return vals, count
+}
+
 // rowsOf is each table's row as text by column, cast per dialect.
 func rowsOf(t *testing.T, db *sql.DB, d velox.Dialect, s *migrate.Schema) map[migrate.TableRef]map[string]string {
 	t.Helper()
@@ -162,26 +226,7 @@ func rowsOf(t *testing.T, db *sql.DB, d velox.Dialect, s *migrate.Schema) map[mi
 			cols = append(cols, textOf(d, c))
 		}
 		q := "SELECT " + strings.Join(cols, ", ") + " FROM " + tableName(d, tb.Ref())
-		rows, err := db.Query(q)
-		if err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-		vals := make([]sql.NullString, len(tb.Columns))
-		ptrs := make([]any, len(vals))
-		for i := range vals {
-			ptrs[i] = &vals[i]
-		}
-		n := 0
-		for rows.Next() {
-			if err := rows.Scan(ptrs...); err != nil {
-				t.Fatal(err)
-			}
-			n++
-		}
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		_ = rows.Close()
+		vals, n := scanRows(t, db, q, len(tb.Columns))
 		if n != 1 {
 			t.Errorf("table %s has %d rows; want 1", tb.Ref(), n)
 			continue

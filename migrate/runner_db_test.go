@@ -337,22 +337,7 @@ func TestUpPostgresQuotedSchema(t *testing.T) {
 			if r := mustUp(t, db, fsys); len(r.Applied) != 0 {
 				t.Errorf("second Up applied %v", versions(r.Applied))
 			}
-			var tables []string
-			rows, err := admin.Query(`SELECT tablename FROM pg_tables WHERE schemaname = $1 ORDER BY tablename`, c.schema)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for rows.Next() {
-				var n string
-				if err := rows.Scan(&n); err != nil {
-					t.Fatal(err)
-				}
-				tables = append(tables, n)
-			}
-			if err := rows.Err(); err != nil {
-				t.Fatal(err)
-			}
-			_ = rows.Close()
+			tables := queryColumn[string](t, admin, `SELECT tablename FROM pg_tables WHERE schemaname = $1 ORDER BY tablename`, c.schema)
 			if want := []string{"a", "b", "c", "velox_migrations"}; !slices.Equal(tables, want) {
 				t.Errorf("tables of %s: %v; want %v", c.schema, tables, want)
 			}
@@ -362,7 +347,7 @@ func TestUpPostgresQuotedSchema(t *testing.T) {
 			}
 			// A failing no-transaction file is recorded in the quoted schema too.
 			bad := extend(t, fsys, velox.Postgres, files("0003_bad.sql", "-- velox:no-transaction\nSELECT 1/0;\n"))
-			_, err = migrate.Up(ctx, db, bad)
+			_, err := migrate.Up(ctx, db, bad)
 			if de := dirtyOf(t, err); de.Version != 3 {
 				t.Errorf("%+v; want version 3", de)
 			}

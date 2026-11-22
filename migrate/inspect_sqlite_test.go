@@ -376,24 +376,7 @@ func rebuildG(t *testing.T, db *sql.DB, edit func(string) string) {
 	if err := db.QueryRow(`SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'g'`).Scan(&create); err != nil {
 		t.Fatal(err)
 	}
-	var indexes []string
-	rows, err := db.Query(`SELECT sql FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'g' AND sql IS NOT NULL ORDER BY name`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			t.Fatal(err)
-		}
-		indexes = append(indexes, s)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	if err := rows.Close(); err != nil {
-		t.Fatal(err)
-	}
+	indexes := queryColumn[string](t, db, `SELECT sql FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'g' AND sql IS NOT NULL ORDER BY name`)
 	edited := edit(create)
 	if edited == create {
 		t.Fatalf("the edit changes nothing in %s", create)

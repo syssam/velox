@@ -154,19 +154,7 @@ func TestDropTableRefusesDependents(t *testing.T) {
 	if _, err := migrate.Up(ctx, db, fsys); err != nil {
 		t.Errorf("a column of that name: %v", err)
 	}
-	var names []string
-	rows, err := db.Query("SELECT name FROM sqlite_schema WHERE type = 'view'")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var n string
-		if err := rows.Scan(&n); err != nil {
-			t.Fatal(err)
-		}
-		names = append(names, n)
-	}
+	names := queryColumn[string](t, db, "SELECT name FROM sqlite_schema WHERE type = 'view'")
 	if !slices.Equal(names, []string{"q_v"}) {
 		t.Errorf("views: %v", names)
 	}

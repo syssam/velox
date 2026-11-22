@@ -560,23 +560,7 @@ func pgDescribe(t *testing.T, db *sql.DB) []string {
 		FROM pg_class r JOIN pg_namespace n ON n.oid = r.relnamespace
 		WHERE r.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema')`,
 	} {
-		rows, err := db.Query(q)
-		if err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-		for rows.Next() {
-			var s string
-			if err := rows.Scan(&s); err != nil {
-				t.Fatal(err)
-			}
-			out = append(out, s)
-		}
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		if err := rows.Close(); err != nil {
-			t.Fatal(err)
-		}
+		out = append(out, queryColumn[string](t, db, q)...)
 	}
 	slices.Sort(out)
 	return out

@@ -611,13 +611,7 @@ func runScripts(t *testing.T, db *sql.DB, ss []migrate.Script) {
 				t.Fatalf("%s: %v\n%s", st.SQL, err, scriptsText(ss))
 			}
 		}
-		rows, err := tx.Query("PRAGMA foreign_key_check")
-		if err != nil {
-			t.Fatal(err)
-		}
-		bad := rows.Next()
-		_ = rows.Close()
-		if bad {
+		if hasRows(t, tx, "PRAGMA foreign_key_check") {
 			t.Fatalf("foreign_key_check reports rows\n%s", scriptsText(ss))
 		}
 		if err := tx.Commit(); err != nil {
