@@ -241,6 +241,17 @@ func TestPresenterPanic(t *testing.T) {
 	}
 }
 
+// TestPanicErrorTypeName: the error graphql-go presents for a recovered
+// panic is of the Go type the presenter knows it by, *graphql.panicError.
+// graphql-go exports no way to tell it, so the presenter compares the type's
+// name: when graphql-go renames the type, this fails, and the presenter's
+// name must follow.
+func TestPanicErrorTypeName(t *testing.T) {
+	if got := fmt.Sprintf("%T", recoveredPanic(t)); got != "*graphql.panicError" {
+		t.Errorf("graphql-go's recovered panic is a %s; recoveredPanic in presenter.go looks for *graphql.panicError", got)
+	}
+}
+
 // recoveredPanic is the error graphql-go gives the presenter for a panic
 // it recovered.
 func recoveredPanic(t *testing.T) error {

@@ -76,7 +76,8 @@ func presenter(log, canceled func(ctx context.Context, err error)) graphql.Error
 // recoveredPanic reports whether err, or an error it wraps, is the error
 // graphql-go presents for a panic it recovered, which it has logged with
 // the stack. graphql-go does not export its type, so it is known by its
-// name. It walks the chain as errors.Is does.
+// name; TestPanicErrorTypeName fails when graphql-go renames it. It walks
+// the chain as errors.Is does.
 func recoveredPanic(err error) bool {
 	if err == nil {
 		return false
