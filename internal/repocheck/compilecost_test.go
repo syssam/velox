@@ -302,7 +302,7 @@ var genericObjects = []struct {
 	// bytes, entityDescUse from 776890 to 781446, entityDescHooks from
 	// 861928 to 866786 and entityDescMixin to 912240, in the engine types an
 	// entity's package reaches; the upsert clause was 3.3 KB of it.
-	{"entityDescriptor", "", entityDescSrc, 146432}, // measured 143784
+	{"entityDescriptor", "", entityDescSrc, 146432}, // measured 144550
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -382,14 +382,14 @@ var genericObjects = []struct {
 	// stayed within their bounds.
 	//
 	// A relation's aggregates, Rel's Count, Sum, Avg, Min and Max (ADR 0112),
-	// took entityDescUse from 776890 to 779982 bytes, entityDescHooks from
-	// 861928 to 865016 and entityDescMixin from 907370 to 910488: about 3 KB
-	// a package, the methods' declarations, flat in the number of Rel
+	// took entityDescUse from 782384 to 785828 bytes, entityDescHooks from
+	// 867722 to 871182 and entityDescMixin from 912240 to 916638: 3.4 to 4.4
+	// KB a package, the methods' declarations, flat in the number of Rel
 	// instantiations (a package with five took the same 3 KB more). One
 	// method cost about 1.3 KB and each more about 0.4 KB; the engine's part
 	// of the change about 0.2 KB.
-	{"entityDescUse", "", entityDescUseSrc, 795648},       // measured 785572
-	{"entityDescHooks", "", entityDescHooksBound, 881664}, // measured 870926
+	{"entityDescUse", "", entityDescUseSrc, 795136},       // measured 785828
+	{"entityDescHooks", "", entityDescHooksBound, 881152}, // measured 871182
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -397,7 +397,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 927744}, // measured 916382
+	{"entityDescMixin", "", entityDescMixinSrc, 928768}, // measured 916638
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

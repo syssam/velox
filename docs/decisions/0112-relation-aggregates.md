@@ -82,7 +82,8 @@ caller how many hidden rows each owner has.
 - Each package that names `Rel` carries the five methods' declarations:
   about 3 KB, flat in the number of `Rel` instantiations (measured with one
   and five). The repocheck bounds of `entityDescUse`, `entityDescHooks` and
-  `entityDescMixin` rose by 3 KB. One method cost about 1.3 KB; a single
+  `entityDescMixin` rose by 3.5 to 5 KB (3.4 to 4.4 KB measured). One
+  method cost about 1.3 KB; a single
   `Agg(term)` in place of `Sum`…`Max` would have saved about 1.5 KB a
   package, against ent's spelling.
 - The After condition repeats the subquery for each ordering term before
