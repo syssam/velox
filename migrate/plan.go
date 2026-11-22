@@ -31,11 +31,34 @@ func NewPlan(from, to *Schema, opts PlanOptions) (*Plan, error) {
 	}
 	findings := lintChanges(from, to, changes).out
 	if blocked := Blocked(findings, opts.Allow); len(blocked) > 0 {
-		return nil, &BlockedError{Findings: blocked}
+		return nil, &BlockedError{Findings: blocked, renames: renameHints(changes, blocked)}
 	}
 	scripts, err := Render(from, to, changes, RenderOptions{LockTimeout: opts.LockTimeout, Allow: opts.Allow})
 	if err != nil {
 		return nil, err
 	}
 	return &Plan{Changes: changes, Findings: findings, Scripts: scripts}, nil
+}
+
+// renameHints is "table.old=new" for each drop-column of blocked with an
+// add-column of the same type, nullability and default in its table: a
+// rename Diff could not tell from a drop and an add.
+func renameHints(changes []Change, blocked []Finding) []string {
+	var out []string
+	for _, f := range blocked {
+		if f.Code != "drop-column" || f.Change < 0 || f.Change >= len(changes) {
+			continue
+		}
+		d, ok := changes[f.Change].(dropColumn)
+		if !ok {
+			continue
+		}
+		for _, c := range changes {
+			a, ok := c.(addColumn)
+			if ok && a.Table == d.Table && a.Column.Type == d.Column.Type && a.Column.Identity == d.Column.Identity {
+				out = append(out, colTarget(d.Table, d.Column.Name)+"="+a.Column.Name)
+			}
+		}
+	}
+	return out
 }

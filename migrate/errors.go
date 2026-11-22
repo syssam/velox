@@ -38,10 +38,15 @@ func (e *Error) Error() string {
 
 // A BlockedError is NewPlan's refusal of a plan with destructive changes no
 // Allow covers.
-type BlockedError struct{ Findings []Finding }
+type BlockedError struct {
+	Findings []Finding
+	renames  []string // "table.old=new": a dropped column and an added one of its type in one table
+}
 
 // Error is "migrate: <n> destructive change(s) refused:", then one line per
 // finding: "  [<pos>: ]<target>: <code>: <message>; allow with -allow <code>=<target>".
+// A column dropped and one of its type added in its table may be a rename:
+// a last line says so, with the -rename-column flag that plans it as one.
 func (e *BlockedError) Error() string {
 	var b strings.Builder
 	b.WriteString("migrate: ")
@@ -57,6 +62,9 @@ func (e *BlockedError) Error() string {
 			b.WriteString(f.Pos + ": ")
 		}
 		b.WriteString(f.Target + ": " + f.Code + ": " + f.Message + "; allow with -allow " + f.Code + "=" + f.Target)
+	}
+	if len(e.renames) > 0 {
+		b.WriteString("\n  a column dropped and one of its type added in one table may be a rename: if so, pass -rename-column " + strings.Join(e.renames, " -rename-column "))
 	}
 	return b.String()
 }

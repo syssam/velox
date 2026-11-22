@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- migrate: `diff`'s refusal of a dropped column, when a column of its type
+  is added to the same table, ends with the `-rename-column table.old=new`
+  that plans the two as a rename.
 - migrate: two Review findings. `drop-identity`: a column loses its
   identity, so an insert that leaves it out gets no value. `zero-default`:
   a NOT NULL column added to a table that exists with `''`, `0` or `false`

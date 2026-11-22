@@ -169,7 +169,9 @@
 // file as a -- velox:allow line. -rename-table old=new and -rename-column
 // table.old=new, repeatable, name the renames the plan cannot see, a table
 // optionally as schema.name; one that names nothing in schema.json is an
-// error. -lock-timeout is the lock timeout the files carry (default:
+// error. A refused drop of a column, with a column of its type added to its
+// table, ends with the -rename-column flag that plans the two as a rename.
+// -lock-timeout is the lock timeout the files carry (default:
 // velox.json's); 0 writes none, so velox.json's applies when they run.
 // -dry-run prints each file after "== <path>" and writes nothing. -check
 // writes nothing and exits 3 when the schema differs from schema.json or

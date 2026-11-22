@@ -347,13 +347,14 @@ func renameOptions(snap *migrate.Schema, renames []rename) (migrate.DiffOptions,
 // dir: an *Error's Pos, and each finding's of a *BlockedError.
 func relMigrate(dir string, err error) error {
 	if be, ok := errors.AsType[*migrate.BlockedError](err); ok {
-		c := &migrate.BlockedError{Findings: slices.Clone(be.Findings)}
+		c := *be // its rename hints with it
+		c.Findings = slices.Clone(be.Findings)
 		for i := range c.Findings {
 			if c.Findings[i].Pos != "" {
 				c.Findings[i].Pos = genrun.RelPos(dir, c.Findings[i].Pos)
 			}
 		}
-		return c
+		return &c
 	}
 	if me, ok := errors.AsType[*migrate.Error](err); ok && me.Pos != "" {
 		e := *me

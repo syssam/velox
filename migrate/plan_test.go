@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,28 @@ func TestNewPlan(t *testing.T) {
 	_, err := migrate.NewPlan(nil, mustTables(velox.MySQL, nil), migrate.PlanOptions{})
 	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "nil" {
 		t.Errorf("a nil from: %v", err)
+	}
+}
+
+// TestNewPlanRenameHint: a column dropped and one of its type added in one
+// table is refused with the -rename-column flag that plans it as a rename;
+// an added column of another type gives no hint.
+func TestNewPlanRenameHint(t *testing.T) {
+	t.Parallel()
+	for _, d := range rendered {
+		from := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("nick").Optional().Default("")) })
+		to := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.String("handle").Optional().Default("")) })
+		_, err := migrate.NewPlan(from, to, migrate.PlanOptions{})
+		if _, ok := errors.AsType[*migrate.BlockedError](err); !ok {
+			t.Fatalf("%v: %v; want a *BlockedError", d, err)
+		}
+		if want := "\n  a column dropped and one of its type added in one table may be a rename: if so, pass -rename-column users.nick=handle"; !strings.HasSuffix(err.Error(), want) {
+			t.Errorf("%v: %s\nwant it to end %q", d, err, want)
+		}
+		other := mustTables(d, func(m *loadjson.Model) { addField(m, "User", field.Int("score").Optional().Default(0)) })
+		if _, err := migrate.NewPlan(from, other, migrate.PlanOptions{}); err == nil || strings.Contains(err.Error(), "rename") {
+			t.Errorf("%v: another type: %v", d, err)
+		}
 	}
 }
 

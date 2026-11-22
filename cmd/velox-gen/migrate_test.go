@@ -142,8 +142,13 @@ func TestMigrateDiff(t *testing.T) {
 	})
 
 	t.Run("drop", func(t *testing.T) {
-		setSchema(`field.String("email").Nillable()`)
+		setSchema(`field.String("full_name")`, `field.String("email").Nillable()`)
 		code, out, errs := runCLI(t, dir, "migrate", "diff")
+		if code != 1 || out != "" || !strings.HasSuffix(errs, "may be a rename: if so, pass -rename-column users.name=full_name\n") {
+			t.Errorf("rename hint: %d %q %q", code, out, errs)
+		}
+		setSchema(`field.String("email").Nillable()`)
+		code, out, errs = runCLI(t, dir, "migrate", "diff")
 		want(t, "blocked", code, out, errs, 1, "", "velox-gen: migrate diff: 1 destructive change refused:\n"+
 			"  users.name: drop-column: drops column users.name and its data; allow with -allow drop-column=users.name\n")
 		code, out, errs = runCLI(t, dir, "migrate", "diff", "-allow", "drop-column=users.name")
