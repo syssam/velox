@@ -201,10 +201,12 @@ Some things are left out on purpose, and raw SQL covers them when you need
 them.
 
 - Joins are for to-one relations only (`Join`, `LeftJoin`); a to-many
-  relation is loaded with `With` or tested with `Has`. There is no
-  `SELECT DISTINCT` or `UNION`. Subqueries are the `EXISTS` of `Has`,
-  `HasWith` and `Of`, and a column's `Select` tested with `InSelect`; one
-  with an aggregate, a CTE or a window function is raw SQL. A report with
+  relation is loaded with `With` or tested with `Has`. `Distinct()` reads
+  each distinct row once. `UNION` and CTEs are raw SQL. Subqueries are the
+  `EXISTS` of `Has`, `HasWith` and `Of`, and a column's `Select` tested
+  with `InSelect`; one with an aggregate or a window function is raw SQL.
+  A window function, such as `COUNT(*) OVER ()`, may be a `Calc` or
+  `SelectRaw` result column or ordering, never a condition. A report with
   `GROUP BY` and `HAVING` reads terms with `Select` ([the
   guide](docs/guide.md#reports-select-groupby-and-having)).
 - `Raw` scans only into entities. For a report, range over

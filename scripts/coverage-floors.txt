@@ -19,7 +19,7 @@
 # To raise a floor after adding tests, or lower one after a deliberate loss, put the
 # measured value minus 1.0 here; the checker prints it. A new package needs a line.
 #
-# Packages at 0.0 have no tests of their own: generated code (*/gen, */schema,
+# Packages at 0.0 have no tests of their own: generated code (*/veloxgen, */veloxschema,
 # graphql/graph), the demo schemas, the committed golden helpers and
 # cmd/velox-graphql, whose main is one call into internal/gqlplugin; they are
 # outside the root module, exercised only by other packages' tests, which
@@ -38,9 +38,7 @@ github.com/syssam/velox/internal/genrun 90.9
 github.com/syssam/velox/veloxtype 89.5
 github.com/syssam/velox/untyped 97.3
 github.com/syssam/velox/dialect/sqlschema 96.8
-github.com/syssam/velox/examples/tracker 77.3
-github.com/syssam/velox/examples/tracker/veloxgen 0.0
-github.com/syssam/velox/examples/tracker/veloxschema 0.0
+github.com/syssam/velox/veloxpgx 95.4
 github.com/syssam/velox/internal/testbind 77.8
 github.com/syssam/velox/internal/testbind/bindtype 94.8
 github.com/syssam/velox/internal/testbind/schema 99.0
@@ -129,8 +127,10 @@ github.com/syssam/velox/examples/tour 80.0
 github.com/syssam/velox/examples/tour/veloxgen 0.0
 github.com/syssam/velox/examples/tour/role 0.0
 github.com/syssam/velox/examples/tour/veloxschema 0.0
+github.com/syssam/velox/examples/tracker 77.3
+github.com/syssam/velox/examples/tracker/veloxgen 0.0
+github.com/syssam/velox/examples/tracker/veloxschema 0.0
 github.com/syssam/velox/examples/tracker/principal 0.0
 github.com/syssam/velox/examples/tx 84.7
 github.com/syssam/velox/examples/tx/veloxgen 0.0
 github.com/syssam/velox/examples/tx/veloxschema 0.0
-github.com/syssam/velox/veloxpgx 95.4

@@ -128,7 +128,8 @@ group.
 - `scale` (gate): `scripts/scale-check.sh`, which runs `bench/scale` against
   `bench/scale/thresholds.json`.
 - `graphql` (graphql): the tidy check, `go vet`, govulncheck, golangci-lint, the
-  tests with a coverage profile and `FuzzCost`, in `contrib/graphql`.
+  tests with a coverage profile, `FuzzCost` and `FuzzLegacyCursor`, in
+  `contrib/graphql`.
 - `examples_graphql` (graphql): `examples/graphql`'s generated files, its tests,
   and gqlgen's output, which waits for the `examples` lane, whose vet builds
   it.
@@ -246,7 +247,7 @@ CI fails when a generated file is stale.
   ```sh
   go run ./cmd/velox-gen -out internal/testmodel -package testmodel ./internal/testmodel/schema
   go run ./cmd/velox-gen -out internal/testbind -package testbind ./internal/testbind/schema
-  cd examples && go tool velox-gen -out ./start/gen ./start/schema
+  cd examples && go tool velox-gen -out ./start/veloxgen ./start/veloxschema
   ```
 
   Do the last line for each example directory. `examples/graphql` also needs
@@ -295,16 +296,18 @@ value minus 1.0. The checker prints that value. The file's header has the rest.
 
 ## Fuzz targets
 
-There are ten. CI runs each for 10 or 20 seconds:
+There are eleven. CI runs each for 10 or 20 seconds:
 
 ```sh
 go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s ./internal/engine
 ```
 
-The targets are `FuzzRender`, `FuzzRenderWrite`, `FuzzQuote`, `FuzzScope` and
-`FuzzConstraint` in `internal/dberr`, `FuzzColumnScan` in `internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and `FuzzDiff` in
-`migrate`, and `FuzzCost` in `contrib/graphql/veloxgql/internal/cost` (run from
-`contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
+The targets are `FuzzRender`, `FuzzRenderWrite`, `FuzzQuote` and `FuzzScope`
+in `internal/engine`, `FuzzConstraint` in `internal/dberr`, `FuzzColumnScan`
+in `internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and
+`FuzzDiff` in `migrate`, and, run from `contrib/graphql`, `FuzzCost` in
+`veloxgql/internal/cost` and `FuzzLegacyCursor` in
+`veloxgql/internal/gqlcore`. `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
 them with their packages and times.
 
 There is no committed corpus yet: the targets' seeds are their `f.Add` calls.
