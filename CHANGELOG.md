@@ -62,12 +62,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   each row, ent's `ByPostsCount` and `ByPosts(sql.OrderBySum(...))`: order by
   one, select it or compare it in an `Expr`. The target's interceptors,
   filters and Read policy apply inside, so a row the reader may not see is
-  not counted, and `After` pages over them (decision 0111). Untyped:
+  not counted, and `After` pages over them (decision 0112). Untyped:
   `Table.RelAgg`.
 - velox-graphql: `graphql.OrderField("POSTS_COUNT")` on a to-many edge orders
   the owner's connections by the edge's count, as entgql's, counting only
   the nodes the reader may see; cursors page over it, and a request that
-  orders by it costs what a `has<Edge>With` costs (decision 0111).
+  orders by it costs what a `has<Edge>With` costs (decision 0112).
   `gqlgraph.Column.Count` is new; `veloxgql.GeneratedCodeIsVersion27` stays,
   as code generated before uses nothing that changed.
 - velox-gen: `migrate rebase <file>...` moves a branch's migration files to

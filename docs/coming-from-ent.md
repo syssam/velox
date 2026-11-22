@@ -239,7 +239,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
 | `client.User.Update().SkipDefault(user.FieldUpdatedAt)` (veloxe) | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
-| `client.User.Query().Order(user.ByPostsCount(sql.OrderDesc()))` | `db.Query[veloxgen.User]().OrderBy(U.Posts.Count().Desc(), U.ID.Asc())`: the posts the reader may not see are not counted (decision 0111) |
+| `client.User.Query().Order(user.ByPostsCount(sql.OrderDesc()))` | `db.Query[veloxgen.User]().OrderBy(U.Posts.Count().Desc(), U.ID.Asc())`: the posts the reader may not see are not counted (decision 0112) |
 | `client.User.Query().Order(user.ByPosts(sql.OrderBySum(post.FieldViews)))` | `OrderBy(U.Posts.Sum(P.Views).Asc(), U.ID.Asc())`; `Avg`, `Min` and `Max` too, NULL for a user with no posts |
 | `user.HasPostsWith(...)` with a count, `sql.P` by hand | `velox.Expr[veloxgen.User]("? >= ?", U.Posts.Count(), 3)` in a `Where` |
 | `client.User.Query().IDs(ctx)` | `velox.IDs[int64](ctx, db.Query[veloxgen.User]().Limit(n))` |

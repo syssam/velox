@@ -111,7 +111,7 @@ func (w *writer) order(o *object) {
 	for i, v := range o.order.values {
 		w.at = o.order.wheres[i]
 		if k := o.order.edges[i] - 1; k >= 0 && o.order.counts[i] {
-			// A count reads the edge's nodes through their Read policy (0111).
+			// A count reads the edge's nodes through their Read policy (0112).
 			edge, _ := o.edgeName(k)
 			w.line(`  """`, CountOrderDoc, edge, ` of each `, o.name, `, counting only those the reader may see."""`)
 		} else if k >= 0 {
@@ -188,7 +188,7 @@ const CountOrderDoc = "Orders by the number of "
 
 // orderCount adds to ord the values that order by the number of a to-many
 // edge's nodes (graphql.OrderField on the edge, entgql's POSTS_COUNT). The
-// count is a subquery that applies the target's Read policy (0111), so it
+// count is a subquery that applies the target's Read policy (0112), so it
 // reveals no node the reader may not see, but it reveals how many there
 // are: an edge a directive guards or the type leaves out is refused, as is
 // one to an entity with no GraphQL type.
