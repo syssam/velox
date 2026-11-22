@@ -205,16 +205,23 @@ func RedactedError(st *Statement, err error) string {
 			name = "(unnamed)"
 		}
 		if ce.Entity != "" {
-			b.WriteString("velox: " + ce.Entity + ": ")
+			b.WriteString("velox: ")
+			b.WriteString(ce.Entity)
+			b.WriteString(": ")
 		}
-		b.WriteString(ce.Kind.String() + " constraint " + name + " violated")
+		b.WriteString(ce.Kind.String())
+		b.WriteString(" constraint ")
+		b.WriteString(name)
+		b.WriteString(" violated")
 	} else if safe = safeError(entity, err); safe != "" {
 		b.WriteString(safe)
 	} else {
 		b.WriteString(errTypes(err))
 	}
 	if hasCode {
-		b.WriteString(" (code " + code + ")")
+		b.WriteString(" (code ")
+		b.WriteString(code)
+		b.WriteString(")")
 	}
 	switch {
 	case dberr.Is(err, ErrTimeout):

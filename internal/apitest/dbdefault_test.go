@@ -327,6 +327,9 @@ func TestInsertAllEmptyUsesDefaults(t *testing.T) {
 		}
 		stored = append(stored, s)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	_ = rows.Close()
 	if !slices.Equal(stored, []string{"new", "new", "new"}) || a.Status != "new" || a.ID == 0 || xs[0].Status != "new" || xs[1].Status != "new" || xs[1].ID == 0 {
 		t.Errorf("stored %q; entities %+v %+v", stored, a, xs)
