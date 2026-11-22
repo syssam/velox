@@ -16,6 +16,11 @@ concurrency:
 # on a push only is --full's; one on a pull request only is the merge gate's
 # form of a --full check; one on a changes output runs on a push, and on a pull
 # request that touches its group (scripts/ci-changes.sh).
+#
+# Each job keeps its build and module caches under a key of its own, so that
+# the tools it builds with go run, golangci-lint, govulncheck and revive,
+# and its packages, come from its last run rather than from whichever job
+# saved setup-go's one shared cache first.
 jobs:
   # The groups beyond the ORM's that the run checks: all of them on a push, and
   # on a pull request those its files touch.
@@ -34,6 +39,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - id: groups
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -58,6 +71,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - name: gofmt
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - run: go mod tidy -diff
@@ -129,6 +150,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       # The tests build modules offline, with gqlgen as a tool: they need the whole
       # module graph, which go mod download without all leaves out. The lint job
       # checks tidiness; download all dirties go.sum, and the tidy after it
@@ -180,6 +209,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - name: fuzz (short)
         run: |
           go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s ./internal/engine
@@ -202,6 +239,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - name: generated files are current and every entity is valid
         run: |
           go build -o bin/velox-gen ./cmd/velox-gen
@@ -245,6 +290,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       # bench/scale builds offline: it needs the whole module graph, as the
       # test job does.
       - run: |
@@ -264,6 +317,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - run: |
           go mod download all
           go mod tidy # download all adds to go.sum what tidy leaves out
@@ -304,6 +365,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - run: scripts/gqlgen-latest.sh
   # contrib/veloxotel's checks.
   otel:
@@ -316,6 +385,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       - name: contrib/veloxotel
         working-directory: contrib/veloxotel
         run: |
@@ -336,6 +413,14 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+          cache: false # the job's own cache, below
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: go-${{ runner.os }}-${{ github.job }}-${{ strategy.job-index }}-
       # TestGenerateCompiles builds velox-gen and a generated app offline: it
       # needs the root's whole module graph, as the scale job does.
       - run: |
