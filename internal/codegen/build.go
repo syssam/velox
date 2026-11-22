@@ -31,6 +31,7 @@ func Build(m *loadjson.Model) (*Graph, error) {
 	}
 	b.entities(m)
 	b.resolveEdges()
+	b.edgeSchemas()
 	b.foreignKeys()
 	b.onDeletes()
 	b.indexes()
@@ -73,6 +74,7 @@ type node struct {
 	ent    *Entity
 	schema *loadjson.Schema
 	edges  []*edgeState // in the order of ent.Edges
+	link   []string     // an edge schema's two key columns: the assoc edge's owner's, then its target's
 }
 
 // edgeState is an edge with what resolving it found.
@@ -734,6 +736,9 @@ func (b *builder) indexes() {
 				b.refused[ix] = true
 			}
 		}
+		if n.link != nil {
+			b.linkIndex(n)
+		}
 		// A partial index with no StorageKey whose name another index has
 		// takes the hash of its Where; a full index never does, and two of
 		// one name are rule 44's.
@@ -804,8 +809,8 @@ func (b *builder) nameLengths() {
 			for _, sym := range s.le.Symbols {
 				b.long(e.Name, edgeLoc(s.ed), "symbol", sym, "")
 			}
-			if s.ed.Rel.Kind != "M2M" || s.le.Inverse {
-				continue
+			if s.ed.Rel.Kind != "M2M" || s.le.Inverse || s.ed.Rel.EdgeSchema != "" {
+				continue // an edge schema's names are its own
 			}
 			b.joinLengths(s)
 		}
@@ -1261,7 +1266,7 @@ func (b *builder) validateEdges(n *node) {
 				break
 			}
 		}
-		if ed.Rel.Kind == "M2M" && !ed.Inverse {
+		if ed.Rel.Kind == "M2M" && !ed.Inverse && ed.Rel.EdgeSchema == "" {
 			for _, other := range b.g.Entities {
 				if other.Table == ed.Rel.Table {
 					b.fail(27, e.Name, edgeLoc(ed), "join table %s is also the table of schema %s", ed.Rel.Table, other.Name)

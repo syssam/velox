@@ -108,8 +108,8 @@ func joinTables(g *Graph) []joinTable {
 	var out []joinTable
 	for _, e := range g.Entities {
 		for _, ed := range e.Edges {
-			if ed.Rel.Kind != "M2M" || ed.Inverse || len(ed.Rel.Columns) != 2 {
-				continue
+			if ed.Rel.Kind != "M2M" || ed.Inverse || len(ed.Rel.Columns) != 2 || ed.Rel.EdgeSchema != "" {
+				continue // an edge schema's table is its entity's
 			}
 			t := g.Entity(ed.Target)
 			if t == nil {

@@ -47,3 +47,35 @@ func TestDescribeDeterministic(t *testing.T) {
 		t.Fatal("describe -json depends on the order of the schemas")
 	}
 }
+
+// A relation through an edge schema names it, and the through edges are
+// listed with the declared ones.
+func TestDescribeEdgeSchema(t *testing.T) {
+	var b bytes.Buffer
+	if err := Describe(&b, mustBuild(t, Learner{}, Course{}, Enrollment{}), false); err != nil {
+		t.Fatal(err)
+	}
+	want := `Course (courses)
+  id           int64                         id  auto
+  learners     M2M via Enrollment → Learner  enrollments(course_id, learner_id)
+  enrollments  O2M → Enrollment              enrollments.course_id
+
+Enrollment (enrollments)
+  id          int64          id          auto
+  role        enum           role
+  joined_at   time           joined_at   immutable
+  learner_id  int64          learner_id
+  course_id   int64          course_id
+  learner     M2O → Learner  enrollments.learner_id
+  course      M2O → Course   enrollments.course_id
+
+Learner (learners)
+  id           int64                        id    auto
+  name         string                       name
+  courses      M2M via Enrollment → Course  enrollments(learner_id, course_id)
+  enrollments  O2M → Enrollment             enrollments.learner_id
+`
+	if b.String() != want {
+		t.Fatalf("got\n%s\nwant\n%s", b.String(), want)
+	}
+}

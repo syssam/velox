@@ -28,6 +28,7 @@ type Entity struct {
 	Edges       []*Edge                    `json:"edges"`
 	Indexes     []*Index                   `json:"indexes,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+	EdgeSchema  bool                       `json:"edge_schema,omitempty"` // a many-to-many relation's links are its rows, as edge.Through names it
 
 	// Mixins are the values of the schema's Mixin method, and Pointer says
 	// the schema implements schema.Interface only through a pointer. They
@@ -72,6 +73,7 @@ type Edge struct {
 	Field       string                     `json:"field,omitempty"`     // the foreign-key field, on whichever entity's table holds the column; "" for M2M
 	Immutable   bool                       `json:"immutable,omitempty"` // the edge cannot be changed after create
 	Symbols     []string                   `json:"symbols,omitempty"`   // the foreign-key constraint names: one, or two for M2M
+	Through     string                     `json:"through,omitempty"`   // on an M2M edge that declares edge.Through, the name of its edge to the edge schema
 	Comment     string                     `json:"comment,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Pos         string                     `json:"-"` // the file:line that declares the edge, for errors
@@ -98,10 +100,13 @@ func (f Field) MarshalJSON() ([]byte, error) {
 
 // Rel is the relation an edge stands for, and where it is stored.
 type Rel struct {
-	Kind     string   `json:"kind"`                // "O2O", "O2M", "M2O", "M2M"
-	Table    string   `json:"table"`               // the table holding the foreign key, or the join table
-	Columns  []string `json:"columns"`             // the foreign key; for M2M the join table's owner and target columns
-	OnDelete string   `json:"on_delete,omitempty"` // the foreign key's action: "CASCADE", "SET NULL", "RESTRICT", "NO ACTION", or "" for a NOT NULL key that sets none (NO ACTION). Recorded for the migration planner, not in the plugin model
+	Kind    string   `json:"kind"`    // "O2O", "O2M", "M2O", "M2M"
+	Table   string   `json:"table"`   // the table holding the foreign key, or the join table or edge schema's table
+	Columns []string `json:"columns"` // the foreign key; for M2M the owner's and the target's columns of that table
+	// EdgeSchema names, on M2M, the edge schema whose table holds the links
+	// instead of a join table.
+	EdgeSchema string `json:"edge_schema,omitempty"`
+	OnDelete   string `json:"on_delete,omitempty"` // the foreign key's action: "CASCADE", "SET NULL", "RESTRICT", "NO ACTION", or "" for a NOT NULL key that sets none (NO ACTION). Recorded for the migration planner, not in the plugin model
 }
 
 // Index is an index of an entity's table.

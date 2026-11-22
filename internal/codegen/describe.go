@@ -11,7 +11,8 @@ import (
 
 // Describe writes the graph: when asJSON, as the indented JSON of the model a
 // plugin receives (PluginModel of the graph lowered with the default Config),
-// otherwise as text, one block per entity with its fields, then its edges.
+// otherwise as text, one block per entity with its fields, then its edges. A
+// many-to-many edge through an edge schema says "M2M via" and its name.
 func Describe(w io.Writer, g *Graph, asJSON bool) error {
 	if asJSON {
 		// Not HTML-escaped: a partial index's Where shows "a < b" as written.
@@ -46,7 +47,11 @@ func describeEntity(buf *bytes.Buffer, e *Entity) {
 		_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", f.Name, f.Type, f.Column, strings.Join(fieldFlags(f), ", "))
 	}
 	for _, ed := range e.Edges {
-		_, _ = fmt.Fprintf(tw, "  %s\t%s → %s\t%s\n", ed.Name, ed.Rel.Kind, ed.Target, relStorage(ed.Rel)+onDelete(ed.Rel))
+		kind := ed.Rel.Kind
+		if ed.Rel.EdgeSchema != "" {
+			kind += " via " + ed.Rel.EdgeSchema
+		}
+		_, _ = fmt.Fprintf(tw, "  %s\t%s → %s\t%s\n", ed.Name, kind, ed.Target, relStorage(ed.Rel)+onDelete(ed.Rel))
 	}
 	_ = tw.Flush() // writes to a bytes.Buffer
 	for line := range strings.Lines(tab.String()) {
