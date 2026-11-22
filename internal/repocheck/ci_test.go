@@ -376,7 +376,7 @@ func TestCIGateIsTheORM(t *testing.T) {
 		{".", "scripts/scale-check.sh -n 500 -s 100"},
 		{"examples", "go test -race -count=1 "},
 		{"examples", "go tool velox-gen -check "},
-		{"examples", "go tool velox-gen migrate apply "},
+		{"examples", "go tool velox-gen migrate diff -check "},
 	}
 	full := []struct{ dir, prefix string }{
 		{".", "go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile=cover-root.out "},

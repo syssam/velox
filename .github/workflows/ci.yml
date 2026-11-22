@@ -306,20 +306,17 @@ jobs:
             go tool velox-gen -check -out "./$x/veloxgen" "./$x/veloxschema"
             go tool velox-gen verify -out "./$x/veloxgen" "./$x/veloxschema"
           done
-          # Each example's tables come from its committed migrations: fail on drift from the
-          # schema package, and on SQL that does not replay to its schema.json (applied to a
-          # temporary SQLite file, then compared with drift).
-          migdb=$(mktemp -d)
+          # Each example's tables come from its committed migrations: diff -check fails
+          # on drift from the schema package, and replays the SQL on a temporary SQLite
+          # file to compare it with schema.json.
           for f in */migrations/schema.json */migrations/sqlite/schema.json; do
             d=${f%/schema.json}
             x=${d%%/*}
             go tool velox-gen migrate diff -check -dir "./$d" "./$x/veloxschema"
-            go tool velox-gen migrate apply -dir "./$d" -db "$migdb/$x.db"
-            go tool velox-gen migrate drift -dir "./$d" -db "$migdb/$x.db"
           done
-          rm -rf "$migdb"
-          # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
-          go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/veloxschema
+          # tracker's PostgreSQL migrations: its tests apply them under VELOX_TEST_POSTGRES,
+          # so here the check skips the replay, which would need a PostgreSQL scratch database.
+          go tool velox-gen migrate diff -check -replay=false -dir ./tracker/migrations/postgres ./tracker/veloxschema
   # velox's own build cost, report-only here until a Linux run recalibrates
   # thresholds.json, which was measured on darwin/arm64 only. A run that fails
   # still fails the step.
