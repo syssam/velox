@@ -344,3 +344,46 @@ func TestRunRefusesAnUsedDirectory(t *testing.T) {
 		t.Fatalf("got %v, want a refusal", err)
 	}
 }
+
+// TestAddM2MShape: k edges on the schemas with i%5 == 1, each with its
+// inverse on E<i+2>, and with through an edge schema L<i> per edge that the
+// edge names.
+func TestAddM2MShape(t *testing.T) {
+	for _, through := range []bool{false, true} {
+		schemas, _ := generate(20, 1, false)
+		addM2M(schemas, 4, through)
+		if want := 20 + map[bool]int{false: 0, true: 4}[through]; len(schemas) != want {
+			t.Fatalf("through %v: %d schemas, want %d", through, len(schemas), want)
+		}
+		for _, i := range []int{1, 6, 11, 16} {
+			own, target := schemas[filepath.Join("schema", fmt.Sprintf("e%d.go", i))], schemas[filepath.Join("schema", fmt.Sprintf("e%d.go", i+2))]
+			if !strings.Contains(own, fmt.Sprintf(`edge.To("tags", E%d.Type)`, i+2)) || !strings.Contains(target, fmt.Sprintf(`edge.From("tagged", E%d.Type).Ref("tags")`, i)) {
+				t.Errorf("through %v: e%d or e%d lacks its edge", through, i, i+2)
+			}
+			if got := strings.Contains(own, fmt.Sprintf(`.Through("links", L%d.Type)`, i)); got != through {
+				t.Errorf("through %v: e%d names an edge schema: %v", through, i, got)
+			}
+		}
+	}
+	if _, err := run(config{n: 20, services: 1, through: true}); err == nil {
+		t.Error("-through without -m2m is accepted")
+	}
+	if k := (config{n: 100, m2m: 20, through: true}).thresholdsKey(); k != "100-m2m20-through" {
+		t.Errorf("thresholds key %q", k)
+	}
+}
+
+// TestScaleHarnessSmallThrough builds a small application whose many-to-many
+// edges go through edge schemas: velox-gen accepts the probe's schemas, and
+// the generated code builds.
+func TestScaleHarnessSmallThrough(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("builds an application; run without -short")
+	}
+	r, err := run(config{n: 20, services: 1, m2m: 4, through: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	measured(t, r)
+}

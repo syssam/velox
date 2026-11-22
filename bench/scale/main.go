@@ -42,6 +42,8 @@ import (
 type config struct {
 	n, services int
 	graphql     bool   // generate the GraphQL code too, with the velox-graphql plugin
+	m2m         int    // many-to-many edges to add (addM2M)
+	through     bool   // make each many-to-many edge's links an edge schema
 	dir         string // where the application is written: empty or missing; a temporary directory when empty
 }
 
@@ -72,6 +74,8 @@ func main() {
 	flag.IntVar(&c.n, "n", 500, "entities (a multiple of 10)")
 	flag.IntVar(&c.services, "s", 100, "services")
 	flag.BoolVar(&c.graphql, "graphql", false, "also generate and link the GraphQL code (velox-graphql)")
+	flag.IntVar(&c.m2m, "m2m", 0, "many-to-many edges to add, at most n/5")
+	flag.BoolVar(&c.through, "through", false, "make each -m2m edge's links an edge schema (edge.Through) with one more field")
 	thresholds := flag.String("check", "", "a thresholds file to check against")
 	asJSON := flag.Bool("json", false, "print the report as JSON")
 	flag.Parse()
@@ -100,12 +104,20 @@ func main() {
 }
 
 // thresholdsKey is the key of thresholds.json that holds this configuration's
-// thresholds: the entities, and "-graphql" after them for the GraphQL variant.
+// thresholds: the entities, "-graphql" after them for the GraphQL variant,
+// and "-m2m<k>" and "-through" for the many-to-many probe, which has none.
 func (c config) thresholdsKey() string {
+	k := strconv.Itoa(c.n)
 	if c.graphql {
-		return strconv.Itoa(c.n) + "-graphql"
+		k += "-graphql"
 	}
-	return strconv.Itoa(c.n)
+	if c.m2m > 0 {
+		k += "-m2m" + strconv.Itoa(c.m2m)
+	}
+	if c.through {
+		k += "-through"
+	}
+	return k
 }
 
 // repo is the root of this repository: bench/scale's grandparent.
@@ -122,6 +134,9 @@ func run(c config) (report, error) {
 	r := report{N: c.n, Services: c.services}
 	if c.n < 10 || c.n%10 != 0 || c.services < 1 {
 		return r, fmt.Errorf("-n must be a multiple of 10 and -s at least 1")
+	}
+	if c.m2m < 0 || c.m2m > c.n/5 || c.through && c.m2m == 0 {
+		return r, fmt.Errorf("-m2m must be between 0 and n/5, and -through needs it")
 	}
 	root, err := repo()
 	if err != nil {
@@ -143,6 +158,7 @@ func run(c config) (report, error) {
 		}
 	}
 	schemas, services := generate(c.n, c.services, c.graphql)
+	addM2M(schemas, c.m2m, c.through)
 	// The services import gen, which does not exist until velox-gen has run, and
 	// go mod tidy cannot resolve an import of a missing package: the module is
 	// written and tidied with the schemas alone, and the services follow gen.
@@ -374,6 +390,57 @@ func (E%[1]d) Edges() []schema.Edge {
 			helper, use.String())
 	}
 	return schemas, svc
+}
+
+// addM2M adds k many-to-many edges to schemas, which generate made: E<i>,
+// for the first k i with i%5 == 1, gets To("tags", E<i+2>.Type), and E<i+2>
+// its inverse "tagged". With through, each edge goes through an edge schema
+// L<i> of its own, with the two key fields and a role with a default, the
+// schema an edge schema of a port from ent has. The probe compares the build
+// cost of the two: a generated join entity per edge, or an edge schema.
+func addM2M(schemas map[string]string, k int, through bool) {
+	for j := range k {
+		i := 5*j + 1
+		th := ""
+		if through {
+			th = fmt.Sprintf(".Through(\"links\", L%d.Type)", i)
+			schemas[filepath.Join("schema", fmt.Sprintf("l%d.go", i))] = fmt.Sprintf(`package schema
+
+import (
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+)
+
+// L%[1]d is the edge schema of E%[1]d's tags.
+type L%[1]d struct{ schema.Schema }
+
+func (L%[1]d) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("role").Default("member"),
+		field.Int64("e%[1]d_id"),
+		field.Int64("e%[2]d_id"),
+	}
+}
+
+func (L%[1]d) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("owner", E%[1]d.Type).Unique().Required().Field("e%[1]d_id").OnDelete(edge.Cascade),
+		edge.To("target", E%[2]d.Type).Unique().Required().Field("e%[2]d_id").OnDelete(edge.Cascade),
+	}
+}
+`, i, i+2)
+		}
+		addEdge(schemas, i, fmt.Sprintf("edge.To(\"tags\", E%d.Type)%s", i+2, th))
+		addEdge(schemas, i+2, fmt.Sprintf("edge.From(\"tagged\", E%d.Type).Ref(\"tags\")", i))
+	}
+}
+
+// addEdge adds the edge e first among schema E<i>'s edges.
+func addEdge(schemas map[string]string, i int, e string) {
+	p := filepath.Join("schema", fmt.Sprintf("e%d.go", i))
+	head := fmt.Sprintf("func (E%d) Edges() []schema.Edge {\n\treturn []schema.Edge{\n", i)
+	schemas[p] = strings.Replace(schemas[p], head, head+"\t\t"+e+",\n", 1)
 }
 
 // check compares r with the thresholds recorded under key ("500", or
