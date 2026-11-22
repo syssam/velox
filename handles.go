@@ -1529,7 +1529,7 @@ func (c NullStringCol[E, V]) PutNull[_ Lazy[V]](r Row) error {
 	return rowSet[E]("PutNull", r, c.I, nil)
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -1545,6 +1545,11 @@ func (c JSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}
 	}
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: *p}}
+}
+
+// Append appends the elements of v, a slice, to the column's JSON array, as ent's AppendX does: PostgreSQL's ||, MySQL's JSON_MERGE_PRESERVE and SQLite's json_insert. A NULL column, or one holding the JSON null, becomes the elements; a document that is no array becomes the first element. v must encode as a JSON array; an insert refuses Append, as it refuses Add. PostgreSQL's column must be jsonb, as velox-gen writes it.
+func (c JSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignAppend, Value: v}}
 }
 
 // Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.
@@ -1576,6 +1581,11 @@ func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAl
 
 // IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
 func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
+
+// Len is the number of elements of the JSON array at the path of object keys in the column, or of the column's own array when no key is given, for its conditions and an ordering: NULL where the path is missing or holds no array (an object has no length).
+func (c JSONCol[E, V]) Len[_ Lazy[V]](keys ...string) JSONNumber[E] {
+	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindLen, keys)}
+}
 
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
@@ -1618,6 +1628,11 @@ func (c NullJSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: *p}}
 }
 
+// Append appends the elements of v, a slice, to the column's JSON array, as ent's AppendX does: PostgreSQL's ||, MySQL's JSON_MERGE_PRESERVE and SQLite's json_insert. A NULL column, or one holding the JSON null, becomes the elements; a document that is no array becomes the first element. v must encode as a JSON array; an insert refuses Append, as it refuses Add. PostgreSQL's column must be jsonb, as velox-gen writes it.
+func (c NullJSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignAppend, Value: v}}
+}
+
 // Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.
 func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
 	return JSONText[E]{c.I, jsonPath(engine.JSONKindText, keys)}
@@ -1647,6 +1662,11 @@ func (c NullJSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonH
 
 // IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
 func (c NullJSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
+
+// Len is the number of elements of the JSON array at the path of object keys in the column, or of the column's own array when no key is given, for its conditions and an ordering: NULL where the path is missing or holds no array (an object has no length).
+func (c NullJSONCol[E, V]) Len[_ Lazy[V]](keys ...string) JSONNumber[E] {
+	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindLen, keys)}
+}
 
 // SetNull sets the column to NULL.
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {

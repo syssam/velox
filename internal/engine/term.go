@@ -28,6 +28,7 @@ const (
 	termAgg
 	termInvalid
 	termExcluded
+	termJSON
 )
 
 // TermFn is an aggregate function of a term.
@@ -56,6 +57,8 @@ type Term struct {
 	x     *exprData
 	fn    TermFn
 	of    *Term
+	path  *JSONPath // a termJSON's
+	name  string    // the result column's name, NamedTerm's; "" for none
 	err   error
 	shape string // what shapes it in the render cache's key: see seal
 }
@@ -78,9 +81,67 @@ func (t Term) seal() Term {
 		} else {
 			b = append(b, 0)
 		}
+	case termJSON:
+		// The keys are arguments; the kind and their number shape the text.
+		b = append(b, byte(t.path.Kind))
+		b = binary.AppendUvarint(b, uint64(len(t.path.Keys)))
 	}
+	b = binary.AppendUvarint(b, uint64(len(t.name)))
+	b = append(b, t.name...)
 	t.shape = string(b)
 	return t
+}
+
+// JSONTerm is the value at path p in the JSON column col, by p's kind, as
+// the conditions of an OpJSON read it. A path that cannot be written alike
+// on every dialect is an InvalidTerm.
+func JSONTerm(col int32, p JSONPath) Term {
+	if err := p.check(); err != nil {
+		return InvalidTerm(err)
+	}
+	return Term{kind: termJSON, col: col, path: &p}.seal()
+}
+
+// NamedTerm is t named name as a result column of a Projection: SELECT t AS
+// name. A name is a letter or an underscore, then letters, digits and
+// underscores, at most 63 of them, so that it is the same identifier on
+// every dialect. The name is written only in a Projection's result columns;
+// t is the same term wherever else it stands.
+func NamedTerm(t Term, name string) Term {
+	if t.kind == termInvalid || t.kind == termNone {
+		return t
+	}
+	if !plainName(name) {
+		return InvalidTerm(fmt.Errorf("velox: the term name %q is not a letter or an underscore followed by up to 62 letters, digits or underscores", name))
+	}
+	t.name = name
+	return t.seal()
+}
+
+// plainName reports whether s is a letter or an underscore, then letters,
+// digits and underscores, 63 bytes at most: PostgreSQL's longest identifier.
+func plainName(s string) bool {
+	if s == "" || len(s) > 63 {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		letter := c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+		if !letter && (i == 0 || c < '0' || c > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// unnamed is t without its name, the term wherever it is not a result
+// column.
+func unnamed(t Term) Term {
+	if t.name == "" {
+		return t
+	}
+	t.name = ""
+	return t.seal()
 }
 
 // ColumnTerm is column col of the statement's entity.
@@ -170,6 +231,12 @@ func (w *writer) term(t Term) {
 		w.excluded(t.col)
 	case termExpr:
 		w.exprBody(t.x)
+	case termJSON:
+		if !w.in.Columns[t.col].Codec {
+			w.fail(fmt.Errorf("velox: %s: column %s is not a JSON column, which a JSON path needs", w.in.Name, w.in.Columns[t.col].Name))
+			return
+		}
+		w.jsonValue(t.col, *t.path)
 	case termAgg:
 		w.str(termFnSQL[t.fn])
 		w.str("(")
@@ -205,7 +272,12 @@ func (w *writer) projectStmt(st *Statement) {
 	if st.Distinct {
 		w.str("DISTINCT ")
 	}
-	w.terms(p.Terms)
+	for i, t := range p.Terms {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.resultTerm(t, st.Distinct)
+	}
 	w.str(" FROM ")
 	w.table()
 	w.where(st.Where)
@@ -224,6 +296,22 @@ func (w *writer) projectStmt(st *Statement) {
 	w.orderBy(st.OrderBy, false)
 	w.qualify = false
 	w.selectTail(st)
+}
+
+// resultTerm writes t as a result column of a projection: as term writes it,
+// then AS its name, when it has one. An encoded column is read as it is
+// stored, for velox.Scan to decode, unless the read is DISTINCT, which would
+// compare its encodings.
+func (w *writer) resultTerm(t Term, distinct bool) {
+	if t.kind == termColumn && w.in.Columns[t.col].Codec && !distinct {
+		w.predCol(t.col)
+	} else {
+		w.term(t)
+	}
+	if t.name != "" {
+		w.str(" AS ")
+		w.ident(t.name)
+	}
 }
 
 // orderTerm writes the ordering o by an expression term. NULL sorts after
@@ -279,7 +367,7 @@ func checkTermCols(t Term, bad func(int) error) error {
 		return err
 	}
 	switch t.kind {
-	case termColumn, termExcluded:
+	case termColumn, termExcluded, termJSON:
 		return bad(int(t.col))
 	case termExpr:
 		return checkExprCols(t.x, bad)
@@ -333,7 +421,7 @@ func nodeExcluded(cols []int, n Node) []int {
 // swapTerm is swapCols of a term: columns 0 and 1 trade places.
 func swapTerm(t Term) Term {
 	switch t.kind {
-	case termColumn, termExcluded:
+	case termColumn, termExcluded, termJSON:
 		t.col = swapCol(t.col)
 	case termExpr:
 		t.x = swapExprData(t.x)

@@ -861,6 +861,8 @@ func (w *writer) pred(n Node) {
 		w.jsonHas(n)
 	case OpJSONEmpty:
 		w.jsonEmpty(n)
+	case opJSONLike:
+		w.jsonLike(n)
 	case opRowIn:
 		w.rowIn(n)
 	default:
@@ -1381,6 +1383,9 @@ func (w *writer) updateStmt(st *Statement) {
 			continue
 		case AssignExpr:
 			w.setExpr(a)
+			continue
+		case AssignAppend:
+			w.jsonAppend(a)
 			continue
 		case AssignSkip:
 			w.fail(fmt.Errorf("velox: %s: a skipped setter of column %d reached the statement", w.in.Name, a.Column))

@@ -63,6 +63,9 @@ const (
 	// is the columns, a []int, and w the rows of values, a [][]any, each
 	// one value per column. rowsIn makes it.
 	opRowIn
+	// opJSONLike is the kid of an OpJSON that matches the string at the
+	// path with a pattern: v is its jsonLike. JSONLikeLeaf makes it.
+	opJSONLike
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.

@@ -222,8 +222,14 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	for _, a := range st.Set {
 		k = binary.AppendUvarint(k, uint64(a.Column))
 		k = append(k, byte(a.Op))
-		if a.Op == AssignExpr {
+		switch a.Op {
+		case AssignExpr:
 			k = termKey(k, exprAssigned(a))
+		case AssignAppend:
+			if d == SQLite {
+				// SQLite's text has a json(?) per element.
+				k = binary.AppendUvarint(k, uint64(appendLen(a.Value)))
+			}
 		}
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Rows)))

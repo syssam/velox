@@ -86,13 +86,16 @@ const (
 	AssignAdd                      // column = column + value
 	AssignSub                      // column = column - value
 	AssignExpr                     // column = expression, made by velox.SetExpr
+	// AssignAppend appends the elements of the JSON array value to the
+	// column's array, made by a JSON handle's Append.
+	AssignAppend
 )
 
 // Assignment is one column an UPDATE sets.
 type Assignment struct {
 	Column int      // index into velox.EntityInfo.Columns
 	Op     AssignOp // how the column is assigned
-	// Value is the value assigned, added or subtracted. For AssignExpr it is
+	// Value is the value assigned, added, subtracted or appended. For AssignExpr it is
 	// the expression, an untyped.Term, which only velox reads.
 	Value any
 }

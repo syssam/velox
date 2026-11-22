@@ -107,6 +107,7 @@ const AggregateMax
 const AggregateMin
 const AggregateSum
 const AssignAdd
+const AssignAppend
 const AssignExpr
 const AssignSet
 const AssignSub
@@ -139,6 +140,7 @@ const TxRollback
 func (b JSONBool[E]) EQ[_ Lazy[E]](v bool) Pred[E]
 func (b JSONBool[E]) IsNull[_ Lazy[E]]() Pred[E]
 func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E]
+func (b JSONBool[E]) Term[_ Lazy[E]]() Term[E]
 func (c Change) Changed[E any](cols ...Column[E]) bool
 func (c Change) Diff() []FieldChange
 func (c Change) NewRow() any
@@ -164,6 +166,7 @@ func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c Col[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c Col[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
+func (c JSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
 func (c JSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
@@ -173,6 +176,7 @@ func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
 func (c JSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E]
 func (c JSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E]
 func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E]
+func (c JSONCol[E, V]) Len[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V
@@ -211,6 +215,7 @@ func (c NullCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
 func (c NullCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
+func (c NullJSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E]
 func (c NullJSONCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
 func (c NullJSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
@@ -223,6 +228,7 @@ func (c NullJSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E]
 func (c NullJSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E]
 func (c NullJSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullJSONCol[E, V]) Len[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c NullJSONCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V
 func (c NullJSONCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
@@ -555,7 +561,9 @@ func (m *Mutation) Value(name string) (any, bool)
 func (m *Mutation) Where(ps ...Predicate)
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
 func (m Many[T]) MarshalJSON() ([]byte, error)
+func (n JSONNumber[E]) Asc[_ Lazy[E]]() Order[E]
 func (n JSONNumber[E]) Between[_ Lazy[E]](lo, hi float64) Pred[E]
+func (n JSONNumber[E]) Desc[_ Lazy[E]]() Order[E]
 func (n JSONNumber[E]) EQ[_ Lazy[E]](v float64) Pred[E]
 func (n JSONNumber[E]) GTE[_ Lazy[E]](v float64) Pred[E]
 func (n JSONNumber[E]) GT[_ Lazy[E]](v float64) Pred[E]
@@ -564,6 +572,7 @@ func (n JSONNumber[E]) LTE[_ Lazy[E]](v float64) Pred[E]
 func (n JSONNumber[E]) LT[_ Lazy[E]](v float64) Pred[E]
 func (n JSONNumber[E]) NEQ[_ Lazy[E]](v float64) Pred[E]
 func (n JSONNumber[E]) NotNull[_ Lazy[E]]() Pred[E]
+func (n JSONNumber[E]) Term[_ Lazy[E]]() Term[E]
 func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E]
 func (o One[T]) Get[_ Lazy[T]]() (*T, bool)
 func (o One[T]) MarshalJSON() ([]byte, error)
@@ -641,12 +650,19 @@ func (s SaveQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) SaveQuery[E]
 func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
 func (s Setter[E]) Column[_ Lazy[E]]() int
+func (t JSONText[E]) Asc[_ Lazy[E]]() Order[E]
+func (t JSONText[E]) Contains[_ Lazy[E]](s string) Pred[E]
+func (t JSONText[E]) Desc[_ Lazy[E]]() Order[E]
 func (t JSONText[E]) EQ[_ Lazy[E]](v string) Pred[E]
+func (t JSONText[E]) HasPrefix[_ Lazy[E]](s string) Pred[E]
+func (t JSONText[E]) HasSuffix[_ Lazy[E]](s string) Pred[E]
 func (t JSONText[E]) In[_ Lazy[E]](vs ...string) Pred[E]
 func (t JSONText[E]) IsNull[_ Lazy[E]]() Pred[E]
 func (t JSONText[E]) NEQ[_ Lazy[E]](v string) Pred[E]
 func (t JSONText[E]) NotIn[_ Lazy[E]](vs ...string) Pred[E]
 func (t JSONText[E]) NotNull[_ Lazy[E]]() Pred[E]
+func (t JSONText[E]) Term[_ Lazy[E]]() Term[E]
+func (t Term[E]) As[_ Lazy[E]](name string) Term[E]
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E]
 func (t Term[E]) Avg[_ Lazy[E]]() Term[E]
 func (t Term[E]) CountDistinct[_ Lazy[E]]() Term[E]
@@ -919,6 +935,7 @@ const AggregateMax
 const AggregateMin
 const AggregateSum Aggregate
 const AssignAdd
+const AssignAppend
 const AssignExpr
 const AssignSet AssignOp
 const AssignSub

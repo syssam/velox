@@ -163,7 +163,7 @@ func (s Setters) CheckInsert(in *EntityInfo) error {
 			return fmt.Errorf("velox: %s: an insert's setter of %s: %w", in.Name, in.Columns[a.Column].Field, errSetExprInsert)
 		}
 		if a.Op != AssignSet {
-			return fmt.Errorf("velox: %s: an insert's setter of %s is Add or Sub, which needs a row; use Set", in.Name, in.Columns[a.Column].Field)
+			return fmt.Errorf("velox: %s: an insert's setter of %s is Add, Sub or Append, which needs a row; use Set", in.Name, in.Columns[a.Column].Field)
 		}
 	}
 	return nil

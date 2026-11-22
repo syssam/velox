@@ -374,8 +374,14 @@ var genericObjects = []struct {
 	// Query.Distinct, InsertQuery.UpdateAll and Statement.Distinct (ADR 0102)
 	// took entityDescUse from 771328 to 772452 bytes, entityDescHooks from
 	// 856428 to 857550 and entityDescMixin from 901728 to 902852.
-	{"entityDescUse", "", entityDescUseSrc, 791552},       // measured 781446
-	{"entityDescHooks", "", entityDescHooksBound, 877568}, // measured 866786
+	//
+	// The JSON helpers, Term.As and Scan (ADR 0115, 0116) took entityDescUse
+	// from 776888 to 777942 bytes. It has no JSON column and calls no Scan,
+	// so the 1 KB is in the engine types its package reaches, such as Term
+	// with its JSON path and name; entityDescHooks and entityDescMixin
+	// stayed within their bounds.
+	{"entityDescUse", "", entityDescUseSrc, 791552},       // measured 782384
+	{"entityDescHooks", "", entityDescHooksBound, 877568}, // measured 867722
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own

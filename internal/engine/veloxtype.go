@@ -45,6 +45,8 @@ const (
 	AssignSub  = veloxtype.AssignSub
 	AssignExpr = veloxtype.AssignExpr
 
+	AssignAppend = veloxtype.AssignAppend
+
 	ConstraintUnique     = veloxtype.ConstraintUnique
 	ConstraintForeignKey = veloxtype.ConstraintForeignKey
 	ConstraintNotNull    = veloxtype.ConstraintNotNull

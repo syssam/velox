@@ -45,8 +45,8 @@ func TestHandleMethodSets(t *testing.T) {
 		"NullOtherCol":  "Asc Assign AssignNull Between Count CountDistinct Desc EQ Fill GT GTE Get GetPtr In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Value ValuePtr column",
 		"NullNumberCol": "Add Asc Assign AssignNull Avg Between Count CountDistinct Desc EQ Fill GT GTE Get GetPtr In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Sub Sum Value ValuePtr column",
 		"NullStringCol": "Asc Assign AssignNull Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold Fill GT GTE Get GetPtr HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Value ValuePtr column",
-		"JSONCol":       "Assign Bool Fill Get Has HasEvery HasKey HasSome IsEmpty New Number Old Put Set SetPtr Text Value column",
-		"NullJSONCol":   "Assign AssignNull Bool Fill Get GetPtr Has HasEvery HasKey HasSome IsEmpty IsNull New NewPtr NotNull Number Old OldPtr Put PutNull Set SetNull SetPtr Text Value ValuePtr column",
+		"JSONCol":       "Append Assign Bool Fill Get Has HasEvery HasKey HasSome IsEmpty Len New Number Old Put Set SetPtr Text Value column",
+		"NullJSONCol":   "Append Assign AssignNull Bool Fill Get GetPtr Has HasEvery HasKey HasSome IsEmpty IsNull Len New NewPtr NotNull Number Old OldPtr Put PutNull Set SetNull SetPtr Text Value ValuePtr column",
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(), "handles.go"), nil, parser.SkipObjectResolution)
 	if err != nil {

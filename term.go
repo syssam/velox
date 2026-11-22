@@ -84,6 +84,14 @@ func (t Term[E]) CountDistinct[_ Lazy[E]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCountDistinct, t.t)}
 }
 
+// As names t as a result column of Select: SELECT t AS name. Scan reads
+// the column into the field of that name. A name is a letter or an
+// underscore, then letters, digits and underscores, at most 63 of them; any
+// other fails the statement. The name is written only in Select's result
+// columns: in GroupBy, Having, an Expr or an ordering, t is written as it
+// is.
+func (t Term[E]) As[_ Lazy[E]](name string) Term[E] { return Term[E]{engine.NamedTerm(t.t, name)} }
+
 // Asc orders by t, ascending, NULL last as every ordering puts it. An entity
 // query ordered by an expression cannot be read After a row or by a cursor.
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E] { return Order[E]{OrderTerm{Expr: t.t}} }

@@ -714,7 +714,7 @@ func TestEdgeSetterSetKey(t *testing.T) {
 func TestEdgeSetterRefused(t *testing.T) {
 	db, raw := edgeDB(t)
 	p := sPost{AuthorID: 1, Title: "p"}
-	if err := db.Insert(&p).Set(sPosts.AuthorID.Add(1)).Exec(user); err == nil || !strings.Contains(err.Error(), "Add or Sub") {
+	if err := db.Insert(&p).Set(sPosts.AuthorID.Add(1)).Exec(user); err == nil || !strings.Contains(err.Error(), "Add, Sub or Append") {
 		t.Errorf("Add on insert: %v", err)
 	}
 	for name, s := range map[string]velox.Setter[sPost]{

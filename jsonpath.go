@@ -18,8 +18,9 @@ type JSONText[E any] struct {
 
 // JSONNumber is the number at a path of object keys in a JSON column of
 // entity E, made by a JSON handle's Number, as a float64. It is NULL where
-// the path is missing or holds a value that is not a number. Its conditions
-// read alike on PostgreSQL (jsonb), MySQL and SQLite.
+// the path is missing or holds a value that is not a number. A JSON handle's
+// Len is one too: the length of an array. Its conditions read alike on
+// PostgreSQL (jsonb), MySQL and SQLite.
 type JSONNumber[E any] struct {
 	col  int32
 	path engine.JSONPath
@@ -34,6 +35,18 @@ type JSONBool[E any] struct {
 	col  int32
 	path engine.JSONPath
 }
+
+// Term returns the value as a Term: a result column of Select, which
+// Scan reads into a string field, a key of GroupBy, or an operand of Calc.
+func (t JSONText[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTerm(t.col, t.path)} }
+
+// Term returns the value as a Term, as JSONText's Term does: Scan reads it
+// into a number field, and Sum, Avg, Min and Max aggregate it.
+func (n JSONNumber[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTerm(n.col, n.path)} }
+
+// Term returns the value as a Term, as JSONText's Term does: Scan reads it
+// into a bool field.
+func (b JSONBool[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTerm(b.col, b.path)} }
 
 func jsonPath(kind engine.JSONKind, keys []string) engine.JSONPath {
 	return engine.JSONPath{Kind: kind, Keys: slices.Clone(keys)}
@@ -101,6 +114,38 @@ func (t JSONText[E]) NotIn[_ Lazy[E]](vs ...string) Pred[E] {
 	return jsonPred[E](t.col, t.path, engine.Node{Op: engine.OpNotIn, V: list(vs)})
 }
 
+// Contains is true where the string at the path contains s, taken
+// literally and with case on every dialect: SQLite's text is a GLOB, as its
+// LIKE ignores the case of ASCII letters.
+func (t JSONText[E]) Contains[_ Lazy[E]](s string) Pred[E] {
+	return jsonPred[E](t.col, t.path, engine.JSONLikeLeaf(engine.JSONContains, s))
+}
+
+// HasPrefix is true where the string at the path begins with s, taken
+// literally and with case, as Contains.
+func (t JSONText[E]) HasPrefix[_ Lazy[E]](s string) Pred[E] {
+	return jsonPred[E](t.col, t.path, engine.JSONLikeLeaf(engine.JSONHasPrefix, s))
+}
+
+// HasSuffix is true where the string at the path ends with s, taken
+// literally and with case, as Contains.
+func (t JSONText[E]) HasSuffix[_ Lazy[E]](s string) Pred[E] {
+	return jsonPred[E](t.col, t.path, engine.JSONLikeLeaf(engine.JSONHasSuffix, s))
+}
+
+// Asc orders by the string at the path, ascending, in the database's order
+// of text (its collation), NULL last: where the path is missing or holds no
+// string. An entity query ordered so cannot be read After a row or by a
+// cursor.
+func (t JSONText[E]) Asc[_ Lazy[E]]() Order[E] {
+	return Order[E]{OrderTerm{Expr: engine.JSONTerm(t.col, t.path)}}
+}
+
+// Desc orders by the string at the path, descending, NULL first.
+func (t JSONText[E]) Desc[_ Lazy[E]]() Order[E] {
+	return Order[E]{OrderTerm{Expr: engine.JSONTerm(t.col, t.path), Desc: true}}
+}
+
 // IsNull is true where the path is missing or holds no string.
 func (t JSONText[E]) IsNull[_ Lazy[E]]() Pred[E] {
 	return jsonPred[E](t.col, t.path, engine.Node{Op: engine.OpIsNull})
@@ -145,6 +190,18 @@ func (n JSONNumber[E]) LTE[_ Lazy[E]](v float64) Pred[E] {
 // included.
 func (n JSONNumber[E]) Between[_ Lazy[E]](lo, hi float64) Pred[E] {
 	return jsonPred[E](n.col, n.path, engine.Node{Op: engine.OpBetween, V: lo, W: hi})
+}
+
+// Asc orders by the number at the path, ascending, NULL last: where the
+// path is missing or holds no number. An entity query ordered so cannot be
+// read After a row or by a cursor.
+func (n JSONNumber[E]) Asc[_ Lazy[E]]() Order[E] {
+	return Order[E]{OrderTerm{Expr: engine.JSONTerm(n.col, n.path)}}
+}
+
+// Desc orders by the number at the path, descending, NULL first.
+func (n JSONNumber[E]) Desc[_ Lazy[E]]() Order[E] {
+	return Order[E]{OrderTerm{Expr: engine.JSONTerm(n.col, n.path), Desc: true}}
 }
 
 // IsNull is true where the path is missing or holds no number.

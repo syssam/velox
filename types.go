@@ -172,6 +172,9 @@ const (
 	AssignAdd  = veloxtype.AssignAdd  // column = column + value
 	AssignSub  = veloxtype.AssignSub  // column = column - value
 	AssignExpr = veloxtype.AssignExpr // column = expression (SetExpr)
+	// AssignAppend appends the elements of a JSON array to the column's
+	// array (a JSON handle's Append).
+	AssignAppend = veloxtype.AssignAppend
 )
 
 // Assignment is one column an UPDATE sets.

@@ -155,7 +155,8 @@ func distinctOrdered(st *Statement, o OrderTerm) bool {
 		t = ColumnTerm(int32(o.Column))
 	}
 	if st.Project != nil {
-		return slices.ContainsFunc(st.Project.Terms, func(x Term) bool { return reflect.DeepEqual(x, t) })
+		t = unnamed(t)
+		return slices.ContainsFunc(st.Project.Terms, func(x Term) bool { return reflect.DeepEqual(unnamed(x), t) })
 	}
 	return !expr && o.Rel == 0 && len(st.Columns) == 1 && st.Columns[0] == o.Column
 }
