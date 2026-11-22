@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -39,37 +40,43 @@ func readOne(t *testing.T, ctx context.Context, db *velox.DB) {
 	}
 }
 
+// TestPinAfterWrite runs in a synctest bubble: the pin window passes on the
+// bubble's clock, so a loaded machine cannot stretch the reads past it.
 func TestPinAfterWrite(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
-		s := seeded(hooked, velox.WithPinWindow(50*time.Millisecond))
-		sctx := velox.WithSession(ctx)
-		// The insert reads its key back; then two reads on the primary.
-		s.p.Results = [][][]any{{{int64(42)}}, {invoiceRow(1)}, {invoiceRow(1)}}
-		readOne(t, sctx, s.db) // before any write: a replica
-		inv := testmodel.Invoice{OrgID: 1, Number: "N"}
-		if err := s.db.Insert(&inv).Exec(sctx); err != nil {
-			t.Fatal(err)
-		}
-		readOne(t, sctx, s.db)
-		readOne(t, sctx, s.db)
-		// replica 0, then the write, then two pinned reads
-		s.check(t, hooked, [3]int{3, 1, 0}, onR0, onPrimary, onPrimary, onPrimary)
+		synctest.Test(t, func(t *testing.T) {
+			s := seeded(hooked, velox.WithPinWindow(50*time.Millisecond))
+			sctx := velox.WithSession(ctx)
+			// The insert reads its key back; then two reads on the primary.
+			s.p.Results = [][][]any{{{int64(42)}}, {invoiceRow(1)}, {invoiceRow(1)}}
+			readOne(t, sctx, s.db) // before any write: a replica
+			inv := testmodel.Invoice{OrgID: 1, Number: "N"}
+			if err := s.db.Insert(&inv).Exec(sctx); err != nil {
+				t.Fatal(err)
+			}
+			time.Sleep(49 * time.Millisecond) // still inside the window
+			readOne(t, sctx, s.db)
+			readOne(t, sctx, s.db)
+			// replica 0, then the write, then two pinned reads
+			s.check(t, hooked, [3]int{3, 1, 0}, onR0, onPrimary, onPrimary, onPrimary)
 
-		time.Sleep(60 * time.Millisecond)
-		readOne(t, sctx, s.db)
-		s.check(t, hooked, [3]int{3, 1, 1}, onR0, onPrimary, onPrimary, onPrimary, onR1)
+			time.Sleep(2 * time.Millisecond) // past it
+			readOne(t, sctx, s.db)
+			s.check(t, hooked, [3]int{3, 1, 1}, onR0, onPrimary, onPrimary, onPrimary, onR1)
+		})
 	})
 }
 
 func TestDefaultPinWindow(t *testing.T) {
-	s := seeded(false)
-	sctx := velox.WithSession(ctx)
-	before := time.Now()
-	writeOne(t, sctx, s.db)
-	until := velox.PinnedUntil(sctx)
-	if d := until.Sub(before); d < 2*time.Second || d > 3*time.Second {
-		t.Errorf("a write pins for %v, want the default 2s", d)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		s := seeded(false)
+		sctx := velox.WithSession(ctx)
+		before := time.Now()
+		writeOne(t, sctx, s.db)
+		if d := velox.PinnedUntil(sctx).Sub(before); d != 2*time.Second {
+			t.Errorf("a write pins for %v, want the default 2s", d)
+		}
+	})
 }
 
 func TestNoSessionNoPin(t *testing.T) {

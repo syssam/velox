@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -148,16 +149,18 @@ func TestStatementOnTheTxContextTimesOut(t *testing.T) {
 }
 
 func TestTxPastItsDeadlineIsNotCommitted(t *testing.T) {
-	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
-		time.Sleep(60 * time.Millisecond)
-		return nil
-	}, velox.TxTimeout(20*time.Millisecond))
-	if !errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
-		t.Errorf("%v", err)
-	}
-	notCommitted(t, e)
+	synctest.Test(t, func(t *testing.T) {
+		e := &fakeconn.Exec{}
+		db := openFake(velox.Postgres, e)
+		err := db.Tx(ctx, func(context.Context, *velox.DB) error {
+			time.Sleep(60 * time.Millisecond)
+			return nil
+		}, velox.TxTimeout(20*time.Millisecond))
+		if !errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
+			t.Errorf("%v", err)
+		}
+		notCommitted(t, e)
+	})
 }
 
 // notCommitted fails t unless e's transaction ended with ROLLBACK.
@@ -255,30 +258,32 @@ func TestCallersDeadlineBoundsTheTx(t *testing.T) {
 // by the caller's deadline or cancellation, is rolled back and its error says
 // which.
 func TestTxPastCallersDeadlineIsNotCommitted(t *testing.T) {
-	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e)
-	cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	defer cancel()
-	err := db.Tx(cctx, func(context.Context, *velox.DB) error {
-		time.Sleep(60 * time.Millisecond)
-		return nil
-	})
-	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
-		t.Errorf("past the deadline: %v", err)
-	}
-	notCommitted(t, e)
+	synctest.Test(t, func(t *testing.T) {
+		e := &fakeconn.Exec{}
+		db := openFake(velox.Postgres, e)
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		defer cancel()
+		err := db.Tx(cctx, func(context.Context, *velox.DB) error {
+			time.Sleep(60 * time.Millisecond)
+			return nil
+		})
+		if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
+			t.Errorf("past the deadline: %v", err)
+		}
+		notCommitted(t, e)
 
-	e = &fakeconn.Exec{}
-	db = openFake(velox.Postgres, e)
-	cctx, cancel = context.WithCancel(ctx)
-	err = db.Tx(cctx, func(context.Context, *velox.DB) error {
-		cancel()
-		return nil
+		e = &fakeconn.Exec{}
+		db = openFake(velox.Postgres, e)
+		cctx, cancel = context.WithCancel(ctx)
+		err = db.Tx(cctx, func(context.Context, *velox.DB) error {
+			cancel()
+			return nil
+		})
+		if !errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
+			t.Errorf("canceled: %v", err)
+		}
+		notCommitted(t, e)
 	})
-	if !errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
-		t.Errorf("canceled: %v", err)
-	}
-	notCommitted(t, e)
 }
 
 // TestSavepointGetsCallersDeadline: the caller's deadline on a transaction
@@ -304,27 +309,31 @@ func TestSavepointGetsCallersDeadline(t *testing.T) {
 
 // TestRetriesStopAtTheTxDeadline is Review Focus 3.
 func TestRetriesStopAtTheTxDeadline(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	runs := 0
-	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
-		runs++
-		time.Sleep(20 * time.Millisecond)
-		return &pgconn.PgError{Code: "40001"}
-	}, velox.TxRetrySerializable(1000), velox.TxTimeout(100*time.Millisecond))
-	if !errors.Is(err, velox.ErrTimeout) || runs < 2 || runs > 10 {
-		t.Errorf("%v after %d runs", err, runs)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		db := openFake(velox.Postgres, &fakeconn.Exec{})
+		runs := 0
+		err := db.Tx(ctx, func(context.Context, *velox.DB) error {
+			runs++
+			time.Sleep(20 * time.Millisecond)
+			return &pgconn.PgError{Code: "40001"}
+		}, velox.TxRetrySerializable(1000), velox.TxTimeout(100*time.Millisecond))
+		if !errors.Is(err, velox.ErrTimeout) || runs < 2 || runs > 10 {
+			t.Errorf("%v after %d runs", err, runs)
+		}
+	})
 }
 
 func TestTimeoutReplacesTheTxDefault(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithDeadlines(velox.Deadlines{Tx: 10 * time.Millisecond, MaxTx: time.Hour}))
-	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
-		time.Sleep(40 * time.Millisecond)
-		return nil
-	}, velox.TxTimeout(time.Minute))
-	if err != nil {
-		t.Errorf("%v", err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithDeadlines(velox.Deadlines{Tx: 10 * time.Millisecond, MaxTx: time.Hour}))
+		err := db.Tx(ctx, func(context.Context, *velox.DB) error {
+			time.Sleep(40 * time.Millisecond)
+			return nil
+		}, velox.TxTimeout(time.Minute))
+		if err != nil {
+			t.Errorf("%v", err)
+		}
+	})
 }
 
 func TestStatementsInATxGetItsDeadline(t *testing.T) {

@@ -124,7 +124,11 @@ func TestUpPostgresConcurrentIndexBuild(t *testing.T) {
 		_, err := migrate.Up(ctx, openDB(t, "pgx", dsn), fsys, migrate.WithLockWait(time.Minute))
 		second <- err
 	}()
-	time.Sleep(2 * time.Second) // past deadlock_timeout, 1s: the second Up's check finds no cycle
+	// The second Up has tried the lock, and waits for it, before the writer
+	// lets the build go on. Its session's last statement is its try; the
+	// first's is the build. Polled, so that a loaded runner cannot leave the
+	// second Up not yet started; a pg_advisory_lock would match too.
+	waitFor(t, db, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND query LIKE 'SELECT pg\_%advisory\_lock(%'`)
 	if _, err := writer.ExecContext(ctx, `COMMIT`); err != nil {
 		t.Fatal(err)
 	}
@@ -139,10 +143,10 @@ func TestUpPostgresConcurrentIndexBuild(t *testing.T) {
 	}
 }
 
-// waitFor waits, up to 10s, until the count q reads is above 0.
+// waitFor waits, up to 30s, until the count q reads is above 0.
 func waitFor(t *testing.T, db *sql.DB, q string) {
 	t.Helper()
-	for range 200 {
+	for range 600 {
 		var n int
 		if err := db.QueryRow(q).Scan(&n); err != nil {
 			t.Fatal(err)

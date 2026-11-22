@@ -367,22 +367,39 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		wantRoute(t, "read under Primary", log.last(t), velox.Route{Replica: -1})
 
 		// Within a session, a read after a write reads the primary, the write
-		// included; once the window has passed, the replica again.
-		sctx := velox.WithSession(ctx)
-		wantNumbers(t, "read in a session before its write", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
-		// The pin starts inside insertInvoice, so the guard below measures
-		// from before it; the sleep after the window measures from after it,
-		// which is the later, and so the safe, side.
-		before := time.Now()
-		insertInvoice(t, sctx, db, 1, "IN-SESSION")
-		wrote := time.Now()
-		wantNumbers(t, "read in a session after its write", readNumbers(t, sctx, db), []string{"PRIMARY-SEED", "WRITTEN", "IN-SESSION"})
-		wantRoute(t, "read in the pin window", log.last(t), velox.Route{Replica: -1})
-		wantNumbers(t, "read with no session in the window", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
-		// The in-window reads must have finished inside the window, or their
-		// checks prove nothing about it.
-		if took := time.Since(before); took >= window {
-			t.Fatalf("the runner took %v for the in-window reads, past the %v window", took, window)
+		// included; once the window has passed, the replica again. The
+		// in-window reads must finish inside the window, or their checks prove
+		// nothing about it: a try that a loaded runner made too slow is
+		// discarded, and another runs in a new session, until a generous
+		// deadline.
+		primaryRows := []string{"PRIMARY-SEED", "WRITTEN"}
+		var sctx context.Context
+		var wrote time.Time
+		giveUp := time.Now().Add(time.Minute)
+		for try := 1; ; try++ {
+			sctx = velox.WithSession(ctx)
+			wantNumbers(t, "read in a session before its write", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
+			// The pin starts inside insertInvoice, so the guard below measures
+			// from before it; the sleep after the window measures from after
+			// it, which is the later, and so the safe, side.
+			number := fmt.Sprintf("IN-SESSION-%d", try)
+			before := time.Now()
+			insertInvoice(t, sctx, db, 1, number)
+			wrote = time.Now()
+			primaryRows = append(primaryRows, number)
+			inSession := readNumbers(t, sctx, db)
+			inSessionRoute := log.last(t)
+			noSession := readNumbers(t, ctx, db)
+			took := time.Since(before)
+			if took < window {
+				wantNumbers(t, "read in a session after its write", inSession, primaryRows)
+				wantRoute(t, "read in the pin window", inSessionRoute, velox.Route{Replica: -1})
+				wantNumbers(t, "read with no session in the window", noSession, []string{"REPLICA-SEED"})
+				break
+			}
+			if time.Now().After(giveUp) {
+				t.Fatalf("after %d tries, the runner still took %v for the in-window reads, past the %v window", try, took, window)
+			}
 		}
 		time.Sleep(time.Until(wrote.Add(window + 100*time.Millisecond)))
 		wantNumbers(t, "read after the window", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
