@@ -54,10 +54,16 @@ func edgeSchemaBehaviour(g *Graph, bound map[string]Bound, mixins map[string][]M
 	return errors.Join(errs...)
 }
 
+// mysqlDrops is the end of the warning of an edge schema's other unique
+// key: what Add does on MySQL.
+const mysqlDrops = "on MySQL, Add's ON DUPLICATE KEY UPDATE applies to every unique key, so a new link whose row collides with another only on this key is dropped without an error"
+
 // EdgeSchemaWarnings returns a warning for each edge schema neither of whose
 // two key edges declares OnDelete: its keys have no action, as ent's do, so
 // deleting a row that a link names fails while the link exists. A plain join
-// table's keys cascade. Each warning is "<pos>: schema X: reason", as an
+// table's keys cascade. It also warns of each unique field and unique index
+// of an edge schema other than the one over its pair of keys, which MySQL's
+// Add treats as the pair's. Each warning is "<pos>: schema X: reason", as an
 // Error prints.
 func EdgeSchemaWarnings(g *Graph) []string {
 	var out []string
@@ -66,6 +72,7 @@ func EdgeSchemaWarnings(g *Graph) []string {
 			continue
 		}
 		keys := linkKeys(g, e)
+		out = append(out, otherUniques(e, keys)...)
 		if len(keys) != 2 || keys[0].Rel.OnDelete != "" || keys[1].Rel.OnDelete != "" {
 			continue
 		}
@@ -76,6 +83,31 @@ func EdgeSchemaWarnings(g *Graph) []string {
 		out = append(out, (&Error{Pos: keys[0].Pos, Schema: e.Name, Reason: fmt.Sprintf(
 			"deleting %s rows fails while %s rows name them; declare OnDelete(edge.Cascade) on edges %q and %q to delete their links with them",
 			sides, e.Name, keys[0].Name, keys[1].Name)}).Error())
+	}
+	return out
+}
+
+// otherUniques are the warnings of the unique fields and indexes of the edge
+// schema es, whose key edges are keys, but the ID and the index over the
+// pair of keys.
+func otherUniques(es *Entity, keys []*Edge) []string {
+	var pair []string
+	for _, k := range keys {
+		if i := fieldIndex(es, k.Field); i >= 0 {
+			pair = append(pair, es.Fields[i].Column)
+		}
+	}
+	var out []string
+	for _, f := range es.Fields[1:] {
+		if f.Unique {
+			out = append(out, (&Error{Pos: f.Pos, Schema: es.Name, Where: fieldAt(f.Name), Reason: "a unique field of an edge schema: " + mysqlDrops}).Error())
+		}
+	}
+	for i, ix := range es.Indexes {
+		if !ix.Unique || len(pair) == 2 && len(ix.Columns) == 2 && slices.Contains(ix.Columns, pair[0]) && slices.Contains(ix.Columns, pair[1]) && pair[0] != pair[1] {
+			continue
+		}
+		out = append(out, (&Error{Pos: ix.Pos, Schema: es.Name, Where: indexAt(i), Reason: "a unique index of an edge schema other than its pair of keys': " + mysqlDrops}).Error())
 	}
 	return out
 }

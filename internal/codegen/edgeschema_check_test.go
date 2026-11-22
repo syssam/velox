@@ -9,6 +9,7 @@ import (
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
 )
 
 // esCheckSchema is users in groups through Membership, an edge schema whose
@@ -136,7 +137,8 @@ func TestEdgeSchemaBehaviourRefused(t *testing.T) {
 }
 
 // A cascading pair of keys for the warning test: Place's keys both declare
-// OnDelete.
+// OnDelete. Place has a unique code, a unique index over it and a key, and
+// the unique index over its pair in the reversed order.
 type Viewer struct{ schema.Schema }
 
 func (Viewer) Edges() []schema.Edge {
@@ -152,7 +154,10 @@ func (Show) Edges() []schema.Edge {
 type Place struct{ schema.Schema }
 
 func (Place) Fields() []schema.Field {
-	return []schema.Field{field.Int64("viewer_id"), field.Int64("show_id")}
+	return []schema.Field{field.Int64("viewer_id"), field.Int64("show_id"), field.String("code").Unique()}
+}
+func (Place) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("code", "show_id").Unique(), index.Fields("show_id", "viewer_id").Unique()}
 }
 func (Place) Edges() []schema.Edge {
 	return []schema.Edge{
@@ -162,19 +167,24 @@ func (Place) Edges() []schema.Edge {
 }
 
 // An edge schema whose keys declare no OnDelete is warned of once, naming
-// both sides and both key edges; one whose keys cascade is not.
+// both sides and both key edges; one whose keys cascade is not. Each unique
+// field and unique index of an edge schema but the pair's, in either order,
+// is warned of for MySQL.
 func TestEdgeSchemaWarnings(t *testing.T) {
 	g := mustBuild(t, Learner{}, Course{}, Enrollment{}, Fan{}, Follow{}, Viewer{}, Show{}, Place{})
 	got := EdgeSchemaWarnings(g)
+	const drops = "on MySQL, Add's ON DUPLICATE KEY UPDATE applies to every unique key, so a new link whose row collides with another only on this key is dropped without an error"
 	want := []string{
-		`schema Enrollment: deleting Learner or Course rows fails while Enrollment rows name them; declare OnDelete(edge.Cascade) on edges "learner" and "course" to delete their links with them`,
-		`schema Follow: deleting Fan rows fails while Follow rows name them; declare OnDelete(edge.Cascade) on edges "fan" and "follower" to delete their links with them`,
+		`edgeschema_test.go:57: schema Enrollment: deleting Learner or Course rows fails while Enrollment rows name them; declare OnDelete(edge.Cascade) on edges "learner" and "course" to delete their links with them`,
+		`edgeschema_test.go:82: schema Follow: deleting Fan rows fails while Follow rows name them; declare OnDelete(edge.Cascade) on edges "fan" and "follower" to delete their links with them`,
+		`schema Place: field "code": a unique field of an edge schema: ` + drops,
+		`schema Place: index 0: a unique index of an edge schema other than its pair of keys': ` + drops,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d warnings, want %d:\n%s", len(got), len(want), strings.Join(got, "\n"))
 	}
 	for i, w := range want {
-		if !strings.HasSuffix(got[i], w) || !strings.Contains(got[i], "edgeschema_test.go:") {
+		if !strings.HasSuffix(got[i], w) {
 			t.Errorf("warning %d:\n got %s\nwant …%s", i, got[i], w)
 		}
 	}
