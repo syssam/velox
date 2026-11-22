@@ -99,6 +99,49 @@ func TestMigrateDiff(t *testing.T) {
 		want(t, "again", code, out, errs, 0, "no changes\n", "")
 		code, out, errs = runCLI(t, dir, "migrate", "diff", "-check")
 		want(t, "check", code, out, errs, 0, "", "")
+
+		// -check applies the files to a temporary SQLite file: a hand edit,
+		// hashed, that schema.json does not know fails it.
+		file := filepath.Join(mig, "0001_create_users.sql")
+		orig, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, file, "CREATE TABLE `users` (`id` integer NOT NULL PRIMARY KEY AUTOINCREMENT);\n")
+		if code, _, errs := runCLI(t, dir, "migrate", "hash"); code != 0 {
+			t.Fatalf("hash: %s", errs)
+		}
+		code, out, errs = runCLI(t, dir, "migrate", "diff", "-check")
+		if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: migrate diff: the files do not make migrations/schema.json: applied to a temporary SQLite file, the database differs from migrations/schema.json after applying the directory:\n") ||
+			!strings.Contains(errs, "add-column users.name") {
+			t.Errorf("check of an edited file: %d %q %q", code, out, errs)
+		}
+		code, out, errs = runCLI(t, dir, "migrate", "diff", "-check", "-replay=false")
+		want(t, "check -replay=false", code, out, errs, 0, "", "")
+		writeFile(t, file, string(orig))
+		if code, _, errs := runCLI(t, dir, "migrate", "hash"); code != 0 {
+			t.Fatalf("hash: %s", errs)
+		}
+	})
+
+	t.Run("check replays a postgres directory only on -scratch-db", func(t *testing.T) {
+		code, _, errs := runCLI(t, dir, "migrate", "diff", "-dir", "pg", "-dialect", "postgres")
+		if code != 0 {
+			t.Fatalf("diff: %s", errs)
+		}
+		code, out, errs := runCLI(t, dir, "migrate", "diff", "-check", "-dir", "pg")
+		want(t, "no scratch", code, out, errs, 2, "", "velox-gen: migrate diff: -check applies the files to an empty database and compares it with schema.json, and the files of this postgres directory need a postgres one: pass -scratch-db <dsn>, or -replay=false to compare the schema package with schema.json alone\n")
+		code, out, errs = runCLI(t, dir, "migrate", "diff", "-check", "-dir", "pg", "-replay=false")
+		want(t, "-replay=false", code, out, errs, 0, "", "")
+		for _, args := range [][]string{{"-scratch-db", "x"}, {"-replay=false"}, {"-check", "-replay=false", "-scratch-db", "x"}} {
+			code, out, errs := runCLI(t, dir, append([]string{"migrate", "diff", "-dir", "pg"}, args...)...)
+			if code != 2 || out != "" || !strings.Contains(errs, "Usage:") {
+				t.Errorf("%v: %d %q %q", args, code, out, errs)
+			}
+		}
+		if err := os.RemoveAll(filepath.Join(dir, "pg")); err != nil {
+			t.Fatal(err)
+		}
 	})
 
 	t.Run("existing empty directory", func(t *testing.T) {
@@ -139,6 +182,30 @@ func TestMigrateDiff(t *testing.T) {
 		}
 		code, out, errs = runCLI(t, dir, "migrate", "diff")
 		want(t, "diff", code, out, errs, 0, "migrations/0002_add_users_email.sql\nmigrations/schema.json\nmigrations/velox.sum\n", "")
+
+		// The last file deleted and the sum rewritten, schema.json still says
+		// what it made: -check fails.
+		last := filepath.Join(mig, "0002_add_users_email.sql")
+		data, err := os.ReadFile(last)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(last); err != nil {
+			t.Fatal(err)
+		}
+		if code, _, errs := runCLI(t, dir, "migrate", "hash"); code != 0 {
+			t.Fatalf("hash: %s", errs)
+		}
+		code, out, errs = runCLI(t, dir, "migrate", "diff", "-check")
+		if code != 1 || out != "" || !strings.Contains(errs, "the files do not make migrations/schema.json") || !strings.Contains(errs, "add-column users.email") {
+			t.Errorf("check without the last file: %d %q %q", code, out, errs)
+		}
+		writeFile(t, last, string(data))
+		if code, _, errs := runCLI(t, dir, "migrate", "hash"); code != 0 {
+			t.Fatalf("hash: %s", errs)
+		}
+		code, out, errs = runCLI(t, dir, "migrate", "diff", "-check")
+		want(t, "check restored", code, out, errs, 0, "", "")
 	})
 
 	t.Run("drop", func(t *testing.T) {

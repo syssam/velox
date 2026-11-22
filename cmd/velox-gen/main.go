@@ -26,7 +26,7 @@
 //	velox-gen version
 //	velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
 //	                       [-rename-table old=new]... [-rename-column table.old=new]...
-//	                       [-lock-timeout 5s] [-check] [-dry-run] [-db dsn] [package]
+//	                       [-lock-timeout 5s] [-check [-scratch-db dsn] [-replay=false]] [-dry-run] [-db dsn] [package]
 //	velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume] [-lock-wait 5m] [-dry-run]
 //	                        [-baseline version]
 //	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
@@ -175,8 +175,14 @@
 // velox.json's); 0 writes none, so velox.json's applies when they run.
 // -dry-run prints each file after "== <path>" and writes nothing. -check
 // writes nothing and exits 3 when the schema differs from schema.json or
-// velox.sum is out of date; CI runs it. A stale velox.sum is otherwise an
-// error: run migrate hash when the edits are intended.
+// velox.sum is out of date; CI runs it. It then applies the files to an empty
+// database and exits 1 unless the result is schema.json, as package migrate's
+// Verify does: a file deleted or edited and hashed is found. The database is
+// a temporary SQLite file for a SQLite directory, and -scratch-db, an empty
+// database that is left with the files applied, for a PostgreSQL or MySQL
+// one, whose -check without it is exit 2. -replay=false compares the schema
+// package with schema.json alone. A stale velox.sum is otherwise an error:
+// run migrate hash when the edits are intended.
 //
 // migrate lint checks every file, or those from -since version on: their
 // directives and statements, what cannot run in a file's transaction
@@ -465,7 +471,7 @@ func printUsage(w io.Writer) {
         protocol and of the model
   velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
         [-rename-table old=new]... [-rename-column table.old=new]...
-        [-lock-timeout 5s] [-check] [-dry-run] [-db dsn] [package]
+        [-lock-timeout 5s] [-check [-scratch-db dsn] [-replay=false]] [-dry-run] [-db dsn] [package]
         write the migration that brings the directory's schema.json to the
         schema package
   velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]

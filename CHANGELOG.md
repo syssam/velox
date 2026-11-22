@@ -572,6 +572,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen: `migrate diff -check` applies the directory's files to an empty
+  database and fails unless they make `schema.json`, as `migrate.Verify`
+  does: a file deleted, or edited and hashed, passed before. A SQLite
+  directory uses a temporary file; a PostgreSQL or MySQL one needs
+  `-scratch-db <dsn>`, and is exit 2 without it. `-replay=false` compares
+  the schema package with `schema.json` alone, as before.
 - migrate: a MySQL `varchar(n)` to `text`, `mediumtext` or `longtext` is a
   Review `widen-type`, not a destructive `alter-type`: each holds what any
   varchar can. The finding names an index over the column, which MODIFY

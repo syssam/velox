@@ -169,12 +169,26 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	check := c.fs.Bool("check", false, "write nothing; exit 3 when the schema differs from schema.json or velox.sum is out of date")
 	dryRun := c.fs.Bool("dry-run", false, "print the files instead of writing them")
 	seen := c.fs.String("db", "", "a database whose history to look at first: refuse if it holds a version above the directory's last, which a new file would reuse")
+	scratch := c.fs.String("scratch-db", "", "with -check: an empty database's `dsn`, which the files are applied to, to compare with schema.json (default on SQLite: a temporary file)")
+	replay := c.fs.Bool("replay", true, "with -check: apply the files to a scratch database and compare the result with schema.json; -replay=false compares the schema package with schema.json alone")
 	patterns, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
 	}
 	if len(patterns) > 1 {
 		return tooMany("migrate diff", c.fs, stderr)
+	}
+	for _, f := range []string{"scratch-db", "replay"} {
+		if given(c.fs, f) && !*check {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate diff: -%s goes with -check\n", f)
+			c.fs.Usage()
+			return 2
+		}
+	}
+	if *scratch != "" && !*replay {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate diff: -scratch-db and -replay=false cannot be combined\n")
+		c.fs.Usage()
+		return 2
 	}
 
 	// The directory, or a new one of -dialect.
@@ -207,7 +221,10 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	}
 
 	if *check {
-		return c.checkDiff(dir, d, to, opts)
+		if code := c.checkDiff(dir, d, to, opts); code != 0 || !*replay || state != migrationDir || len(d.Files) == 0 {
+			return code
+		}
+		return c.checkReplay(dir, d, *scratch)
 	}
 
 	timeout := d.Config.LockTimeout
@@ -313,6 +330,43 @@ func (c *migrateCmd) checkDiff(dir string, d *migrate.Dir, to *migrate.Schema, o
 	b.WriteString("velox-gen: run velox-gen migrate diff\n")
 	_, _ = io.WriteString(c.stderr, b.String())
 	return 3
+}
+
+// checkReplay is the rest of diff -check: it applies the directory's files to
+// an empty database, as migrate.Verify does, and fails unless the result is
+// schema.json. The database is dsn, which must be empty and is left with the
+// files applied, or with no dsn on SQLite a temporary file, removed after. A
+// PostgreSQL or MySQL directory with no dsn is a usage error: SQLite cannot
+// run its files, and a check that ran nothing would pass.
+func (c *migrateCmd) checkReplay(dir string, d *migrate.Dir, dsn string) int {
+	bc := &dbCmd{migrateCmd: c, db: &dsn}
+	where := "-scratch-db"
+	if dsn == "" {
+		if d.Config.Dialect != velox.SQLite {
+			_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate diff: -check applies the files to an empty database and compares it with schema.json, and the files of this %s directory need a %s one: pass -scratch-db <dsn>, or -replay=false to compare the schema package with schema.json alone\n", d.Config.Dialect, d.Config.Dialect)
+			return 2
+		}
+		tmp, err := os.MkdirTemp("", "velox-check-")
+		if err != nil {
+			return c.fail(1, err)
+		}
+		defer func() { _ = os.RemoveAll(tmp) }()
+		dsn, where = filepath.Join(tmp, "check.db"), "a temporary SQLite file"
+	}
+	db, code, ok := bc.open(d.Config.Dialect, dsn, "-scratch-db", false)
+	if !ok {
+		return code
+	}
+	defer func() { _ = db.Close() }()
+	ctx, stop := signalContext()
+	defer stop()
+	if err := migrate.Verify(ctx, db, os.DirFS(c.abs(dir))); err != nil {
+		if ctx.Err() != nil {
+			return bc.fail(1, ctx.Err())
+		}
+		return bc.fail(1, fmt.Errorf("the files do not make schema.json: applied to %s, %s", where, strings.TrimPrefix(err.Error(), "migrate: ")))
+	}
+	return 0
 }
 
 // renameOptions is Diff's options for the renames, each checked against the

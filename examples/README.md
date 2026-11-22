@@ -44,8 +44,11 @@ go run ./start
 - Each example's tables come from its `migrations/` directory, made by
   `go tool velox-gen migrate diff -dialect sqlite` and applied with
   `migrate.Up` to a fresh SQLite file; CI checks the directories with
-  `migrate diff -check`. A real application plans its migrations from the
-  schemas the same way, as below.
+  `migrate diff -check`, which also applies the files to a temporary SQLite
+  file and fails unless they make `schema.json`. tracker's PostgreSQL
+  directory needs an empty PostgreSQL database for that, `-scratch-db
+  <dsn>`, or `-replay=false` to compare the schema package alone. A real
+  application plans its migrations from the schemas the same way, as below.
 - The output is deterministic. `go test ./...` compares each example's output
   with its `testdata/output.golden`; after an intended change,
   `go test ./start -update` rewrites that example's file.
