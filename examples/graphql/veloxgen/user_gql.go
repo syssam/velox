@@ -203,7 +203,7 @@ const (
 	UserOrderFieldName UserOrderField = "NAME"
 	// UserOrderFieldJoinedAt orders by the field joined_at.
 	UserOrderFieldJoinedAt UserOrderField = "JOINED_AT"
-	// UserOrderFieldPostsCount orders by the number of the edge posts's nodes.
+	// UserOrderFieldPostsCount orders by the number of nodes of the edge posts.
 	UserOrderFieldPostsCount UserOrderField = "POSTS_COUNT"
 )
 
