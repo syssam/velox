@@ -215,7 +215,11 @@
 // the snapshot says. On SQLite, Verify, Up and Drift need a
 // file database, since each run opens a connection of its own and a
 // connection to :memory: is a new, empty database; Up refuses one, and takes
-// a shared-cache one another connection keeps.
+// a shared-cache one another connection keeps. [WithDryRun] makes Up check
+// the pending files and change nothing. [SchemaAt] is what the files up to a
+// version make on a scratch database, which Drift compares a database behind
+// the directory with. [Rebase] moves a branch's files past the others when
+// two branches took one version.
 //
 // # Adopting a database
 //

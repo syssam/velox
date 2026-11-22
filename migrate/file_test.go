@@ -158,6 +158,9 @@ func TestParseFileBackslash(t *testing.T) {
 		"-- a \\ b\nINSERT INTO t VALUES (1)": false,
 		"INSERT INTO t VALUES ('ab') # \\":    false,
 		"INSERT INTO t VALUES ('ab')":         false,
+		// A statement block's literals count too; its comments do not.
+		"-- velox:statement begin\nCREATE PROCEDURE p() BEGIN /* \\ */ -- \\\n SELECT 'a\\b'; END\n-- velox:statement end\n": true,
+		"-- velox:statement begin\nCREATE PROCEDURE p() BEGIN /* \\ */ -- \\\n SELECT 'ab'; END\n-- velox:statement end\n":   false,
 	} {
 		if got := migrate.FileBackslash(parseFile(t, velox.MySQL, "0001_x.sql", src)); got != want {
 			t.Errorf("%q: backslash %v, want %v", src, got, want)
