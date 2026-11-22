@@ -2,7 +2,8 @@
 
 What to do when `migrate apply` refuses, and how to turn a join table into
 an edge schema's. Each recovery here is run by `TestOperationsDoc` in
-`cmd/velox-gen`, and the conversion by `TestConvertJoinTable`. The commands
+`cmd/velox-gen`, and the conversion by `TestConvertJoinTable`, but for its
+MySQL undo route, which is the one `apply`'s error gives. The commands
 take `-dir` and `-db`, or `$VELOX_DB`; they are left out below. None of the
 recoveries changes the schema: `resolve` only writes the history table. The
 conversion is a migration, and changes it.

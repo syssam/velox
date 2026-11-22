@@ -166,8 +166,7 @@ func (Place) Edges() []schema.Edge {
 	}
 }
 
-// Stay is an edge schema with a unique tag and a note Add cannot fill: Add
-// is refused, so no link can be dropped, and the tag is not warned of.
+// Ward is in beds through the edge schema Stay.
 type Ward struct{ schema.Schema }
 
 func (Ward) Edges() []schema.Edge {
@@ -178,6 +177,8 @@ type Bed struct{ schema.Schema }
 
 func (Bed) Edges() []schema.Edge { return []schema.Edge{edge.From("wards", Ward.Type).Ref("beds")} }
 
+// Stay is an edge schema with a unique tag and a note Add cannot fill: Add
+// is refused, so no link can be dropped, and the tag is not warned of.
 type Stay struct{ schema.Schema }
 
 func (Stay) Fields() []schema.Field {

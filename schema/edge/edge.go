@@ -232,8 +232,9 @@ func (b *InverseBuilder) StorageKey(opts ...StorageOption) *InverseBuilder {
 func (b *InverseBuilder) OnDelete(a Action) *InverseBuilder { setOnDelete(b.d, a); return b }
 
 // Through makes the schema t names the edge schema of the inverse of a
-// many-to-many edge: the target gains a to-many edge named name to it. It
-// names the edge schema the assoc edge names. See AssocBuilder.Through.
+// many-to-many edge: the schema that declares this edge gains a to-many
+// edge named name to it. It names the edge schema the assoc edge names. See
+// AssocBuilder.Through.
 func (b *InverseBuilder) Through(name string, t any) *InverseBuilder {
 	setThrough(b.d, name, t)
 	return b

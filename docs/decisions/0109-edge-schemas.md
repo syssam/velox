@@ -29,7 +29,9 @@ through the entity pipeline. The gap analysis lists the edge schema as row
   over the two keys, named as any index is (0090), unless the schema
   declares one, unique and over every row, on the two columns in either
   order. `Add`'s `ON CONFLICT` names its two columns.
-- velox-gen refuses, at the edge's line, as numbered rules:
+- velox-gen refuses, as numbered rules, at the edge's line or the
+  offending declaration's. Rule 70's errors for Interceptors and soft
+  delete name the schema alone, as velox-gen has no line for them:
   - 63: `Through` on an edge that is not many-to-many.
   - 64: `Through` names a type that is not a schema of the package, the
     edge's own schema, or its target's.
