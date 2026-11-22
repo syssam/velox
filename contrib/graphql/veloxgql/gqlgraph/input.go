@@ -131,7 +131,7 @@ func ShowJSON(p *veloxgql.JSON) any {
 func writeError(err error, input, entity string, name func(goField string) string) error {
 	var v *velox.ValidationError
 	for e := err; e != nil && v == nil; {
-		switch x := e.(type) {
+		switch x := e.(type) { //nolint:errorlint // searches only the chain of single wraps; a join is left alone, as documented
 		case *velox.ValidationError:
 			v = x
 		case interface{ Unwrap() error }:

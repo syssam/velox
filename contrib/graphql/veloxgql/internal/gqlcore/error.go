@@ -60,7 +60,7 @@ func NotFoundf(format string, args ...any) error {
 func codedf(code, format string, args ...any) error {
 	err := fmt.Errorf(format, args...)
 	e := &Error{Code: code, Msg: err.Error()}
-	switch u := err.(type) {
+	switch u := err.(type) { //nolint:errorlint // err is fmt.Errorf's own, and its direct wrap is what e wraps
 	case interface{ Unwrap() error }:
 		e.Err = u.Unwrap()
 	case interface{ Unwrap() []error }:
@@ -76,7 +76,7 @@ func codedf(code, format string, args ...any) error {
 // then shown the coded error's text alone.
 func Within(at string, err error) error {
 	var code string
-	if c, ok := err.(Coding); ok {
+	if c, ok := err.(Coding); ok { //nolint:errorlint // only err itself being coded gives a code, not a coded error it wraps
 		code, _ = c.Extensions()["code"].(string)
 	}
 	return &Error{Code: code, Msg: at + ": " + strings.TrimPrefix(err.Error(), "veloxgql: "), Err: err}
@@ -95,7 +95,7 @@ type Coding interface {
 // passed over (Walk).
 func Coded(err error) (c Coding, code string) {
 	Walk(err, func(e error) bool {
-		x, ok := e.(Coding)
+		x, ok := e.(Coding) //nolint:errorlint // Walk calls this on each node of the tree
 		if !ok {
 			return false
 		}

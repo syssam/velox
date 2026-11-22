@@ -214,7 +214,7 @@ func internalLeaves(err error, out []error) []error {
 		// could panic on it: it is passed over, as gqlcore.Walk does.
 		return out
 	}
-	switch e := err.(type) {
+	switch e := err.(type) { //nolint:errorlint // each node of the walk is judged by its own type
 	case *gqlcore.Error:
 		if e.Code != "" {
 			return out
@@ -222,7 +222,7 @@ func internalLeaves(err error, out []error) []error {
 	case *velox.PolicyError, *velox.ValidationError, *velox.ConstraintError, *velox.EdgeError:
 		return out
 	}
-	switch u := err.(type) {
+	switch u := err.(type) { //nolint:errorlint // the walk descends through each wrapper itself
 	case interface{ Unwrap() []error }:
 		for _, e := range u.Unwrap() {
 			out = internalLeaves(e, out)

@@ -103,7 +103,7 @@ func resolverField(o *object, m graphql.ResolverMapping) (gqlField, error) {
 	src := "type T { " + name + args + ": " + m.Type + " }"
 	doc, err := parser.ParseSchema(&ast.Source{Name: "graphql.Map", Input: src})
 	if err != nil {
-		return gqlField{}, fmt.Errorf("%s: not a field of an SDL type: %v", where, err)
+		return gqlField{}, fmt.Errorf("%s: not a field of an SDL type: %w", where, err)
 	}
 	if len(doc.Definitions) != 1 || len(doc.Definitions[0].Fields) != 1 || doc.Definitions[0].Fields[0].Name != name || len(doc.Definitions[0].Fields[0].Directives) > 0 {
 		return gqlField{}, fmt.Errorf("%s: it must be one field and its type, without directives", where)

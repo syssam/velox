@@ -18,7 +18,7 @@ func Walk(err error, f func(error) bool) bool {
 	if f(err) {
 		return true
 	}
-	switch u := err.(type) {
+	switch u := err.(type) { //nolint:errorlint // Walk is the tree walk itself, which errors.Is and As do not offer with a nil-pointer skip
 	case interface{ Unwrap() error }:
 		return Walk(u.Unwrap(), f)
 	case interface{ Unwrap() []error }:
@@ -46,7 +46,7 @@ func Is(err, target error) bool {
 	}
 	canEq := reflect.TypeOf(target).Comparable()
 	return Walk(err, func(e error) bool {
-		if canEq && e == target {
+		if canEq && e == target { //nolint:errorlint // errors.Is over Walk: f judges one node
 			return true
 		}
 		x, ok := e.(interface{ Is(error) bool })
@@ -59,7 +59,7 @@ func Is(err, target error) bool {
 func As[T error](err error) (T, bool) {
 	var found T
 	ok := Walk(err, func(e error) bool {
-		if t, ok := e.(T); ok {
+		if t, ok := e.(T); ok { //nolint:errorlint // errors.As over Walk: f judges one node
 			found = t
 			return true
 		}

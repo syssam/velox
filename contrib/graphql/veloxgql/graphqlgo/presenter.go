@@ -57,7 +57,7 @@ func presenter(log, canceled func(ctx context.Context, err error)) graphql.Error
 		if err == nil {
 			return nil
 		}
-		switch err.(type) {
+		switch err.(type) { //nolint:errorlint // only an error that is itself a graphql-go or gqlparser error is passed through
 		case *graphql.Error, *gqlerror.Error:
 			return graphql.DefaultErrorPresenter(ctx, err)
 		}
@@ -85,7 +85,7 @@ func recoveredPanic(err error) bool {
 	if fmt.Sprintf("%T", err) == "*graphql.panicError" {
 		return true
 	}
-	switch u := err.(type) {
+	switch u := err.(type) { //nolint:errorlint // the walk descends through each wrapper itself
 	case interface{ Unwrap() error }:
 		return recoveredPanic(u.Unwrap())
 	case interface{ Unwrap() []error }:
