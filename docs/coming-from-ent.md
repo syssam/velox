@@ -222,6 +222,9 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 | `client.User.Create().OnConflict(...).UpdateNewValues()` | `db.Insert(&u).OnConflict(U.Email).UpdateAll().Exec(ctx)` |
+| `.OnConflict(...).UpdateAge()`, `.AddAge(1)`, `.SetAge(3)` on the upsert | `.OnConflict(U.Email).Update(U.Age)`, `.UpdateSet(U.Age.Add(1))`, `.UpdateSet(U.Age.Set(3))` |
+| `sql.ResolveWith(func(u *sql.UpdateSet){ u.Set(c, sql.Expr(...)) })`, `u.Excluded()` | `.UpdateSet(velox.SetExpr(U.Age, "? + ?", U.Age, velox.Excluded(U.Age)))` |
+| `sql.UpdateWhere(p)`, `sql.ConflictWhere(p)`, `sql.ConflictConstraint(name)` | `.UpdateWhere(p)`, `.OnConflictWhere(p)`, `.OnConstraint(name)` (PostgreSQL; `OnConflict`'s columns stay required) (decision 0111) |
 | `client.User.Query().Select(user.FieldName, user.FieldAge).All(ctx)` | `db.Query[veloxgen.User]().Columns(U.Name, U.Age).Limit(n).All(ctx)`: the other fields stay zero. velox's `Select` is a projection: terms read by position with `Rows`, not entities |
 | `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
@@ -229,6 +232,10 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Update().SkipDefault(user.FieldUpdatedAt)` (veloxe) | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
 | `client.User.Query().IDs(ctx)` | `velox.IDs[int64](ctx, db.Query[veloxgen.User]().Limit(n))` |
 | `tx.OnCommit(...)` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed (decision 0100) |
+| a commit hook (`tx.OnCommit` returning a `Committer` that runs before `next.Commit`) | `velox.BeforeCommit(tx, fn)`: its error rolls back (decision 0111) |
+| `tx.OnRollback(...)` | `velox.AfterRollback(tx, fn)`: also runs when the nested `Tx` it was queued in rolls back (decision 0111) |
+| `m.Fields()`, `m.FieldCleared(f)`, `m.AddedEdges()`/`RemovedEdges()`/`ClearedEdges()` | `m.Columns()`, `m.Cleared(name)`, `m.Edges()` |
+| `hook.If`, `hook.Unless`, `hook.HasOp`, `hook.HasFields`, `hook.HasClearedFields`, `hook.Reject` | `velox.If`, `velox.Unless`, `velox.HasOp`, `velox.HasColumns`, `velox.HasCleared`, `velox.Reject` |
 | `client.Debug()` | the option `velox.WithLog(logger)`; `velox.LogArgs()` logs arguments too |
 | `ent.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular` |
 

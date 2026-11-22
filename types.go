@@ -196,6 +196,15 @@ type Assignment = veloxtype.Assignment
 //	// skipped. A Rewrite or Around hook that rebuilds the clause must copy
 //	// Ignore.
 //	Ignore bool
+//	// Set holds the update branch's other assignments (UpdateSet): Set,
+//	// Add, Sub and expressions, in which Excluded names the inserted row.
+//	Set []Assignment
+//	// TargetWhere is the conflict target's condition, a partial index's
+//	// predicate (OnConflictWhere); refused on MySQL.
+//	TargetWhere []Predicate
+//	// Constraint names the constraint of ON CONFLICT ON CONSTRAINT
+//	// (OnConstraint), PostgreSQL only.
+//	Constraint string
 type ConflictClause = engine.ConflictClause
 
 // EachClause makes a SELECT read, or count, the rows of each owner apart: the

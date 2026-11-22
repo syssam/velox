@@ -295,7 +295,14 @@ var genericObjects = []struct {
 	// package, for Mutation and Row in the handles' method sets, whatever
 	// the entity's columns. The methods are lazy, so a handle's own cost
 	// (Col and the rest below) did not change.
-	{"entityDescriptor", "", entityDescSrc, 143360}, // measured 142374
+	//
+	// UpdateSet, Excluded and the upsert clause's Set, TargetWhere and
+	// Constraint, Mutation's Columns, Cleared and Edges, and BeforeCommit and
+	// AfterRollback (ADR 0111) took entityDescriptor from 142374 to 143784
+	// bytes, entityDescUse from 776890 to 781446, entityDescHooks from
+	// 861928 to 866786 and entityDescMixin to 912240, in the engine types an
+	// entity's package reaches; the upsert clause was 3.3 KB of it.
+	{"entityDescriptor", "", entityDescSrc, 146432}, // measured 143784
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -367,8 +374,8 @@ var genericObjects = []struct {
 	// Query.Distinct, InsertQuery.UpdateAll and Statement.Distinct (ADR 0102)
 	// took entityDescUse from 771328 to 772452 bytes, entityDescHooks from
 	// 856428 to 857550 and entityDescMixin from 901728 to 902852.
-	{"entityDescUse", "", entityDescUseSrc, 777216},       // measured 776888
-	{"entityDescHooks", "", entityDescHooksBound, 863232}, // measured 857550
+	{"entityDescUse", "", entityDescUseSrc, 791552},       // measured 781446
+	{"entityDescHooks", "", entityDescHooksBound, 877568}, // measured 866786
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -376,7 +383,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 909312}, // measured 902852
+	{"entityDescMixin", "", entityDescMixinSrc, 923648}, // measured 912240
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

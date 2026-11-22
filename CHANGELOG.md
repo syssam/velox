@@ -21,6 +21,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- insert: `UpdateSet(setters...)` gives an upsert's update branch `Set`,
+  `SetNull`, `Add`, `Sub` and `SetExpr`, and `velox.Excluded(c)` names the
+  inserted row in it; `UpdateWhere`, `OnConflictWhere` (a partial index) and
+  `OnConstraint` (PostgreSQL). MySQL refuses the last three before sending
+  (ADR 0111).
+- hooks: `Mutation.Columns`, `Cleared` and `Edges`; `If`, `Unless`, `HasOp`,
+  `HasColumns`, `HasCleared` and `Reject`, for schema and run-time hooks
+  (ADR 0111).
+- tx: `velox.BeforeCommit(tx, fn)` runs before COMMIT, and its error rolls
+  back; `velox.AfterRollback(tx, fn)` runs after a rollback, a savepoint's
+  included (ADR 0111).
+
 - velox-gen: `migrate rebase <file>...` moves a branch's migration files to
   the versions after the directory's others, as they are, writes the schema
   package's tables as `schema.json` and rebuilds `velox.sum`, after checking

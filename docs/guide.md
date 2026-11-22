@@ -948,6 +948,27 @@ columns, the `Version` column (which an upsert bumps) and a column whose
 err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).UpdateAll().Exec(ctx)
 ```
 
+`UpdateSet(setters...)` gives the update branch the setters an update
+takes, as ent's `AddX` and `ResolveWith` do. `Set` writes a value, `Add`
+adds to the stored value, and `SetExpr` writes an expression, in which a
+handle is the existing row's column and `velox.Excluded(c)` the inserted
+row's:
+
+```go
+err := db.Insert(&stock).OnConflict(S.SKU).UpdateSet(
+	S.Qty.Add(stock.Qty), // qty = "stocks"."qty" + $n
+	velox.SetExpr(S.Peak, "GREATEST(?, ?)", S.Peak, velox.Excluded(S.Peak)),
+).Exec(ctx)
+```
+
+The entity gets back what the database stored in those columns.
+`UpdateWhere(preds...)` conditions the update branch: a conflicting row it
+rejects is kept as it is, and the policy's conditions still apply.
+`OnConflictWhere(preds...)` names a partial unique index by its predicate,
+and `OnConstraint(name)` a PostgreSQL constraint. MySQL's `ON DUPLICATE KEY
+UPDATE` can say none of the three, so there they fail before anything is
+sent ([ADR 0111](decisions/0111-upsert-setters-hook-conditions-tx-hooks.md)).
+
 ### Update and Delete
 
 Updates are set-based: you say which columns change and which rows match.
@@ -1134,6 +1155,16 @@ Outside a transaction, and on a `UseTx` DB, whose commit velox never sees,
 others: `Tx` panics again once all have run
 ([ADR 0100](decisions/0100-after-commit-values-and-log.md)).
 
+`velox.BeforeCommit(tx, fn)` runs `fn(ctx) error` once the outermost `fn`
+has returned nil, before COMMIT, and its statements on `tx` join the
+transaction. An error rolls it back. `velox.AfterRollback(tx, fn)` runs `fn`
+once the work done through `tx` is undone: when the outermost transaction
+does not commit, or when `tx` is a nested `Tx`'s and its savepoint rolls
+back. A transaction that commits runs, in order: each recorded write's sink,
+before its savepoint ends; the `BeforeCommit` functions; COMMIT; the
+`AfterRollback` functions of savepoints that rolled back; the `AfterCommit`
+functions ([ADR 0111](decisions/0111-upsert-setters-hook-conditions-tx-hooks.md)).
+
 See the [tx example](../examples/tx).
 
 ## Hooks, policies and interceptors
@@ -1199,6 +1230,22 @@ A value of the wrong type does not compile. A nullable column's handle adds
 `ValuePtr`, `GetPtr`, `AssignNull` and `PutNull`, which tell NULL apart. A
 handle of another entity is a misuse, which fails the write. The schema
 package cannot import `veloxgen`, so its hooks keep the names.
+
+A hook asks what a write does with `m.Columns()`, the columns it assigns,
+`m.Cleared(name)`, a column it sets to NULL, and `m.Edges()`, its edge
+setters. `velox.If(h, cond)` and `velox.Unless` apply a hook only to some
+writes, with `velox.HasOp`, `velox.HasColumns`, `velox.HasCleared` or any
+function of the `Mutation`. `velox.Reject(ops...)` refuses kinds of write.
+They work in the schema and in `WithHooks` alike:
+
+```go
+func (Task) Hooks() []velox.Hook {
+	return []velox.Hook{
+		velox.If(notifyAssignee, velox.HasColumns("assignee_id")),
+		velox.Reject(velox.OpDelete),
+	}
+}
+```
 
 A change log does not need a hook: a recording handle reports every row a
 write changes, with its old and new values. See

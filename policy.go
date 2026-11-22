@@ -221,9 +221,12 @@ func (m *Mutation) Cleared(name string) bool { return m.mu.ClearedByName(name) }
 // assignment of its foreign key there, as Columns reports.
 func (m *Mutation) Edges() []EdgeChange { return m.mu.EdgeChanges() }
 
-// EdgeChange is one edge setter of a write: the edge's name, as the schema
-// gives it, what the setter does, and its keys, none for EdgeClear.
-// Mutation.Edges returns them.
+// EdgeChange is one edge setter of a write, which Mutation.Edges returns.
+// Its fields:
+//
+//	Name string // the edge's name, as the schema gives it
+//	Op   EdgeOp // what the setter does
+//	Keys []any  // its keys; none for EdgeClear
 type EdgeChange = engine.EdgeChange
 
 // EdgeOp is what an edge setter does.

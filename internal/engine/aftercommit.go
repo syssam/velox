@@ -65,7 +65,7 @@ func txOf(db *DB, isNil bool, what string) error {
 }
 
 // BeforeCommit queues fn on db's transaction, to run once the outermost
-// Tx's fn has returned nil, before COMMIT (ADR 0110). An error from fn
+// Tx's fn has returned nil, before COMMIT (ADR 0111). An error from fn
 // rolls the transaction back, and Tx returns it. It refuses what
 // AfterCommit refuses, and a call once the BeforeCommit functions have run.
 func BeforeCommit(db *DB, fn func(context.Context) error) error {
@@ -86,7 +86,7 @@ func BeforeCommit(db *DB, fn func(context.Context) error) error {
 }
 
 // AfterRollback queues fn on db's transaction, to run once the work done
-// through db is rolled back (ADR 0110): when the outermost transaction does
+// through db is rolled back (ADR 0111): when the outermost transaction does
 // not commit, or when db is a nested Tx's and its savepoint rolls back. It
 // refuses what AfterCommit refuses.
 func AfterRollback(db *DB, fn func(context.Context)) error {
