@@ -147,6 +147,11 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 		return nil, err
 	}
 	if n := strings.Count(text, "?"); n != len(slots) {
+		if n > len(slots) {
+			return nil, fmt.Errorf("velox: Expr %q has %d ?, and %d arguments: every ? is an argument's place, "+
+				"so PostgreSQL's jsonb ?, ?| and ?& cannot be written; use the JSON column's HasKey, "+
+				"or jsonb_exists, jsonb_exists_any or jsonb_exists_all", text, n, len(slots))
+		}
 		return nil, fmt.Errorf("velox: Expr %q has %d ?, and %d arguments", text, n, len(slots))
 	}
 	return (&exprData{parts: strings.Split(text, "?"), slots: slots, args: args, window: window}).seal(), nil

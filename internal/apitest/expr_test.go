@@ -117,6 +117,8 @@ func TestExprRefused(t *testing.T) {
 		{"empty", velox.Expr[testmodel.Ticket]("  ", Tk.ID), "empty"},
 		{"too few arguments", velox.Expr[testmodel.Ticket]("? = ?", Tk.ID), "2"},
 		{"too many arguments", velox.Expr[testmodel.Ticket]("? = 1", Tk.ID, 1), "1"},
+		{"jsonb ?", velox.Expr[testmodel.Ticket]("? ? 'k'", Tk.Title), "jsonb_exists"},
+		{"jsonb ?|", velox.Expr[testmodel.Ticket]("? ?| array['k']", Tk.Title), "HasKey"},
 		{"another entity's column", velox.Expr[testmodel.Ticket]("? = 1", testmodel.Invoices.ID), "another entity"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

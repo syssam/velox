@@ -33,7 +33,9 @@ import (
 // are matched whatever their case, and FROM is allowed for EXTRACT and TRIM.
 //
 // A ? outside a literal is always an argument's place, so PostgreSQL's jsonb
-// ? operator is written jsonb_exists. A wrong number of arguments, a column
+// ?, ?| and ?& operators are written jsonb_exists, jsonb_exists_any and
+// jsonb_exists_all, or a JSON column's HasKey (ADR 0058) is used; the error
+// for more ? than arguments says so. A wrong number of arguments, a column
 // of another entity and an encoded (JSON) column fail the statement. So
 // does a window function (OVER), in the text or a Term: SQL computes windows
 // after WHERE and HAVING, so one belongs in Calc, as a result column. The
