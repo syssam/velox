@@ -93,8 +93,9 @@ veloxe's semantics that the consumer relies on:
   not provided: velox composes the mixins' and the entity's policies itself.
   `RecordTrace` is not provided.
 - A Query condition applies inside an EXISTS or join of a read (Has,
-  HasWith, With loads), as Read does. veloxe's edge predicates were raw
-  subqueries that skipped the target's policy; velox is stricter there.
+  HasWith, With loads), as Read does. veloxe's edge predicates applied the
+  target's policy too (`runtime.ApplyEntityPolicy`), but not its
+  interceptors; velox applies both (amended 2026-11-22).
 - When one entity mixes Read and Query across its policies, all Reads run
   before all Queries, whatever the policies' order; only which denial is
   reported can differ.
