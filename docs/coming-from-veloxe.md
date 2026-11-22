@@ -290,8 +290,9 @@ A client written against veloxe's API sees these as it did:
   key whose target the reader cannot see as null.
 - **Where inputs.** An empty `xIn` or `xNotIn`, a false `xIsNil` or
   `xNotNil`, and an empty `or` add nothing. A null entry is skipped. `not:
-  {}` and `or: [{}]` are an error. A list has no width cap and a where
-  input no node cap; the depth stays at 5.
+  {}` and `or: [{}]` are an error. A list has no width cap; the depth
+  stays at 5. Unlike veloxe, a where argument holds at most 10 times
+  `MaxFilterNodes` (10000) inputs, predicates and list values.
 - **Node.** `node` of an ID no type has, or one the policy hides, is
   `NOT_FOUND`. `nodes` gives null for it. Unlike veloxe, `nodes` reads
   each type with one `IN` query, and takes at most `MaxPage` (100) IDs.

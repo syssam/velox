@@ -1204,6 +1204,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- GraphQL, compat=veloxe: a where argument has a budget of 10 times
+  `Limits.MaxFilterNodes` (10000 by default), where it had none; and any
+  where argument's budget is held to 30000, so a huge `idIn` is
+  `ErrFilterTooLarge` (BAD_USER_INPUT), not the driver's bind-parameter
+  limit as an internal error.
 - GraphQL, compat=veloxe: `nodes(ids:)` reads each type of Node with one
   `IN` query, as entgql does, not one query per ID per type; each type's
   rows batch their edges; more IDs than `Limits.MaxPage` is

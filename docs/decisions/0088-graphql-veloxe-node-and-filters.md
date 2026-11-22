@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-19. Extends 0087. Amends 0061 for compat=veloxe
 only: velox's own API still has no Node. Amended 2026-11-22 for
-`ResolveNodes`: see the note at the end.
+`ResolveNodes` and the node budget: see the notes at the end.
 
 ## Context
 
@@ -121,3 +121,20 @@ its list. `ErrAmbiguousNodeID` is BAD_USER_INPUT, not an internal error.
 `TestResolveNodesBatched` and `TestResolveNodesCap` in
 `contrib/graphql/veloxgql/gqlgraph`, `TestCostNodesAndLists` in
 `contrib/graphql/veloxgql/internal/cost`.
+
+## Amendment, 2026-11-22: a node budget under compat
+
+The decision above left a where argument under compat with only its depth
+bounded, and graphqlgo applies no velox cost (0106): a request of one huge
+`idIn` reached the database, and past the dialect's limit on bind
+parameters it failed as an internal error. What was rejected above was the
+width cap's default, which the consumer's over-100 `idIn` lists exceed, not
+a budget. So under compat a where argument has a budget of 10 times
+`MaxFilterNodes`, 10000 by default, an order above what the consumer sends;
+a multiple, not a new limit, so `Limits` stays as it is and a lower
+`MaxFilterNodes` lowers it too. Under compat or not, the budget is held to
+30000: each predicate and each In value binds one parameter, so a where
+argument stays under SQLite's 32766, and a larger one is `ErrFilterTooLarge`,
+BAD_USER_INPUT, before any statement. The width cap still does not apply.
+Evidence: `TestVeloxeWhere` (an `idIn` of 9000 passes and one of 10000 is
+refused) and `TestVeloxeBindLimit` in `contrib/graphql/veloxgql/gqlgraph`.

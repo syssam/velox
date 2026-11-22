@@ -66,7 +66,8 @@ func (n name) String() string { return n.base + n.op }
 // The depth, how deeply the input is nested in the where argument, and the
 // argument's node budget travel in ctx, under one unexported key. A context
 // without them starts a where argument: depth 0, a full budget of
-// MaxFilterNodes, and the limits of veloxgql.LimitsFromContext(ctx). So each
+// MaxFilterNodes (10 times that under c's Veloxe, and never over 30000), and
+// the limits of veloxgql.LimitsFromContext(ctx). So each
 // call of a where input's Pred with a context of the application's has its own
 // budget, however often the context is used. A nested input's Pred is called
 // with a context of the helpers', one level deeper (inside each not, and, or
@@ -82,14 +83,14 @@ func (n name) String() string { return n.base + n.op }
 // The filter fails, before any query runs, on a key the column cannot hold;
 // on a nesting deeper than MaxFilterDepth (veloxgql.ErrFilterTooDeep); on an and, an
 // or, a has…With, an In or a NotIn of more than MaxFilterWidth entries
-// (veloxgql.ErrFilterTooWide); and on a where argument of more than
-// MaxFilterNodes inputs, predicates and values in all
+// (veloxgql.ErrFilterTooWide), unless under Veloxe; and on a where argument
+// over its budget of inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
 func NewFilter(ctx context.Context, c *Type) *Filter {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
 		lim := veloxgql.LimitsFromContext(ctx)
-		st = &state{budget: &budget{left: lim.MaxFilterNodes, limits: lim}}
+		st = &state{budget: newBudget(lim, c.Veloxe)}
 	}
 	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, veloxe: c.Veloxe}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
@@ -130,11 +131,35 @@ func emptyPredicate(err error) bool {
 	return ok && e.Err == errEmptyPredicate //nolint:errorlint // likewise
 }
 
-// budget is what is left of a where argument's MaxFilterNodes, and the
+// budget is what is left of a where argument's budget of nodes, and the
 // argument's limits.
 type budget struct {
-	left   int
-	limits veloxgql.Limits
+	left, most int
+	limits     veloxgql.Limits
+}
+
+// veloxeBudget is how many times MaxFilterNodes a where argument may hold
+// under Type.Veloxe, whose clients send In lists over MaxFilterWidth, as
+// veloxe had no cap: 10000 nodes under the default limits.
+const veloxeBudget = 10
+
+// maxFilterNodes is the most nodes any where argument may hold, whatever
+// its limits. Each predicate binds a parameter and each In value one more,
+// so a statement's parameters stay under every dialect's limit (SQLite's
+// 32766), with room for its other terms: past it, the statement would
+// fail with the driver's error, an internal one, where this is the
+// client's.
+const maxFilterNodes = 30000
+
+// newBudget is the budget of a where argument under lim: MaxFilterNodes,
+// veloxeBudget times that under Type.Veloxe, and never over maxFilterNodes.
+func newBudget(lim veloxgql.Limits, veloxe bool) *budget {
+	most := lim.MaxFilterNodes
+	if veloxe {
+		most *= veloxeBudget
+	}
+	most = min(most, maxFilterNodes)
+	return &budget{left: most, most: most, limits: lim}
 }
 
 // state is what a where argument's context carries to a nested input: its
@@ -150,12 +175,9 @@ type stateKey struct{}
 // charge counts n against the where argument's budget, for the field of
 // f's input; ok is false when that is over it, and f has the error.
 func (f *Filter) charge(field name, n int) (ok bool) {
-	if f.veloxe {
-		return true // veloxe had no budget
-	}
 	f.budget.left -= n
 	if f.budget.left < 0 {
-		f.refuse(field, InputErrorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.limits.MaxFilterNodes))
+		f.refuse(field, InputErrorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.most))
 		return false
 	}
 	return true

@@ -111,8 +111,9 @@ type Type struct {
 	// match no node or the negated test; a null entry of an and, an or or a
 	// has<Edge>With is left out; a nested input that sets no predicate is
 	// an error (BAD_USER_INPUT) in a not, an or or a has<Edge>With, and left
-	// out of an and; and MaxFilterWidth and MaxFilterNodes do not apply,
-	// as veloxe had no such limits. MaxFilterDepth does.
+	// out of an and; and MaxFilterWidth does not apply, as veloxe had no
+	// such limit. MaxFilterDepth does, and a where argument's budget is 10
+	// times MaxFilterNodes, 10000 by default.
 	//
 	// Veloxe gives the type's connections and foreign keys veloxe's
 	// semantics too (ADR 0108): a connection takes a cursor veloxe wrote

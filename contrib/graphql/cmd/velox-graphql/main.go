@@ -42,8 +42,8 @@
 // has node(id:) and nodes(ids:), which the application's resolvers answer
 // with the generated ResolveNode and ResolveNodes (veloxgen/noder_gql.go). A
 // where input reads as veloxe's did: an empty In, a false IsNil and an empty
-// or add nothing, a not of nothing is an error, and no width or node cap
-// applies (gqlgraph.Type's Veloxe). A foreign key's predicates are the
+// or add nothing, a not of nothing is an error, no width cap applies, and
+// the node budget is 10 times MaxFilterNodes (gqlgraph.Type's Veloxe). A foreign key's predicates are the
 // column's alone. A connection takes the cursors veloxe wrote, as well as
 // its own, and reads their values as the current order's. An order of one
 // term breaks ties by the key in its direction. A page after a cursor has

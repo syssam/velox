@@ -10,6 +10,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/untyped"
@@ -110,6 +111,9 @@ func TestVeloxeWhere(t *testing.T) {
 		{name: "and [{not: {}}]", w: vWhere{And: []*vWhere{{Not: &vWhere{}}}}, wantErr: "empty predicate", def: []int64{}},
 		{name: "idIn of 150", w: vWhere{IDIn: wide}, want: all, defErr: veloxgql.ErrFilterTooWide},
 		{name: "1200 nodes", w: vWhere{And: many}, want: all, defErr: veloxgql.ErrFilterTooLarge},
+		// The budget under Veloxe is 10 times MaxFilterNodes.
+		{name: "idIn of 9000", w: vWhere{IDIn: span(1, 9000)}, want: all, defErr: veloxgql.ErrFilterTooWide},
+		{name: "idIn of 10000", w: vWhere{IDIn: span(1, 10000)}, wantErr: "filter is too large", defErr: veloxgql.ErrFilterTooWide},
 	} {
 		got, err := vPeople(t, db, &c.w)
 		switch {
@@ -132,6 +136,29 @@ func TestVeloxeWhere(t *testing.T) {
 		case err != nil || !slices.Equal(got, c.def):
 			t.Errorf("%s, by default: %v, %v; want %v", c.name, got, err, c.def)
 		}
+	}
+}
+
+// TestVeloxeBindLimit: under Veloxe, a where argument whose In lists hold
+// more values than any dialect binds is BAD_USER_INPUT ErrFilterTooLarge,
+// before any statement, even when MaxFilterNodes allows them; the
+// statement would otherwise fail with the driver's limit, an internal
+// error.
+func TestVeloxeBindLimit(t *testing.T) {
+	db, _ := peopleDB(t)
+	ctx := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxFilterNodes: 10000})).NewContext(context.Background())
+	w := &vWhere{IDIn: span(1, 40000)}
+	_, err := w.predicate(ctx)
+	if !errors.Is(err, veloxgql.ErrFilterTooLarge) || codeOf(err) != veloxgql.CodeBadUserInput {
+		t.Fatalf("idIn of 40000: %v; want BAD_USER_INPUT ErrFilterTooLarge", err)
+	}
+	w = &vWhere{IDIn: span(1, 20000)}
+	p, err := w.predicate(ctx)
+	if err != nil {
+		t.Fatalf("idIn of 20000 under MaxFilterNodes 10000: %v", err)
+	}
+	if n, err := db.Query[person]().Where(velox.Pred[person](p)).Count(ctx); err != nil || n != int64(len(all)) {
+		t.Errorf("idIn of 20000: %d, %v", n, err)
 	}
 }
 

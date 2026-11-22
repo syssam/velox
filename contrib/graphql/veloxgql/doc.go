@@ -114,6 +114,10 @@
 // list of more than MaxFilterWidth entries, of inputs or of In or NotIn values,
 // fails with ErrFilterTooWide, and a where argument over its budget of
 // MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
+// Under compat=veloxe no width cap applies and the budget is 10 times
+// MaxFilterNodes. The budget is never over 30000, whatever the limits: each
+// predicate and each In value binds a parameter, and the statement must
+// stay under every dialect's limit on them (SQLite's 32766).
 // None of it runs a query, so a refused filter fails before any statement is
 // built. An error names the field that held its cause, through the nesting:
 // "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.titleIn: filter
