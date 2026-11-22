@@ -81,7 +81,15 @@ and `Bool` read a number or a boolean, and `HasKey` tests that a key is there
 ([0058](decisions/0058-json-paths.md)). `Has`, `HasSome`, `HasEvery` and
 `IsEmpty` test the elements of a column that is an array, where ent writes
 `sqljson.ValueContains`: `veloxgen.Users.Tags.Has("admin")`
-([0080](decisions/0080-json-array-elements.md)).
+([0080](decisions/0080-json-array-elements.md)). The other `sqljson` helpers
+map as follows ([0115](decisions/0115-json-append-len-patterns-order.md)):
+
+| ent | velox |
+| --- | --- |
+| `client.User.Update().AppendTags([]string{"x"})` (`sqljson.Append`) | `Set(U.Tags.Append([]string{"x"}))`; a NULL column becomes the elements, as in ent |
+| `sqljson.LenEQ(user.FieldTags, 2)`, `LenGT`… with `sqljson.Path` | `U.Tags.Len().EQ(2)`, `U.Attrs.Len("a", "b").GT(0)`: NULL where the path holds no array |
+| `sqljson.StringContains(f, "x", sqljson.Path("name"))`, `StringHasPrefix`, `StringHasSuffix` | `U.Attrs.Text("name").Contains("x")`, `HasPrefix`, `HasSuffix`: literal and with case on every dialect |
+| `sqljson.OrderValue(f, sqljson.Path("n"))` | `OrderBy(U.Attrs.Number("n").Asc())`, or `Text("n").Desc()` |
 
 **The implicit ID is int64.** The implicit `id` is `field.Int64`, where
 ent's is `int`. A foreign-key field must have its target's ID type: declare it
@@ -225,7 +233,8 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `.OnConflict(...).UpdateAge()`, `.AddAge(1)`, `.SetAge(3)` on the upsert | `.OnConflict(U.Email).Update(U.Age)`, `.UpdateSet(U.Age.Add(1))`, `.UpdateSet(U.Age.Set(3))` |
 | `sql.ResolveWith(func(u *sql.UpdateSet){ u.Set(c, sql.Expr(...)) })`, `u.Excluded()` | `.UpdateSet(velox.SetExpr(U.Age, "? + ?", U.Age, velox.Excluded(U.Age)))` |
 | `sql.UpdateWhere(p)`, `sql.ConflictWhere(p)`, `sql.ConflictConstraint(name)` | `.UpdateWhere(p)`, `.OnConflictWhere(p)`, `.OnConstraint(name)` (PostgreSQL; `OnConflict`'s columns stay required) (decision 0111) |
-| `client.User.Query().Select(user.FieldName, user.FieldAge).All(ctx)` | `db.Query[veloxgen.User]().Columns(U.Name, U.Age).Limit(n).All(ctx)`: the other fields stay zero. velox's `Select` is a projection: terms read by position with `Rows`, not entities |
+| `client.User.Query().Select(user.FieldName, user.FieldAge).All(ctx)` | `db.Query[veloxgen.User]().Columns(U.Name, U.Age).Limit(n).All(ctx)`: the other fields stay zero. velox's `Select` is a projection: terms read by position with `Rows`, or into a struct with `velox.Scan`, not entities |
+| `client.User.Query().GroupBy(user.FieldAge).Aggregate(ent.Count()).Scan(ctx, &v)`, `Select(...).Scan` | `velox.Scan[T](ctx, db.Query[veloxgen.User]().Select(U.Age, velox.CountAll[veloxgen.User]().As("count")).GroupBy(U.Age).Limit(n))`: fields by a `velox:"name"` tag or their name, JSON decoded; `velox.ScanOne` for one row (decision 0116) |
 | `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |

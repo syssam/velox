@@ -663,6 +663,18 @@ PostgreSQL, MySQL and SQLite: velox writes each dialect's JSON functions and
 passes the keys as arguments. A key can't be empty or contain `"`, `\` or a
 control character. See [ADR 0058](decisions/0058-json-paths.md).
 
+A string at a path also has `Contains`, `HasPrefix` and `HasSuffix`, which
+take the string literally and keep case on every dialect. A number or a
+string at a path orders a query with `Asc` and `Desc`, and its `Term()` is a
+result column of `Select`:
+
+```go
+db.Query[veloxgen.Account]().Where(A.Attrs.Text("name").HasPrefix("Acme")).
+	OrderBy(A.Attrs.Number("plan", "seats").Desc()).Limit(20)
+```
+
+See [ADR 0115](decisions/0115-json-append-len-patterns-order.md).
+
 ### Inside a JSON array: Has, HasSome, HasEvery and IsEmpty
 
 A column that is itself an array (`field.Strings("tags")`, or any
@@ -674,7 +686,12 @@ db.Query[veloxgen.User]().Where(U.Tags.Has("admin"))                  // holds "
 db.Query[veloxgen.User]().Where(U.Tags.HasSome("admin", "staff"))     // holds one of them
 db.Query[veloxgen.User]().Where(U.Tags.HasEvery("admin", "staff"))    // holds both
 db.Query[veloxgen.User]().Where(U.Tags.IsEmpty())                     // is []
+db.Query[veloxgen.User]().Where(U.Tags.Len().GT(3))                   // more than 3 elements
 ```
+
+`Len(keys...)` is the length of the array at a path, or of the column's own
+array with no key. It is NULL for anything that is not an array. Being a
+`JSONNumber`, it has the comparisons, `Asc` and `Desc`.
 
 An element is a string, a number or a boolean. `true` is not `1` and `"1"` is
 not `1`, and a document that is not an array holds nothing and is not empty;
@@ -858,7 +875,30 @@ db.Query[veloxgen.Invoice]().Limit(10).
 	SelectRaw("EXTRACT(MONTH FROM ?)", I.CreatedAt).Rows(ctx)
 ```
 
-`Rows` reads by position: the caller scans each row. It is a read of the
+`Rows` reads by position: the caller scans each row. `velox.Scan` reads the
+rows into a struct instead, as ent's `Scan(ctx, &v)` does. A column handle's
+result column is named by its column, and `As` names any other term. A field
+takes the column named by its `velox:"name"` tag, or the one matching its own
+name with case and underscores ignored. A JSON column is decoded by its
+codec. A NULL goes into a pointer field as nil:
+
+```go
+type orgSum struct {
+	OrgID int64
+	Sum   int64 `velox:"sum"`
+	N     int
+}
+rows, err := velox.Scan[orgSum](ctx, db.Query[veloxgen.Invoice]().
+	Select(I.OrgID, I.TotalCents.Sum().As("sum"), velox.CountAll[veloxgen.Invoice]().As("n")).
+	GroupBy(I.OrgID).Limit(20))
+
+n, err := velox.ScanOne[int64](ctx, db.Query[veloxgen.Invoice]().Select(velox.CountAll[veloxgen.Invoice]()))
+```
+
+These fail before anything is sent: a result column with no field, a term
+with no name, and a field whose type cannot hold the term's value
+([ADR 0116](decisions/0116-typed-projection-scan.md)).
+ It is a read of the
 entity, so `Where`, the Read policy, the scope and the interceptors apply and
 the groups count only rows the caller may see, which `Raw` does not give.
 `SelectRaw` and `Calc` take guarded text like `Expr`, so they keep the
@@ -984,6 +1024,9 @@ n, err = db.Delete[veloxgen.Line]().Where(veloxgen.Lines.AmountCents.EQ(0)).Exec
 ```
 
 Number handles also have `Add` and `Sub` (`Set(I.TotalCents.Add(500))`).
+A JSON array's handle has `Append`, ent's `AppendX`:
+`Set(U.Tags.Append([]string{"new"}))`. A NULL column becomes the new
+elements ([ADR 0115](decisions/0115-json-append-len-patterns-order.md)).
 `velox.SetExpr` sets a column to an SQL expression over the row's own
 columns, written as `Expr`'s text is, and keeps the policies:
 `Set(velox.SetExpr(I.Customer, "TRIM(?)", I.Customer))`

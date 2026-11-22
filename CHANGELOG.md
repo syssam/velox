@@ -33,6 +33,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   back; `velox.AfterRollback(tx, fn)` runs after a rollback, a savepoint's
   included (ADR 0111).
 
+- A JSON handle's `Append(v)` appends a slice's elements to the column's
+  array, as ent's `AppendX` does (`velox.AssignAppend`); `Len(keys...)` is
+  the length of an array, for conditions and orderings. `JSONText` has
+  `Contains`, `HasPrefix` and `HasSuffix`, with case on every dialect;
+  `JSONNumber` and `JSONText` have `Asc` and `Desc`; the three path kinds
+  have `Term()` for `Select` (ADR 0115).
+- `velox.Scan[T](ctx, q)` and `velox.ScanOne[T]` read a projection into a
+  struct by a `velox:"name"` tag or the field's name, decoding JSON columns,
+  and `Term.As(name)` names a result column. A JSON column may be a result
+  column of `Select` (ADR 0116).
 - velox-gen: `migrate rebase <file>...` moves a branch's migration files to
   the versions after the directory's others, as they are, writes the schema
   package's tables as `schema.json` and rebuilds `velox.sum`, after checking
