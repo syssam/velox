@@ -521,7 +521,7 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 			b.fail(13, n.ent.Name, edgeLoc(ed), "field %q must be Optional exactly when the edge is not Required", f.Name)
 		case f.Optional && !f.Nillable:
 			// Unset, a value field would write 0, which no row's key is.
-			b.fail(38, n.ent.Name, edgeLoc(ed), "field %q must be Nillable when the edge is not Required: an unset foreign key is NULL", f.Name)
+			b.fail(38, n.ent.Name, edgeLoc(ed), "field %q must be Nillable when the edge is not Required: an unset foreign key is NULL; make it .Optional().Nillable(), or mark the edge Required() and drop the field's Optional()", f.Name)
 		}
 		switch {
 		case le.Immutable && !f.Immutable:

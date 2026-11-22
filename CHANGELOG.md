@@ -1305,6 +1305,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   which run SQL from a string, and an `@` right before a name, a MySQL
   variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass
   when a space follows them.
+- Rule 38, an Optional foreign key of an edge that is not Required, says
+  the fix: make the field `.Optional().Nillable()`, or mark the edge
+  `Required()` and drop the field's `Optional()`.
 - A field that holds the column of the foreign key velox adds for an edge
   is reported at that edge's line, names the edge and says how to bind
   the field: `.Field("x")` on the edge, or an inverse edge on the field's

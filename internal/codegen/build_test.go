@@ -1254,7 +1254,7 @@ func TestBuildRules(t *testing.T) {
 		{"35 singular is the owner's label", []schema.Interface{Man{}}, `schema Man: edge "men": join table man_men has two columns named man_id; name them with edge.Columns`},
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
 		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable: unset, it has no value to store, as "" is none of its values`},
-		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
+		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL; make it .Optional().Nillable(), or mark the edge Required() and drop the field's Optional()`},
 		{"44 shortened primary keys", []schema.Interface{lpA{}, lpB{}}, `schema lpB: name "` + lpPrefix + `_pkey" is also schema lpA's primary key`},
 		{"44 shortened sequences", []schema.Interface{lpA{}, lpB{}}, `schema lpB: field "id": name "` + lpPrefix[:56] + `_id_seq" is also schema lpA's identity sequence`},
 		{"44 indexes of one name", []schema.Interface{dupNamed{}}, `schema dupNamed: index 1: name "dup_nameds_dupnamed_name" is also this schema's index 0`},
