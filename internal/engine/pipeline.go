@@ -57,6 +57,9 @@ type DB struct {
 	// bypass is WithoutPolicy's reason: a DB whose statements skip every
 	// entity's policy; "" on any other.
 	bypass string
+	// misuse fails every statement and Tx of the DB: WithoutPolicy's with
+	// no reason. Nil on any other.
+	misuse error
 	// rec is Record's: a DB whose writes go to its sink; nil on any other.
 	rec *Recording
 	// batch is, on the handles of a recorded write's transaction or
@@ -236,6 +239,9 @@ func (db *DB) Hooked() bool { return len(db.Cfg.Rewrites) > 0 || len(db.Cfg.Arou
 // context lookup, and a pointer compare. In a transaction a savepoint broke
 // (txFrame.broken), it fails st with that error.
 func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
+	if db.misuse != nil {
+		return stmtErr(st, db.misuse)
+	}
 	if db.Foreign(ctx) {
 		return stmtErr(st, ErrOutsideTx)
 	}

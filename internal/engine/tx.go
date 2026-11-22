@@ -269,6 +269,9 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // a nested tx, run in the enclosing transaction). tx is not safe for
 // concurrent use: run its statements from one goroutine at a time.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
+	if db.misuse != nil {
+		return fmt.Errorf("velox: transaction: %w", db.misuse)
+	}
 	if db.Foreign(ctx) {
 		return fmt.Errorf("velox: transaction: %w", ErrOutsideTx)
 	}

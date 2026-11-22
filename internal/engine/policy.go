@@ -11,16 +11,23 @@ import (
 // WithoutPolicy returns a DB like db whose statements skip every entity's
 // policy, and the transactions it begins. The reason is required and is shown
 // to hooks as Statement.PolicyBypass; with a reason that is empty or only
-// white space WithoutPolicy returns db. The DB it returns shares db's pool and
-// configuration, and Close on it closes nothing.
+// white space every statement and Tx of the DB it returns fails with
+// errNoBypassReason, as raw SQL without a reason does. The DB it returns
+// shares db's pool and configuration, and Close on it closes nothing.
 func (db *DB) WithoutPolicy(reason string) *DB {
-	if NoReason(reason) {
-		return db
-	}
 	c := *db
-	c.bypass, c.owned = reason, false
+	c.owned = false
+	if NoReason(reason) {
+		c.bypass, c.misuse = "", errNoBypassReason
+		return &c
+	}
+	c.bypass = reason
 	return &c
 }
+
+// errNoBypassReason fails the statements of a DB from WithoutPolicy with no
+// reason.
+var errNoBypassReason = errors.New("WithoutPolicy needs a reason, as it skips every policy")
 
 // PolicyBypass returns db's WithoutPolicy reason; "" when none.
 func (db *DB) PolicyBypass() string { return db.bypass }

@@ -955,7 +955,36 @@ func TestWithoutPolicyIsTheDBs(t *testing.T) {
 	if err := velox.Pool(owner).PingContext(bg); err != nil {
 		t.Errorf("after Close on the bypassing DB: %v", err)
 	}
-	if db.PolicyBypass() != "" || free.WithoutPolicy("").PolicyBypass() != "audit" {
+	if db.PolicyBypass() != "" || free.WithoutPolicy("").PolicyBypass() != "" {
 		t.Errorf("PolicyBypass: %q, %q", db.PolicyBypass(), free.WithoutPolicy("").PolicyBypass())
+	}
+}
+
+// TestWithoutPolicyNoReason: WithoutPolicy with an empty reason is a
+// mistake, as Exec's is: the DB it returns fails every statement and Tx, on
+// a DB with a bypass too, rather than keeping the policies on quietly.
+func TestWithoutPolicyNoReason(t *testing.T) {
+	db := policyDB(t)
+	bg := testmodel.Org.With(context.Background(), int64(1))
+	for _, base := range []*velox.DB{db, db.WithoutPolicy("audit")} {
+		for _, reason := range []string{"", "  "} {
+			bad := base.WithoutPolicy(reason)
+			want := func(what string, err error) {
+				t.Helper()
+				if err == nil || !strings.Contains(err.Error(), "WithoutPolicy needs a reason") {
+					t.Errorf("%q: %s: %v, want WithoutPolicy needs a reason", reason, what, err)
+				}
+			}
+			_, err := bad.Query[testmodel.Invoice]().Count(bg)
+			want("Count", err)
+			_, err = bad.Query[testmodel.Invoice]().Limit(1).All(bg)
+			want("All", err)
+			_, _, err = bad.Query[testmodel.Invoice]().Limit(1).SQL(bg)
+			want("SQL", err)
+			want("Insert", bad.Insert(&testmodel.Invoice{OrgID: 1, Number: "X", Data: []byte("d")}).Exec(bg))
+			_, err = bad.Exec(bg, "fix", "SELECT 1")
+			want("Exec", err)
+			want("Tx", bad.Tx(bg, func(context.Context, *velox.DB) error { return nil }))
+		}
 	}
 }

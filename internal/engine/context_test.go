@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,8 +38,9 @@ func TestScopeValuesAreTheContexts(t *testing.T) {
 func TestSkipPolicyNeedsAReason(t *testing.T) {
 	db := velox.OpenConn(velox.Postgres, fakeConn(&fakeconn.Exec{}))
 	for _, reason := range []string{"", " \t\n"} {
-		if db.WithoutPolicy(reason) != db {
-			t.Errorf("WithoutPolicy with the reason %q made another DB", reason)
+		_, err := db.WithoutPolicy(reason).Exec(context.Background(), "x", "SELECT 1")
+		if err == nil || !strings.Contains(err.Error(), "WithoutPolicy needs a reason") {
+			t.Errorf("WithoutPolicy with the reason %q: %v", reason, err)
 		}
 	}
 	free := db.WithoutPolicy("support tool")

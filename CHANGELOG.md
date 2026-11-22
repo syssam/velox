@@ -596,6 +596,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Review `widen-type`, not a destructive `alter-type`: each holds what any
   varchar can. The finding names an index over the column, which MODIFY
   fails on without a prefix length.
+- `db.WithoutPolicy("")`, or a reason of only white space, returns a DB
+  whose every statement and `Tx` fail with "WithoutPolicy needs a reason",
+  as `Exec` without a reason fails. It returned `db`, so the policies stayed
+  on without a word.
 - `Query.Limit(n)` and `Rel.LimitEach(n)` with n <= 0 fail the query with
   "Limit must be positive" ("LimitEach must be positive"), before anything
   is sent. `Limit(0)` reported "query has no Limit", and `LimitEach(0)`

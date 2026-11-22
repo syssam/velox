@@ -254,9 +254,10 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 // Mutation.DB. Interceptors still apply. The bypass is the DB's, not a
 // context's: it reaches only the code given this DB, never a callee that is
 // handed ctx. The reason is required and is shown to hooks as
-// Statement.PolicyBypass; with a reason that is empty or only white space
-// WithoutPolicy returns db. The DB it returns shares db's pool and options,
-// and Close on it closes nothing.
+// Statement.PolicyBypass. With a reason that is empty or only white space
+// every statement and Tx of the DB it returns fails, before anything is
+// sent, as Exec without a reason does. The DB it returns shares db's pool
+// and options, and Close on it closes nothing.
 func (db *DB) WithoutPolicy(reason string) *DB { return pub(db.e.WithoutPolicy(reason)) }
 
 // PolicyBypass returns db's WithoutPolicy reason; "" when it has none.
