@@ -71,10 +71,11 @@ type ruleError struct {
 
 // node is an entity with the model it came from.
 type node struct {
-	ent    *Entity
-	schema *loadjson.Schema
-	edges  []*edgeState // in the order of ent.Edges
-	link   []string     // an edge schema's two key columns: the assoc edge's owner's, then its target's
+	ent     *Entity
+	schema  *loadjson.Schema
+	edges   []*edgeState // in the order of ent.Edges
+	link    []string     // an edge schema's two key columns: the assoc edge's owner's, then its target's
+	linkPos string       // the line of the edge that names it with Through
 }
 
 // edgeState is an edge with what resolving it found.
@@ -409,10 +410,18 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 // 35), as the singular fallback gives for an edge to its own schema named
 // after it: edge "nodes" on Node makes node_id twice. s is the edge whose name
 // gave the second column.
+//
+// Through takes no edge.Columns (rule 68), so on a relation through an edge
+// schema the fix is another name for s.
 func (b *builder) checkJoinColumns(s *edgeState, table string, cols []string) {
-	if cols[0] == cols[1] {
-		b.fail(35, s.owner.ent.Name, edgeLoc(s.ed), "join table %s has two columns named %s; name them with edge.Columns", table, cols[0])
+	if cols[0] != cols[1] {
+		return
 	}
+	if s.le.Through != nil || s.pair != nil && s.pair.le.Through != nil {
+		b.fail(35, s.owner.ent.Name, edgeLoc(s.ed), "the relation's two columns are both named %s, after this edge's name; rename the edge, as Through takes its columns from the edge names", cols[0])
+		return
+	}
+	b.fail(35, s.owner.ent.Name, edgeLoc(s.ed), "join table %s has two columns named %s; name them with edge.Columns", table, cols[0])
 }
 
 // hasKey reports whether le declares a storage key.

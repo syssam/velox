@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -410,7 +411,7 @@ func TestEdgeSchemaRules(t *testing.T) {
 			edgeIn(t, m, "Enrollment", "course").Required = false
 			f := fieldIn(t, m, "Enrollment", "course_id")
 			f.Optional, f.Nillable = true, true
-		}, [2]string{"Learner", "courses"}, `edge "course" of Enrollment must be Required: a link has both ends`},
+		}, [2]string{"Learner", "courses"}, `edge "course" of Enrollment (@Enrollment.course) must be Required: a link has both ends`},
 		{"67 two edges to the side", nil, func(t *testing.T, m *loadjson.Model) {
 			fieldIn(t, m, "Enrollment", "learner_id").Name = "student_id"
 			edgeIn(t, m, "Enrollment", "learner").Field = "student_id"
@@ -419,14 +420,24 @@ func TestEdgeSchemaRules(t *testing.T) {
 			tutor := *edgeIn(t, m, "Enrollment", "learner")
 			tutor.Name, tutor.Field = "tutor", "tutor_id"
 			s.Edges = append(s.Edges, &tutor)
-		}, [2]string{"Learner", "courses"}, `edge schema Enrollment has no edge to Learner bound to field "learner_id"; declare edge.To("learner", Learner.Type).Unique().Required().Field("learner_id")`},
+		}, [2]string{"Learner", "courses"}, `edge schema Enrollment has no edge to Learner bound to field "learner_id"; bind field "learner_id" on edge "learner"`},
 		{"67 own schema by name alone", []schema.Interface{Fan{}, Follow{}}, func(t *testing.T, m *loadjson.Model) {
 			// Follow's other edge to Fan is the only one left, and still
 			// not taken: on a relation to its own schema, the type
 			// decides nothing.
 			fieldIn(t, m, "Follow", "follower_id").Name = "followee_id"
 			edgeIn(t, m, "Follow", "follower").Field = "followee_id"
-		}, [2]string{"Fan", "following"}, `edge schema Follow has no edge to Fan bound to field "follower_id"; declare edge.To("follower", Fan.Type).Unique().Required().Field("follower_id")`},
+		}, [2]string{"Fan", "following"}, `edge schema Follow has no edge to Fan bound to field "follower_id"; bind field "follower_id" on edge "follower"`},
+		{"67 one-to-one key", nil, func(t *testing.T, m *loadjson.Model) {
+			s := schemaIn(t, m, "Learner")
+			courses := edgeIn(t, m, "Learner", "courses")
+			s.Edges = append(s.Edges, &loadjson.Edge{Name: "enrollment", Type: "Enrollment", TypePkg: courses.TypePkg, Unique: true, Pos: courses.Pos})
+			key := edgeIn(t, m, "Enrollment", "learner")
+			key.Inverse, key.Ref = true, "enrollment"
+		}, [2]string{"Learner", "courses"}, `edge "learner" of Enrollment (@Enrollment.learner) must be many-to-one: a Learner has many links; remove Unique from Learner.enrollment`},
+		{"35 under Through", []schema.Interface{Fan{}, Follow{}}, func(t *testing.T, m *loadjson.Model) {
+			edgeIn(t, m, "Fan", "followers").Name = "fans"
+		}, [2]string{"Fan", "fans"}, `the relation's two columns are both named fan_id, after this edge's name; rename the edge, as Through takes its columns from the edge names`},
 		{"68 table", nil, func(t *testing.T, m *loadjson.Model) {
 			edgeIn(t, m, "Learner", "courses").Table = "learner_courses"
 		}, [2]string{"Learner", "courses"}, `Through takes its table and columns from Enrollment; remove StorageKey (edge.Table, edge.Columns, edge.Symbols)`},
@@ -450,13 +461,20 @@ func TestEdgeSchemaRules(t *testing.T) {
 			}
 			pos := edgeIn(t, m, c.at[0], c.at[1]).Pos
 			_, err := Build(m)
-			want := pos + ": schema " + c.at[0] + `: edge "` + c.at[1] + `": ` + c.want
+			want := pos + ": schema " + c.at[0] + `: edge "` + c.at[1] + `": ` + atPos.ReplaceAllStringFunc(c.want, func(ref string) string {
+				s, e, _ := strings.Cut(ref[1:], ".")
+				return edgeIn(t, m, s, e).Pos
+			})
 			if err == nil || err.Error() != want {
 				t.Fatalf("got\n%v\nwant\n%s", err, want)
 			}
 		})
 	}
 }
+
+// atPos is a reference, in a rule's text, to the position of an edge:
+// @Schema.edge.
+var atPos = regexp.MustCompile(`@[A-Za-z]+\.[a-z_]+`)
 
 // The error is at the line that declares Through.
 func TestEdgeSchemaRulePos(t *testing.T) {
@@ -582,6 +600,55 @@ func TestEdgeSchemaConversionRefused(t *testing.T) {
 		_, err = migrate.Diff(from, to, migrate.DiffOptions{})
 		if me, ok := errors.AsType[*migrate.Error](err); !ok || me.Code != "primary-key" {
 			t.Errorf("%v: got %v, want a primary-key refusal", d, err)
+		}
+	}
+}
+
+// A declared index over the pair in its order that is not unique stands
+// where the pair's unique index goes: it is refused at its own line. The
+// derived index's line is the edge's that names Through.
+func TestEdgeSchemaNonUniqueIndex(t *testing.T) {
+	m := enrollments(t)
+	ix := loadjson.Index{Fields: []string{"learner_id", "course_id"}, Pos: "schema.go:7"}
+	schemaIn(t, m, "Enrollment").Indexes = []*loadjson.Index{&ix}
+	_, err := Build(m)
+	want := `schema.go:7: schema Enrollment: index 0: over (learner_id, course_id) must be Unique: Through's links are unique pairs`
+	if err == nil || err.Error() != want {
+		t.Fatalf("got\n%v\nwant\n%s", err, want)
+	}
+	e := mustBuildModel(t, enrollments(t)).Entity("Enrollment")
+	if got, want := e.Indexes[0].Pos, edgeIn(t, enrollments(t), "Learner", "courses").Pos; got != want {
+		t.Fatalf("the pair's index is at %q, want %q", got, want)
+	}
+}
+
+// A key edge may be the inverse of an edge its side declares: the through
+// edge pairs with it, and its foreign key is listed once.
+func TestEdgeSchemaInverseKeyEdge(t *testing.T) {
+	m := enrollments(t)
+	courses := edgeIn(t, m, "Learner", "courses")
+	key := edgeIn(t, m, "Enrollment", "learner")
+	key.Inverse, key.Ref = true, "links"
+	s := schemaIn(t, m, "Learner")
+	s.Edges = append(s.Edges, &loadjson.Edge{Name: "links", Type: "Enrollment", TypePkg: courses.TypePkg, Pos: courses.Pos})
+	g := mustBuildModel(t, m)
+	l := g.Entity("Learner")
+	if ed := l.Edge("enrollments"); ed == nil || ed.Ref != "learner" || ed.Field != "learner_id" {
+		t.Fatalf("Learner.enrollments %+v", ed)
+	}
+	if ed := l.Edge("links"); ed.Rel.Kind != "O2M" || ed.Ref != "learner" || ed.Field != "learner_id" {
+		t.Fatalf("Learner.links %+v", ed)
+	}
+	if ed := g.Entity("Enrollment").Edge("learner"); ed.Ref != "links" || ed.Rel.Kind != "M2O" {
+		t.Fatalf("Enrollment.learner %+v", ed)
+	}
+	for _, d := range allDialects {
+		s, err := Tables(g, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fks := table(t, s, "enrollments").ForeignKeys; len(fks) != 2 {
+			t.Errorf("%v: foreign keys %+v", d, fks)
 		}
 	}
 }

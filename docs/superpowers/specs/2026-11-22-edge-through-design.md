@@ -565,6 +565,9 @@ The tests listed with each task fail before it.
 
 1. Composite keys (`field.ID("a", "b")`): deferred to ADR 0110. v1 refuses
    it with a rule that says so.
+   - Amended in fix round 1: no rule and no stub. velox has no `field.ID`,
+     so a port that uses it fails to compile. Task 5 adds a
+     `coming-from-ent.md` note that says to remove it and names ADR 0110.
 2. Bidirectional self edges through an edge schema (ent's `User.friends`):
    refused in v1 (rule 69), with an error naming the workaround (an inverse
    pair).

@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"cmp"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -77,6 +78,9 @@ func (b *builder) edgeSchema(a *edgeState, claimed map[*node]*edgeState) {
 	if keyed {
 		return
 	}
+	if c := a.ed.Rel.Columns; c[0] == c[1] {
+		return // rule 35
+	}
 	// The relation's default columns, the assoc edge's owner's and then its
 	// target's, name the edge schema's fields.
 	sides := [2]*node{a.owner, a.target}
@@ -85,13 +89,11 @@ func (b *builder) edgeSchema(a *edgeState, claimed map[*node]*edgeState) {
 	for i, col := range a.ed.Rel.Columns {
 		k := keyEdge(es, sides[i], col, sides[0] == sides[1])
 		if k == nil {
-			name := cmp.Or(strings.TrimSuffix(col, "_id"), sides[i].ent.Label)
-			b.fail(67, decl.owner.ent.Name, edgeLoc(decl.ed), "edge schema %s has no edge to %s bound to field %q; declare edge.To(%q, %s.Type).Unique().Required().Field(%q)",
-				es.ent.Name, sides[i].ent.Name, col, name, sides[i].ent.Name, col)
+			b.fail(67, decl.owner.ent.Name, edgeLoc(decl.ed), "%s", noKeyEdge(es, sides[i], col))
 			return
 		}
-		if !k.le.Required {
-			b.fail(67, decl.owner.ent.Name, edgeLoc(decl.ed), "edge %q of %s must be Required: a link has both ends", k.ed.Name, es.ent.Name)
+		if why := badKeyEdge(es, k); why != "" {
+			b.fail(67, decl.owner.ent.Name, edgeLoc(decl.ed), "%s", why)
 			return
 		}
 		keys[i], cols[i] = k, k.le.Field
@@ -99,7 +101,7 @@ func (b *builder) edgeSchema(a *edgeState, claimed map[*node]*edgeState) {
 			cols[i] = f.Column
 		}
 	}
-	es.ent.EdgeSchema, es.link = true, cols[:]
+	es.ent.EdgeSchema, es.link, es.linkPos = true, cols[:], decl.ed.Pos
 	a.ed.Rel.Table, a.ed.Rel.Columns, a.ed.Rel.EdgeSchema = es.ent.Table, []string{cols[0], cols[1]}, es.ent.Name
 	if p != nil {
 		p.ed.Rel.Table, p.ed.Rel.Columns, p.ed.Rel.EdgeSchema = es.ent.Table, []string{cols[1], cols[0]}, es.ent.Name
@@ -111,6 +113,36 @@ func (b *builder) edgeSchema(a *edgeState, claimed map[*node]*edgeState) {
 	if p != nil && p.le.Through != nil {
 		b.throughEdge(p, es, keys[1], cols[1])
 	}
+}
+
+// noKeyEdge is rule 67's reason when the edge schema es has no edge to side
+// that binds the field named col. It suggests the edge to declare, or, when
+// es has an edge of that name already, the field to bind on it.
+func noKeyEdge(es, side *node, col string) string {
+	reason := fmt.Sprintf("edge schema %s has no edge to %s bound to field %q; ", es.ent.Name, side.ent.Name, col)
+	name := cmp.Or(strings.TrimSuffix(col, "_id"), side.ent.Label)
+	if es.edge(name) != nil {
+		return reason + fmt.Sprintf("bind field %q on edge %q", col, name)
+	}
+	return reason + fmt.Sprintf("declare edge.To(%q, %s.Type).Unique().Required().Field(%q)", name, side.ent.Name, col)
+}
+
+// badKeyEdge is rule 67's reason when k, the key edge of the edge schema es,
+// cannot hold one end of a link: it must be Required, and many-to-one, as a
+// row of its side has many links. It is "" when k can.
+func badKeyEdge(es *node, k *edgeState) string {
+	at := ""
+	if k.ed.Pos != "" {
+		at = " (" + k.ed.Pos + ")"
+	}
+	switch {
+	case !k.le.Required:
+		return fmt.Sprintf("edge %q of %s%s must be Required: a link has both ends", k.ed.Name, es.ent.Name, at)
+	case k.ed.Rel.Kind == "O2O" && k.pair != nil:
+		return fmt.Sprintf("edge %q of %s%s must be many-to-one: a %s has many links; remove Unique from %s.%s",
+			k.ed.Name, es.ent.Name, at, k.target.ent.Name, k.pair.owner.ent.Name, k.pair.ed.Name)
+	}
+	return ""
 }
 
 // throughNode returns the node of the edge schema that the Through of s
@@ -212,13 +244,25 @@ func (b *builder) throughEdge(s *edgeState, es *node, key *edgeState, col string
 // linkIndex adds to the edge schema n the unique index of its pair of keys,
 // as ent does, unless it declares one: unique, over every row, on the two
 // columns in either order. Add's ON CONFLICT names it.
+//
+// A declared index over every row on the two columns in their order that is
+// not unique is refused (rule 67): it would stand where the pair's index
+// goes, and its name is the one the pair's index would take.
 func (b *builder) linkIndex(n *node) {
 	e, link := n.ent, n.link
-	for _, ix := range e.Indexes {
-		if !b.refused[ix] && ix.Unique && ix.Where == "" && len(ix.Columns) == 2 &&
-			(slices.Equal(ix.Columns, link) || ix.Columns[0] == link[1] && ix.Columns[1] == link[0]) {
+	for i, ix := range e.Indexes {
+		if b.refused[ix] || ix.Where != "" || len(ix.Columns) != 2 {
+			continue
+		}
+		same := slices.Equal(ix.Columns, link)
+		switch {
+		case ix.Unique && (same || ix.Columns[0] == link[1] && ix.Columns[1] == link[0]):
+			return
+		case same:
+			b.fail(67, e.Name, indexLoc(i, ix), "over (%s) must be Unique: Through's links are unique pairs", strings.Join(link, ", "))
+			b.refused[ix] = true
 			return
 		}
 	}
-	e.Indexes = append(e.Indexes, &Index{Name: indexName(e.Name, link), Derived: true, Columns: slices.Clone(link), Unique: true})
+	e.Indexes = append(e.Indexes, &Index{Name: indexName(e.Name, link), Derived: true, Columns: slices.Clone(link), Unique: true, Pos: n.linkPos})
 }
