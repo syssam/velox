@@ -211,22 +211,22 @@ func PlanInsert(d Dialect, st *Statement, gen int) error {
 }
 
 // scanReturned scans the row r holds, the RETURNING columns of st, into the
-// entity at p. A Rewrite hook that changed Returning leaves the entity as
-// it was: the row then holds other columns.
-func scanReturned(r Rows, st *Statement, p unsafe.Pointer) error {
+// entity at p, through dst, the destinations, which it returns for the next
+// row: one slice serves every row, as Scan's arguments escape. A Rewrite
+// hook that changed Returning leaves the entity as it was: the row then
+// holds other columns.
+func scanReturned(r Rows, st *Statement, p unsafe.Pointer, dst []any) ([]any, error) {
 	if !slices.Equal(st.Returning, st.ret) {
-		return nil
+		return dst, nil
 	}
 	in := st.Entity
-	if len(st.ret) == 1 {
-		c := st.ret[0]
-		return r.Scan(ScanDst(in, c, fieldAddr(in, p, c)))
+	if len(dst) != len(st.ret) {
+		dst = make([]any, len(st.ret))
 	}
-	dst := make([]any, len(st.ret))
 	for i, c := range st.ret {
 		dst[i] = ScanDst(in, c, fieldAddr(in, p, c))
 	}
-	return r.Scan(dst...)
+	return dst, r.Scan(dst...)
 }
 
 // sendReturning sends st, which reads back st.Returning, on db, and scans
@@ -243,13 +243,15 @@ func sendReturning(ctx context.Context, db *DB, st *Statement, one unsafe.Pointe
 			back = n
 			return err
 		}
+		var scan []any
 		for r.Next() {
 			dst := one
 			if dst == nil && int(back) < len(rows) {
 				dst = rows[back]
 			}
 			if dst != nil && (one == nil || back == 0) {
-				if err := scanReturned(r, st, dst); err != nil {
+				var err error
+				if scan, err = scanReturned(r, st, dst, scan); err != nil {
 					return err
 				}
 			}
@@ -296,10 +298,14 @@ func keyReturning(d Dialect, st *Statement) {
 func readPlaced(r Rows, st *Statement, rows []unsafe.Pointer) (int64, error) {
 	in := st.Entity
 	ts := InfoTable(in).state()
-	var got []unsafe.Pointer
+	var (
+		got  []unsafe.Pointer
+		scan []any
+		err  error
+	)
 	for r.Next() {
 		p := ts.newRow()
-		if err := scanReturned(r, st, p); err != nil {
+		if scan, err = scanReturned(r, st, p, scan); err != nil {
 			return 0, err
 		}
 		got = append(got, p)

@@ -9,9 +9,10 @@ import (
 )
 
 // TestWriteAllocationBudgets pins, on an entity with no hooks, filters or
-// recorder, the allocations of a cached update by key and a count, at the
-// numbers measured when the budgets were set: a feature that is off costs
-// these paths nothing. Each also has a byte budget: the count keeps its
+// recorder, the allocations of a cached update by key, a count and a 100-row
+// InsertAll that reads its keys back, at the numbers measured when the
+// budgets were set: a feature that is off costs these paths nothing. The
+// update and the count also have a byte budget: the count keeps its
 // Statement on the stack, and the update's, which escapes, stays in the
 // 640-byte size class.
 func TestWriteAllocationBudgets(t *testing.T) {
@@ -48,4 +49,22 @@ func TestWriteAllocationBudgets(t *testing.T) {
 		cnt.Log, cnt.ArgLog = cnt.Log[:0], cnt.ArgLog[:0]
 		return err
 	})
+	keys := make([][]any, 100)
+	for i := range keys {
+		keys[i] = []any{int64(i + 1)}
+	}
+	ins := &fakeconn.Exec{Rows: keys}
+	inserts := openFake(velox.SQLite, ins)
+	rows := make([]testmodel.Sample, 100)
+	measure("a 100-row InsertAll", 1039, 0, func() error {
+		for i := range rows {
+			rows[i] = testmodel.Sample{Name: "n", Status: "s", When: t0}
+		}
+		err := inserts.InsertAll(rows).Exec(ctx)
+		ins.Log, ins.ArgLog = ins.Log[:0], ins.ArgLog[:0]
+		return err
+	})
+	if rows[99].ID != 100 {
+		t.Errorf("the last row's key is %d, want 100: the keys were not read back", rows[99].ID)
+	}
 }
