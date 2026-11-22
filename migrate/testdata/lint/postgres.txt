@@ -4,6 +4,7 @@
 == rename-table
 0 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
 == add-column-optional
+0 zero-default review users.nickname [cases_test.go]: adds column users.nickname as NOT NULL with default ''; existing rows get '': give the field a Default or make it Nillable if that is not their value
 == add-column-nillable
 == add-column-required
 0 add-required-column destructive users.joined_at [cases_test.go]: adds column users.joined_at as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Nillable, or allow it only on an empty table

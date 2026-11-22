@@ -428,6 +428,9 @@ func (l *linter) addColumn(i int, c addColumn) {
 		if !col.Nullable && col.Default == "" && !col.Identity {
 			l.add(i, "add-required-column", Destructive, target, col.Pos, "adds column %s as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Nillable, or allow it only on an empty table", target)
 		}
+		if !col.Nullable && !col.Identity && zeroLiteral(l.d, col.Default) {
+			l.add(i, "zero-default", Review, target, col.Pos, "adds column %s as NOT NULL with default %s; existing rows get %s: give the field a Default or make it Nillable if that is not their value", target, col.Default, col.Default)
+		}
 		if l.d == velox.Postgres && col.Default != "" && !literalDefault(l.d, col.Default) {
 			l.add(i, "volatile-default", Review, target, col.Pos, "adds column %s with default %s; if the expression is volatile, PostgreSQL rewrites the table under an exclusive lock", target, col.Default)
 		}
@@ -448,6 +451,9 @@ func (l *linter) alterColumn(i int, c alterColumn) {
 		if strings.HasPrefix(c.From.Default, "nextval(") {
 			l.add(i, "serial-to-identity", Review, target, c.To.Pos, "turns serial column %s into an identity that goes on from its sequence: its default and sequence are dropped", target)
 		}
+	}
+	if c.What&columnIdentity != 0 && c.From.Identity && !c.To.Identity {
+		l.add(i, "drop-identity", Review, target, c.To.Pos, "drops the identity of column %s; an insert that leaves the column out no longer gets a value from the database", target)
 	}
 	var what []string
 	for _, w := range [...]struct {
@@ -720,6 +726,23 @@ func literalDefault(d velox.Dialect, s string) bool {
 	}
 	_, err := strconv.ParseFloat(s, 64)
 	return err == nil
+}
+
+// zeroLiteral reports whether a default is the zero of a string, bool or
+// number: an empty string, false or a number equal to 0. velox-gen gives a NOT NULL
+// string, bool or number column with no Default this one (decision 0090).
+func zeroLiteral(d velox.Dialect, s string) bool {
+	if strings.EqualFold(s, "false") {
+		return true
+	}
+	if v, ok := ddl.Unquote(d, s); ok {
+		return v == ""
+	}
+	if s == "" || !strings.ContainsAny(s[:1], "+-.0123456789") {
+		return false
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	return err == nil && f == 0
 }
 
 // sqliteAffinity is the affinity SQLite gives a column of type typ, by its

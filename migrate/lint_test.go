@@ -151,11 +151,19 @@ func TestLintCases(t *testing.T) {
 // optional, nillable or has a default, and blocks when it is required.
 func TestLintAddColumn(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"add-column-optional", "add-column-nillable", "add-column-default"} {
+	for _, name := range []string{"add-column-nillable", "add-column-default"} {
 		for _, d := range allDialects {
 			if got := caseFindings(t, name, d); len(got) > 0 {
 				t.Errorf("%s on %v: %v", name, d, codes(got))
 			}
+		}
+	}
+	// A NOT NULL column whose default is the zero, as velox-gen gives one
+	// with no Default (decision 0090), says what the existing rows get.
+	for _, d := range allDialects {
+		got := caseFindings(t, "add-column-optional", d)
+		if len(got) != 1 || got[0].Code != "zero-default" || got[0].Class != migrate.Review || !strings.Contains(got[0].Message, "existing rows get") {
+			t.Errorf("add-column-optional on %v: %+v", d, got)
 		}
 	}
 	c := caseNamed("add-column-required")
@@ -271,6 +279,53 @@ func TestLintWidenType(t *testing.T) {
 				t.Errorf("got %+v, want %s %v", got, r.code, r.class)
 			}
 		})
+	}
+}
+
+// TestLintZeroDefault: a NOT NULL column added with the zero of its type as
+// its default is a Review finding; a nullable one, another default and an
+// identity are none.
+func TestLintZeroDefault(t *testing.T) {
+	t.Parallel()
+	for _, r := range []struct {
+		col  migrate.Column
+		want bool
+	}{
+		{migrate.Column{Name: "c", Type: "text", Default: "''"}, true},
+		{migrate.Column{Name: "c", Type: "integer", Default: "0"}, true},
+		{migrate.Column{Name: "c", Type: "real", Default: "0.0"}, true},
+		{migrate.Column{Name: "c", Type: "boolean", Default: "false"}, true},
+		{migrate.Column{Name: "c", Type: "text", Default: "'x'"}, false},
+		{migrate.Column{Name: "c", Type: "integer", Default: "1"}, false},
+		{migrate.Column{Name: "c", Type: "text", Default: "''", Nullable: true}, false},
+		{migrate.Column{Name: "c", Type: "text", Default: "lower('')"}, false},
+	} {
+		from := &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{Name: "t"}}}
+		cs := []migrate.Change{migrate.AddColumn{Table: migrate.TableRef{Name: "t"}, Column: r.col}}
+		got := slices.ContainsFunc(lint(t, from, cs), func(f migrate.Finding) bool {
+			return f.Code == "zero-default" && f.Class == migrate.Review && strings.Contains(f.Message, "existing rows get "+r.col.Default)
+		})
+		if got != r.want {
+			t.Errorf("%+v: zero-default is %v", r.col, got)
+		}
+	}
+}
+
+// TestLintDropIdentity: dropping a column's identity is a Review finding on
+// every dialect.
+func TestLintDropIdentity(t *testing.T) {
+	t.Parallel()
+	for _, d := range allDialects {
+		ref := migrate.TableRef{Name: "t"}
+		from := migrate.Column{Name: "id", Type: "bigint", Identity: true}
+		to := migrate.Column{Name: "id", Type: "bigint"}
+		sch := &migrate.Schema{Dialect: d, Tables: []migrate.Table{{Name: "t", Columns: []migrate.Column{from}}}}
+		cs := []migrate.Change{migrate.AlterColumn{Table: ref, From: from, To: to, What: migrate.ColumnIdentity}}
+		if !slices.ContainsFunc(lint(t, sch, cs), func(f migrate.Finding) bool {
+			return f.Code == "drop-identity" && f.Class == migrate.Review && f.Target == "t.id"
+		}) {
+			t.Errorf("%v: no drop-identity finding in %v", d, codes(lint(t, sch, cs)))
+		}
 	}
 }
 
@@ -719,7 +774,7 @@ func TestLintVolatileDefaultIsPostgresOnly(t *testing.T) {
 	for _, def := range []string{"'x'", "0", "-1.5", "true", "FALSE", "NULL", "'it''s'"} {
 		from := &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{Name: "t"}}}
 		cs := []migrate.Change{migrate.AddColumn{Table: migrate.TableRef{Name: "t"}, Column: migrate.Column{Name: "c", Type: "text", Default: def}}}
-		if fs := lint(t, from, cs); len(fs) > 0 {
+		if fs := lint(t, from, cs); slices.ContainsFunc(fs, func(f migrate.Finding) bool { return f.Code == "volatile-default" }) {
 			t.Errorf("default %s: %v", def, codes(fs))
 		}
 	}

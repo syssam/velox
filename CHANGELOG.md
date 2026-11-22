@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- migrate: two Review findings. `drop-identity`: a column loses its
+  identity, so an insert that leaves it out gets no value. `zero-default`:
+  a NOT NULL column added to a table that exists with `''`, `0` or `false`
+  as its default, as velox-gen gives a string, bool or number field with no
+  Default (ADR 0090), says what the existing rows get.
 - Edge schemas, as ent's `edge.Through`: a many-to-many edge names a schema
   whose rows are its links, with an ID, fields and two Required to-one key
   edges. velox-gen generates it as any entity, adds the through edge and a
