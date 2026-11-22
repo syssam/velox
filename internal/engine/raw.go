@@ -192,7 +192,7 @@ func skipComment(d Dialect, q string) string {
 // another cannot be told.
 func (db *DB) noteRawEnd(ctx context.Context, st *Statement) error {
 	if db.txRoot.broken != nil {
-		return nil
+		return nil //nolint:nilerr // already broken: the Tx reports that, not this statement
 	}
 	gone := false
 	switch db.D {
