@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/constant"
@@ -467,8 +468,8 @@ func (ck *behaviourCheck) warningList() []string {
 // one call's refusals stay in the order of the methods that reach it.
 func byLine(errs []error) []error {
 	slices.SortStableFunc(errs, func(a, b error) int {
-		fa, oka := a.(*FileError)
-		fb, okb := b.(*FileError)
+		fa, oka := errors.AsType[*FileError](a)
+		fb, okb := errors.AsType[*FileError](b)
 		if !oka || !okb {
 			return 0
 		}

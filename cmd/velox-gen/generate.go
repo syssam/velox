@@ -59,7 +59,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	case errors.Is(err, generate.ErrInterrupted):
 		if j, ok := err.(interface{ Unwrap() []error }); ok {
 			for _, e := range j.Unwrap() {
-				if e != generate.ErrInterrupted {
+				if !errors.Is(e, generate.ErrInterrupted) {
 					_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", e)
 				}
 			}

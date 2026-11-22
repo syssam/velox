@@ -38,13 +38,13 @@ func RelErrors(dir string, err error) error {
 	changed := false
 	for i, e := range errs {
 		out[i] = e
-		if fe, ok := e.(*codegen.FileError); ok {
+		if fe, ok := e.(*codegen.FileError); ok { //nolint:errorlint // only an element that is itself a FileError is copied; a wrapper would be dropped
 			c := *fe
 			c.Path = RelPath(dir, fe.Path)
 			out[i], changed = &c, c != *fe
 			continue
 		}
-		if ge, ok := e.(*codegen.Error); ok {
+		if ge, ok := e.(*codegen.Error); ok { //nolint:errorlint // only an element that is itself an Error is copied; a wrapper would be dropped
 			c := *ge
 			if ge.Pos != "" {
 				c.Pos = RelPos(dir, ge.Pos)

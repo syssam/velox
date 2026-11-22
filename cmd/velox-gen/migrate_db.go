@@ -193,7 +193,7 @@ func dsnForm(d velox.Dialect, dsn, src, whose string) error {
 		name = "a PostgreSQL connection string"
 		_, err := pgconn.ParseConfig(dsn)
 		if pe, ok := errors.AsType[*fs.PathError](err); ok {
-			return fmt.Errorf("%s names a file that cannot be read: %v", src, pe)
+			return fmt.Errorf("%s names a file that cannot be read: %w", src, pe)
 		}
 		ok = err == nil
 	case velox.MySQL:

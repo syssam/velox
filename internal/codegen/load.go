@@ -108,7 +108,7 @@ func prefixFiles(err error, dir string) error {
 		errs = j.Unwrap()
 	}
 	for _, e := range errs {
-		if ge, ok := e.(*Error); ok && ge.Pos != "" && !filepath.IsAbs(ge.Pos) {
+		if ge, ok := errors.AsType[*Error](e); ok && ge.Pos != "" && !filepath.IsAbs(ge.Pos) {
 			ge.Pos = filepath.Join(dir, ge.Pos)
 		}
 	}
@@ -142,7 +142,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	defer removeOnSignal(tmp)()
 	exp, err := exports(pkg.Module.Dir, pkg.ImportPath, env)
 	if err != nil {
-		return nil, fmt.Errorf("loading %s:\n%s", pkg.ImportPath, err)
+		return nil, fmt.Errorf("loading %s:\n%w", pkg.ImportPath, err)
 	}
 	names, err := classify(pkg.ImportPath, exp)
 	if err != nil {
