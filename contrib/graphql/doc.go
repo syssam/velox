@@ -86,6 +86,11 @@
 // application directive on an entity: put it on the fields and edges it
 // guards, or use the entity's policy for row access.
 //
+// A directive's object is the row as its page or edge read it, narrowed to
+// the columns the selection needs: a column whose field is not selected
+// holds its zero value, so a directive that reads a field of the object
+// needs it selected (see "Loading").
+//
 // The application declares such a directive on FIELD_DEFINITION |
 // INPUT_FIELD_DEFINITION, or gqlgen refuses the schema:
 //

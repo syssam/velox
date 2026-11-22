@@ -12,6 +12,11 @@ import (
 // application's own resolver returns. Outside an adapter's operation, or a
 // resolver's field, it does nothing.
 //
+// The rows an edge reads for them are narrowed as a page's are, to the
+// columns their selection needs: a resolver or a directive handed one sees
+// the zero value of each column it did not select, so one that reads a field
+// selects it.
+//
 // The rows are the operation's: an edge of theirs reads them as they are
 // when the edge is first resolved, under that resolver's context, and a row
 // given to Batch again leaves its earlier batch. rows itself is not kept,
