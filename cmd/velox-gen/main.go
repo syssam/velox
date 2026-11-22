@@ -323,6 +323,11 @@ import (
 	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/internal/genrun"
 	"github.com/syssam/velox/plugin"
+
+	// The loader's program, which velox-gen writes into the user's module,
+	// imports schema/load. velox-gen imports it too, so that go mod vendor
+	// copies it into a module that vendors velox-gen as a tool.
+	_ "github.com/syssam/velox/schema/load"
 )
 
 func main() {
