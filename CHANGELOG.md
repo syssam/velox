@@ -1275,6 +1275,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   error's text, which can quote a row's values (MySQL's "Duplicate entry
   'alice@example.com'"). Its status description is error.type, and its
   exception event has exception.type and no exception.message.
+- A column handle made by hand with an index its entity lacks, such as
+  `NumberCol{I: 42}`, fails the statement with an error naming the column.
+  It panicked in the renderer.
+- `IDs[K]` of a key whose field is not a K names the field's type
+  (`int64`), not a pointer to it (`*int64`).
 - `Expr` and `SetExpr` refuse PostgreSQL's `ts_rewrite` and `ts_stat`,
   which run SQL from a string, and an `@` right before a name, a MySQL
   variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass

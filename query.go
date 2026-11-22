@@ -16,6 +16,9 @@ import (
 // leaves the one it was called on as it was, so a base query can be extended
 // in several ways, from several goroutines. Running a query does not change
 // it either, so it can run again.
+//
+// The zero Query, as in var q velox.Query[E], has no DB: running it panics.
+// Start a query with db.Query.
 type Query[E any] struct {
 	s    engine.QueryState // first: package untyped reads it
 	meta *metaState[E]

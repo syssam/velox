@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/syssam/velox/internal/engine"
 )
@@ -88,7 +89,7 @@ func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error) {
 	}
 	var e E
 	if p := q.meta.Addr(&e, col); !isPtrTo[K](p) {
-		return nil, fmt.Errorf("velox: %s: IDs[%T] of a key whose field is %T", q.meta.Info.Name, *new(K), p)
+		return nil, fmt.Errorf("velox: %s: IDs[%v] of a key whose field is %v", q.meta.Info.Name, reflect.TypeFor[K](), reflect.TypeOf(p).Elem())
 	}
 	return columnValues[E, K](ctx, q, col, "IDs")
 }

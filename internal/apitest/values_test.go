@@ -66,7 +66,7 @@ func TestValuesRefusals(t *testing.T) {
 	if _, err := velox.IDs[int64](ctx, db.Query[testmodel.Ticket]()); !errors.Is(err, velox.ErrUnbounded) {
 		t.Errorf("IDs without Limit: %v", err)
 	}
-	if _, err := velox.IDs[string](ctx, db.Query[testmodel.Ticket]().Limit(1)); err == nil || !strings.Contains(err.Error(), "IDs[string] of a key whose field is *int64") {
+	if _, err := velox.IDs[string](ctx, db.Query[testmodel.Ticket]().Limit(1)); err == nil || !strings.HasSuffix(err.Error(), "IDs[string] of a key whose field is int64") {
 		t.Errorf("IDs[string]: %v", err)
 	}
 	if _, err := velox.Values(ctx, db.Query[testmodel.Ticket]().Join(Tk.Invoice).Limit(1), Tk.Title.Key()); err == nil || !strings.Contains(err.Error(), "cannot join") {

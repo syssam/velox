@@ -14,6 +14,9 @@ import (
 //
 // A DB from Connect, Open, OpenConn or OpenShards is safe for concurrent use by multiple
 // goroutines. The *DB that Tx gives its fn is not: see Tx.
+//
+// The zero DB, as in var db velox.DB, has no connection and no dialect: a
+// statement or Tx on it panics. Make a DB with one of those functions.
 type DB struct {
 	// e is the DB, without what is generic. It is the only field: a transaction
 	// gives its fn the *DB of an *engine.DB, a pointer to the same memory.

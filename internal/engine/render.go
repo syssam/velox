@@ -957,9 +957,14 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 }
 
 // RenderStmt returns a statement's SQL and arguments, or why it cannot be
-// sent: a JSON value that does not encode, or a condition comparing a JSON
-// column.
+// sent: a JSON value that does not encode, a condition comparing a JSON
+// column, or a column index the entity does not have, from a handle made by
+// hand (NumberCol{I: 42}). The render cache calls it on a miss only, and a
+// shape that fails is not cached, so the check costs a hit nothing.
 func RenderStmt(d Dialect, st *Statement) (string, []any, error) {
+	if err := checkColumns(st, "a column handle names"); err != nil {
+		return "", nil, err
+	}
 	w := writer{d: d, in: st.Entity}
 	w.statement(st)
 	if w.err != nil {

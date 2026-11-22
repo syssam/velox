@@ -86,3 +86,85 @@ func TestQuerySelectingNoColumnsIsRefused(t *testing.T) {
 		t.Errorf("%v, calls %d", err, e.Calls)
 	}
 }
+
+// TestForgedHandle: a handle made by hand with a column index its entity
+// does not have fails the statement with an error, in every place a handle
+// goes, rather than panicking in the renderer.
+func TestForgedHandle(t *testing.T) {
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	bad := velox.NumberCol[testmodel.Invoice, int64]{I: 42}
+	neg := velox.NumberCol[testmodel.Invoice, int64]{I: -3}
+	ctx := context.Background()
+	for _, c := range []velox.NumberCol[testmodel.Invoice, int64]{bad, neg} {
+		for name, run := range map[string]func() error{
+			"Where": func() error {
+				_, err := db.Query[testmodel.Invoice]().Where(c.EQ(1)).Limit(1).All(ctx)
+				return err
+			},
+			"In": func() error {
+				_, err := db.Query[testmodel.Invoice]().Where(c.In(1, 2)).Limit(1).All(ctx)
+				return err
+			},
+			"IsNull": func() error {
+				_, err := db.Query[testmodel.Invoice]().Where(c.EQ(1), velox.Not(c.GT(2))).Count(ctx)
+				return err
+			},
+			"OrderBy": func() error {
+				_, err := db.Query[testmodel.Invoice]().OrderBy(c.Asc()).Limit(1).All(ctx)
+				return err
+			},
+			"Columns": func() error {
+				_, err := db.Query[testmodel.Invoice]().Columns(c).Limit(1).All(ctx)
+				return err
+			},
+			"Set": func() error {
+				_, err := db.Update[testmodel.Invoice]().Where(testmodel.Invoices.ID.EQ(1)).Set(c.Set(1)).Exec(ctx)
+				return err
+			},
+			"Add": func() error {
+				_, err := db.Update[testmodel.Invoice]().Where(testmodel.Invoices.ID.EQ(1)).Set(c.Add(1)).Exec(ctx)
+				return err
+			},
+			"Sum": func() error {
+				_, err := velox.Sum(ctx, db.Query[testmodel.Invoice](), c)
+				return err
+			},
+		} {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Errorf("I %d: %s panicked: %v", c.I, name, r)
+					}
+				}()
+				if err := run(); err == nil || !strings.Contains(err.Error(), "column") {
+					t.Errorf("I %d: %s: %v, want an error naming the column", c.I, name, err)
+				}
+			}()
+		}
+	}
+}
+
+// TestZeroDBAndQueryPanic: the zero DB and the zero Query have no
+// connection, as their godoc says: running a statement on either panics.
+func TestZeroDBAndQueryPanic(t *testing.T) {
+	ctx := context.Background()
+	for name, run := range map[string]func(){
+		"DB": func() {
+			var db velox.DB
+			_, _ = db.Query[testmodel.Invoice]().Limit(1).All(ctx)
+		},
+		"Query": func() {
+			var q velox.Query[testmodel.Invoice]
+			_, _ = q.Limit(1).All(ctx)
+		},
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("the zero %s did not panic", name)
+				}
+			}()
+			run()
+		}()
+	}
+}
