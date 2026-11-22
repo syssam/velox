@@ -46,6 +46,7 @@ var veloxORM = orm{
 "github.com/syssam/velox/schema/edge"
 "github.com/syssam/velox/schema/field"`,
 		SchemaType: "schema.Schema", FieldType: "schema.Field", EdgeType: "schema.Edge", FK: "Int64",
+		IndexType: "schema.Index", IndexImport: "github.com/syssam/velox/schema/index",
 	},
 	Codegen: func(tools string) []string {
 		return []string{filepath.Join(tools, "velox-gen"), "-out", "gen", "./schema"}
@@ -189,7 +190,8 @@ func (o orm) entity(i, n int) string {
 	}
 	b.WriteString("\t}\n}\n")
 	if d.IndexType != "" && i > 0 {
-		// The edge key's index, which velox's DDL creates by itself.
+		// The edge key's index. No ORM indexes a foreign key by itself
+		// (velox's ADR 0090), so each schema declares it.
 		fmt.Fprintf(&b, "\nfunc (E%d) Indexes() []%s {\n\treturn []%s{index.Fields(\"prev_id\")}\n}\n", i, d.IndexType, d.IndexType)
 	}
 	src, err := format.Source([]byte(b.String()))

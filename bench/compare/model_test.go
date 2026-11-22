@@ -181,7 +181,8 @@ func TestORMByName(t *testing.T) {
 
 // TestSchemasEquivalent pins what the comparison rests on: after the DSLs'
 // spellings are normalised, the three ORMs' schema files are the same, entity
-// by entity. What stays different is the index method, which velox does not write.
+// by entity. The index method is left out here; the test above checks that
+// each ORM's writes index.Fields("prev_id").
 func TestSchemasEquivalent(t *testing.T) {
 	const n = 20
 	importBlock := regexp.MustCompile(`(?s)import \(.*?\n\)\n`)
