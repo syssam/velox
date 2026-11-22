@@ -1327,6 +1327,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A statement on a Tx while another goroutine's statement on it is being
+  sent fails, and the Tx then rolls back with an error that says a Tx is not
+  safe for concurrent use. Before, both ran and raced on the transaction's
+  state.
+- On MySQL an InsertAll's keys are `@@auto_increment_increment` apart, read
+  once per DB before the first multi-row INSERT. They were taken as
+  consecutive, which a step other than 1 made wrong.
+- On PostgreSQL a raw text in a Tx that holds more than one statement is
+  followed by a savepoint probe, and one that ended the transaction breaks
+  the Tx. Before, pgx and lib/pq ran a trailing COMMIT unseen, and later
+  statements committed alone.
 - GraphQL: a connection ordered by `graphql.OrderVia` reads the edge with a
   LEFT JOIN, so the order no longer drops a row whose target is missing or
   hidden, nor changes `totalCount`, which told a caller how many rows a

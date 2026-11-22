@@ -269,7 +269,10 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
 // a nested tx, run in the enclosing transaction). tx is not safe for
-// concurrent use: run its statements from one goroutine at a time.
+// concurrent use: run its statements from one goroutine at a time. A statement
+// sent while another goroutine's is being sent fails, and the transaction then
+// rolls back with an error that says so. Overlaps outside the send, and an
+// Iter's loop, are not seen.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
 	if db.misuse != nil {
 		return fmt.Errorf("velox: transaction: %w", db.misuse)
@@ -523,6 +526,14 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		}
 		return false, fmt.Errorf("velox: transaction: %w", err)
 	}
+	if f.shared.Load() {
+		endTx(info, TxError)
+		err := fmt.Errorf("velox: transaction: %w", errTxShared)
+		if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) {
+			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
+		}
+		return false, err
+	}
 	if f.broken != nil {
 		// A savepoint did not roll back: its fn's work may still be in the
 		// transaction, which must not commit it.
@@ -771,7 +782,12 @@ type txFrame struct {
 	ctx        txCtx
 	ended      atomic.Bool
 	savepoints atomic.Uint64
-	broken     error
+	// sending is set, on the root, while a statement of the transaction is
+	// being sent (exec), and shared is set once a statement found it set:
+	// two goroutines used the Tx at once, which then cannot commit. An Iter's
+	// statement does not set sending, as its loop body may run statements.
+	sending, shared atomic.Bool
+	broken          error
 	// kept is, on the root, the rows Recorders kept in the transaction, in
 	// order: a savepoint that rolls back drops those after its mark, and a
 	// transaction that does not commit drops them all (unkeep).

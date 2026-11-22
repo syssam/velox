@@ -565,10 +565,22 @@ func (db *DB) capLimit(st *Statement) {
 	}
 }
 
-// exec is send, and marks a transaction the server has rolled back. A broken
-// transaction fails here as well as in outsideTx, as an Around hook may call next
-// again after the statement that broke it.
+// errTxShared is the error of a statement sent on a transaction while another
+// goroutine's was being sent, and of that transaction's end.
+var errTxShared = errors.New("another goroutine was sending a statement on the transaction: a Tx is not safe for concurrent use")
+
+// exec is send, and marks a transaction the server has rolled back. In a
+// transaction it refuses a statement while another is being sent (errTxShared).
+// A broken transaction fails here as well as in outsideTx, as an Around hook may
+// call next again after the statement that broke it.
 func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+	if f := db.txRoot; f != nil && !st.iter {
+		if !f.sending.CompareAndSwap(false, true) {
+			f.shared.Store(true)
+			return stmtErr(st, errTxShared)
+		}
+		defer f.sending.Store(false)
+	}
 	if db.txRoot != nil && db.txRoot.broken != nil {
 		return stmtErr(st, db.txRoot.broken)
 	}

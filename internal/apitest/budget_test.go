@@ -61,6 +61,26 @@ func BenchmarkOneRow(b *testing.B) {
 	}
 }
 
+// BenchmarkOneRowInTx is BenchmarkOneRow on a transaction's handle, whose
+// statements pass the check for concurrent use.
+func BenchmarkOneRowInTx(b *testing.B) {
+	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
+	db := openFake(velox.Postgres, e)
+	b.ReportAllocs()
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		for b.Loop() {
+			e.Log = e.Log[:0]
+			if _, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+}
+
 // TestScopedOneRowBudget pins the scope budget: a scoped
 // one-row read makes at most one allocation more than Core's budget, the
 // scope's Read condition and the policy call.
