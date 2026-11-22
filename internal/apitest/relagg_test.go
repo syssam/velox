@@ -46,14 +46,14 @@ func TestRelAggregateSQL(t *testing.T) {
 		d   velox.Dialect
 		sql string
 	}{
-		{velox.Postgres, `SELECT "id", (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND "body" <> $1 AND "hidden" = $2 AND "body" <> $3), ` +
-			`(SELECT COUNT(*) FROM "notes" AS "vx1" WHERE EXISTS (SELECT 1 FROM "owner_notes" AS "vx2" WHERE "vx2"."note_id" = "vx1"."id" AND "vx2"."owner_id" = "owners"."id") AND "hidden" = $4 AND "body" <> $5), ` +
-			`(SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND "hidden" = $6 AND "body" <> $7) FROM "owners" ` +
-			`ORDER BY (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND "hidden" = $8 AND "body" <> $9) DESC, (SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND "hidden" = $10 AND "body" <> $11), "id" LIMIT $12`},
-		{velox.MySQL, "SELECT `id`, (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `body` <> ? AND `hidden` = ? AND `body` <> ?), " +
-			"(SELECT COUNT(*) FROM `notes` AS `vx1` WHERE EXISTS (SELECT 1 FROM `owner_notes` AS `vx2` WHERE `vx2`.`note_id` = `vx1`.`id` AND `vx2`.`owner_id` = `owners`.`id`) AND `hidden` = ? AND `body` <> ?), " +
-			"(SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = ? AND `body` <> ?) FROM `owners` " +
-			"ORDER BY (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = ? AND `body` <> ?) DESC, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = ? AND `body` <> ?) IS NULL, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = ? AND `body` <> ?), `id` LIMIT ?"},
+		{velox.Postgres, `SELECT "id", (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND "body" <> $1 AND NOT "hidden" AND "body" <> $2), ` +
+			`(SELECT COUNT(*) FROM "notes" AS "vx1" WHERE EXISTS (SELECT 1 FROM "owner_notes" AS "vx2" WHERE "vx2"."note_id" = "vx1"."id" AND "vx2"."owner_id" = "owners"."id") AND NOT "hidden" AND "body" <> $3), ` +
+			`(SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $4) FROM "owners" ` +
+			`ORDER BY (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $5) DESC, (SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $6), "id" LIMIT $7`},
+		{velox.MySQL, "SELECT `id`, (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `body` <> ? AND `hidden` = 0 AND `body` <> ?), " +
+			"(SELECT COUNT(*) FROM `notes` AS `vx1` WHERE EXISTS (SELECT 1 FROM `owner_notes` AS `vx2` WHERE `vx2`.`note_id` = `vx1`.`id` AND `vx2`.`owner_id` = `owners`.`id`) AND `hidden` = 0 AND `body` <> ?), " +
+			"(SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) FROM `owners` " +
+			"ORDER BY (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) DESC, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) IS NULL, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?), `id` LIMIT ?"},
 	} {
 		db := openPolicied(tc.d, &fakeconn.Exec{})
 		text, args, err := db.Query[fixture.IOwner]().
