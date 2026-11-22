@@ -479,7 +479,7 @@ func TestRecordUpsertDoNothingGenerated(t *testing.T) {
 	}
 	wantLog(t, e, []string{
 		"BEGIN",
-		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "name" IN ($1, $2, $3) FOR UPDATE`,
+		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "name" IN ($1, $2, $3, $4) FOR UPDATE`,
 		`INSERT INTO "ddefs" ("name") VALUES ($1), ($2), ($3) ON CONFLICT ("name") DO NOTHING RETURNING ` + dDefCols,
 		"COMMIT",
 	})

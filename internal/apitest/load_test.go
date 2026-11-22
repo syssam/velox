@@ -38,7 +38,7 @@ func TestWithAttachesToOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" IN ($1, $2, $3) ORDER BY "id"`; e.Log[1] != want {
+	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" IN ($1, $2, $3, $4) ORDER BY "id"`; e.Log[1] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 	skus := func(i int) []string {

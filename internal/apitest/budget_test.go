@@ -519,3 +519,37 @@ func TestLongReadGrowsInSteps(t *testing.T) {
 		t.Logf("1000 rows of %.0f bytes cost %.0f bytes", size, grown)
 	}
 }
+
+// BenchmarkInList is a read whose In list has three values, its shape in
+// the render cache: the hot path of a list.
+func BenchmarkInList(b *testing.B) {
+	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
+	db := openFake(velox.Postgres, e)
+	b.ReportAllocs()
+	for b.Loop() {
+		e.Log = e.Log[:0]
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.In(1, 2, 3)).Limit(1).All(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkInListLengths reads with In lists of 1 to 6000 values in turn:
+// more lengths than the render cache holds shapes.
+func BenchmarkInListLengths(b *testing.B) {
+	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
+	db := openFake(velox.Postgres, e)
+	ids := make([]int64, 6000)
+	for i := range ids {
+		ids[i] = int64(i)
+	}
+	b.ReportAllocs()
+	n := 0
+	for b.Loop() {
+		e.Log = e.Log[:0]
+		n = n%len(ids) + 1
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.In(ids[:n]...)).Limit(1).All(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

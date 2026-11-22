@@ -191,11 +191,13 @@ func renderCases() []renderCase {
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `org_id` = ? AND `total` > ? ORDER BY `paid_at` DESC, `id` LIMIT ?",
 			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND "total" > ? ORDER BY "paid_at" DESC, "id" LIMIT 50`,
 		}, []any{int64(7), float64(10), 50}},
-		{"in and not in", func() *velox.Statement { return stmt(hID.In(1, 2, 3), hNumber.NotIn("x")) }, map[velox.Dialect]string{
-			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN ($1, $2, $3) AND "number" NOT IN ($4)`,
-			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `id` IN (?, ?, ?) AND `number` NOT IN (?)",
-			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN (?, ?, ?) AND "number" NOT IN (?)`,
-		}, []any{int64(1), int64(2), int64(3), "x"}},
+		// A list is padded to a power of two, its last value repeated
+		// (inLen), so that lists of many lengths share a few shapes.
+		{"in and not in", func() *velox.Statement { return stmt(hID.In(1, 2, 3), hNumber.NotIn("x", "y", "z", "w", "v")) }, map[velox.Dialect]string{
+			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN ($1, $2, $3, $4) AND "number" NOT IN ($5, $6, $7, $8, $9, $10, $11, $12)`,
+			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `id` IN (?, ?, ?, ?) AND `number` NOT IN (?, ?, ?, ?, ?, ?, ?, ?)",
+			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN (?, ?, ?, ?) AND "number" NOT IN (?, ?, ?, ?, ?, ?, ?, ?)`,
+		}, []any{int64(1), int64(2), int64(3), int64(3), "x", "y", "z", "w", "v", "v", "v", "v"}},
 		{"empty in and not in", func() *velox.Statement { return stmt(hID.In(), hID.NotIn()) }, map[velox.Dialect]string{
 			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE 1 = 0 AND 1 = 1`,
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE 1 = 0 AND 1 = 1",

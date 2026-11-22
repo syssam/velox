@@ -596,6 +596,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Review `widen-type`, not a destructive `alter-type`: each holds what any
   varchar can. The finding names an index over the column, which MODIFY
   fails on without a prefix length.
+- An IN or NOT IN list is written padded to the next power of two up to
+  1024 values, then to the next multiple of 1024 up to 16384, its last
+  value repeated, so lists of many lengths share a few shapes in the
+  render cache. Loads and Each plan their chunks so that a padded list
+  stays under the parameter limit. A full render cache now evicts shapes at
+  random to hold a new one; it stopped adding shapes, so every later shape
+  rendered each time.
 - `Statement`, `ConflictClause`, `EachClause`, `JoinClause`, `Projection`,
   `EntityInfo`, `ColumnInfo`, `Rewrite`, `Around`, package `untyped`,
   `Rel.Fill`, `Rel.Filled` and the handles' `I` field are documented as for

@@ -237,7 +237,7 @@ func TestByID(t *testing.T) {
 			"hidden": {"totalCount": 0}
 		}}`,
 		stmts: []string{
-			`SELECT "id", "name" FROM "users" WHERE "id" IN (?, ?, ?) ORDER BY "id" LIMIT 101 [1 9 3]`,
+			`SELECT "id", "name" FROM "users" WHERE "id" IN (?, ?, ?, ?) ORDER BY "id" LIMIT 101 [1 9 3 3]`,
 			`SELECT "id", "author_id", "title" FROM "posts" WHERE "id" = ? AND "org_id" = ? ORDER BY "id" LIMIT 101 [1 1]`,
 			`SELECT "id", "name" FROM "users" WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
 			`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`,
@@ -362,10 +362,25 @@ const nestedQuery = `query($n: Int) { users(first: $n, orderBy: {field: NAME}) {
 func nestedStmts(n int, userKeys, postKeys string) []string {
 	return []string{
 		fmt.Sprintf(`SELECT "id", "name" FROM "users" ORDER BY "name", "id" LIMIT %d []`, n+1),
-		fmt.Sprintf(`%s [%s 1 2]`, postsOf(`"id", "author_id", "title"`, marks(userKeys), `"title", "id"`), userKeys),
-		fmt.Sprintf(`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (%s) AND "org_id" = ? GROUP BY "author_id" [%s 1]`, marks(userKeys), userKeys),
-		fmt.Sprintf(`%s [%s 101]`, tagsOf(marks(postKeys)), postKeys),
+		fmt.Sprintf(`%s [%s 1 2]`, postsOf(`"id", "author_id", "title"`, marks(pad(userKeys)), `"title", "id"`), pad(userKeys)),
+		fmt.Sprintf(`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (%s) AND "org_id" = ? GROUP BY "author_id" [%s 1]`, marks(pad(userKeys)), pad(userKeys)),
+		fmt.Sprintf(`%s [%s 101]`, tagsOf(marks(pad(postKeys))), pad(postKeys)),
 	}
+}
+
+// pad is keys, a list of keys separated by spaces, as velox writes an IN
+// list of them: padded to a power of two with the last key ("1 2 3" is
+// "1 2 3 3"), so that lists of many lengths share a few shapes.
+func pad(keys string) string {
+	ks := strings.Fields(keys)
+	n := 1
+	for n < len(ks) {
+		n *= 2
+	}
+	for len(ks) < n {
+		ks = append(ks, ks[len(ks)-1])
+	}
+	return strings.Join(ks, " ")
 }
 
 // marks are the placeholders of keys, a list of keys separated by spaces:
@@ -450,8 +465,8 @@ func TestAliasesBatch(t *testing.T) {
 		stmts: []string{
 			`SELECT "id", "name" FROM "users" ORDER BY "id" LIMIT 101 []`,
 			// a, its first post each; b, the posts titled Beta.
-			postsOf(`"id", "author_id", "title"`, "?, ?, ?", `"id"`) + ` [1 2 3 1 2]`,
-			`SELECT "id", "author_id", "title" FROM (SELECT "id", "author_id", "title", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
+			postsOf(`"id", "author_id", "title"`, "?, ?, ?, ?", `"id"`) + ` [1 2 3 3 1 2]`,
+			`SELECT "id", "author_id", "title" FROM (SELECT "id", "author_id", "title", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 3 Beta 1 101]`,
 		},
 	})
 }
@@ -496,7 +511,7 @@ func TestBatchInMutation(t *testing.T) {
 			`SELECT "id" FROM "users" WHERE "id" IN (?) LIMIT 1 [1]`,
 			postsOf(`"id", "author_id", "title"`, "?", `"id"`) + ` [1 1 101]`,
 			`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?) AND "org_id" = ? GROUP BY "author_id" [1 1]`,
-			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 6]`,
+			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 6 6]`,
 		},
 	})
 }
@@ -659,7 +674,7 @@ func TestRequestCost(t *testing.T) {
 			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 0}}}]}}}]}}}`,
 		stmts: []string{
 			`SELECT "id" FROM "users" ORDER BY "id" LIMIT 6 []`,
-			postsOf(`"id", "author_id"`, "?, ?, ?", `"id"`) + ` [1 2 3 1 6]`,
+			postsOf(`"id", "author_id"`, "?, ?, ?, ?", `"id"`) + ` [1 2 3 3 1 6]`,
 			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 3 4]`,
 		},
 	})

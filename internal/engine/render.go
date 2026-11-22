@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"math/bits"
 	"reflect"
 	"strconv"
 	"strings"
@@ -642,7 +643,8 @@ func (w *writer) eachKeys(c *EachClause, key func()) {
 	}
 	key()
 	w.str(" IN (")
-	for i, k := range c.Keys {
+	for i := range inLen(len(c.Keys)) {
+		k := c.Keys[min(i, len(c.Keys)-1)]
 		if i > 0 {
 			w.str(", ")
 		}
@@ -698,6 +700,38 @@ func (w *writer) eachKey(c *EachClause) {
 	w.col(int32(c.Column))
 }
 
+// inLen is the number of values an IN list of n values is written with:
+// the next power of two up to 1024, and the next multiple of 1024 up to
+// 16384, the last value repeated, so that lists of many lengths share a few
+// shapes in the render cache. A repeated value changes neither IN nor NOT
+// IN. A longer list, such as a load's chunk under the dialect's parameter
+// limit, is written as it is.
+func inLen(n int) int {
+	switch {
+	case n <= 1 || n > 16384:
+		return n
+	case n <= 1024:
+		return 1 << bits.Len(uint(n-1))
+	default:
+		return (n + 1023) &^ 1023
+	}
+}
+
+// inFit is the longest IN list that inLen writes with at most n values; 1
+// when n is below 1.
+func inFit(n int) int {
+	switch {
+	case n <= 1:
+		return 1
+	case n > 16384:
+		return n
+	case n < 1024:
+		return 1 << (bits.Len(uint(n)) - 1)
+	default:
+		return n &^ 1023
+	}
+}
+
 // isNilArg reports a value that SQL compares with IS NULL, not =. It
 // recognizes an untyped nil and a nil []byte only: a nil value of another type
 // (a nil *int64 in an any, say) is compared with =, which matches nothing.
@@ -750,11 +784,11 @@ func (w *writer) pred(n Node) {
 		} else {
 			w.str(" IN (")
 		}
-		for i, v := range vs {
+		for i := range inLen(len(vs)) {
 			if i > 0 {
 				w.str(", ")
 			}
-			w.argOf(n.Col, v)
+			w.argOf(n.Col, vs[min(i, len(vs)-1)])
 		}
 		w.str(")")
 	case OpBetween:
@@ -848,12 +882,12 @@ func (w *writer) rowIn(n Node) {
 		w.predCol(int32(c))
 	}
 	w.str(") IN (")
-	for r, row := range rows {
+	for r := range inLen(len(rows)) {
 		if r > 0 {
 			w.str(", ")
 		}
 		w.str("(")
-		for i, v := range row {
+		for i, v := range rows[min(r, len(rows)-1)] {
 			if i > 0 {
 				w.str(", ")
 			}

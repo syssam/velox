@@ -62,7 +62,7 @@ type pcFrame struct {
 }
 
 // maxPCs bounds a DB's cache of program counters. Past it, a counter is
-// resolved each time, as the render cache renders past its bound.
+// resolved each time.
 var maxPCs = 4096
 
 // load reads, once, what resolving frames needs: velox's package path and

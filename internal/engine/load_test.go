@@ -57,12 +57,12 @@ var ovNotes = struct {
 	Rank    velox.NumberCol[ovNote, int64]
 }{velox.NumberCol[ovNote, int64]{I: 0}, velox.NumberCol[ovNote, int64]{I: 1}, velox.NumberCol[ovNote, int64]{I: 2}}
 
-// ovKey's value, a []any of int64s, is what ovNote's Read policy's In
-// holds.
+// ovKey's value, a []any of int64s, is what ovNote's Read policy's
+// conditions compare with.
 type ovKey struct{}
 
-// ovReading is a context under which ovNote's Read policy is an In of n
-// values, n parameters.
+// ovReading is a context under which ovNote's Read policy is an Or of n
+// equalities, n parameters: an In list would be padded (inLen).
 func ovReading(n int) context.Context {
 	vs := make([]any, n)
 	for i := range vs {
@@ -74,7 +74,11 @@ func ovReading(n int) context.Context {
 func (*ovNote) Policy() velox.Policy {
 	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
 		if vs, ok := ctx.Value(ovKey{}).([]any); ok {
-			return velox.FieldIn("rank", vs...), nil
+			ps := make([]velox.Predicate, len(vs))
+			for i, v := range vs {
+				ps[i] = velox.FieldEQ("rank", v)
+			}
+			return velox.Or(ps...), nil
 		}
 		return velox.Allow(), nil
 	}}

@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"math/bits"
 	"strings"
 	"sync"
 	"testing"
@@ -118,21 +119,43 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 	wg.Wait()
 }
 
-func TestCacheStopsGrowing(t *testing.T) {
+// TestCacheEvicts: a full cache stays within its bound and keeps adding
+// shapes, replacing others at random: the newest shape is always held, where
+// a cache that stopped growing would render it, and every later one, each
+// time.
+func TestCacheEvicts(t *testing.T) {
 	c := engine.RenderCache{MaxShapes: 3}
-	for n := 1; n <= 10; n++ {
+	var buf [256]byte
+	for n := 1; n <= 1024; n *= 2 { // 11 shapes
 		vs := make([]int64, n)
 		want, _ := render(velox.Postgres, stmt(hID.In(vs...)))
 		if got, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(vs...))); got != want {
 			t.Fatalf("n=%d: %s", n, got)
 		}
+		if _, ok := c.M[invInfo][string(engine.ShapeKey(buf[:0], velox.Postgres, stmt(hID.In(vs...))))]; !ok {
+			t.Errorf("n=%d: the newest shape is not held", n)
+		}
+		held := 0
+		for _, shapes := range c.M {
+			held += len(shapes)
+		}
+		if want := min(bits.Len(uint(n)), 3); c.Size() != want || held != want {
+			t.Errorf("n=%d: cache holds %d shapes (counted %d), want %d", n, held, c.Size(), want)
+		}
 	}
-	held := 0
-	for _, shapes := range c.M {
-		held += len(shapes)
-	}
-	if c.Size() != 3 || held != 3 {
-		t.Errorf("cache holds %d shapes (counted %d), the limit is 3", held, c.Size())
+}
+
+// TestCacheEvictsAcrossEntities: eviction may empty an entity's shapes, and
+// then its map leaves the cache.
+func TestCacheEvictsAcrossEntities(t *testing.T) {
+	c := engine.RenderCache{MaxShapes: 1}
+	other := *invInfo
+	cachedRender(&c, velox.Postgres, stmt(hOrg.EQ(1)))
+	st := stmt(hOrg.EQ(1))
+	st.Entity = &other
+	cachedRender(&c, velox.Postgres, st)
+	if len(c.M) != 1 || len(c.M[&other]) != 1 || c.Size() != 1 {
+		t.Errorf("the cache holds %d entities, %d shapes", len(c.M), c.Size())
 	}
 }
 
@@ -224,7 +247,8 @@ func TestCacheBoundedInBytes(t *testing.T) {
 	}
 }
 
-// inShape is a SELECT whose In list has n values: each n is a shape of its own.
+// inShape is a SELECT whose In list has n values: each length inLen pads
+// to is a shape of its own, so n = 1, 2, 4, 8… are each one.
 func inShape(n int) *velox.Statement {
 	vs := make([]any, n)
 	for i := range vs {
@@ -237,9 +261,9 @@ func inShape(n int) *velox.Statement {
 // text and the 16-byte fingerprint of each shape, and the byte bound includes
 // the fingerprint: a bound one byte short of the sum leaves the last shape out.
 func TestCacheBytesCountTheFingerprint(t *testing.T) {
-	const shapes = 50
+	const shapes = 11 // 1, 2, 4, … 1024
 	var c engine.RenderCache
-	for n := 1; n <= shapes; n++ {
+	for n := 1; n <= 1024; n++ {
 		cachedRender(&c, velox.Postgres, inShape(n))
 	}
 	sum, held := 0, 0
@@ -259,17 +283,24 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 		t.Errorf("the cache counts %d bytes, its entries sum to %d", c.Bytes, sum)
 	}
 
+	// A bound one byte short evicts a shape to hold the last.
 	tight := engine.RenderCache{MaxBytes: sum - 1}
-	for n := 1; n <= shapes; n++ {
+	for n := 1; n <= 1024; n *= 2 {
 		cachedRender(&tight, velox.Postgres, inShape(n))
 	}
 	var buf [256]byte
-	last := engine.ShapeKey(buf[:0], velox.Postgres, inShape(shapes))
-	if _, ok := tight.M[invInfo][string(last)]; ok {
-		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", tight.MaxBytes, sum)
+	last := engine.ShapeKey(buf[:0], velox.Postgres, inShape(1024))
+	if _, ok := tight.M[invInfo][string(last)]; !ok {
+		t.Error("the last shape is not held")
 	}
-	if tight.Size() != shapes-1 || tight.Bytes > tight.MaxBytes {
-		t.Errorf("the tight cache holds %d shapes and %d bytes, want %d shapes within %d bytes", tight.Size(), tight.Bytes, shapes-1, tight.MaxBytes)
+	if tight.Size() >= shapes || tight.Bytes > tight.MaxBytes {
+		t.Errorf("the tight cache holds %d shapes and %d bytes, want fewer than %d shapes within %d bytes", tight.Size(), tight.Bytes, shapes, tight.MaxBytes)
+	}
+	// A shape larger than the bound is not held.
+	small := engine.RenderCache{MaxBytes: 8}
+	cachedRender(&small, velox.Postgres, inShape(1))
+	if small.Size() != 0 || small.Bytes != 0 {
+		t.Errorf("a cache of 8 bytes holds %d shapes, %d bytes", small.Size(), small.Bytes)
 	}
 }
 

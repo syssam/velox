@@ -612,7 +612,9 @@ func throughChunks(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r
 	rest := keys            // the owners not read yet
 plan:
 	for len(rest) > 0 {
-		chunks, n := throughPlan(rest, byOwner, per)
+		// A chunk's keys are an IN list, written padded (inLen): plan
+		// lists that pad to at most per.
+		chunks, n := throughPlan(rest, byOwner, inFit(per))
 		if n > 0 {
 			err := fmt.Errorf("velox: %s: relation %s: an owner has %d related rows, more than one statement can load in order", owner.Name, r.Name, n)
 			if shrunk != nil {
@@ -624,7 +626,7 @@ plan:
 		for _, c := range chunks {
 			part, _, err := fetchPart(ctx, db, pin, t, []int{l.TargetCol}, sp, order, c.Keys, maxRows, nil)
 			if pe, ok := dberr.As[*paramsError](err); ok && per > 1 {
-				per = max(1, min(per, len(c.Keys))-(pe.N-pe.Max))
+				per = max(1, min(per, inLen(len(c.Keys)))-(pe.N-pe.Max))
 				shrunk = pe
 				rest = rest[slices.Index(rest, c.Owners[0]):]
 				continue plan
@@ -728,13 +730,16 @@ func fetchPlan(db *DB, t *EntityInfo, sp LoadSpec) ([]OrderTerm, int) {
 // byChunks runs read on keys[lo:hi] in chunks of at most per keys, in order.
 // A chunk whose statement had too many parameters (*paramsError) and more than
 // one key is read again, from lo, in chunks smaller by the excess, and the rest
-// use the smaller size; with one key, the error is returned.
+// use the smaller size; with one key, the error is returned. Each chunk's keys
+// are an IN list, which is written padded (inLen), so per is first lowered
+// to a length that pads to at most per (inFit).
 func byChunks(n, per int, read func(lo, hi int) error) error {
+	per = inFit(per)
 	for lo := 0; lo < n; {
 		hi := min(lo+per, n)
 		err := read(lo, hi)
 		if pe, ok := dberr.As[*paramsError](err); ok && hi-lo > 1 {
-			per = max(1, hi-lo-(pe.N-pe.Max))
+			per = inFit(inLen(hi-lo) - (pe.N - pe.Max))
 			continue
 		}
 		if err != nil {

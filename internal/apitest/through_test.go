@@ -48,7 +48,7 @@ func TestThroughLoadSharedAndEmpty(t *testing.T) {
 	if tags, ok := bs[2].Tags.Get(); !ok || tags == nil || len(tags) != 0 {
 		t.Errorf("book 3: %v %v", tags, ok)
 	}
-	if want := `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" IN ($1, $2, $3) ORDER BY "book_id", "tag_id"`; e.Log[1] != want {
+	if want := `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" IN ($1, $2, $3, $4) ORDER BY "book_id", "tag_id"`; e.Log[1] != want {
 		t.Errorf("join SQL %s", e.Log[1])
 	}
 	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" IN ($1, $2) ORDER BY "id"`; e.Log[2] != want {

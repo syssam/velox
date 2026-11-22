@@ -102,7 +102,7 @@ func TestEachReChunksOnParameterOverflow(t *testing.T) {
 			}
 			return rows
 		}
-		db, e, s := ovRun([][][]any{notes(1, 20), notes(21, 40), notes(41, 50)}, params(100))
+		db, e, s := ovRun([][][]any{notes(1, 16), notes(17, 32), notes(33, 48), notes(49, 50)}, params(100))
 		got, err := velox.LoadEach(pctx, db.Query[ovNote](), ovOwners.Notes, owners)
 		if err != nil {
 			t.Fatal(err)
@@ -112,7 +112,7 @@ func TestEachReChunksOnParameterOverflow(t *testing.T) {
 				t.Errorf("owner %d: %v", owners[i].ID, ns)
 			}
 		}
-		checkSent(t, e, s, []int{100, 100, 90})
+		checkSent(t, e, s, []int{96, 96, 96, 82})
 	})
 	t.Run("CountEach", func(t *testing.T) {
 		counts := func(lo, hi int64) [][]any {
@@ -122,7 +122,7 @@ func TestEachReChunksOnParameterOverflow(t *testing.T) {
 			}
 			return rows
 		}
-		db, e, s := ovRun([][][]any{counts(1, 20), counts(21, 40), counts(41, 50)}, params(100))
+		db, e, s := ovRun([][][]any{counts(1, 16), counts(17, 32), counts(33, 48), counts(49, 50)}, params(100))
 		got, err := velox.CountEach(pctx, db.Query[ovNote](), ovOwners.Notes, owners)
 		if err != nil {
 			t.Fatal(err)
@@ -132,7 +132,7 @@ func TestEachReChunksOnParameterOverflow(t *testing.T) {
 				t.Errorf("owner %d: %d", owners[i].ID, n)
 			}
 		}
-		checkSent(t, e, s, []int{100, 100, 90})
+		checkSent(t, e, s, []int{96, 96, 96, 82})
 	})
 }
 
@@ -243,8 +243,8 @@ func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 }
 
 func TestLoadReChunksOnParameterOverflow(t *testing.T) {
-	// KeysPer leaves 36 keys: with the policy's 80 values, 116 parameters,
-	// 16 too many, so the chunks hold 20 keys.
+	// KeysPer leaves 36 keys, an IN list of 32 (inFit): with the policy's 80
+	// values, 112 parameters, 12 too many, so the chunks hold 16 keys.
 	pctx := ovReading(80)
 	owners := func(t *testing.T, db *velox.DB, r velox.Rel[ovOwner, ovNote]) []ovOwner {
 		t.Helper()
@@ -278,28 +278,28 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 			}
 			return rows
 		}
-		db, e, s := ovRun([][][]any{ovOwnerRows(50), notes(1, 20), notes(21, 40), notes(41, 50)}, params(100))
+		db, e, s := ovRun([][][]any{ovOwnerRows(50), notes(1, 16), notes(17, 32), notes(33, 48), notes(49, 50)}, params(100))
 		for _, o := range owners(t, db, ovOwners.Notes) {
 			if got := ids(t, o, o.Notes); !reflect.DeepEqual(got, []int64{1000 + o.ID}) {
 				t.Errorf("owner %d: notes %v", o.ID, got)
 			}
 		}
-		checkSent(t, e, s, []int{1, 100, 100, 90}) // the owners' LIMIT, then the notes'
+		checkSent(t, e, s, []int{1, 96, 96, 96, 82}) // the owners' LIMIT, then the notes'
 		// Without hooks, exec's check splits the chunk the same way.
-		e = &fakeconn.Exec{Results: [][][]any{ovOwnerRows(50), notes(1, 20), notes(21, 40), notes(41, 50)}}
+		e = &fakeconn.Exec{Results: [][][]any{ovOwnerRows(50), notes(1, 16), notes(17, 32), notes(33, 48), notes(49, 50)}}
 		for _, o := range owners(t, openPolicied(velox.Postgres, e, params(100)), ovOwners.Notes) {
 			if got := ids(t, o, o.Notes); !reflect.DeepEqual(got, []int64{1000 + o.ID}) {
 				t.Errorf("without hooks: owner %d: notes %v", o.ID, got)
 			}
 		}
-		if e.Calls != 4 {
-			t.Errorf("without hooks: %d statements sent, want 4", e.Calls)
+		if e.Calls != 5 {
+			t.Errorf("without hooks: %d statements sent, want 5", e.Calls)
 		}
 	})
 	t.Run("many-to-many", func(t *testing.T) {
 		// Owner o picks notes 10o+1 and 10o+2, ranked 1 and 2: two keys per
-		// owner, so 10 owners per chunk. The fake returns each owner's in
-		// the order OrderBy(Rank.Desc()) gives.
+		// owner, so 8 owners per chunk of 16 keys. The fake returns each
+		// owner's in the order OrderBy(Rank.Desc()) gives.
 		links := func(lo, hi int64) [][]any {
 			var rows [][]any
 			for o := lo; o <= hi; o++ {
@@ -307,24 +307,25 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 			}
 			return rows
 		}
-		targets := func(lo int64) [][]any {
+		targets := func(lo, hi int64) [][]any {
 			var rows [][]any
-			for o := lo; o < lo+10; o++ {
+			for o := lo; o <= hi; o++ {
 				rows = append(rows, []any{10*o + 2, int64(0), int64(2)}, []any{10*o + 1, int64(0), int64(1)})
 			}
 			return rows
 		}
-		db, e, s := ovRun([][][]any{ovOwnerRows(50), links(1, 36), links(37, 50), targets(1), targets(11), targets(21), targets(31), targets(41)}, params(100))
+		db, e, s := ovRun([][][]any{ovOwnerRows(50), links(1, 32), links(33, 50),
+			targets(1, 8), targets(9, 16), targets(17, 24), targets(25, 32), targets(33, 40), targets(41, 48), targets(49, 50)}, params(100))
 		for _, o := range owners(t, db, ovOwners.Picks.OrderBy(ovNotes.Rank.Desc())) {
 			if got, want := ids(t, o, o.Picks), []int64{10*o.ID + 2, 10*o.ID + 1}; !reflect.DeepEqual(got, want) {
 				t.Errorf("owner %d: picks %v, want %v", o.ID, got, want)
 			}
 		}
-		// The join rows have no policy: 36 keys, then 14.
-		checkSent(t, e, s, []int{1, 36, 14, 100, 100, 100, 100, 100})
+		// The join rows have no policy: 32 keys, then 18 padded to 32.
+		checkSent(t, e, s, []int{1, 32, 32, 96, 96, 96, 96, 96, 96, 84})
 	})
 	t.Run("many-to-many with LimitEach", func(t *testing.T) {
-		// The limit is a parameter too: 117, 17 too many, 19 keys a chunk.
+		// The limit is a parameter too: 113, 13 too many, 16 keys a chunk.
 		picks := func(lo, hi int64) [][]any {
 			var rows [][]any
 			for o := lo; o <= hi; o++ {
@@ -332,13 +333,13 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 			}
 			return rows
 		}
-		db, e, s := ovRun([][][]any{ovOwnerRows(50), picks(1, 19), picks(20, 38), picks(39, 50)}, params(100))
+		db, e, s := ovRun([][][]any{ovOwnerRows(50), picks(1, 16), picks(17, 32), picks(33, 48), picks(49, 50)}, params(100))
 		for _, o := range owners(t, db, ovOwners.Picks.LimitEach(1)) {
 			if got := ids(t, o, o.Picks); !reflect.DeepEqual(got, []int64{10*o.ID + 1}) {
 				t.Errorf("owner %d: picks %v", o.ID, got)
 			}
 		}
-		checkSent(t, e, s, []int{1, 100, 100, 93})
+		checkSent(t, e, s, []int{1, 97, 97, 97, 83})
 	})
 	// picksOf are owner o's n picks, notes 100o+1 to 100o+n: its join rows
 	// (links) and its targets (notes).
@@ -357,29 +358,20 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		return rows
 	}
 	t.Run("many-to-many, a later chunk overflows", func(t *testing.T) {
-		// The policy's 70 values leave 30 keys. Owners 1, 2 and 3 have 20,
-		// 20 and 16 picks: owner 1's chunk is read; owners 2 and 3's, 36
-		// keys, overflows and is not sent. The chunks are planned again from
-		// owner 2 only, 30 keys a chunk: owner 1's is not read again.
-		join := slices.Concat(links(1, 20), links(2, 20), links(3, 16))
-		db, e, s := ovRun([][][]any{ovOwnerRows(3), join, notes(1, 20), notes(2, 20), notes(3, 16)}, params(100))
-		os, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Picks).Limit(3).All(ovReading(70))
-		if err != nil {
-			t.Fatal(err)
+		// The policy's 70 values leave 30 keys, an IN list of 16. Owners 1,
+		// 2 and 3 have 16, 20 and 10 picks: owner 1's chunk, 16 keys, is
+		// read; owners 2 and 3's, 30 keys written as 32, overflows and is
+		// not sent. The chunks are planned again from owner 2 only, 16 keys
+		// a chunk, which cannot hold its 20: owner 1's is not read again,
+		// and the error says why.
+		join := slices.Concat(links(1, 16), links(2, 20), links(3, 10))
+		db, e, s := ovRun([][][]any{ovOwnerRows(3), join, notes(1, 16)}, params(100))
+		_, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Picks).Limit(3).All(ovReading(70))
+		const want = "velox: engine_test.ovOwner: relation Picks: an owner has 20 related rows, more than one statement can load in order: velox: engine_test.ovNote: the statement has 102 parameters; postgres allows 100"
+		if err == nil || err.Error() != want {
+			t.Errorf("err = %v,\nwant %s", err, want)
 		}
-		for i, o := range os {
-			if got := ids(t, o, o.Picks); len(got) != []int{20, 20, 16}[i] || got[0] != 100*o.ID+1 {
-				t.Errorf("owner %d: picks %v", o.ID, got)
-			}
-		}
-		checkSent(t, e, s, []int{1, 3, 90, 90, 86})
-		for i := range e.ArgLog {
-			for j := range i {
-				if reflect.DeepEqual(e.ArgLog[i], e.ArgLog[j]) {
-					t.Errorf("statements %d and %d were sent with the same arguments %v", j, i, e.ArgLog[i])
-				}
-			}
-		}
+		checkSent(t, e, s, []int{1, 4, 86})
 	})
 	t.Run("many-to-many, an owner too many for the smaller chunks", func(t *testing.T) {
 		// Owner 1's 32 picks overflow by 2 with the policy's 70 values:
@@ -415,14 +407,15 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 	})
 }
 
-// TestOfOverTheParameterLimit: each owner is a parameter, and a statement
+// TestOfOverTheParameterLimit: each owner is a parameter (3 owners, an IN
+// list padded to 4, and the Limit), and a statement
 // over the dialect's limit is refused before it is sent.
 func TestOfOverTheParameterLimit(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e, params(3))
 	invs := []testmodel.Invoice{{ID: 1}, {ID: 2}, {ID: 3}}
 	_, err := db.Query[testmodel.Item]().Where(I.Items.Of(&invs[0], &invs[1], &invs[2])).Limit(10).All(ctx)
-	if err == nil || err.Error() != "velox: testmodel.Item: the statement has 4 parameters; postgres allows 3" || e.Calls != 0 {
+	if err == nil || err.Error() != "velox: testmodel.Item: the statement has 5 parameters; postgres allows 3" || e.Calls != 0 {
 		t.Errorf("%v, %d sent", err, e.Calls)
 	}
 }

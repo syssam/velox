@@ -9,8 +9,8 @@ import (
 
 // DefaultMaxShapes bounds a cache whose MaxShapes is 0: the number of
 // shapes it holds, across all entities. Programs have a fixed set of query
-// shapes, except that In lists of every length are shapes of their own. Both
-// bounds apply; past either, statements are rendered without the cache.
+// shapes, and In lists are padded to a few lengths (inLen). Both bounds
+// apply; past either, a new shape replaces shapes chosen at random.
 const DefaultMaxShapes = 4096
 
 // DefaultMaxCacheBytes bounds the memory of a cache whose MaxBytes is 0: the
@@ -40,8 +40,15 @@ func Fingerprint(text string) string {
 //
 // It is keyed first by the statement's *EntityInfo. A key holds the pointer,
 // so an EntityInfo in the cache is never freed and its address never reused
-// for another. DB.Run does not use the cache for a statement whose entity a
+// for another while it has shapes; one whose last shape is evicted leaves
+// the map. DB.Run does not use the cache for a statement whose entity a
 // rewrite hook replaced, so a hook's per-statement EntityInfo never fills it.
+//
+// A full cache evicts at random: a miss on a full cache replaces shapes
+// chosen by map iteration, which Go randomizes, until the new one fits. So
+// a program with more shapes than the bounds keeps most of its hot ones,
+// where a cache that stopped adding would render every later shape each
+// time. Eviction runs on a miss only, which renders anyway.
 type RenderCache struct {
 	mu    sync.RWMutex
 	M     map[*EntityInfo]map[string]cached // entity, then shape
@@ -53,10 +60,10 @@ type RenderCache struct {
 }
 
 // Get returns the shape's cached text and fingerprint, and the statement's
-// arguments, or RenderStmt's error. A shape past the cache's bounds, an
-// insert of more than MaxCachedRows rows, and an insert with DEFAULT cells,
-// is rendered each time, and gets its fingerprint each time. A shape whose
-// rendering fails is not cached.
+// arguments, or RenderStmt's error. An insert of more than MaxCachedRows
+// rows, an insert with DEFAULT cells, and a shape larger than the byte
+// bound, is rendered each time, and gets its fingerprint each time. A shape
+// whose rendering fails is not cached.
 func (c *RenderCache) Get(d Dialect, st *Statement) (cached, []any, error) {
 	// An insert with DEFAULT cells (Statement.dflt) is rendered each time:
 	// where they fall is data, and a shape per pattern would fill the cache.
@@ -86,23 +93,55 @@ func (c *RenderCache) Get(d Dialect, st *Statement) (cached, []any, error) {
 	}
 	e = cached{text, Fingerprint(text)}
 	c.mu.Lock()
-	if c.n < c.maxShapes() && c.Bytes+len(key)+len(e.Text)+len(e.Fp) <= c.maxBytes() {
-		if c.M == nil {
-			c.M = make(map[*EntityInfo]map[string]cached)
-		}
-		shapes := c.M[st.Entity]
-		if shapes == nil {
-			shapes = make(map[string]cached)
-			c.M[st.Entity] = shapes
-		}
-		if _, dup := shapes[string(key)]; !dup { // another goroutine may have added it
-			shapes[string(key)] = e
-			c.n++
-			c.Bytes += len(key) + len(e.Text) + len(e.Fp)
-		}
-	}
+	c.add(st.Entity, string(key), e)
 	c.mu.Unlock()
 	return e, args, nil
+}
+
+// add holds e as in's shape key, evicting shapes at random until it fits
+// the bounds. A shape larger than the byte bound, or a cache bounded to
+// nothing, holds nothing. c.mu is held.
+func (c *RenderCache) add(in *EntityInfo, key string, e cached) {
+	size := len(key) + len(e.Text) + len(e.Fp)
+	maxN, maxB := c.maxShapes(), c.maxBytes()
+	if maxN == 0 || size > maxB {
+		return
+	}
+	if _, dup := c.M[in][key]; dup { // another goroutine may have added it
+		return
+	}
+	for c.n >= maxN || c.Bytes+size > maxB {
+		c.evict()
+	}
+	if c.M == nil {
+		c.M = make(map[*EntityInfo]map[string]cached)
+	}
+	shapes := c.M[in]
+	if shapes == nil {
+		shapes = make(map[string]cached)
+		c.M[in] = shapes
+	}
+	shapes[key] = e
+	c.n++
+	c.Bytes += size
+}
+
+// evict drops one shape, of the entity and with the key Go's randomized map
+// iteration gives first, and the entity's map once it is empty. The cache is
+// not empty. c.mu is held.
+func (c *RenderCache) evict() {
+	for in, shapes := range c.M {
+		for k, e := range shapes {
+			delete(shapes, k)
+			c.n--
+			c.Bytes -= len(k) + len(e.Text) + len(e.Fp)
+			break
+		}
+		if len(shapes) == 0 {
+			delete(c.M, in)
+		}
+		return
+	}
 }
 
 // maxShapes is the most shapes c holds.
@@ -236,7 +275,7 @@ func eachKey(k []byte, c *EachClause) []byte {
 	}
 	k = append(k, 1, bit(c.Limit > 0))
 	k = binary.AppendUvarint(k, uint64(c.Column))
-	k = binary.AppendUvarint(k, uint64(len(c.Keys)))
+	k = binary.AppendUvarint(k, uint64(inLen(len(c.Keys))))
 	if j := c.Join; j != nil {
 		k = append(k, 1)
 		for _, s := range [...]string{j.Name, j.Schema, j.Table} {
@@ -274,7 +313,7 @@ func nodeKey(k []byte, n Node) []byte {
 	case OpEQ, OpNEQ:
 		k = append(k, bit(isNilArg(n.V)))
 	case OpIn, OpNotIn:
-		k = binary.AppendUvarint(k, uint64(len(n.V.([]any))))
+		k = binary.AppendUvarint(k, uint64(inLen(len(n.V.([]any)))))
 	case OpJSON:
 		// The keys are arguments; the kind and their number shape the text.
 		p := n.V.(JSONPath)
@@ -287,7 +326,7 @@ func nodeKey(k []byte, n Node) []byte {
 		k = exprKey(k, n.V.(*exprData))
 	case opRowIn:
 		k = appendInts(k, n.V.([]int))
-		k = binary.AppendUvarint(k, uint64(len(n.W.([][]any))))
+		k = binary.AppendUvarint(k, uint64(inLen(len(n.W.([][]any)))))
 	case OpExists:
 		if n.Col < 0 {
 			// A ColRef's EXISTS: the outer entity does not fix its target
