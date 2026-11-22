@@ -94,7 +94,8 @@ type Directives struct {
 // turns foreign keys off.
 //
 // Each statement carries the review and destructive findings of its changes
-// as its review line, and each destructive finding an Allow covers is
+// as its review line, but an unindexed-fk finding an Allow covers, and each
+// destructive finding an Allow covers is
 // recorded as an allow directive, as is an Allow of unmodeled-loss, for Up.
 // A SQLite rebuild's own removals, which Up compares the table
 // with, are listed as drops directives. A script with no statement is left out.
@@ -117,7 +118,7 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 		return nil, r.refuse(i, "the change is nil")
 	}
 	l := lintChanges(from, to, changes)
-	r.l, r.findings, r.taken = l, reviewed(l.out, len(changes)), make([]bool, len(changes))
+	r.l, r.findings, r.taken = l, reviewed(unallowed(l.out, opts.Allow), len(changes)), make([]bool, len(changes))
 	main := Script{Kind: ScriptMain}
 	if opts.LockTimeout > 0 && r.d != velox.SQLite {
 		main.Directives.LockTimeout, main.Directives.LockTimeoutSet = opts.LockTimeout, true

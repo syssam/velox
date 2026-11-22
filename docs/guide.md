@@ -419,6 +419,15 @@ before a change that could lose data the schema does not describe
 There are no down migrations: to undo a change, change the schema back and
 diff forward.
 
+velox declares no index of a foreign key on PostgreSQL or SQLite, as ent
+does not. `diff` writes a `review: unindexed-fk` line above a statement
+that adds a key no index leads, or drops the last index that did: `With`,
+`Has`, joins and deletes of the referenced row scan the table without one.
+Declare `index.Fields("author_id")` in the schema, or pass
+`-allow unindexed-fk=posts.author_id` when the scan is meant
+([ADR 0112](decisions/0112-unindexed-foreign-keys.md)). MySQL indexes
+every key itself.
+
 You can also apply migrations from your program, which is handy in tests and
 small services. Embed the directory and call `migrate.Up` on the pool:
 

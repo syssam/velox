@@ -49,7 +49,15 @@ type Finding struct {
 // An Allow lets a destructive finding through.
 type Allow struct{ Code, Target string } // Target "" covers every target of Code
 
-// destructive are the codes an Allow can name. Lint gives the first nine;
+// allowedReviews are the review codes an Allow can name: an allowance takes the
+// finding out of the plan and its review lines.
+var allowedReviews = []string{unindexedFK}
+
+// unindexedFK is the code of a foreign key whose column no index leads.
+const unindexedFK = "unindexed-fk"
+
+// destructive are the codes an Allow can name besides allowedReviews'. Lint
+// gives the first nine;
 // delete-rows, update-rows, drop-schema, drop-database, drop-domain, drop-type,
 // drop-collation and drop-partition are LintFile's only;
 // lossCode is Up's, which no plan can give.
@@ -61,11 +69,12 @@ var destructive = []string{
 }
 
 // ParseAllow reads the items of the -allow flag, joined by commas, each a
-// destructive code and optionally "=" and the target it covers:
+// destructive code, or unindexed-fk, and optionally "=" and the target it
+// covers:
 // "drop-column=users.name,drop-table". A comma inside parentheses is the
 // target's, as in "unmodeled-loss=t.(a, b)". An empty s, or one of white space,
 // allows nothing: nil and no error. In a list, an empty item, an empty
-// target, or a code that is not destructive is an *Error with Code "allow".
+// target, or a code that is neither is an *Error with Code "allow".
 func ParseAllow(s string) ([]Allow, error) {
 	if strings.TrimSpace(s) == "" {
 		return nil, nil
@@ -78,8 +87,8 @@ func ParseAllow(s string) ([]Allow, error) {
 		switch {
 		case item == "":
 			return nil, &Error{Code: "allow", Reason: "an allowance is empty; write code or code=target, joined by commas"}
-		case !slices.Contains(destructive, code):
-			return nil, &Error{Code: "allow", Object: item, Reason: fmt.Sprintf("%q is not a destructive code; only %s can be allowed", code, strings.Join(destructive, ", "))}
+		case !slices.Contains(destructive, code) && !slices.Contains(allowedReviews, code):
+			return nil, &Error{Code: "allow", Object: item, Reason: fmt.Sprintf("%q is not a destructive code, nor %s; only %s can be allowed", code, unindexedFK, strings.Join(slices.Concat(destructive, allowedReviews), ", "))}
 		case hasTarget && target == "":
 			return nil, &Error{Code: "allow", Object: item, Reason: "the target after = is empty; leave out the = to cover every target"}
 		}
@@ -124,8 +133,18 @@ func Blocked(findings []Finding, allow []Allow) []Finding {
 	return out
 }
 
+// unallowed is findings without the review findings allow covers, which
+// a plan leaves out. An Allow covers a finding as in Blocked.
+func unallowed(findings []Finding, allow []Allow) []Finding {
+	return slices.DeleteFunc(slices.Clone(findings), func(f Finding) bool {
+		return f.Class == Review && slices.Contains(allowedReviews, f.Code) &&
+			slices.ContainsFunc(allow, func(a Allow) bool { return a.Code == f.Code && (a.Target == "" || a.Target == f.Target) })
+	})
+}
+
 // Lint classifies changes, the output of Diff from from. Each change gets at
-// most one finding of each code, in the order of the changes; a change with
+// most one finding of each code, but one unindexed-fk for each column, in
+// the order of the changes; a change with
 // no finding is safe. The table of a change counts as existing when from has
 // it, or it renames one of from's. A nil change gets no finding; Render
 // refuses it. Lint does not change from or the changes.
@@ -150,6 +169,7 @@ func lintChanges(from, to *Schema, changes []Change) *linter {
 	for i, c := range changes {
 		if c != nil {
 			l.change(i, c)
+			l.unindexed(i, c)
 		}
 	}
 	return l
@@ -171,6 +191,8 @@ type linter struct {
 	quiet    []bool                // the change is half of a pair that leaves things as they were
 
 	rebuildWhat []string // SQLite: what a rebuilding change does, as its sqlite-rebuild finding says
+
+	fkSeen map[string]bool // the targets of the unindexed-fk findings so far
 }
 
 func (l *linter) add(i int, code string, class Class, target, pos, format string, args ...any) {
@@ -347,6 +369,106 @@ func (l *linter) change(i int, c Change) {
 	case alterEnum:
 		l.alterEnum(i, c)
 	}
+}
+
+// unindexed adds an unindexed-fk finding for each foreign key that change
+// i adds, or whose last leading index it drops, when no full index or
+// primary key of its table leads with the key's first column once the
+// plan has run. A With, Has or join through the key, and a delete of a
+// row it references, then scan the table. MySQL is left out: it makes an
+// index for a key that has none. A change to a table that the plan does
+// not create needs the plan's to, which public Lint has not.
+func (l *linter) unindexed(i int, c Change) {
+	if l.d == velox.MySQL {
+		return
+	}
+	var ref TableRef
+	var keys []ForeignKey
+	switch c := c.(type) {
+	case createTable:
+		ref, keys = c.Table.Ref(), c.Table.ForeignKeys
+	case addForeignKey:
+		if l.keyedBefore(c) {
+			return // a key replaced, as for a new action, is no new key
+		}
+		ref, keys = c.Table, []ForeignKey{c.ForeignKey}
+	case dropIndex:
+		if len(c.Index.Columns) == 0 || c.Index.Where != "" || l.dropped[l.canon(c.Table)] {
+			return
+		}
+		ref = c.Table
+		if l.to != nil {
+			ref = l.afterRenames(c.Table)
+		}
+		if t := l.tableAfter(ref); t != nil {
+			for _, fk := range t.ForeignKeys {
+				if fk.Columns[0] == c.Index.Columns[0] {
+					keys = append(keys, fk)
+				}
+			}
+		}
+	default:
+		return
+	}
+	t := l.tableAfter(ref)
+	if t == nil {
+		return
+	}
+	for _, fk := range keys {
+		col := fk.Columns[0]
+		target := colTarget(ref, col)
+		if l.fkSeen[target] || leadsWith(t, col) {
+			continue
+		}
+		if l.fkSeen == nil {
+			l.fkSeen = map[string]bool{}
+		}
+		l.fkSeen[target] = true
+		l.add(i, unindexedFK, Review, target, fk.Pos, "foreign key column %s has no index that leads with it: With, Has and joins through it, and deletes in %s, scan %s; declare an index, or -allow %s=%s", target, fk.RefTable, ref, unindexedFK, target)
+	}
+}
+
+// keyedBefore reports whether c adds a key to a table of from whose column
+// a key of from's table already had.
+func (l *linter) keyedBefore(c addForeignKey) bool {
+	if !l.existing(c.Table) {
+		return false
+	}
+	t := l.from.table(l.canon(c.Table))
+	return t != nil && slices.ContainsFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Columns[0] == c.ForeignKey.Columns[0] })
+}
+
+// tableAfter is table ref, as the plan names it, once the plan has run: to's,
+// or without to, the one the plan creates.
+func (l *linter) tableAfter(ref TableRef) *Table {
+	if l.to != nil {
+		return l.to.table(ref)
+	}
+	for _, c := range l.cs {
+		if c, ok := c.(createTable); ok && c.Table.Ref() == ref {
+			return &c.Table
+		}
+	}
+	return nil
+}
+
+// afterRenames is ref, a table of from, by its name after the plan's renames.
+func (l *linter) afterRenames(ref TableRef) TableRef {
+	for to, from := range l.renamed {
+		if from == ref {
+			return to
+		}
+	}
+	return ref
+}
+
+// leadsWith reports whether t's primary key, or a full index of it, has col
+// first.
+func leadsWith(t *Table, col string) bool {
+	if len(t.PrimaryKey) > 0 && t.PrimaryKey[0] == col {
+		return true
+	}
+	return slices.ContainsFunc(t.Indexes, func(ix Index) bool { return ix.Where == "" && len(ix.Columns) > 0 && ix.Columns[0] == col })
 }
 
 // rebuildFinding adds the sqlite-rebuild finding of change i, if it

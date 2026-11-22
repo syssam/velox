@@ -20,7 +20,8 @@ type Plan struct {
 
 // NewPlan runs Diff, Lint, Blocked and Render in one call, as velox-gen uses
 // them. When a destructive finding is not allowed, it returns a
-// *BlockedError holding every such finding, and no plan. Render gets
+// *BlockedError holding every such finding, and no plan. An unindexed-fk
+// finding an Allow covers is left out of the plan's findings. Render gets
 // opts.LockTimeout and opts.Allow as they are. Diff's and
 // Render's errors come through as they are. NewPlan does not change its
 // arguments.
@@ -29,7 +30,7 @@ func NewPlan(from, to *Schema, opts PlanOptions) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	findings := lintChanges(from, to, changes).out
+	findings := unallowed(lintChanges(from, to, changes).out, opts.Allow)
 	if blocked := Blocked(findings, opts.Allow); len(blocked) > 0 {
 		return nil, &BlockedError{Findings: blocked, renames: renameHints(changes, blocked)}
 	}

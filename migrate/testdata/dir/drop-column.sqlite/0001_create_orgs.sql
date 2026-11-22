@@ -4,6 +4,7 @@ CREATE TABLE "orgs" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "name" text NOT NULL DEFAULT ''
 );
+-- review: unindexed-fk: foreign key column users.mentor_id has no index that leads with it: With, Has and joins through it, and deletes in users, scan users; declare an index, or -allow unindexed-fk=users.mentor_id; unindexed-fk: foreign key column users.org_id has no index that leads with it: With, Has and joins through it, and deletes in orgs, scan users; declare an index, or -allow unindexed-fk=users.org_id
 CREATE TABLE "users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "org_id" integer NOT NULL DEFAULT 0,
@@ -20,6 +21,7 @@ CREATE TABLE "users" (
 );
 CREATE INDEX "users_by_name" ON "users" ("name");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
+-- review: unindexed-fk: foreign key column posts.author_id has no index that leads with it: With, Has and joins through it, and deletes in users, scan posts; declare an index, or -allow unindexed-fk=posts.author_id
 CREATE TABLE "posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "author_id" integer NOT NULL DEFAULT 0,

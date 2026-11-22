@@ -13,6 +13,7 @@ CREATE TABLE "users" (
 CREATE UNIQUE INDEX "user_email" ON "users" ("email");
 CREATE INDEX "user_name" ON "users" ("name");
 CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
+-- review: unindexed-fk: foreign key column posts.user_drafts_written_but_never_published_by_this_user_so_far has no index that leads with it: With, Has and joins through it, and deletes in users, scan posts; declare an index, or -allow unindexed-fk=posts.user_drafts_written_but_never_published_by_this_user_so_far; unindexed-fk: foreign key column posts.user_posts has no index that leads with it: With, Has and joins through it, and deletes in users, scan posts; declare an index, or -allow unindexed-fk=posts.user_posts
 CREATE TABLE "posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "title" text NOT NULL,

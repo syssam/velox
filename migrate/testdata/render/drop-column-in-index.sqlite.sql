@@ -2,6 +2,7 @@
 -- velox:foreign-keys off
 -- velox:allow drop-column users.logins
 
+-- review: unindexed-fk: foreign key column users.org_id has no index that leads with it: With, Has and joins through it, and deletes in orgs, scan users; declare an index, or -allow unindexed-fk=users.org_id
 DROP INDEX "users_user_org_id_logins";
 -- review: drop-column: drops column users.logins and its data; sqlite-rebuild: drops column users.logins, which a key, index or constraint uses; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (

@@ -396,6 +396,11 @@ databases it has the bootstrap ent's tests use
 | `client.Schema.Create(ctx)` at deploy | `migrate diff`, then `migrate apply` or `migrate.Up` |
 | `migrate.WithDropColumn`, `WithDropIndex` | `migrate diff -allow drop-column=t.c`; `Create` never alters a table |
 
+ent leaves a foreign key without an index unremarked. velox declares
+none either, but `migrate diff` writes an `unindexed-fk` review line for
+a key it adds that no index leads, which `-allow unindexed-fk=t.c`
+silences ([decision 0112](decisions/0112-unindexed-foreign-keys.md)).
+
 ## Running the generator from Go
 
 ent's `entc.go` calls `entc.Generate` (veloxe's, `compiler.Generate`) with a

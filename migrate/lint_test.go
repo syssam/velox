@@ -103,8 +103,8 @@ func TestLintCases(t *testing.T) {
 	my := velox.MySQL
 	lite := velox.SQLite
 	want := map[key][]string{
-		{"create-tables", pgM}:             nil,
-		{"create-tables", lite}:            nil,
+		{"create-tables", pgM}:             {"unindexed-fk@users.mentor_id", "unindexed-fk@users.org_id", "unindexed-fk@posts.author_id", "unindexed-fk@beta.alpha_id", "unindexed-fk@alphas.beta_id"},
+		{"create-tables", lite}:            {"unindexed-fk@users.mentor_id", "unindexed-fk@users.org_id", "unindexed-fk@posts.author_id", "unindexed-fk@alphas.beta_id", "unindexed-fk@beta.alpha_id"},
 		{"drop-table", pgM}:                {"drop-table@posts"},
 		{"drop-table", my}:                 {"drop-table@posts"},
 		{"rename-table", pgM}:              {"rename-table@accounts"},
@@ -703,9 +703,12 @@ func TestLintDeterministic(t *testing.T) {
 		if !reflect.DeepEqual(a, b) {
 			t.Errorf("two calls differ:\n%v\n--\n%v", a, b)
 		}
-		seen := map[[2]any]bool{}
+		seen := map[[3]any]bool{}
 		for _, f := range a {
-			k := [2]any{f.Change, f.Code}
+			k := [3]any{f.Change, f.Code, ""}
+			if f.Code == "unindexed-fk" { // one per column of a table's keys
+				k[2] = f.Target
+			}
 			if seen[k] {
 				t.Errorf("change %d has two %s findings", f.Change, f.Code)
 			}

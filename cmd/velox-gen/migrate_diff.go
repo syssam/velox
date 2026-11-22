@@ -161,7 +161,7 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	c.fs.Var(&dialect, "dialect", "the dialect of a new directory: postgres, mysql or sqlite (default: velox.json's)")
 	name := c.fs.String("name", "", "the files' `name` after their version (default: from the first change, as create_users)")
 	var allow allowFlag
-	c.fs.Var(&allow, "allow", "allow the destructive changes `code[=target],...`, as drop-column=users.name,drop-table")
+	c.fs.Var(&allow, "allow", "allow the destructive changes, or unindexed foreign keys, `code[=target],...`, as drop-column=users.name,drop-table,unindexed-fk=posts.author_id")
 	var renames []rename
 	c.fs.Var(renameFlag{list: &renames}, "rename-table", "rename the table `old=new`, each optionally schema.name; repeat for several")
 	c.fs.Var(renameFlag{column: true, list: &renames}, "rename-column", "rename the column `table.old=new`; repeat for several")

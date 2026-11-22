@@ -275,7 +275,7 @@ func TestMigrateDiff(t *testing.T) {
 		code, out, errs := runCLI(t, dir, "migrate", "diff", "-dialect", "postgres")
 		want(t, "dialect", code, out, errs, 2, "", "velox-gen: migrate diff: -dialect postgres disagrees with migrations/velox.json, which says sqlite\n")
 		code, out, errs = runCLI(t, dir, "migrate", "diff", "-allow", "nope")
-		if code != 2 || out != "" || !strings.HasPrefix(errs, `invalid value "nope" for flag -allow: nope: "nope" is not a destructive code;`) || !strings.Contains(errs, "Flags of migrate diff:") {
+		if code != 2 || out != "" || !strings.HasPrefix(errs, `invalid value "nope" for flag -allow: nope: "nope" is not a destructive code, nor unindexed-fk;`) || !strings.Contains(errs, "Flags of migrate diff:") {
 			t.Errorf("-allow: %d %q %q", code, out, errs)
 		}
 		for _, args := range [][]string{
