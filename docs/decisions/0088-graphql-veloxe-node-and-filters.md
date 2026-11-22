@@ -1,7 +1,8 @@
 # 0088. Under compat=veloxe, Node and where inputs are veloxe's
 
 Status: accepted, 2026-11-19. Extends 0087. Amends 0061 for compat=veloxe
-only: velox's own API still has no Node.
+only: velox's own API still has no Node. Amended 2026-11-22 for
+`ResolveNodes`: see the note at the end.
 
 ## Context
 
@@ -103,3 +104,20 @@ possibly empty and over-100 `idIn` lists, and rely on the old meaning.
   (null entries), `node` of a missing or hidden ID (NOT_FOUND),
   `organizationIdIn: []`, `referrerIdIsNil: false`, `or: []`, an
   `organizationIdIn` of 151 IDs, and `not: {}` and `or: [{}]` refused.
+
+## Amendment, 2026-11-22: nodes(ids:) is bounded
+
+A review proved `nodes(ids:)` unbounded: `ResolveNodes` ran one query per
+ID per type, serially, and the cost model charged 50000 IDs what it charged
+one. `ResolveNodes` now works as entgql's `Noders`: it reads each type with
+one `IN` query of the IDs its key column can hold, so T statements, not
+N×T; each type's rows are one batch, so a nested edge is one statement;
+and more IDs than `Limits.MaxPage` (100) is `ErrPageTooLarge`,
+BAD_USER_INPUT. MaxPage, not a new limit: `nodes` returns a page of rows,
+and a page is what MaxPage bounds. The cost model charges `node` and
+`nodes` 100 for each type of Node, and the rows of `nodes` by the length of
+its list. `ErrAmbiguousNodeID` is BAD_USER_INPUT, not an internal error.
+`ResolveNode` still probes each type with `LoadNode`. Evidence:
+`TestResolveNodesBatched` and `TestResolveNodesCap` in
+`contrib/graphql/veloxgql/gqlgraph`, `TestCostNodesAndLists` in
+`contrib/graphql/veloxgql/internal/cost`.

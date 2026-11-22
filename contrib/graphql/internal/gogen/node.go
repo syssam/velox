@@ -15,7 +15,7 @@ import (
 // each implementing type's Go type to satisfy it, so each gets IsNode, as
 // veloxe's generated entities had. ResolveNode and ResolveNodes answer
 // node(id:) and nodes(ids:) as veloxe's Client.Noder and Client.Noders did,
-// for the application's resolvers; NodeTypes is for an application that
+// ResolveNodes with one statement per type, for the application's resolvers; NodeTypes is for an application that
 // resolves them its own way. ok is false when no type has an ID, as the SDL
 // then has no Node.
 //
@@ -79,7 +79,7 @@ func (r *renderer) nodeFile(types []*sdl.Type) (file plugin.File, ok bool, err e
 	f.p("\treturn n.(Noder), nil")
 	f.p("}")
 	f.p("")
-	f.doc("", "ResolveNodes answers nodes(ids:) as veloxe's Client.Noders did: ResolveNode of each ID, in order, nil for one no type has. Any other error stops it.")
+	f.doc("", "ResolveNodes answers nodes(ids:) as veloxe's Client.Noders did: the node of each ID, in order, nil for one no type has. It reads each type with one IN query of the IDs, and each type's nodes batch their edges. More IDs than Limits.MaxPage is veloxgql.ErrPageTooLarge (BAD_USER_INPUT); an ID of two types is gqlgraph.ErrAmbiguousNodeID. Any other error stops it.")
 	f.p("func ResolveNodes(ctx %s.Context, db *%s.DB, ids []%s) ([]Noder, error) {", ctx, velox, key.typ)
 	f.p("\tns, err := %s.ResolveNodes(ctx, db, nodeTypes, ids)", impl)
 	f.p("\tif err != nil {")

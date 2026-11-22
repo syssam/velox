@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/untyped"
 )
@@ -85,21 +87,117 @@ func ResolveNode(ctx context.Context, db *velox.DB, types []*Type, id any) (any,
 }
 
 // ResolveNodes returns the row of each of ids, in order, as veloxe's
-// Client.Noders did: ResolveNode of each, with nil for an ID that no type
-// has, as Relay's nodes(ids:) asks. Any other error stops it and is
-// returned. As in veloxe, the number of ids is not capped: an application
-// that needs a cap checks len(ids) in its resolver.
+// Client.Noders did, with nil for an ID that no type has, as Relay's
+// nodes(ids:) asks. It reads each type once, with one IN query of every
+// ID its key column can hold, as entgql's Noders does: one statement per
+// type, however many IDs. Each type's rows are one batch (veloxgql.Batch),
+// so an edge of theirs is read for all of them in one statement.
+//
+// More IDs than the MaxPage of veloxgql.LimitsFromContext(ctx) is
+// veloxgql.ErrPageTooLarge, BAD_USER_INPUT, before any statement. An ID
+// that more than one type has fails the whole list with ErrAmbiguousNodeID,
+// as ResolveNode fails; so does any other error.
 func ResolveNodes[K any](ctx context.Context, db *velox.DB, types []*Type, ids []K) ([]any, error) {
-	nodes := make([]any, len(ids))
+	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
+		return nil, gqlcore.InputErrorf("%w: nodes(ids:) takes at most %d IDs", veloxgql.ErrPageTooLarge, most)
+	}
+	xs := make([]any, len(ids))
 	for i, id := range ids {
-		n, err := ResolveNode(ctx, db, types, id)
-		switch {
-		case errors.Is(err, ErrNodeNotFound):
-			continue
-		case err != nil:
+		xs[i] = id
+	}
+	return resolveNodes(ctx, db, types, xs)
+}
+
+// resolveNodes is ResolveNodes of ids, already capped.
+func resolveNodes(ctx context.Context, db *velox.DB, types []*Type, ids []any) ([]any, error) {
+	nodes := make([]any, len(ids))
+	found := make([][]string, len(ids)) // the types that have each ID
+	ambiguous := -1                     // the first ID of two types
+	for _, c := range types {
+		rows, err := loadNodes(ctx, db, c, ids)
+		if err != nil {
 			return nil, err
 		}
-		nodes[i] = n
+		for i, r := range rows {
+			if r == nil {
+				continue
+			}
+			nodes[i] = r
+			found[i] = append(found[i], c.Name)
+			if len(found[i]) > 1 && ambiguous < 0 {
+				ambiguous = i
+			}
+		}
+	}
+	if ambiguous >= 0 {
+		return nil, gqlcore.InputErrorf("%w: an ID is a %s; nodes(ids:) needs IDs unique across types", ErrAmbiguousNodeID, strings.Join(found[ambiguous], " and a "))
 	}
 	return nodes, nil
+}
+
+// loadNodes returns, for each of ids, the row of type c whose key it is, or
+// nil, read with one IN query of the keys, as LoadNode reads one: a key the
+// column cannot hold, a hidden row and a denied read are all none. The rows
+// it read are one batch.
+func loadNodes(ctx context.Context, db *velox.DB, c *Type, ids []any) ([]any, error) {
+	if len(c.Key) != 1 {
+		return nil, fmt.Errorf("gqlgraph: type %s has %d key columns, and a Node has one", c.Name, len(c.Key))
+	}
+	t, col := c.table(), c.Key[0].Index
+	keys := make([]any, len(ids)) // each ID as the key column's Go type; nil for none
+	var in []any                  // the distinct keys
+	seen := map[any]bool{}
+	for i, id := range ids {
+		k, err := t.Convert(col, id)
+		if err != nil || k == nil {
+			continue // names no row of the type
+		}
+		if !reflect.TypeOf(k).Comparable() {
+			return loadEach(ctx, db, c, ids)
+		}
+		keys[i] = k
+		if !seen[k] {
+			seen[k] = true
+			in = append(in, k)
+		}
+	}
+	out := make([]any, len(ids))
+	if len(in) == 0 {
+		return out, nil
+	}
+	rows, err := untyped.Query(db, t).Where(t.Pred(col, untyped.PredIn, in)).Limit(len(in)).All(ctx)
+	switch {
+	case errors.Is(err, velox.ErrDenied):
+		return out, nil
+	case err != nil:
+		return nil, err
+	}
+	byKey := make(map[any]any, rows.Len())
+	group := make([]any, rows.Len())
+	for i := range rows.Len() {
+		r := rows.At(i)
+		byKey[t.Value(r, col)] = r
+		group[i] = r
+	}
+	for i, k := range keys {
+		if k != nil {
+			out[i] = byKey[k]
+		}
+	}
+	gqlcore.Add(ctx, group)
+	return out, nil
+}
+
+// loadEach is loadNodes by LoadNode of each ID, for a key whose Go type a
+// map cannot hold.
+func loadEach(ctx context.Context, db *velox.DB, c *Type, ids []any) ([]any, error) {
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		n, err := LoadNode(ctx, db, c, id)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = n
+	}
+	return out, nil
 }

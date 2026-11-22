@@ -1204,6 +1204,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- GraphQL, compat=veloxe: `nodes(ids:)` reads each type of Node with one
+  `IN` query, as entgql does, not one query per ID per type; each type's
+  rows batch their edges; more IDs than `Limits.MaxPage` is
+  `ErrPageTooLarge`; and the cost model charges it by the number of IDs,
+  and `node`/`nodes` 100 for each type of Node.
 - GraphQL, compat=veloxe: `node(id:)` of an ID that more than one type has
   (`gqlgraph.ErrAmbiguousNodeID`) reaches the client as BAD_USER_INPUT, not
   INTERNAL_SERVER_ERROR.

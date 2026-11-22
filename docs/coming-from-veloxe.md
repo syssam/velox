@@ -293,7 +293,8 @@ A client written against veloxe's API sees these as it did:
   {}` and `or: [{}]` are an error. A list has no width cap and a where
   input no node cap; the depth stays at 5.
 - **Node.** `node` of an ID no type has, or one the policy hides, is
-  `NOT_FOUND`. `nodes` gives null for it.
+  `NOT_FOUND`. `nodes` gives null for it. Unlike veloxe, `nodes` reads
+  each type with one `IN` query, and takes at most `MaxPage` (100) IDs.
 - **The order argument.** It is one `XOrder`, and `direction` defaults to
   ASC.
 - **A hidden required edge.** A `Required` to-one edge whose target is

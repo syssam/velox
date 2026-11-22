@@ -220,7 +220,7 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 		meta:       children.meta,
 	}
 	if c.runsStatement(f, parent, child) {
-		n.statements = add(n.statements, statementCost)
+		n.statements = add(n.statements, mul(max(c.nodeTypes(parent, child), 1), statementCost))
 	}
 	if parent != nil && parent == c.schema.Mutation {
 		n.statements = add(n.statements, add(c.writes(f, def), c.deletes(f)))
@@ -277,13 +277,49 @@ func (c *coster) multiplier(f *ast.Field, def *ast.FieldDefinition, parent, chil
 	n := int64(1)
 	for t := def.Type; t != nil && isObjectKind(child); t = t.Elem {
 		if t.Elem != nil {
-			n = mul(n, c.listRows(def))
+			rows := c.listRows(def)
+			if c.nodeTypes(parent, child) > 0 {
+				rows = c.idCount(f)
+			}
+			n = mul(n, rows)
 			if c.list == "" && parent != nil {
 				c.list = parent.Name + "." + def.Name
 			}
 		}
 	}
 	return n
+}
+
+// nodeTypes is the number of types of Node when f, of type child, is a
+// root query's field of the interface Node, as node(id:) and nodes(ids:)
+// are: it reads each type with a statement of its own (gqlgraph's
+// ResolveNode and ResolveNodes). It is 0 for any other field.
+func (c *coster) nodeTypes(parent, child *ast.Definition) int64 {
+	if parent == nil || parent != c.schema.Query || child == nil || child.Kind != ast.Interface || child.Name != "Node" {
+		return 0
+	}
+	return int64(len(c.schema.GetPossibleTypes(child)))
+}
+
+// idCount is how many rows f, a list field of Node such as nodes(ids:),
+// reads: the length of its list argument, or MaxPage, which caps it, when
+// the argument's value is not known. A single value is a list of one, as
+// GraphQL coerces it.
+func (c *coster) idCount(f *ast.Field) int64 {
+	for _, a := range f.Arguments {
+		if a.Value == nil {
+			continue
+		}
+		v, err := a.Value.Value(c.vars)
+		if err != nil || v == nil {
+			continue
+		}
+		if l, ok := v.([]any); ok {
+			return int64(len(l))
+		}
+		return 1
+	}
+	return int64(c.l.MaxPage)
 }
 
 // listRows is what a list field reads for each parent: l.MaxList, or the edge's

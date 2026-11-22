@@ -169,7 +169,7 @@ func TestCostDodges(t *testing.T) {
 
 	// Inline fragments on node: every branch counts.
 	const node = `{ node(id: "x") { ... on User { posts { totalCount } } ... on Post { title } } }`
-	if got, want := costOf(t, node, nil, l), 3*stmt+1+(1+1)+1; got != want {
+	if got, want := costOf(t, node, nil, l), 4*stmt+1+(1+1)+1; got != want {
 		t.Errorf("node with two branches: cost %d, want %d", got, want)
 	}
 	// A selection that @skip leaves out costs nothing.
@@ -325,9 +325,14 @@ func TestCostNodesAndLists(t *testing.T) {
 		vars  map[string]any
 		want  int
 	}{
-		{"a root list of an interface", `{ nodes(ids: ["a", "b", "c"]) { id } }`, nil, stmt + 1 + 20*1},
+		// nodes(ids:) reads each of its IDs, with a statement for each type of
+		// Node (User and Post), however many IDs it has.
+		{"nodes", `{ nodes(ids: ["a", "b", "c"]) { id } }`, nil, 2*stmt + 1 + 3*1},
+		{"nodes of one ID", `{ nodes(ids: "a") { id } }`, nil, 2*stmt + 1 + 1*1},
+		{"nodes by a variable", `query ($ids: [ID!]!) { nodes(ids: $ids) { id } }`, map[string]any{"ids": manyIDs(50000)}, 2*stmt + 1 + 50000*1},
+		{"nodes with an edge", `{ nodes(ids: ["a", "b"]) { ... on Post { author { name } } } }`, nil, 3*stmt + 1 + 2*(1+1)},
 		{"a list of objects", `{ users(first: 1) { edges { node { friends { name } } } } }`, nil, 2*stmt + 1 + 1 + 1*(1+(1+20*1))},
-		{"a to-one object", `{ node(id: "x") { ... on Post { author { name } } } }`, nil, 2*stmt + 1 + (1 + 1)},
+		{"a to-one object", `{ node(id: "x") { ... on Post { author { name } } } }`, nil, 3*stmt + 1 + (1 + 1)},
 		{"a list of scalars", `{ users(first: 1) { edges { node { tags } } } }`, nil, stmt + 1 + 1 + 1*(1+1)},
 		{"__typename", `{ __typename }`, nil, 1},
 	} {
@@ -335,6 +340,15 @@ func TestCostNodesAndLists(t *testing.T) {
 			t.Errorf("%s: cost %d, want %d", c.name, got, c.want)
 		}
 	}
+}
+
+// manyIDs is n IDs, as a variable's value.
+func manyIDs(n int) []any {
+	out := make([]any, n)
+	for i := range out {
+		out[i] = fmt.Sprint(i)
+	}
+	return out
 }
 
 // costListSDL is a schema of list edges, as velox-graphql writes them: one with

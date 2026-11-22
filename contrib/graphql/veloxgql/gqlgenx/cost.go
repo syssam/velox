@@ -17,7 +17,9 @@ import (
 //     the field has no such arguments, the safer count; its totalCount and
 //     pageInfo are read once;
 //   - any other field of a list of objects multiplies by l.MaxList, or by the
-//     edge's graphql.MaxList when that is lower;
+//     edge's graphql.MaxList when that is lower, except nodes(ids:), a root
+//     query's list of the interface Node, which multiplies by the number of
+//     its IDs, or by l.MaxPage, its cap, when that is not known;
 //   - every branch of a fragment counts, but a selection that @skip(if: true)
 //     or @include(if: false) leaves out costs nothing, its condition a
 //     literal or a variable's value (a missing variable's default, when it
@@ -34,7 +36,9 @@ import (
 // the rows of a batch share one statement however many parents they have:
 //   - a field that runs a statement adds 100: a root field, a connection, its
 //     totalCount (a COUNT of its own) and any other field of an object or a list
-//     of objects. first: 0 still counts: a COUNT or a filter still runs;
+//     of objects. first: 0 still counts: a COUNT or a filter still runs. A
+//     root query's field of Node, node(id:) or nodes(ids:), adds 100 for each
+//     type of Node, as it reads each with a statement of its own;
 //   - an input object argument (a where, an orderBy, a mutation's input) adds
 //     its size at each use: one for each value in it, nested inputs and lists
 //     included, read from the variables; a string one more for each 128 of its
