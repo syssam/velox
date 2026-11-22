@@ -27,6 +27,7 @@ const (
 	termExpr
 	termAgg
 	termInvalid
+	termExcluded
 )
 
 // TermFn is an aggregate function of a term.
@@ -84,6 +85,12 @@ func (t Term) seal() Term {
 
 // ColumnTerm is column col of the statement's entity.
 func ColumnTerm(col int32) Term { return Term{kind: termColumn, col: col}.seal() }
+
+// ExcludedTerm is column col of the row an upsert proposes: EXCLUDED.col on
+// PostgreSQL and SQLite, new.col on MySQL. Only an upsert's update branch,
+// its assignments and its condition, may hold it; anywhere else it fails
+// the statement.
+func ExcludedTerm(col int32) Term { return Term{kind: termExcluded, col: col}.seal() }
 
 // InvalidTerm is a term that fails the statement holding it with err.
 func InvalidTerm(err error) Term { return Term{kind: termInvalid, err: err}.seal() }
@@ -153,6 +160,14 @@ func (w *writer) term(t Term) {
 			w.fail(errCodecExpr(w.in, int(t.col)))
 		}
 		w.predCol(t.col)
+	case termExcluded:
+		switch {
+		case !w.upsert:
+			w.fail(fmt.Errorf("velox: %s: Excluded names the row an upsert proposes; only the upsert's UpdateSet and UpdateWhere may hold it", w.in.Name))
+		case w.in.Columns[t.col].Codec:
+			w.fail(errCodecExpr(w.in, int(t.col)))
+		}
+		w.excluded(t.col)
 	case termExpr:
 		w.exprBody(t.x)
 	case termAgg:
@@ -264,7 +279,7 @@ func checkTermCols(t Term, bad func(int) error) error {
 		return err
 	}
 	switch t.kind {
-	case termColumn:
+	case termColumn, termExcluded:
 		return bad(int(t.col))
 	case termExpr:
 		return checkExprCols(t.x, bad)
@@ -276,10 +291,49 @@ func checkTermCols(t Term, bad func(int) error) error {
 	return nil
 }
 
+// excludedCols appends to cols each column an ExcludedTerm in t names.
+func excludedCols(cols []int, t Term) []int {
+	switch t.kind {
+	case termExcluded:
+		if !slices.Contains(cols, int(t.col)) {
+			cols = append(cols, int(t.col))
+		}
+	case termExpr:
+		for _, s := range t.x.slots {
+			if s.Term != nil {
+				cols = excludedCols(cols, *s.Term)
+			}
+		}
+	case termAgg:
+		if t.of != nil {
+			cols = excludedCols(cols, *t.of)
+		}
+	}
+	return cols
+}
+
+// nodeExcluded appends to cols each column an ExcludedTerm in the
+// expressions of n, or of its kids, names.
+func nodeExcluded(cols []int, n Node) []int {
+	if n.Op == OpExpr {
+		if d, ok := n.V.(*exprData); ok {
+			for _, s := range d.slots {
+				if s.Term != nil {
+					cols = excludedCols(cols, *s.Term)
+				}
+			}
+		}
+	}
+	for _, k := range n.Kids {
+		cols = nodeExcluded(cols, k)
+	}
+	return cols
+}
+
 // swapTerm is swapCols of a term: columns 0 and 1 trade places.
 func swapTerm(t Term) Term {
 	switch t.kind {
-	case termColumn:
+	case termColumn, termExcluded:
 		t.col = swapCol(t.col)
 	case termExpr:
 		t.x = swapExprData(t.x)

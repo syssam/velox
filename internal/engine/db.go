@@ -214,6 +214,14 @@ func checkConflict(st *Statement, who string) error {
 	if err := badColumns(st, who, cf.Columns); err != nil {
 		return err
 	}
+	for _, a := range cf.Set {
+		if err := badColumn(st, who, a.Column); err != nil {
+			return err
+		}
+	}
+	if err := checkConds(st, who, cf.TargetWhere); err != nil {
+		return err
+	}
 	return badColumns(st, who, cf.Update)
 }
 

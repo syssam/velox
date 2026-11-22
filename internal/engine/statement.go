@@ -28,11 +28,34 @@ type ConflictClause struct {
 	// every Update column had its setter skipped (a SetPtr of nil). A
 	// Rewrite or Around hook that rebuilds the clause must copy Ignore.
 	Ignore bool
+	// Set holds the update branch's other assignments, after Update's
+	// copies: AssignSet writes a value, AssignAdd and AssignSub add to or
+	// subtract from the existing row's value, and AssignExpr writes an
+	// expression, in which an ExcludedTerm names the inserted row's value.
+	// A column is in Update or Set, not both, and in Set once.
+	Set []Assignment
+	// TargetWhere is the conflict target's condition, the predicate of a
+	// partial unique index: ON CONFLICT (cols) WHERE …. PostgreSQL and
+	// SQLite render it; velox refuses it on MySQL.
+	TargetWhere []Predicate
+	// Constraint names the constraint whose conflict the insert resolves:
+	// ON CONFLICT ON CONSTRAINT name, on PostgreSQL only. Columns stay
+	// required: velox reads rows back, and matches them, by those columns.
+	Constraint string
 }
 
 // ignores reports whether cf's update branch is Ignore's no-op assignment.
 func (cf *ConflictClause) ignores() bool {
-	return cf.Ignore && !cf.DoNothing && len(cf.Update) == 0 && len(cf.Columns) > 0
+	return cf.Ignore && !cf.DoNothing && len(cf.Update) == 0 && len(cf.Set) == 0 && len(cf.Columns) > 0
+}
+
+// updates reports whether cf has an update branch that assigns a column:
+// Update's copies or Set's assignments.
+func (cf *ConflictClause) updates() bool { return len(cf.Update) > 0 || len(cf.Set) > 0 }
+
+// writes reports whether cf's update branch assigns column c.
+func (cf *ConflictClause) writes(c int) bool {
+	return slices.Contains(cf.Update, c) || slices.ContainsFunc(cf.Set, func(a Assignment) bool { return a.Column == c })
 }
 
 // EachClause makes a SELECT read, or count, the rows of each owner apart: the

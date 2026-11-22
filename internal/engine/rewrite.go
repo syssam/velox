@@ -27,6 +27,7 @@ func cloneForHooks(st *Statement) {
 	if st.Conflict != nil {
 		cf := *st.Conflict
 		cf.Columns, cf.Update, cf.Where = slices.Clone(cf.Columns), slices.Clone(cf.Update), slices.Clone(cf.Where)
+		cf.Set, cf.TargetWhere = slices.Clone(cf.Set), slices.Clone(cf.TargetWhere)
 		st.Conflict = &cf
 	}
 	if st.Each != nil {

@@ -238,6 +238,20 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		for _, p := range cf.Where {
 			k = nodeKey(k, p.n)
 		}
+		k = binary.AppendUvarint(k, uint64(len(cf.Set)))
+		for _, a := range cf.Set {
+			k = binary.AppendUvarint(k, uint64(a.Column))
+			k = append(k, byte(a.Op))
+			if a.Op == AssignExpr {
+				k = termKey(k, exprAssigned(a))
+			}
+		}
+		k = binary.AppendUvarint(k, uint64(len(cf.TargetWhere)))
+		for _, p := range cf.TargetWhere {
+			k = nodeKey(k, p.n)
+		}
+		k = binary.AppendUvarint(k, uint64(len(cf.Constraint)))
+		k = append(k, cf.Constraint...)
 	} else {
 		k = append(k, 0)
 	}

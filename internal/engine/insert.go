@@ -45,7 +45,7 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 	if err := refuseBidiUpsert(in, cf); err != nil {
 		return err
 	}
-	if (len(cf.Update) > 0 || cf.ignores()) && in.bidi {
+	if (cf.updates() || cf.ignores()) && in.bidi {
 		return errBidiUpdate(in)
 	}
 	if in.immutable {
@@ -55,8 +55,82 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 			}
 		}
 	}
-	if v, ok := in.VersionColumn(); ok && slices.Contains(cf.Update, v) {
+	if v, ok := in.VersionColumn(); ok && cf.writes(v) {
 		return fmt.Errorf("velox: %s: %s: %w", in.Name, in.Columns[v].Field, ErrVersionSet)
+	}
+	return checkUpsertSet(in, cf)
+}
+
+// checkUpsertSet checks the assignments of cf's update branch (Set): each
+// is Set, Add, Sub or an expression of a column of in that Update does not
+// copy and no other assignment writes; ValidateSetters' checks hold, an
+// Add or an expression refuses an encoded column, and an expression names
+// only in's columns and holds no aggregate or window function. The
+// conflict target's condition holds no relation or subquery.
+func checkUpsertSet(in *EntityInfo, cf *ConflictClause) error {
+	for i, a := range cf.Set {
+		if err := checkCol(in, a.Column); err != nil {
+			return err
+		}
+		field := in.Columns[a.Column].Field
+		switch a.Op {
+		case AssignSet:
+		case AssignAdd, AssignSub:
+			if in.Columns[a.Column].Codec {
+				return errCodecAdd(in, a.Column)
+			}
+		case AssignExpr:
+			if err := checkUpsertExpr(in, a); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("velox: %s: an upsert's setter of %s is not Set, SetNull, Add, Sub or SetExpr", in.Name, field)
+		}
+		if slices.Contains(cf.Update, a.Column) || slices.ContainsFunc(cf.Set[:i], func(b Assignment) bool { return b.Column == a.Column }) {
+			return fmt.Errorf("velox: %s: the upsert's update branch assigns %s twice", in.Name, field)
+		}
+	}
+	if err := ValidateSetters(in, cf.Set); err != nil {
+		return err
+	}
+	for _, p := range cf.TargetWhere {
+		if p.n.Op == opZero {
+			return fmt.Errorf("velox: %s: OnConflictWhere holds the zero Predicate", in.Name)
+		}
+		if hasSubquery(p.n) {
+			return fmt.Errorf("velox: %s: OnConflictWhere is a partial index's predicate, which holds no relation or subquery", in.Name)
+		}
+	}
+	for _, p := range cf.Where {
+		if p.n.Op == opZero {
+			return fmt.Errorf("velox: %s: UpdateWhere holds the zero Predicate", in.Name)
+		}
+	}
+	if len(cf.Where) > 0 && keepsRow(cf) {
+		return fmt.Errorf("velox: %s: UpdateWhere conditions the update branch, and the upsert has none: follow OnConflict with Update, UpdateAll or UpdateSet", in.Name)
+	}
+	return nil
+}
+
+// checkUpsertExpr checks the expression a assigns in an upsert's update
+// branch, as checkSetExpr checks an UPDATE's.
+func checkUpsertExpr(in *EntityInfo, a Assignment) error {
+	t, ok := a.Value.(Term)
+	if !ok {
+		return fmt.Errorf("velox: %s: an expression assignment to %s that holds a %T, not a term", in.Name, in.Columns[a.Column].Field, a.Value)
+	}
+	if err := checkTermCols(t, func(c int) error { return checkCol(in, c) }); err != nil {
+		return err
+	}
+	switch {
+	case t.kind != termExpr:
+		return fmt.Errorf("velox: %s: an assignment to %s is not an expression", in.Name, in.Columns[a.Column].Field)
+	case hasAgg(t):
+		return fmt.Errorf("velox: %s: the expression assigned to %s holds an aggregate, which an upsert cannot compute", in.Name, in.Columns[a.Column].Field)
+	case hasWindow(t):
+		return fmt.Errorf("velox: %s: the expression assigned to %s holds a window function, which an upsert cannot compute", in.Name, in.Columns[a.Column].Field)
+	case in.Columns[a.Column].Codec:
+		return errCodecSetExpr(in, a.Column)
 	}
 	return nil
 }
@@ -64,7 +138,7 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 // resolveUpdateAll is cf, a new clause when nil, with UpdateAll's columns
 // in Update and DoNothing cleared: every column of in but the primary
 // key's, the conflict columns, the Immutable columns and the Version
-// column, in the entity's order. With none left, the branch is Ignore's,
+// column, in the entity's order, and those Set assigns. With none left, the branch is Ignore's,
 // which keeps the existing row.
 func resolveUpdateAll(in *EntityInfo, cf *ConflictClause) *ConflictClause {
 	var out ConflictClause
@@ -75,12 +149,13 @@ func resolveUpdateAll(in *EntityInfo, cf *ConflictClause) *ConflictClause {
 	out.DoNothing, out.Update = false, nil
 	for i := range in.Columns {
 		switch {
-		case slices.Contains(in.PrimaryKey, i), slices.Contains(out.Columns, i), in.Columns[i].Immutable, hasVersion && i == v:
+		case slices.Contains(in.PrimaryKey, i), slices.Contains(out.Columns, i), in.Columns[i].Immutable, hasVersion && i == v,
+			slices.ContainsFunc(out.Set, func(a Assignment) bool { return a.Column == i }):
 			continue
 		}
 		out.Update = append(out.Update, i)
 	}
-	if len(out.Update) == 0 {
+	if len(out.Update) == 0 && len(out.Set) == 0 {
 		out.Ignore = true
 	}
 	return &out
@@ -499,14 +574,15 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 // upsert that updates, on any dialect but MySQL (which refuses it), of an
 // entity with a Read or Write policy, unless WithoutPolicy; a DB with a
 // Rewrite hook may condition any, which matters when the rows read values
-// back (reads: a generated key, or a column with a declared default).
+// back (reads: a generated key, or a column with a declared default), and
+// so may UpdateWhere's condition.
 func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int, reads bool) bool {
 	return n > 1 && cf != nil && !keepsRow(cf) && db.D != MySQL &&
-		(len(in.filters) > 0 || len(db.Cfg.Filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
+		(reads && len(cf.Where) > 0 || len(in.filters) > 0 || len(db.Cfg.Filters) > 0 || reads && len(db.Cfg.Rewrites) > 0 ||
 			InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && db.bypass == "")
 }
 
 // keepsRow reports whether cf keeps a conflicting row as it is with no
 // update branch: DoNothing, or an empty Update without Ignore, which MySQL
 // renders as a no-op assignment. Ignore's branch is an update branch.
-func keepsRow(cf *ConflictClause) bool { return cf.DoNothing || len(cf.Update) == 0 && !cf.ignores() }
+func keepsRow(cf *ConflictClause) bool { return cf.DoNothing || !cf.updates() && !cf.ignores() }

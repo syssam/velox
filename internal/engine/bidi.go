@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"slices"
 	"unsafe"
 )
 
@@ -276,7 +275,7 @@ func refuseBidiInsert(in *EntityInfo, p unsafe.Pointer, many bool) error {
 // at it, whatever the inserted row holds.
 func refuseBidiUpsert(in *EntityInfo, cf *ConflictClause) error {
 	for _, bk := range in.bidiKeys {
-		if slices.Contains(cf.Update, bk.Col) {
+		if cf.writes(bk.Col) {
 			return fmt.Errorf("velox: %s: an upsert cannot update the key of the bidirectional edge %s; Save the key, which re-points both rows", in.Name, bk.Edge)
 		}
 	}

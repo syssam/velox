@@ -449,8 +449,8 @@ func ticketColumn(t *testing.T, st *velox.Statement, name string) int {
 // hook that replaces the clause with its own copy keeps the hidden-row check.
 func TestUpsertPolicyFlagIsTheStatements(t *testing.T) {
 	cf := reflect.TypeFor[velox.ConflictClause]()
-	if cf.NumField() != 5 {
-		t.Errorf("ConflictClause has %d fields, want 5", cf.NumField())
+	if cf.NumField() != 8 {
+		t.Errorf("ConflictClause has %d fields, want 8", cf.NumField())
 	}
 	for f := range cf.Fields() {
 		if !f.IsExported() {
@@ -460,7 +460,8 @@ func TestUpsertPolicyFlagIsTheStatements(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 0}
 	db := openPolicied(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		c := st.Conflict
-		st.Conflict = &velox.ConflictClause{Columns: slices.Clone(c.Columns), Update: slices.Clone(c.Update), Where: slices.Clone(c.Where), Ignore: c.Ignore}
+		st.Conflict = &velox.ConflictClause{Columns: slices.Clone(c.Columns), Update: slices.Clone(c.Update), Where: slices.Clone(c.Where), Ignore: c.Ignore,
+			Set: slices.Clone(c.Set), TargetWhere: slices.Clone(c.TargetWhere), Constraint: c.Constraint}
 		return next(ctx)
 	}))
 	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}

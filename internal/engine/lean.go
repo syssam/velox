@@ -63,9 +63,25 @@ func nilEncoded(c *ColumnInfo, v any) bool {
 // whatever its rows hold: the conflict target, and every column the update
 // branch copies from the inserted row. MySQL's new.<col> names only a
 // column the INSERT lists, and PostgreSQL's EXCLUDED.<col> would hold the
-// column's DEFAULT, not the row's value.
+// column's DEFAULT, not the row's value. A column an ExcludedTerm of the
+// update branch names is read from the inserted row too.
 func conflictWritten(cf *ConflictClause, col int) bool {
-	return cf != nil && (slices.Contains(cf.Columns, col) || slices.Contains(cf.Update, col))
+	return cf != nil && (slices.Contains(cf.Columns, col) || slices.Contains(cf.Update, col) || slices.Contains(cf.excludedRefs(), col))
+}
+
+// excludedRefs are the columns the ExcludedTerms of cf's update branch, its
+// assignments and its condition, name.
+func (cf *ConflictClause) excludedRefs() []int {
+	var cols []int
+	for _, a := range cf.Set {
+		if a.Op == AssignExpr {
+			cols = excludedCols(cols, exprAssigned(a))
+		}
+	}
+	for _, p := range cf.Where {
+		cols = nodeExcluded(cols, p.n)
+	}
+	return cols
 }
 
 // defaultCell reports whether the cell v of column col, in st, an insert
@@ -181,8 +197,19 @@ func dropColumns(st *Statement, drop []bool) {
 // SELECT after the insert (readFilled, or readUpserted for a one-row
 // upsert). A key column that the database fills on MySQL, where no
 // auto-increment value tells it, is refused.
+//
+// The columns an upsert's update branch assigns with Set (UpdateSet) are
+// read back too, as the row then holds the database's value, not the
+// entity's: with RETURNING, and on MySQL for a one-row upsert.
 func PlanInsert(d Dialect, st *Statement, gen int) error {
 	fill := LeanInsert(d, st)
+	if cf := st.Conflict; cf != nil && !keepsRow(cf) && (d != MySQL || len(st.Rows) == 1) {
+		for _, a := range cf.Set {
+			if !slices.Contains(fill, a.Column) && !slices.Contains(st.Entity.PrimaryKey, a.Column) {
+				fill = append(fill, a.Column)
+			}
+		}
+	}
 	in := st.Entity
 	if InfoBidi(in) {
 		// The rows hold each link and its mirror (MirrorRows), which match

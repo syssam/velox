@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"slices"
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
@@ -49,7 +50,7 @@ func columnIndexes[E any](cs []Column[E]) []int {
 }
 
 // OnConflict names the columns of the unique key whose conflict the insert
-// resolves; follow it with Update or DoNothing. Without either, the insert
+// resolves; follow it with Update, UpdateAll, UpdateSet or DoNothing. Without either, the insert
 // keeps the existing row (DO NOTHING). It replaces only the key columns: an
 // Update or DoNothing already chained stays. On MySQL, ON DUPLICATE KEY UPDATE
 // resolves a conflict on any unique key.
@@ -67,7 +68,8 @@ func (q InsertQuery[E]) OnConflict[_ Lazy[E]](cols ...Column[E]) InsertQuery[E] 
 }
 
 // Update overwrites the named columns of the existing row with the inserted
-// values when the insert conflicts.
+// values when the insert conflicts. It replaces an earlier Update's
+// columns; UpdateSet's setters stay.
 func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E] {
 	var cf ConflictClause
 	if q.conflict != nil {
@@ -96,13 +98,125 @@ func (q InsertQuery[E]) UpdateAll[_ Lazy[E]]() InsertQuery[E] {
 	return q
 }
 
-// DoNothing keeps the existing row when the insert conflicts.
+// UpdateSet adds setters to the upsert's update branch, which runs on the
+// existing row when the insert conflicts, as ent's UpdateX, AddX and
+// ResolveWith do:
+//
+//	db.Insert(&stock).OnConflict(S.SKU).UpdateSet(
+//		S.Qty.Add(stock.Qty),                                 // qty = stock.qty + $1
+//		S.Note.Set("restocked"),                              // note = $2
+//		velox.SetExpr(S.Peak, "GREATEST(?, ?)", S.Peak, velox.Excluded(S.Qty)),
+//	).Exec(ctx)
+//
+// A column handle's Set and SetNull write a value. Add and Sub add to, or
+// subtract from, the existing row's value, as an UPDATE's do; to add the
+// inserted value instead, write SetExpr(c, "? + ?", c, Excluded(c)).
+// SetExpr writes an expression: a column handle there is the existing
+// row's column, and Excluded(c) the inserted row's. A SetPtr of nil is
+// skipped; with no other assignment left, the upsert keeps the existing row,
+// as for Set. An edge setter fails the insert.
+//
+// It combines with Update and UpdateAll, which copy the inserted values of
+// other columns; a column is assigned once, by one of them, and UpdateAll
+// leaves out the columns UpdateSet assigns. DoNothing drops the setters.
+// Immutable and Version columns are refused as for Update, and the
+// validators run on Set's values. On MySQL, ON DUPLICATE KEY UPDATE runs
+// its assignments in order, so an expression after an assignment of the
+// same row reads the assigned value; PostgreSQL and SQLite read the row as
+// it was.
+//
+// Exec reads back into the entity what the update branch stored in these
+// columns: with RETURNING on PostgreSQL and SQLite, and on MySQL for an
+// Insert, not an InsertAll.
+func (q InsertQuery[E]) UpdateSet[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
+	cf, err := engine.UpsertSet(q.conflict, assignments(ss))
+	if err != nil {
+		if q.err == nil {
+			q.err = err
+		}
+		return q
+	}
+	q.conflict = cf
+	return q
+}
+
+// UpdateWhere adds conditions to the upsert's update branch, on the
+// existing row, as ent's UpdateWhere does: a conflicting row they reject
+// is neither updated nor replaced, and Exec leaves the entity's generated
+// key zero. A condition may name the inserted row with Excluded:
+//
+//	db.Insert(&doc).OnConflict(D.Slug).Update(D.Body, D.Rev).
+//		UpdateWhere(velox.Expr[Doc]("? > ?", velox.Excluded(D.Rev), D.Rev)).Exec(ctx)
+//
+// They are ANDed with the policy's conditions, which the update branch
+// gets whatever UpdateWhere says. An InsertAll that reads values back
+// matches the returned rows to its entities by OnConflict's columns, and
+// runs in a transaction, as with the policy's conditions. MySQL's ON
+// DUPLICATE KEY UPDATE takes no condition: there Exec fails before
+// anything is sent.
+func (q InsertQuery[E]) UpdateWhere[_ Lazy[E]](ps ...Pred[E]) InsertQuery[E] {
+	var cf ConflictClause
+	if q.conflict != nil {
+		cf = *q.conflict
+	}
+	cf.Where = slices.Clip(cf.Where)
+	for _, p := range ps {
+		cf.Where = append(cf.Where, Predicate(p))
+	}
+	q.conflict = &cf
+	return q
+}
+
+// OnConflictWhere adds the conflict target's conditions: the predicate of
+// the partial unique index whose conflict the insert resolves, as ent's
+// ConflictWhere does. It renders ON CONFLICT (cols) WHERE … on
+// PostgreSQL and SQLite, which pick the partial index by it; a condition
+// is plain, holding no relation or subquery. MySQL has no partial index,
+// and Exec fails there before anything is sent.
+func (q InsertQuery[E]) OnConflictWhere[_ Lazy[E]](ps ...Pred[E]) InsertQuery[E] {
+	var cf ConflictClause
+	if q.conflict != nil {
+		cf = *q.conflict
+	}
+	cf.TargetWhere = slices.Clip(cf.TargetWhere)
+	for _, p := range ps {
+		cf.TargetWhere = append(cf.TargetWhere, Predicate(p))
+	}
+	q.conflict = &cf
+	return q
+}
+
+// OnConstraint names the constraint whose conflict the insert resolves,
+// on PostgreSQL: ON CONFLICT ON CONSTRAINT name, as ent's
+// ConflictConstraint does. OnConflict's columns are still required: velox
+// reads the row back, and matches rows to entities, by them. SQLite and
+// MySQL fail the insert before anything is sent.
+func (q InsertQuery[E]) OnConstraint[_ Lazy[E]](name string) InsertQuery[E] {
+	var cf ConflictClause
+	if q.conflict != nil {
+		cf = *q.conflict
+	}
+	cf.Constraint = name
+	q.conflict = &cf
+	return q
+}
+
+// Excluded is column c of the row an upsert proposes to insert, for
+// SetExpr in UpdateSet and Expr in UpdateWhere: EXCLUDED.c on PostgreSQL
+// and SQLite, new.c on MySQL. Anywhere else it fails the statement. A
+// column it names is always sent, never left to the database's default.
+func Excluded[E any](c Column[E]) Term[E] {
+	return Term[E]{engine.ExcludedTerm(c.column(nil))}
+}
+
+// DoNothing keeps the existing row when the insert conflicts. It drops
+// Update's columns and UpdateSet's setters.
 func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 	var cf ConflictClause
 	if q.conflict != nil {
 		cf = *q.conflict
 	}
-	cf.Update, cf.DoNothing = nil, true
+	cf.Update, cf.Set, cf.DoNothing = nil, nil, true
 	q.conflict, q.all = &cf, false
 	return q
 }

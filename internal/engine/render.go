@@ -25,6 +25,9 @@ type writer struct {
 	// subquery: an upsert's condition is on the existing row, and on
 	// PostgreSQL a bare column there may also be EXCLUDED's.
 	qualify bool
+	// upsert is set while an upsert's update branch is written: an
+	// ExcludedTerm may name the inserted row there, and nowhere else.
+	upsert bool
 	// joins are the statement's joins; joinAlias is the alias of the one whose
 	// target's conditions are being written, "" outside it.
 	joins     []JoinClause
@@ -1234,12 +1237,22 @@ func (w *writer) insertRows(st *Statement) {
 // applies to any unique key, keeping the existing row is a no-op assignment,
 // and the inserted values come from the row alias new (MySQL 8.4 and
 // later). The alias makes an unqualified column name on the right side
-// ambiguous (error 1052), so the no-op assignment qualifies it with the
-// table.
+// ambiguous (error 1052), so the no-op assignment, an Add and an
+// expression's columns qualify it with the table. MySQL cannot take the
+// update branch's condition, the target's or a named constraint; SQLite
+// cannot take a named constraint. Each fails the statement.
 func (w *writer) conflict(cf *ConflictClause) {
 	noop := cf.ignores()
 	keep := keepsRow(cf)
 	if w.d == MySQL {
+		switch {
+		case len(cf.Where) > 0:
+			w.fail(fmt.Errorf("velox: %s: MySQL's ON DUPLICATE KEY UPDATE takes no condition, so it cannot take UpdateWhere", w.in.Name))
+		case len(cf.TargetWhere) > 0:
+			w.fail(fmt.Errorf("velox: %s: MySQL's ON DUPLICATE KEY UPDATE names no conflict target, so it cannot take OnConflictWhere", w.in.Name))
+		case cf.Constraint != "":
+			w.fail(fmt.Errorf("velox: %s: MySQL's ON DUPLICATE KEY UPDATE names no constraint, so it cannot take OnConstraint", w.in.Name))
+		}
 		w.str(" AS new ON DUPLICATE KEY UPDATE ")
 		if keep || noop {
 			w.col(int32(cf.Columns[0]))
@@ -1249,20 +1262,21 @@ func (w *writer) conflict(cf *ConflictClause) {
 			w.col(int32(cf.Columns[0]))
 			return
 		}
-		for i, c := range cf.Update {
-			if i > 0 {
-				w.str(", ")
-			}
-			w.col(int32(c))
-			w.str(" = new.")
-			w.col(int32(c))
-		}
-		w.bumpVersion()
+		w.upsertSet(cf)
 		return
 	}
-	w.str(" ON CONFLICT (")
-	w.columns(cf.Columns)
-	w.str(")")
+	switch {
+	case cf.Constraint != "" && w.d != Postgres:
+		w.fail(fmt.Errorf("velox: %s: OnConstraint is PostgreSQL's; name the conflict by its columns", w.in.Name))
+	case cf.Constraint != "":
+		w.str(" ON CONFLICT ON CONSTRAINT ")
+		w.ident(cf.Constraint)
+	default:
+		w.str(" ON CONFLICT (")
+		w.columns(cf.Columns)
+		w.str(")")
+		w.where(cf.TargetWhere)
+	}
 	if keep {
 		w.str(" DO NOTHING")
 		return
@@ -1274,23 +1288,61 @@ func (w *writer) conflict(cf *ConflictClause) {
 		w.table()
 		w.str(".")
 		w.col(int32(cf.Columns[0]))
-		w.qualify = true
-		w.where(cf.Where)
-		w.qualify = false
-		return
+	} else {
+		w.upsertSet(cf)
 	}
+	w.qualify, w.upsert = true, true
+	w.where(cf.Where)
+	w.qualify, w.upsert = false, false
+}
+
+// upsertSet writes the assignments of an upsert's update branch: Update's
+// copies of the inserted row's values, then Set's, then the Version bump.
+// An Add or Sub adds to the existing row's value, named by its table, as an
+// UPDATE's does; an expression's columns are the existing row's, by its
+// table, and an ExcludedTerm the inserted row's.
+func (w *writer) upsertSet(cf *ConflictClause) {
 	for i, c := range cf.Update {
 		if i > 0 {
 			w.str(", ")
 		}
 		w.col(int32(c))
-		w.str(" = EXCLUDED.")
-		w.col(int32(c))
+		w.str(" = ")
+		w.excluded(int32(c))
 	}
+	w.qualify, w.upsert = true, true
+	for i, a := range cf.Set {
+		if i > 0 || len(cf.Update) > 0 {
+			w.str(", ")
+		}
+		w.col(int32(a.Column))
+		w.str(" = ")
+		switch a.Op {
+		case AssignSet:
+			w.colArg(a.Column, a.Value)
+		case AssignAdd:
+			w.arith(a, " + ")
+		case AssignSub:
+			w.arith(a, " - ")
+		case AssignExpr:
+			w.setExpr(a)
+		default:
+			w.fail(fmt.Errorf("velox: %s: an upsert's assignment to %s is not Set, Add, Sub or an expression", w.in.Name, w.in.Columns[a.Column].Field))
+		}
+	}
+	w.qualify, w.upsert = false, false
 	w.bumpVersion()
-	w.qualify = true
-	w.where(cf.Where)
-	w.qualify = false
+}
+
+// excluded writes column c of the row an upsert proposes: EXCLUDED's on
+// PostgreSQL and SQLite, the row alias new's on MySQL.
+func (w *writer) excluded(c int32) {
+	if w.d == MySQL {
+		w.str("new.")
+	} else {
+		w.str("EXCLUDED.")
+	}
+	w.col(c)
 }
 
 // bumpVersion adds 1 to the existing row's Version column in an upsert's
@@ -1352,6 +1404,12 @@ func (w *writer) arith(a Assignment, op string) {
 		w.fail(errCodecAdd(w.in, a.Column))
 	}
 	x := func() {
+		if w.upsert {
+			// The existing row's value, by its table: a bare name is
+			// EXCLUDED's on PostgreSQL and ambiguous beside MySQL's new.
+			w.table()
+			w.str(".")
+		}
 		w.col(int32(a.Column))
 		w.str(op)
 		if dec := w.in.Columns[a.Column].decimal; w.d == MySQL && dec[0] != 0 {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"unsafe"
@@ -106,8 +107,47 @@ func (s Setters) Upsert(cf *ConflictClause) *ConflictClause {
 	}
 	out := *cf
 	out.Update = slices.DeleteFunc(slices.Clone(cf.Update), drop)
-	if len(out.Update) == 0 {
+	if len(out.Update) == 0 && len(out.Set) == 0 {
 		out.Update, out.Ignore = nil, true
+	}
+	return &out
+}
+
+// UpsertSet returns a copy of cf, a new clause when nil, whose update
+// branch also assigns as: UpdateSet's setters. DoNothing is cleared. A
+// skipped setter (AssignSkip) is kept, for CheckInsertQuery to drop
+// (upsertSkips); an edge setter is refused, as the row may be one the
+// insert did not write.
+func UpsertSet(cf *ConflictClause, as []Assignment) (*ConflictClause, error) {
+	var out ConflictClause
+	if cf != nil {
+		out = *cf
+	}
+	for _, a := range as {
+		if EdgeOf(a) != nil {
+			return nil, errors.New("velox: UpdateSet takes column setters; an edge setter of an upsert's update branch would change a row the insert may not have written")
+		}
+	}
+	out.Set = append(slices.Clip(out.Set), as...)
+	out.DoNothing = false
+	return &out, nil
+}
+
+// upsertSkips returns cf without the skipped setters of its update branch's
+// Set (a SetPtr of nil): such a column is not assigned. When they were all
+// it had, and Update copies nothing, the branch keeps the existing row
+// through Ignore's no-op assignment, as Setters.Upsert makes it.
+func upsertSkips(cf *ConflictClause) *ConflictClause {
+	if cf == nil || !slices.ContainsFunc(cf.Set, isSkip) {
+		return cf
+	}
+	out := *cf
+	out.Set = slices.DeleteFunc(slices.Clone(cf.Set), isSkip)
+	if len(out.Set) == 0 {
+		out.Set = nil
+		if len(out.Update) == 0 && !out.DoNothing {
+			out.Ignore = true
+		}
 	}
 	return &out
 }
@@ -143,6 +183,7 @@ func CheckInsertQuery(in *EntityInfo, s Setters, cf *ConflictClause, one unsafe.
 	if err := s.CheckInsert(in); err != nil {
 		return nil, err
 	}
+	cf = upsertSkips(cf)
 	if all {
 		cf = resolveUpdateAll(in, cf)
 	}
