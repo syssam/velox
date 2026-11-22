@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/schema"
@@ -36,7 +38,7 @@ func (User) Edges() []schema.Edge {
 }
 func (User) Indexes() []schema.Index          { return []schema.Index{index.Fields("org_id", "name").Unique()} }
 func (User) Mixin() []schema.Mixin            { return []schema.Mixin{mixin.Time{}} }
-func (User) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("users")} }
+func (User) Annotations() []schema.Annotation { return []schema.Annotation{sqlschema.Table("users")} }
 
 type Post struct{ schema.Schema }
 
@@ -147,7 +149,7 @@ func TestMarshal(t *testing.T) {
 
 func TestMarshalSchemaDefault(t *testing.T) {
 	u := marshal(t, User{}, Post{}).Schemas[1]
-	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
+	want := map[string]string{dialect.Postgres: "now()", dialect.MySQL: "CURRENT_TIMESTAMP(6)", dialect.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
 	if got := u.Fields[0].SchemaDefault; !reflect.DeepEqual(got, want) {
 		t.Fatalf("created_at: %v", got)
 	}
@@ -238,14 +240,14 @@ func (m merged) Merge(o schema.Annotation) schema.Annotation {
 type mixA struct{ mixin.Schema }
 
 func (mixA) Annotations() []schema.Annotation {
-	return []schema.Annotation{merged{N: 1}, schema.Table("a")}
+	return []schema.Annotation{merged{N: 1}, sqlschema.Table("a")}
 }
 
 type withMerge struct{ schema.Schema }
 
 func (withMerge) Mixin() []schema.Mixin { return []schema.Mixin{mixA{}} }
 func (withMerge) Annotations() []schema.Annotation {
-	return []schema.Annotation{merged{N: 2}, schema.Table("b")}
+	return []schema.Annotation{merged{N: 2}, sqlschema.Table("b")}
 }
 
 func TestAnnotationsMerge(t *testing.T) {
@@ -304,7 +306,7 @@ func (mergePanics) Annotations() []schema.Annotation {
 type nilAnno struct{ schema.Schema }
 
 func (nilAnno) Annotations() []schema.Annotation {
-	return []schema.Annotation{(*schema.TableAnnotation)(nil)}
+	return []schema.Annotation{(*schema.CommentAnnotation)(nil)}
 }
 
 type badJSON struct{}
@@ -515,7 +517,9 @@ func (*Board) Edges() []schema.Edge   { return []schema.Edge{edge.To("posts", Po
 func (*Board) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("title").Unique()}
 }
-func (*Board) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("boards")} }
+func (*Board) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("boards")}
+}
 
 // The program velox-gen writes passes each schema as a pointer: Marshal reads
 // the methods of either receiver, and a base's, and names the schema by its

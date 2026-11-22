@@ -6,7 +6,7 @@ package veloxschema
 
 import (
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -27,7 +27,7 @@ func (Org) Fields() []velox.Field {
 
 // Annotations holds the slug to lower case in the database too, whichever code writes it.
 func (Org) Annotations() []velox.Annotation {
-	return []velox.Annotation{schema.Check("orgs_slug_lower", "slug = lower(slug)")}
+	return []velox.Annotation{sqlschema.Checks(map[string]string{"orgs_slug_lower": "slug = lower(slug)"})}
 }
 
 // User is a member of one Org. An email is unique within the Org.

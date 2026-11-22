@@ -3,6 +3,8 @@
 package schema
 
 import (
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -13,7 +15,7 @@ import (
 type Category struct{ schema.Schema }
 
 func (Category) Fields() []schema.Field {
-	return []schema.Field{field.String("title").SchemaType(map[string]string{field.Postgres: "varchar(200)"})}
+	return []schema.Field{field.String("title").SchemaType(map[string]string{dialect.Postgres: "varchar(200)"})}
 }
 
 func (Category) Edges() []schema.Edge {
@@ -25,5 +27,5 @@ func (Category) Indexes() []schema.Index {
 }
 
 func (Category) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("blog", "categories")}
+	return []schema.Annotation{sqlschema.SchemaTable("blog", "categories")}
 }

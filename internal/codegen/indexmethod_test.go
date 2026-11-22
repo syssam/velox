@@ -15,7 +15,9 @@ import (
 // that says so.
 type imGin struct{ schema.Schema }
 
-func (imGin) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("im_gins")} }
+func (imGin) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("im_gins")}
+}
 func (imGin) Fields() []schema.Field {
 	return []schema.Field{field.String("name"), field.JSON("attrs", map[string]string{}), field.Strings("tags")}
 }

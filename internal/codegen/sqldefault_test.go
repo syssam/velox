@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
@@ -14,7 +15,7 @@ import (
 // the one text on every dialect.
 type ddOK struct{ schema.Schema }
 
-func (ddOK) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("dd_oks")} }
+func (ddOK) Annotations() []schema.Annotation { return []schema.Annotation{sqlschema.Table("dd_oks")} }
 func (ddOK) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int("seats").Annotations(sqlschema.Default("100")),
@@ -43,7 +44,7 @@ type ddText struct{ schema.Schema }
 func (ddText) Fields() []schema.Field {
 	return []schema.Field{
 		field.Text("bad").Annotations(sqlschema.Default("'x'")),
-		field.Text("good").SchemaDefault(map[string]string{field.Postgres: "'x'", field.MySQL: "('x')", field.SQLite: "'x'"}),
+		field.Text("good").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'x'", dialect.MySQL: "('x')", dialect.SQLite: "'x'"})),
 	}
 }
 
@@ -51,7 +52,7 @@ func TestSQLDefaultMySQLText(t *testing.T) {
 	g := mustBuild(t, ddText{})
 	if _, err := Tables(g, velox.MySQL); err == nil {
 		t.Fatal("no error")
-	} else if got := plain(err); !strings.Contains(got, `field "bad": its MySQL SchemaDefault 'x' is a literal on a longtext column, whose default MySQL takes only as an expression: write it in parentheses, as ('x')`) ||
+	} else if got := plain(err); !strings.Contains(got, `field "bad": its MySQL database default 'x' is a literal on a longtext column, whose default MySQL takes only as an expression: write it in parentheses, as ('x')`) ||
 		strings.Contains(got, `"good"`) {
 		t.Errorf("got\n%s", got)
 	}
@@ -83,8 +84,8 @@ func TestSQLDefaultMySQLTimePrecision(t *testing.T) {
 	}
 	got := plain(err)
 	for _, w := range []string{
-		`field "bad": its MySQL SchemaDefault CURRENT_TIMESTAMP on a datetime(6) column must carry the column's precision`,
-		`field "bad_fn": its MySQL SchemaDefault now() on a datetime(6) column must carry the column's precision`,
+		`field "bad": its MySQL database default CURRENT_TIMESTAMP on a datetime(6) column must carry the column's precision`,
+		`field "bad_fn": its MySQL database default now() on a datetime(6) column must carry the column's precision`,
 		"write CURRENT_TIMESTAMP(6)",
 	} {
 		if !strings.Contains(got, w) {

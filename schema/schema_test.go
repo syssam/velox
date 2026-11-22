@@ -25,24 +25,11 @@ func TestAnnotationJSON(t *testing.T) {
 		name string
 		js   string
 	}{
-		{schema.Table("users"), "Table", `{"table":"users"}`},
-		{schema.TableIn("s", "t"), "Table", `{"schema":"s","table":"t"}`},
 		{schema.Comment("a user"), "Comment", `{"text":"a user"}`},
 	} {
 		b, err := json.Marshal(c.a)
 		if err != nil || string(b) != c.js || c.a.Name() != c.name {
 			t.Errorf("%T: name %q json %s (%v), want %q %s", c.a, c.a.Name(), b, err, c.name, c.js)
 		}
-	}
-}
-
-func TestCheckMerge(t *testing.T) {
-	a := schema.Check("a", "x > 0")
-	m, ok := a.Merge(schema.Check("b", "y > 0")).(*schema.CheckAnnotation)
-	if !ok || len(m.Checks) != 2 || len(a.Checks) != 1 {
-		t.Errorf("Merge = %+v, a = %+v", m, a)
-	}
-	if got := a.Merge(schema.Table("t")); got != schema.Annotation(a) {
-		t.Errorf("Merge of another annotation = %+v", got)
 	}
 }

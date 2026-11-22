@@ -80,7 +80,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
 
   `atlas migrate diff --env velox` writes a migration, and
   `atlas migrate apply --env velox -u <url>` applies it. For a schema that
-  keeps tables in PostgreSQL schemas (`schema.TableIn`), use
+  keeps tables in PostgreSQL schemas (`sqlschema.SchemaTable`), use
   `docker://postgres/18/dev`, which is database-scoped. For MySQL use
   `docker://mysql/8.4/dev` with `-dialect mysql`, and for SQLite
   `sqlite://dev?mode=memory` with `-dialect sqlite`.

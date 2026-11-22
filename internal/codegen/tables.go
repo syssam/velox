@@ -220,9 +220,9 @@ func (t *tabler) declaredChecks(e *Entity, tb *migrate.Table) {
 		seen[c.Name] = c.Expr
 		switch {
 		case strings.TrimSpace(c.Name) == "" || strings.TrimSpace(c.Expr) == "":
-			t.fail(table, "schema.Check(%q, %q) needs a name and an expression", c.Name, c.Expr)
+			t.fail(table, "sqlschema.Checks {%q: %q} needs a name and an expression", c.Name, c.Expr)
 		case again && old != c.Expr:
-			t.fail(table, "schema.Check names %q twice, as %q and as %q", c.Name, old, c.Expr)
+			t.fail(table, "sqlschema.Checks names %q twice, as %q and as %q", c.Name, old, c.Expr)
 		case again:
 		default:
 			tb.Checks = append(tb.Checks, migrate.Check{Name: c.Name, Expr: c.Expr, Pos: tb.Pos})

@@ -6,6 +6,7 @@
 //	package schema
 //
 //	import (
+//		"github.com/syssam/velox/dialect/sqlschema"
 //		"github.com/syssam/velox/schema"
 //		"github.com/syssam/velox/schema/edge"
 //		"github.com/syssam/velox/schema/field"
@@ -39,7 +40,7 @@
 //	func (User) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
 //
 //	func (User) Annotations() []schema.Annotation {
-//		return []schema.Annotation{schema.Table("users")}
+//		return []schema.Annotation{sqlschema.Table("users")}
 //	}
 //
 // Generate the entities from the package with

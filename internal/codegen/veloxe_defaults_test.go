@@ -15,7 +15,7 @@ import (
 type nuCustomer struct{ schema.Schema }
 
 func (nuCustomer) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("nu_customers")}
+	return []schema.Annotation{sqlschema.Table("nu_customers")}
 }
 func (nuCustomer) Fields() []schema.Field {
 	return []schema.Field{field.Int64("merged_into_id").Optional().Nillable()}
@@ -31,7 +31,7 @@ func (nuCustomer) Edges() []schema.Edge {
 type nuAllocation struct{ schema.Schema }
 
 func (nuAllocation) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("nu_allocations")}
+	return []schema.Annotation{sqlschema.Table("nu_allocations")}
 }
 func (nuAllocation) Fields() []schema.Field {
 	return []schema.Field{field.Int64("reversed_by_id").Optional().Nillable()}
@@ -87,7 +87,7 @@ func TestNonUniqueFK(t *testing.T) {
 type zdFields struct{ schema.Schema }
 
 func (zdFields) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("zd_fields")}
+	return []schema.Annotation{sqlschema.Table("zd_fields")}
 }
 func (zdFields) Fields() []schema.Field {
 	return []schema.Field{

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -46,8 +48,8 @@ func (Ticket) Fields() []schema.Field {
 		field.Bool("picked"),
 		field.String("nick").Optional().Nillable(),
 		field.Time("made_at").Default(time.Now),
-		field.String("seat").SchemaDefault(map[string]string{field.Postgres: "'a'", field.MySQL: "'a'", field.SQLite: "'a'"}),
-		field.String("gate").SchemaDefault(map[string]string{field.Postgres: "'g'"}),
+		field.String("seat").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'a'", dialect.MySQL: "'a'", dialect.SQLite: "'a'"})),
+		field.String("gate").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'g'"})),
 		field.Int64("rider_id"),
 		field.Int64("route_id"),
 	}

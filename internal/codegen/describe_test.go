@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -26,7 +27,7 @@ type partial struct{ schema.Schema }
 
 func (partial) Fields() []schema.Field { return []schema.Field{field.Int64("a"), field.Int64("b")} }
 func (partial) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("a").Where("a < b AND b > 0 & 1")}
+	return []schema.Index{index.Fields("a").Annotations(sqlschema.IndexWhere("a < b AND b > 0 & 1"))}
 }
 
 func TestDescribeJSONDoesNotEscapeHTML(t *testing.T) {

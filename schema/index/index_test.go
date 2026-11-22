@@ -10,8 +10,8 @@ import (
 )
 
 func TestIndex(t *testing.T) {
-	d := index.Fields("org_id", "name").Edges("owner").Unique().StorageKey("ux").Where("deleted_at IS NULL").Descriptor()
-	if len(d.Fields) != 2 || d.Edges[0] != "owner" || !d.Unique || d.StorageKey != "ux" || d.Where != "deleted_at IS NULL" {
+	d := index.Fields("org_id", "name").Edges("owner").Unique().StorageKey("ux").Descriptor()
+	if len(d.Fields) != 2 || d.Edges[0] != "owner" || !d.Unique || d.StorageKey != "ux" {
 		t.Fatalf("%+v", d)
 	}
 }

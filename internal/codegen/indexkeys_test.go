@@ -17,7 +17,9 @@ import (
 // class, and one over a field and an edge's key with both.
 type ikDocs struct{ schema.Schema }
 
-func (ikDocs) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("ik_docs")} }
+func (ikDocs) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("ik_docs")}
+}
 func (ikDocs) Fields() []schema.Field {
 	return []schema.Field{field.String("title"), field.Time("created_at"), field.JSON("attrs", map[string]string{})}
 }

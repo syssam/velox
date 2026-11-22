@@ -24,6 +24,8 @@ func sqlSchema(userIndexes string) map[string]string {
 		"veloxschema/user.go": `package veloxschema
 
 import (
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -32,11 +34,13 @@ import (
 
 type User struct{ schema.Schema }
 
+var _ sqlschema.Annotation // for an index's IndexWhere
+
 func (User) Annotations() []schema.Annotation { return []schema.Annotation{schema.Comment("people")} }
 
 func (User) Fields() []schema.Field {
 	return []schema.Field{
-		field.Enum("role").Values("admin", "member").SchemaType(map[string]string{field.Postgres: "user_role"}),
+		field.Enum("role").Values("admin", "member").SchemaType(map[string]string{dialect.Postgres: "user_role"}),
 		field.String("email").Unique(),
 	}
 }
@@ -115,7 +119,7 @@ func TestMigrateSQLRefusals(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, sqlSchema(`index.Fields("email").Where("email <> ''")`))
+	dir := tempModule(t, sqlSchema(`index.Fields("email").Annotations(sqlschema.IndexWhere("email <> ''"))`))
 	for name, args := range map[string][]string{
 		"no dialect":   {},
 		"oracle":       {"-dialect", "oracle"},
@@ -198,9 +202,10 @@ func (Post) Fields() []schema.Field {
 
 	t.Run("shared enum", func(t *testing.T) {
 		enum := func(name, fieldName, values string) string {
-			return head + "type " + name + " struct{ schema.Schema }\n\n" +
+			src := strings.Replace(head, "import (\n", "import (\n\t\"github.com/syssam/velox/dialect\"\n", 1)
+			return src + "type " + name + " struct{ schema.Schema }\n\n" +
 				"func (" + name + ") Fields() []schema.Field {\n\treturn []schema.Field{\n" +
-				"\t\tfield.Enum(\"" + fieldName + "\").Values(" + values + ").SchemaType(map[string]string{field.Postgres: \"order_status\"}),\n" +
+				"\t\tfield.Enum(\"" + fieldName + "\").Values(" + values + ").SchemaType(map[string]string{dialect.Postgres: \"order_status\"}),\n" +
 				"\t}\n}\n"
 		}
 		invoice := enum("Invoice", "state", `"paid", "new"`)

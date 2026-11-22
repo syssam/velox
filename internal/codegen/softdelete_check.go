@@ -39,7 +39,7 @@ func SoftDeleteWarnings(g *Graph) []string {
 			if ix.Unique && ix.Where == "" && !slices.Contains(ix.Columns, softDeleteColumn) && !uniqueFieldIndex(e, ix) {
 				out = append(out, (&Error{Pos: ix.Pos, Schema: e.Name, Where: indexAt(i),
 					Reason: "a unique index over every row, deleted ones included: softdelete.Mixin's delete keeps the row, so its values block a new row. " +
-						`On PostgreSQL and SQLite, add .Where("deleted_at IS NULL") to cover the live rows alone; on MySQL, which has no partial index, delete under softdelete.Skip(ctx) to remove the row for good, or check uniqueness in a hook`}).Error())
+						`On PostgreSQL and SQLite, add .Annotations(sqlschema.IndexWhere("deleted_at IS NULL")) to cover the live rows alone; on MySQL, which has no partial index, delete under softdelete.Skip(ctx) to remove the row for good, or check uniqueness in a hook`}).Error())
 			}
 		}
 	}
@@ -67,7 +67,7 @@ func softDeleteFieldWarning(e *Entity, f *Field) *Error {
 		return w
 	}
 	w.Reason = "a Unique field is unique over every row, deleted ones included: softdelete.Mixin's delete keeps the row, so its value blocks a new row. " +
-		"On PostgreSQL and SQLite, drop Unique and declare index.Fields(" + strconv.Quote(f.Name) + `).Unique().Where("deleted_at IS NULL"); on MySQL, which has no partial index, delete under softdelete.Skip(ctx) to remove the row for good, or check uniqueness in a hook`
+		"On PostgreSQL and SQLite, drop Unique and declare index.Fields(" + strconv.Quote(f.Name) + `).Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL")); on MySQL, which has no partial index, delete under softdelete.Skip(ctx) to remove the row for good, or check uniqueness in a hook`
 	return w
 }
 

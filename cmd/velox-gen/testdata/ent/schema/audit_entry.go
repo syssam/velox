@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 )
@@ -11,7 +12,7 @@ type AuditEntry struct{ schema.Schema }
 
 // Annotations returns its table.
 func (AuditEntry) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("audit_entries_kept_for_every_change_an_editor_makes_to_posts")}
+	return []schema.Annotation{sqlschema.Table("audit_entries_kept_for_every_change_an_editor_makes_to_posts")}
 }
 
 // Fields returns the column after the ID.

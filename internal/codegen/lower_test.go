@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
@@ -526,7 +528,7 @@ type ClBox struct{ schema.Schema }
 type ClBoxes struct{ schema.Schema }
 
 func (ClBoxes) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("cl_box_rows")}
+	return []schema.Annotation{sqlschema.Table("cl_box_rows")}
 }
 
 type ClUser struct{ schema.Schema }
@@ -549,7 +551,7 @@ func (ClItem) Edges() []schema.Edge {
 type ClJoin struct{ schema.Schema }
 
 func (ClJoin) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("cl_join_rows")}
+	return []schema.Annotation{sqlschema.Table("cl_join_rows")}
 }
 
 // ClTagEdges has the name of the struct of ClTag's relations.
@@ -806,7 +808,7 @@ func TestJSONTags(t *testing.T) {
 type LwSchemaA struct{ schema.Schema }
 
 func (LwSchemaA) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("app", "lw_schema_as")}
+	return []schema.Annotation{sqlschema.SchemaTable("app", "lw_schema_as")}
 }
 func (LwSchemaA) Edges() []schema.Edge { return []schema.Edge{edge.To("bs", LwSchemaB.Type)} }
 
@@ -819,14 +821,14 @@ func (LwSchemaB) Edges() []schema.Edge {
 type LwSchemaC struct{ schema.Schema }
 
 func (LwSchemaC) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("app", "lw_schema_cs")}
+	return []schema.Annotation{sqlschema.SchemaTable("app", "lw_schema_cs")}
 }
 func (LwSchemaC) Edges() []schema.Edge { return []schema.Edge{edge.To("ds", LwSchemaD.Type)} }
 
 type LwSchemaD struct{ schema.Schema }
 
 func (LwSchemaD) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("app", "lw_schema_ds")}
+	return []schema.Annotation{sqlschema.SchemaTable("app", "lw_schema_ds")}
 }
 func (LwSchemaD) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("cs", LwSchemaC.Type).Ref("ds")}
@@ -910,7 +912,7 @@ func TestLowerJoinTableIsEntityTable(t *testing.T) {
 type LWUserGroup struct{ schema.Schema }
 
 func (LWUserGroup) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("lw_ugs")}
+	return []schema.Annotation{sqlschema.Table("lw_ugs")}
 }
 
 func TestLowerJoinLabelCollision(t *testing.T) {
@@ -1129,7 +1131,7 @@ func (LwPartial) Fields() []schema.Field {
 	return []schema.Field{field.String("email").Unique(), field.Bool("active").Nillable(), field.String("code")}
 }
 func (LwPartial) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("email").Where("active").Unique(), index.Fields("code").Where("active").Unique()}
+	return []schema.Index{index.Fields("email").Annotations(sqlschema.IndexWhere("active")).Unique(), index.Fields("code").Annotations(sqlschema.IndexWhere("active")).Unique()}
 }
 
 func TestLowerPartialUniqueIndex(t *testing.T) {
@@ -1333,7 +1335,7 @@ type sdUser struct {
 func (u sdUser) Fields() []schema.Field {
 	f := field.Time("seen")
 	if u.withDefault {
-		f = f.SchemaDefault(map[string]string{field.Postgres: "now()"})
+		f = f.Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "now()"}))
 	}
 	return []schema.Field{f, field.String("name")}
 }

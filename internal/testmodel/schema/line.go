@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -21,5 +22,5 @@ func (Line) Edges() []schema.Edge {
 
 // Annotations names the table "line", not "lines".
 func (Line) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("line")}
+	return []schema.Annotation{sqlschema.Table("line")}
 }

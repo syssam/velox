@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/internal/testmodel"
-	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
 )
 
@@ -35,7 +35,7 @@ func sqliteInvoices(t *testing.T, def string) (*velox.DB, *sql.DB) {
 // mixin.Time, and so with no velox parameter behind it, sorts with velox's
 // time parameters, so After's pages neither repeat nor stop.
 func TestSQLiteDefaultTimePagesWithAfter(t *testing.T) {
-	def := mixin.CreateTime{}.Fields()[0].Descriptor().SchemaDefault[field.SQLite]
+	def := mixin.CreateTime{}.Fields()[0].Descriptor().SchemaDefault[dialect.SQLite]
 	db, raw := sqliteInvoices(t, def)
 	const rows = 5
 	for i := range rows {

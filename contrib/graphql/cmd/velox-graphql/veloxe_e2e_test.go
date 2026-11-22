@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -96,7 +97,7 @@ func (SalesOrder) Fields() []schema.Field {
 		field.Int64("customer_id").Annotations(graphql.Type("ID"), graphql.WhereOps()),
 		field.String("image_url"),
 		field.Int64("referrer_id").Optional().Nillable().Annotations(graphql.WhereOps()),
-		field.Other("total", Amount{}).SchemaType(map[string]string{field.SQLite: "integer", field.Postgres: "bigint", field.MySQL: "bigint"}).
+		field.Other("total", Amount{}).SchemaType(map[string]string{dialect.SQLite: "integer", dialect.Postgres: "bigint", dialect.MySQL: "bigint"}).
 			Annotations(graphql.Type("Amount"), graphql.WhereOps(graphql.OpsComparison)),
 		field.JSON("custom_fields", map[string]any{}).Annotations(graphql.Type("Map")),
 		field.Enum("status").Values("open", "shipped").Annotations(graphql.Type("SalesOrderEntryStatus"), graphql.WhereOps()),

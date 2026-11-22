@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"unicode"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/migrate"
@@ -29,7 +32,7 @@ type caseStatus string
 // pgEnum names a PostgreSQL enum type for an enum field, which is varchar
 // unless its SchemaType names one (decision 0090): the cases keep the
 // planner's enum types under test.
-func pgEnum(name string) map[string]string { return map[string]string{field.Postgres: name} }
+func pgEnum(name string) map[string]string { return map[string]string{dialect.Postgres: name} }
 
 func (caseStatus) Values() []string { return []string{"active", "banned", "pending"} }
 
@@ -102,7 +105,7 @@ func (Beta) Edges() []schema.Edge {
 type Invoice struct{ schema.Schema }
 
 func (Invoice) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("billing", "invoices")}
+	return []schema.Annotation{sqlschema.SchemaTable("billing", "invoices")}
 }
 func (Invoice) Fields() []schema.Field {
 	return []schema.Field{field.Enum("state").Values("open", "paid").Default("open").SchemaType(pgEnum("invoices_state"))}
@@ -116,7 +119,7 @@ func (Invoice) Edges() []schema.Edge {
 type Payer struct{ schema.Schema }
 
 func (Payer) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("billing", "payers")}
+	return []schema.Annotation{sqlschema.SchemaTable("billing", "payers")}
 }
 func (Payer) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 
@@ -246,7 +249,8 @@ func annotate(m *loadjson.Model, s string, a schema.Annotation) {
 	if e.Annotations == nil {
 		e.Annotations = map[string]json.RawMessage{}
 	}
-	e.Annotations[a.Name()] = marshal(part{annos: []schema.Annotation{a}}).Schemas[0].Annotations[a.Name()]
+	// A sqlschema annotation is lowered to those velox-gen reads, by name.
+	maps.Copy(e.Annotations, marshal(part{annos: []schema.Annotation{a}}).Schemas[0].Annotations)
 }
 
 func addSchema(m *loadjson.Model, ss ...schema.Interface) {
@@ -401,7 +405,7 @@ func withFKIndex(m *loadjson.Model) { addIndex(m, "User", index.Fields("org_id",
 
 // optOutRole makes users.role a varchar on MySQL.
 func optOutRole(m *loadjson.Model) {
-	fieldOf(m, "User", "role").SchemaType = map[string]string{field.MySQL: "varchar(16)"}
+	fieldOf(m, "User", "role").SchemaType = map[string]string{dialect.MySQL: "varchar(16)"}
 }
 
 // roleCheck gives users a declared check on its role column, or on kind where
@@ -461,7 +465,7 @@ var cases = []testCase{
 		dropSchema(m, "Post")
 		dropEdge(m, "User", "posts")
 	}},
-	{name: "rename-table", to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) }, opts: renameUsers},
+	{name: "rename-table", to: func(m *loadjson.Model) { annotate(m, "User", sqlschema.Table("accounts")) }, opts: renameUsers},
 	{name: "add-column-optional", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname").Optional().Default("")) }},
 	{name: "add-column-nillable", to: func(m *loadjson.Model) {
 		addField(m, "User", field.String("nickname").Optional().Nillable())
@@ -469,9 +473,9 @@ var cases = []testCase{
 	{name: "add-column-required", allow: allow("add-required-column"), to: func(m *loadjson.Model) { addField(m, "User", field.Time("joined_at")) }},
 	{name: "add-column-default", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname").Default("anon")) }},
 	{name: "add-column-schema-default", to: func(m *loadjson.Model) {
-		addField(m, "User", field.Time("seen_at").SchemaDefault(map[string]string{
-			field.Postgres: "CURRENT_TIMESTAMP", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP",
-		}))
+		addField(m, "User", field.Time("seen_at").Annotations(sqlschema.DefaultExprs(map[string]string{
+			dialect.Postgres: "CURRENT_TIMESTAMP", dialect.MySQL: "CURRENT_TIMESTAMP(6)", dialect.SQLite: "CURRENT_TIMESTAMP",
+		})))
 	}},
 	{name: "drop-column", allow: allow("drop-column"), to: func(m *loadjson.Model) { dropField(m, "User", "email") }},
 	{name: "rename-column", to: func(m *loadjson.Model) { fieldOf(m, "User", "name").StorageKey = "full_name" },
@@ -495,7 +499,9 @@ var cases = []testCase{
 	{name: "drop-index", to: func(m *loadjson.Model) { dropIndex(m, "User", 0) }},
 	{name: "rename-index", to: func(m *loadjson.Model) { ent(m, "User").Indexes[0].StorageKey = "users_name_idx" }},
 	{name: "add-unique", allow: allow("add-unique"), to: func(m *loadjson.Model) { fieldOf(m, "User", "name").Unique = true }},
-	{name: "add-check", to: func(m *loadjson.Model) { annotate(m, "User", schema.Check("users_logins_positive", "logins >= 0")) }},
+	{name: "add-check", to: func(m *loadjson.Model) {
+		annotate(m, "User", sqlschema.Checks(map[string]string{"users_logins_positive": "logins >= 0"}))
+	}},
 	{name: "fk-index-replaced", to: withFKIndex},
 	{name: "fk-index-restored", from: withFKIndex},
 	{name: "add-foreign-key", from: withReviewer, to: func(m *loadjson.Model) {
@@ -519,7 +525,7 @@ var cases = []testCase{
 		setEnum(m, "Post", "status", "active", "pending")
 	}},
 	{name: "enum-opt-out", allow: allow("alter-type"), dialects: pgMySQL, to: func(m *loadjson.Model) {
-		fieldOf(m, "User", "role").SchemaType = map[string]string{field.Postgres: "text", field.MySQL: "varchar(16)"}
+		fieldOf(m, "User", "role").SchemaType = map[string]string{dialect.Postgres: "text", dialect.MySQL: "varchar(16)"}
 	}},
 	{name: "literals", to: func(m *loadjson.Model) {
 		addField(m, "User", field.String("motto").Default(`it's a \ test`).Comment(`it's a \ comment`))
@@ -542,9 +548,9 @@ var cases = []testCase{
 	// type, which PostgreSQL would otherwise rebuild against the old one.
 	{name: "enum-swap-dependents", dialects: pg, allow: allow("drop-enum-value"), from: func(m *loadjson.Model) {
 		setEnum(m, "User", "role", "admin", "viewer", "guest")
-		addIndex(m, "User", index.Fields("name").Where("role = 'admin'"))
+		addIndex(m, "User", index.Fields("name").Annotations(sqlschema.IndexWhere("role = 'admin'")))
 	}, to: func(m *loadjson.Model) {
-		addIndex(m, "User", index.Fields("name").Where("role = 'admin'"))
+		addIndex(m, "User", index.Fields("name").Annotations(sqlschema.IndexWhere("role = 'admin'")))
 	}, both: func(s *migrate.Schema) {
 		tb := table(s, "users")
 		tb.Checks = append(tb.Checks, migrate.Check{Name: "users_role_known", Expr: `"role" IN ('admin', 'viewer')`})
@@ -561,14 +567,14 @@ var cases = []testCase{
 		s := mustTables(d, nil)
 		table(s, "users").Collation = "utf8mb4_0900_ai_ci"
 		return s
-	}, to: func(m *loadjson.Model) { annotate(m, "User", schema.Collation("utf8mb4_bin")) }},
+	}, to: func(m *loadjson.Model) { annotate(m, "User", sqlschema.Collation("utf8mb4_bin")) }},
 	{name: "rebuild-parent", dialects: sqlite, allow: allow("alter-type"), to: func(m *loadjson.Model) { fieldOf(m, "User", "logins").Type = "float64" }},
 	{name: "rename-table-drop-column", allow: allow("drop-column"), to: func(m *loadjson.Model) {
-		annotate(m, "User", schema.Table("accounts"))
+		annotate(m, "User", sqlschema.Table("accounts"))
 		dropField(m, "User", "email")
 	}, opts: renameUsers},
 	{name: "rename-table-key-type", dialects: pgMySQL, from: withSmallKey,
-		to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) }, opts: renameUsers},
+		to: func(m *loadjson.Model) { annotate(m, "User", sqlschema.Table("accounts")) }, opts: renameUsers},
 	{name: "reuse-dropped-name", allow: allow("drop-table"), both: sharedIdx, from: func(m *loadjson.Model) {
 		addIndex(m, "Post", index.Fields("title").StorageKey("shared_idx"))
 		edgeOf(m, "Post", "author").Symbols = []string{"shared_fk"}
@@ -594,11 +600,11 @@ var cases = []testCase{
 	{name: "rename-column-check", both: roleCheck, to: func(m *loadjson.Model) { fieldOf(m, "User", "role").StorageKey = "kind" },
 		opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "role"}: "kind"}}},
 	{name: "rename-column-where", dialects: []velox.Dialect{velox.Postgres, velox.SQLite}, from: func(m *loadjson.Model) {
-		addIndex(m, "User", index.Fields("email").Where(`"bio" <> 'bio'`))
-		addIndex(m, "User", index.Fields("name").Where(`bio IS NOT NULL`))
+		addIndex(m, "User", index.Fields("email").Annotations(sqlschema.IndexWhere(`"bio" <> 'bio'`)))
+		addIndex(m, "User", index.Fields("name").Annotations(sqlschema.IndexWhere(`bio IS NOT NULL`)))
 	}, to: func(m *loadjson.Model) {
 		fieldOf(m, "User", "bio").StorageKey = "about"
-		addIndex(m, "User", index.Fields("email").Where(`"about" <> 'bio'`))
-		addIndex(m, "User", index.Fields("name").Where(`about IS NOT NULL`))
+		addIndex(m, "User", index.Fields("email").Annotations(sqlschema.IndexWhere(`"about" <> 'bio'`)))
+		addIndex(m, "User", index.Fields("name").Annotations(sqlschema.IndexWhere(`about IS NOT NULL`)))
 	}, opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "bio"}: "about"}}},
 }

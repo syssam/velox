@@ -235,10 +235,10 @@ func (t *tabler) checkMySQLColumn(e *Entity, f *Field, c *migrate.Column, at pla
 		}
 	}
 	if d := f.SchemaDefault[velox.MySQL.String()]; d != "" && mysqlExprDefault[c.Type] && !strings.HasPrefix(d, "(") {
-		t.fail(at, "its MySQL SchemaDefault %s is a literal on a %s column, whose default MySQL takes only as an expression: write it in parentheses, as (%s)", d, c.Type, d)
+		t.fail(at, "its MySQL database default %s is a literal on a %s column, whose default MySQL takes only as an expression: write it in parentheses, as (%s)", d, c.Type, d)
 	}
 	if d := f.SchemaDefault[velox.MySQL.String()]; mysqlNowNeedsPrecision(c.Type, d) {
-		t.fail(at, "its MySQL SchemaDefault %s on a %s column must carry the column's precision: MySQL refuses it at apply; write %s", d, c.Type, mysqlNowWithPrecision(c.Type))
+		t.fail(at, "its MySQL database default %s on a %s column must carry the column's precision: MySQL refuses it at apply; write %s", d, c.Type, mysqlNowWithPrecision(c.Type))
 	}
 	if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
 		if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {

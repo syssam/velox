@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -32,7 +33,7 @@ func (sdAccount) Edges() []schema.Edge {
 func (sdAccount) Indexes() []schema.Index {
 	return []schema.Index{
 		index.Fields("handle").Unique(),
-		index.Fields("slug").Unique().Where("deleted_at IS NULL"),
+		index.Fields("slug").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL")),
 		index.Fields("code", "deleted_at").Unique(),
 		index.Fields("token").Unique().StorageKey("sd_accounts_token_key"),
 	}
@@ -74,11 +75,11 @@ func TestSoftDeleteWarnings(t *testing.T) {
 			t.Errorf("warning %d: got %q, want it to contain %q", i, got[i], w)
 		}
 	}
-	if !strings.Contains(got[0], `index.Fields("email").Unique().Where("deleted_at IS NULL")`) {
+	if !strings.Contains(got[0], `index.Fields("email").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))`) {
 		t.Errorf("a field's warning spells its partial index: %q", got[0])
 	}
-	if !strings.Contains(got[2], `.Where("deleted_at IS NULL")`) {
-		t.Errorf("an index's warning spells its Where: %q", got[2])
+	if !strings.Contains(got[2], `.Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))`) {
+		t.Errorf("an index's warning spells its IndexWhere: %q", got[2])
 	}
 	if !strings.Contains(got[3], "softdelete.Skip") {
 		t.Errorf("an edge key's warning names softdelete.Skip: %q", got[3])

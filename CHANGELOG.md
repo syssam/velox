@@ -1228,6 +1228,20 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `velox.NoFilter()`, which was `velox.Allow()` under a second name. A
   `WithFilter` filter returns `velox.Allow()` for an entity it does not
   restrict.
+- One spelling of each schema option is kept, `entsql`'s where ent has
+  one; a port that names a removed one does not compile, and
+  `docs/coming-from-veloxe.md` and `docs/coming-from-ent.md` name each
+  one's replacement. Gone: `schema.Table`, `TableIn`, `Collation`, `Check`
+  and their annotation types (write `sqlschema.Table`, `SchemaTable`,
+  `Collation`, `Checks`); `index.Builder.Where` (write
+  `Annotations(sqlschema.IndexWhere(...))`); `field.SchemaDefault` (write
+  `Annotations(sqlschema.DefaultExprs(...))`); `field.Postgres`, `MySQL`
+  and `SQLite` (write package `dialect`'s). The `sqlschema` options
+  velox-gen refused are gone with their refusals: `Check`, `Size`,
+  `ColumnType`, `OnDelete`, `OnUpdate`, `Charset`, `Skip`,
+  `IncrementStart`, `WithComments`, `CascadeAction` and its constants,
+  and `IndexAnnotation`'s `StorageParams`, `Prefix`, `PrefixColumns` and
+  `IncludeColumns` with their constructors.
 - velox-gen's warning about a file of yours in `-out/entity` or
   `-out/runtime`, where a velox-gen before 1.0 wrote. A run still removes
   the generated files it no longer writes, there as anywhere below `-out`.

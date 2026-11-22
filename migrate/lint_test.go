@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/migrate"
-	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -728,7 +728,7 @@ func TestLintRenamedTable(t *testing.T) {
 	for _, d := range allDialects {
 		from := mustTables(d, nil)
 		to := mustTables(d, func(m *loadjson.Model) {
-			annotate(m, "User", schema.Table("accounts"))
+			annotate(m, "User", sqlschema.Table("accounts"))
 			addField(m, "User", field.Time("joined_at"))
 		})
 		cs := diff(t, from, to, renameUsers)

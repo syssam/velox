@@ -1251,7 +1251,7 @@ func (b *builder) validateID(e *Entity) {
 		b.fail(21, e.Name, fieldLoc(id), "the ID must be required, not Nillable, and have no UpdateDefault")
 	}
 	if integer(id.Type) && len(id.SchemaDefault) > 0 {
-		b.fail(21, e.Name, fieldLoc(id), "an integer ID is assigned by the database and cannot have a SchemaDefault")
+		b.fail(21, e.Name, fieldLoc(id), "an integer ID is assigned by the database and cannot have a database default")
 	}
 	if !idTypes[id.Type] {
 		b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)

@@ -3,6 +3,7 @@
 package schema
 
 import (
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -20,5 +21,5 @@ func (Group) Edges() []schema.Edge {
 }
 
 func (Group) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("teams")}
+	return []schema.Annotation{sqlschema.Table("teams")}
 }

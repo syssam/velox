@@ -225,7 +225,7 @@ type Field struct {
 	Validators    []any // Validate's functions, each a func(T) error
 	StorageKey    string
 	SchemaType    map[string]string
-	SchemaDefault map[string]string // the database default per dialect, as SQL
+	SchemaDefault map[string]string // the database default per dialect, as SQL, that velox's own mixins set
 	Comment       string
 	StructTag     string
 	Annotations   []Annotation
@@ -265,7 +265,6 @@ type Index struct {
 	Fields, Edges []string // the columns and the edges whose foreign keys the index covers
 	Unique        bool
 	StorageKey    string // the index name
-	Where         string // a partial index's predicate, on PostgreSQL and SQLite
 	Annotations   []Annotation
 	PC            uintptr // the constructor's call, for PosOf
 }

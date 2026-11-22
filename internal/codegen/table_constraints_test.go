@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -17,22 +19,22 @@ type tcAsset struct{ schema.Schema }
 
 func (tcAsset) Fields() []schema.Field {
 	return []schema.Field{field.Enum("depreciation_method").Values("linear", "declining").
-		SchemaType(map[string]string{field.MySQL: "varchar(16)"})}
+		SchemaType(map[string]string{dialect.MySQL: "varchar(16)"})}
 }
 
 func (tcAsset) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("asset"), schema.Check("asset_depreciation_method_check", "depreciation_method <> ''")}
+	return []schema.Annotation{sqlschema.Table("asset"), sqlschema.Checks(map[string]string{"asset_depreciation_method_check": "depreciation_method <> ''"})}
 }
 
 type tcAssetDepreciation struct{ schema.Schema }
 
 func (tcAssetDepreciation) Fields() []schema.Field {
 	return []schema.Field{field.Enum("method").Values("linear", "declining").
-		SchemaType(map[string]string{field.MySQL: "varchar(16)"})}
+		SchemaType(map[string]string{dialect.MySQL: "varchar(16)"})}
 }
 
 func (tcAssetDepreciation) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("asset_depreciation"), schema.Check("asset_depreciation_method_check", "method <> ''")}
+	return []schema.Annotation{sqlschema.Table("asset_depreciation"), sqlschema.Checks(map[string]string{"asset_depreciation_method_check": "method <> ''"})}
 }
 
 // PostgreSQL keeps check and not-null constraint names per table, and SQLite
@@ -70,7 +72,7 @@ func (tcCheckUser) Edges() []schema.Edge {
 }
 
 func (tcCheckUser) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users"), schema.Check("users_pets", "age > 0")}
+	return []schema.Annotation{sqlschema.Table("users"), sqlschema.Checks(map[string]string{"users_pets": "age > 0"})}
 }
 
 // tcAllocation is a veloxe application's PaymentAllocation: the assoc edge
@@ -89,7 +91,7 @@ func (tcAllocation) Edges() []schema.Edge {
 }
 
 func (tcAllocation) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("payment_allocation")}
+	return []schema.Annotation{sqlschema.Table("payment_allocation")}
 }
 
 // The key stays in reversed_by_id, unique, with the foreign key veloxe named;

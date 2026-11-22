@@ -17,7 +17,7 @@ type Builder struct{ d *desc.Index }
 // Fields starts an index over the named fields. velox-gen refuses a JSON
 // field, which no index can cover but a GIN one, and an index that repeats
 // another of the schema or its mixins: the same columns in order, the same
-// Unique, Where and sqlschema options.
+// Unique and sqlschema options.
 func Fields(fields ...string) *Builder { return newBuilder(desc.Caller()).Fields(fields...) }
 
 // Edges starts an index over the foreign keys of the named edges.
@@ -43,22 +43,21 @@ func (b *Builder) Unique() *Builder { b.d.Unique = true; return b }
 
 // StorageKey sets the index name. Without one, velox-gen derives ent's name:
 // the entity's name in lower case and the columns, as user_name; a partial
-// index that would share it with another gets a hash of Where. No two
+// index that would share it with another gets a hash of its predicate. No two
 // indexes of one database schema may share a name.
 func (b *Builder) StorageKey(name string) *Builder { b.d.StorageKey = name; return b }
 
-// Where sets the predicate of a partial index, in SQL. PostgreSQL and SQLite
-// have partial indexes; MySQL does not.
-func (b *Builder) Where(sql string) *Builder { b.d.Where = sql; return b }
-
 // Annotations attaches annotations to the index. Options only a SQL database
-// reads are package sqlschema's: an access method, key order, operator classes.
+// reads are package sqlschema's: an access method, key order, operator classes,
+// the predicate of a partial index, which PostgreSQL and SQLite have and MySQL
+// does not.
 // So are they of the GraphQL and other targets of the schema, each in its own
 // package, so that the builders here say nothing of one backend:
 //
 //	index.Fields("tags").Annotations(sqlschema.IndexType("GIN"))
 //	index.Fields("title").Annotations(sqlschema.OpClass("gin_trgm_ops"))
 //	index.Fields("org_id", "created_at").Annotations(sqlschema.DescColumns("created_at"))
+//	index.Fields("email").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))
 func (b *Builder) Annotations(as ...schema.Annotation) *Builder {
 	b.d.Annotations = append(b.d.Annotations, as...)
 	return b

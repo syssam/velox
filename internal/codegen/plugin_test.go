@@ -602,7 +602,9 @@ func TestPluginModelOwnsKey(t *testing.T) {
 	}
 }
 
-// A plugin does not see SchemaDefault: it is for the migration planner.
+// A plugin does not see the lowered SchemaDefault: it is for the migration
+// planner. The field's sqlschema annotation reaches the plugin, as every
+// annotation does.
 func TestPluginModelHasNoSchemaDefault(t *testing.T) {
 	g, err := build(t, sdUser{withDefault: true})
 	if err != nil {
@@ -619,7 +621,7 @@ func TestPluginModelHasNoSchemaDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(b, []byte("schema_default")) || bytes.Contains(b, []byte("now()")) {
+	if bytes.Contains(b, []byte("schema_default")) {
 		t.Fatalf("the plugin model carries a SchemaDefault: %s", b)
 	}
 }

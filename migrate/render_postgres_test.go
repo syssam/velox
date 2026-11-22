@@ -15,9 +15,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/migrate"
-	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
 )
 
@@ -418,7 +418,7 @@ func TestRenderPostgresDetails(t *testing.T) {
 	to = mustTables(velox.Postgres, func(m *loadjson.Model) {
 		f := fieldOf(m, "User", "bio")
 		f.Optional, f.Nillable, f.Size = false, false, 50
-		f.SchemaType = map[string]string{field.Postgres: "varchar(50)"}
+		f.SchemaType = map[string]string{dialect.Postgres: "varchar(50)"}
 	})
 	ss = render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})
 	if main, on := scriptOf(ss, migrate.ScriptMain), scriptOf(ss, migrate.ScriptOnline); main == nil || on == nil ||
@@ -429,7 +429,7 @@ func TestRenderPostgresDetails(t *testing.T) {
 
 	// A type change into an enum casts through text.
 	from = mustTables(velox.Postgres, func(m *loadjson.Model) {
-		fieldOf(m, "User", "role").SchemaType = map[string]string{field.Postgres: "text"}
+		fieldOf(m, "User", "role").SchemaType = map[string]string{dialect.Postgres: "text"}
 	})
 	to = mustTables(velox.Postgres, nil)
 	got = sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{}))

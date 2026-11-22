@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/ddl"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
@@ -38,14 +40,16 @@ func (DnOrderStatus) Values() []string { return []string{"open", "closed"} }
 
 type dnOrder struct{ schema.Schema }
 
-func (dnOrder) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("orders")} }
+func (dnOrder) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("orders")}
+}
 func (dnOrder) Fields() []schema.Field {
 	return []schema.Field{
 		field.Enum("plain").Values("a"),
 		field.EnumOf[DnOrderStatus]("status"),
 		field.Enum("typed").GoType(DnOrderStatus("")),
-		field.Enum("named").Values("a").SchemaType(map[string]string{field.Postgres: "mood"}),
-		field.Enum("text").Values("a").SchemaType(map[string]string{field.Postgres: "varchar(9)"}),
+		field.Enum("named").Values("a").SchemaType(map[string]string{dialect.Postgres: "mood"}),
+		field.Enum("text").Values("a").SchemaType(map[string]string{dialect.Postgres: "varchar(9)"}),
 		field.Enum(strings.Repeat("e", 60)).Values("a"),
 	}
 }
@@ -89,7 +93,9 @@ type dnPet struct{ schema.Schema }
 func (dnPet) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("owner", dnOwner.Type).Ref("pets").Unique().StorageKey(edge.Symbol("pet_owner"))}
 }
-func (dnPet) Indexes() []schema.Index { return []schema.Index{index.Edges("owner").Where("x")} }
+func (dnPet) Indexes() []schema.Index {
+	return []schema.Index{index.Edges("owner").Annotations(sqlschema.IndexWhere("x"))}
+}
 
 type dnGroup struct{ schema.Schema }
 

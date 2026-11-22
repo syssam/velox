@@ -311,6 +311,8 @@ func TestGenerateWarnsOfNonZeroDefault(t *testing.T) {
 	dir := genModule(t, map[string]string{"veloxschema/flag.go": `package veloxschema
 
 import (
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 )
@@ -318,7 +320,7 @@ import (
 type Flag struct{ schema.Schema }
 
 func (Flag) Fields() []schema.Field {
-	return []schema.Field{field.Bool("on").SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "true", field.SQLite: "true"})}
+	return []schema.Field{field.Bool("on").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "true", dialect.MySQL: "true", dialect.SQLite: "true"}))}
 }
 `})
 	code, _, errs := runCLI(t, dir, "./veloxschema")

@@ -94,7 +94,7 @@ func (Invoice) Edges() []velox.Edge {
 
 func (Invoice) Indexes() []velox.Index {
 	return []velox.Index{
-		index.Fields("org_id", "number").Unique().Where("deleted_at IS NULL"),
+		index.Fields("org_id", "number").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL")),
 	}
 }
 ```
@@ -144,16 +144,16 @@ db.Insert(&g).Set(veloxgen.Groups.Open.Set(false)).Exec(ctx) // open = false
 
 A GraphQL create input leaves such a field optional (`active: Boolean`): left
 out it takes the `Default`, and `false` is stored. A constant `Default` is
-also the column's `DEFAULT`. `SchemaDefault` sets a database `DEFAULT`
-per dialect, and `Annotations(sqlschema.Default("100"))` is the same with one
-SQL text for every dialect (`sqlschema.DefaultExprs` takes one for each). An
+also the column's `DEFAULT`. `Annotations(sqlschema.Default("100"))` sets a
+database `DEFAULT` of one SQL text for every dialect, and
+`sqlschema.DefaultExprs` one for each. An
 insert of the zero value leaves such a column out, so the database fills it,
 and reads the value back into the struct
 ([ADR 0093](decisions/0093-lean-inserts.md)):
 
 ```go
 // field.Time("created_at").Annotations(sqlschema.DefaultExpr("CURRENT_TIMESTAMP"))
-// field.Enum("status").Values("new", "paid").SchemaDefault(map[string]string{field.Postgres: "'new'"})
+// field.Enum("status").Values("new", "paid").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'new'"}))
 inv := veloxgen.Invoice{Number: "A-1"}
 db.Insert(&inv).Exec(ctx)
 // INSERT INTO "invoices" ("number") VALUES ($1) RETURNING "id", "created_at", "status"
@@ -167,7 +167,7 @@ given is validated, and so is a column an upsert's conflict clause writes.
 To store the zero itself in such a column, make the field Nillable and set a
 pointer to the zero: a non-nil value is always written. velox-gen warns of a
 field that is not Nillable whose database default is a non-zero literal,
-such as `field.Bool("active").SchemaDefault(...)` with `true`: no `Insert`
+such as `field.Bool("active").Annotations(sqlschema.Default("true"))`: no `Insert`
 can store its `false`, a setter's included. A decimal Other field with a
 non-zero default, such as `"1.00"`, is warned of the same way.
 
@@ -180,7 +180,7 @@ velox, and is written as 0.
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column
 is stored as ent and veloxe store it: `character varying` on PostgreSQL,
 `enum(...)` on MySQL and `text` on SQLite, with no CHECK. A Postgres
-`SchemaType` that names a type, `map[string]string{field.Postgres: "mood"}`,
+`SchemaType` that names a type, `map[string]string{dialect.Postgres: "mood"}`,
 makes a PostgreSQL enum type of that name instead.
 
 ### Edges
@@ -267,7 +267,8 @@ runs it.
 ### Indexes
 
 `index.Fields("a", "b")` makes an index, `.Unique()` makes it unique, and
-`.Where("...")` makes it partial on PostgreSQL and SQLite. Options only a SQL
+`.Annotations(sqlschema.IndexWhere("..."))` makes it partial on PostgreSQL and
+SQLite, as in ent. Options only a SQL
 database reads are annotations of package `dialect/sqlschema`, as in the old
 velox, so that the same schema can feed GraphQL and other targets. On PostgreSQL, `sqlschema.IndexType("GIN")` picks the
 access method (hash, gin, gist, spgist or brin; btree is the default), and a GIN
@@ -305,11 +306,13 @@ index.Fields("title").Annotations(sqlschema.IndexType("GIN"), sqlschema.OpClass(
 index.Fields("name", "created_at").Annotations(sqlschema.DescColumns("created_at"))
 ```
 
-`sqlschema.IndexWhere` is `.Where` as an annotation, for a port; give an index one
-of them. A schema may also be named the old velox's way, `sqlschema.Annotation{Table:
-"users"}` or `sqlschema.Table("users")`, which is `schema.Table`. The old velox's
-`StorageParams`, `Prefix`, `IncludeColumns`, `Size`, `ColumnType` and `OnDelete`
-compile and are refused by velox-gen, naming velox's own spelling.
+A schema's table is `sqlschema.Table("users")`, or
+`sqlschema.Annotation{Table: "users"}`, as ent's `entsql` spells it;
+`SchemaTable`, `Collation` and `Checks` name its database schema, its MySQL
+collation and its CHECK constraints. The old velox's options velox does not
+hold, such as `StorageParams`, `Prefix`, `Size` or `ColumnType`, are not
+there: [coming from veloxe](coming-from-veloxe.md#removed-schema-options)
+names each one's replacement.
 
 Name only an operator class that is not its type's default: PostgreSQL reads a
 default one back as none, and the schema would differ from the database for

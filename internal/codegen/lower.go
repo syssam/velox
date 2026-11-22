@@ -863,11 +863,11 @@ func unset(f *Field, elem string) string {
 
 // checkWriter writes one field's case of Check's switch.
 type checkWriter struct {
-	s     *entState
-	f     *Field
-	o     *OutField
-	at    loc
-	b     strings.Builder
+	s  *entState
+	f  *Field
+	o  *OutField
+	at loc
+	b  strings.Builder
 }
 
 // line writes one line of the case, indented by depth tabs.

@@ -3,6 +3,7 @@ package schema_test
 import (
 	"fmt"
 
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -30,7 +31,7 @@ func (Account) Indexes() []schema.Index {
 }
 
 func (Account) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("accounts"), schema.Comment("Who can sign in.")}
+	return []schema.Annotation{sqlschema.Table("accounts"), schema.Comment("Who can sign in.")}
 }
 
 // Org is the other end of Account's edge.

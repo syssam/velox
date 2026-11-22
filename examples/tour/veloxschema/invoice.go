@@ -7,6 +7,7 @@ package veloxschema
 
 import (
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -44,5 +45,5 @@ func (Invoice) Edges() []velox.Edge { return []velox.Edge{edge.To("lines", Line.
 // are not deleted, so that a deleted invoice's number can be used again.
 // The tour runs on SQLite, which, as PostgreSQL, has partial indexes.
 func (Invoice) Indexes() []velox.Index {
-	return []velox.Index{index.Fields("org_id", "number").Unique().Where("deleted_at IS NULL")}
+	return []velox.Index{index.Fields("org_id", "number").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))}
 }

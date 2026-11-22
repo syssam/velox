@@ -963,27 +963,16 @@ func Open(pool *pgxpool.Pool, opts ...velox.Option) *velox.DB
 
 package schema
 Annotation is interface{ Name() string }
-func (*CheckAnnotation) Name() string
-func (*CollationAnnotation) Name() string
 func (*CommentAnnotation) Name() string
-func (*TableAnnotation) Name() string
 func (Schema) Annotations() []Annotation
 func (Schema) Edges() []Edge
 func (Schema) Fields() []Field
 func (Schema) Indexes() []Index
 func (Schema) Mixin() []Mixin
 func (Schema) Type()
-func (a *CheckAnnotation) Merge(other Annotation) Annotation
-func Check(name, expr string) *CheckAnnotation
-func Collation(name string) *CollationAnnotation
 func Comment(text string) *CommentAnnotation
 func FieldDescriptor(s Interface, name string) *desc.Field
-func Table(name string) *TableAnnotation
-func TableIn(schema, table string) *TableAnnotation
 type Annotation = desc.Annotation
-type CheckAnnotation struct { Checks []CheckConstraint }
-type CheckConstraint struct { Name string Expr string }
-type CollationAnnotation struct { Collation string }
 type CommentAnnotation struct { Text string }
 type Edge interface{ Descriptor() *desc.Edge }
 type Field interface{ Descriptor() *desc.Field }
@@ -992,7 +981,6 @@ type Interface interface { Type() Fields() []Field Edges() []Edge Indexes() []In
 type Merger interface{ Merge(Annotation) Annotation }
 type Mixin interface { Fields() []Field Edges() []Edge Indexes() []Index Annotations() []Annotation }
 type Schema struct { }
-type TableAnnotation struct { Schema string Table string }
 
 package schema/edge
 const Cascade Action
@@ -1049,9 +1037,6 @@ StringBuilder embeds typed[*StringBuilder, string]
 TimeBuilder embeds common[*TimeBuilder]
 UUIDBuilder embeds common[*UUIDBuilder]
 UUIDOfBuilder embeds common[*UUIDOfBuilder[T]]
-const MySQL
-const Postgres
-const SQLite
 func (b *BytesBuilder) MaxLen(n int) *BytesBuilder
 func (b *BytesBuilder) MinLen(n int) *BytesBuilder
 func (b *BytesBuilder) NotEmpty() *BytesBuilder
@@ -1115,7 +1100,6 @@ promoted func (c common[B]) Descriptor() *desc.Field
 promoted func (c common[B]) Immutable() B
 promoted func (c common[B]) Nillable() B
 promoted func (c common[B]) Optional() B
-promoted func (c common[B]) SchemaDefault(m map[string]string) B
 promoted func (c common[B]) SchemaType(m map[string]string) B
 promoted func (c common[B]) Sensitive() B
 promoted func (c common[B]) StorageKey(s string) B
@@ -1148,7 +1132,6 @@ func (b *Builder) Edges(edges ...string) *Builder
 func (b *Builder) Fields(fields ...string) *Builder
 func (b *Builder) StorageKey(name string) *Builder
 func (b *Builder) Unique() *Builder
-func (b *Builder) Where(sql string) *Builder
 func Edges(edges ...string) *Builder
 func Fields(fields ...string) *Builder
 type Builder struct { }
@@ -1160,48 +1143,29 @@ const SQLite
 
 package dialect/sqlschema
 const AnnotationName
-const Cascade CascadeAction
 const IndexAnnotationName
-const NoAction CascadeAction
-const Restrict CascadeAction
-const SetDefault CascadeAction
-const SetNull CascadeAction
 func (Annotation) Name() string
 func (IndexAnnotation) Name() string
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation
 func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation
-func Charset(charset string) Annotation
-func Check(expr string) Annotation
 func Checks(c map[string]string) Annotation
 func Collation(c string) Annotation
-func ColumnType(typ string) Annotation
 func Default(value string) Annotation
 func DefaultExpr(expr string) Annotation
 func DefaultExprs(exprs map[string]string) Annotation
 func Desc() *IndexAnnotation
 func DescColumns(names ...string) *IndexAnnotation
-func IncludeColumns(names ...string) *IndexAnnotation
-func IncrementStart(n int) Annotation
 func IndexType(typ string) *IndexAnnotation
 func IndexTypes(types map[string]string) *IndexAnnotation
 func IndexWhere(pred string) *IndexAnnotation
 func NonUniqueFK() Annotation
-func OnDelete(a CascadeAction) Annotation
-func OnUpdate(a CascadeAction) Annotation
 func OpClass(op string) *IndexAnnotation
 func OpClassColumn(name, op string) *IndexAnnotation
-func Prefix(n uint) *IndexAnnotation
-func PrefixColumn(name string, n uint) *IndexAnnotation
 func Schema(name string) Annotation
 func SchemaTable(schema, table string) Annotation
-func Size(n int64) Annotation
-func Skip() Annotation
-func StorageParams(params string) *IndexAnnotation
 func Table(name string) Annotation
-func WithComments(on bool) Annotation
-type Annotation struct { Table string Schema string Collation string Check string Checks map[string]string Default string DefaultExpr string DefaultExprs map[string]string NonUniqueFK bool Skip bool Size int64 ColumnType string OnDelete CascadeAction OnUpdate CascadeAction Charset string IncrementStart *int WithComments *bool }
-type CascadeAction string
-type IndexAnnotation struct { Type string Types map[string]string Where string StorageParams string Desc bool DescColumns map[string]bool OpClass string OpClassColumns map[string]string Prefix uint PrefixColumns map[string]uint IncludeColumns []string }
+type Annotation struct { Table string Schema string Collation string Checks map[string]string Default string DefaultExpr string DefaultExprs map[string]string NonUniqueFK bool }
+type IndexAnnotation struct { Type string Types map[string]string Where string Desc bool DescColumns map[string]bool OpClass string OpClassColumns map[string]string }
 
 package schema/mixin
 func (CreateTime) Fields() []schema.Field

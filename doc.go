@@ -213,7 +213,7 @@
 // velox binds every time in one form, UTC with nine fractional digits
 // (2026-11-01 12:00:00.000000000+00:00), so that the text sorts by the instant,
 // and mixin.Time's database default writes that form. So must every other
-// writer: a SchemaDefault of your own, raw SQL, another program. Their
+// writer: a sqlschema default of your own, raw SQL, another program. Their
 // expression is strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'). Text in another
 // form compares wrongly: CURRENT_TIMESTAMP's 2026-11-01 12:00:00 sorts below the
 // parameter of the same instant, so that After's pages repeat. A migration that

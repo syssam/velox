@@ -315,6 +315,36 @@ These hold with or without compat:
 - `Optional` stays NOT NULL, and `Nillable` makes a column NULL-able
   ([ADR 0003](decisions/0003-nullability.md)).
 
+## Removed schema options
+
+velox keeps one spelling of each schema option, `entsql`'s where ent has
+one. A port that names one of these does not compile; write the
+replacement.
+
+| Removed | Write instead |
+|---|---|
+| `schema.Table(name)` | `sqlschema.Table(name)` |
+| `schema.TableIn(schema, table)` | `sqlschema.SchemaTable(schema, table)` |
+| `schema.Collation(c)` | `sqlschema.Collation(c)` |
+| `schema.Check(name, expr)` | `sqlschema.Checks(map[string]string{name: expr})` |
+| `index.Fields(...).Where(pred)` | `index.Fields(...).Annotations(sqlschema.IndexWhere(pred))` |
+| `field.X(...).SchemaDefault(m)` | `field.X(...).Annotations(sqlschema.DefaultExprs(m))` |
+| `field.Postgres`, `field.MySQL`, `field.SQLite` | `dialect.Postgres`, `dialect.MySQL`, `dialect.SQLite` |
+| `sqlschema.Check(expr)`, `Annotation.Check` | `sqlschema.Checks`, which names the constraint |
+| `sqlschema.Size(n)`, `Annotation.Size` | `field.MaxLen(n)` |
+| `sqlschema.ColumnType(t)`, `Annotation.ColumnType` | `field.SchemaType`, by dialect |
+| `sqlschema.OnDelete(a)`, `Annotation.OnDelete` | `edge.OnDelete(a)` |
+| `sqlschema.CascadeAction`, `Cascade`, `SetNull`, `Restrict`, `NoAction` | `edge.Action`, `edge.Cascade`, `edge.SetNull`, `edge.Restrict`, `edge.NoAction` |
+| `sqlschema.SetDefault` | not supported |
+| `sqlschema.OnUpdate(a)`, `Annotation.OnUpdate` | not supported: velox writes no `ON UPDATE` |
+| `sqlschema.Charset(c)`, `Annotation.Charset` | not supported |
+| `sqlschema.Skip()`, `Annotation.Skip` | not supported |
+| `sqlschema.IncrementStart(n)`, `Annotation.IncrementStart` | not supported |
+| `sqlschema.WithComments(b)`, `Annotation.WithComments` | not needed: velox writes a comment where the dialect has them |
+| `sqlschema.StorageParams(p)`, `IndexAnnotation.StorageParams` | not supported |
+| `sqlschema.Prefix(n)`, `sqlschema.PrefixColumn(name, n)`, `IndexAnnotation.Prefix`, `PrefixColumns` | not supported: velox does not model a MySQL index prefix |
+| `sqlschema.IncludeColumns(...)`, `IndexAnnotation.IncludeColumns` | not supported: velox does not model a covering index |
+
 ## Not supported
 
 Generator:
@@ -335,7 +365,7 @@ Schema:
 - **`field.Any`, `field.Deprecated`, `field.ValueScanner`, an edge's
   `StructTag` and `sqlschema.View`.** Not built; nothing asked for them.
 - **`FeatureCheckBounds`.** `Min`, `Max` and `Range` make no `CHECK`.
-  Declare one with `sqlschema.Check`.
+  Declare one with `sqlschema.Checks`.
 - **`mixin.AuditHook`, `AnnotateFields` and `AnnotateEdges`.** `db.Record`
   reports each change with the row before and after
   ([ADR 0094](decisions/0094-change-recording.md)).
@@ -357,7 +387,7 @@ Queries and runtime:
   values, and every call returns its error.
 - **`querylanguage.P` (entql).** `velox.FieldEQ` and its kin, and package
   `untyped`, name columns by string.
-- **A per-client table schema at run time.** `schema.TableIn` and
+- **A per-client table schema at run time.** `sqlschema.SchemaTable` and
   `sqlschema.Schema` are fixed at generation.
 - **veloxe's viewer, role and tenant rules** (`WithViewer`, `HasRole`,
   `TenantRule`, `DenyIfNoViewer`). Tenancy is a mixin over package `scope`

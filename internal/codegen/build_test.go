@@ -16,6 +16,8 @@ import (
 	"unsafe"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen/internal/other"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/internal/ddl"
@@ -250,7 +252,7 @@ func (Profile) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("account", Account.Type).Ref("profile").Unique().Required()}
 }
 func (Profile) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("app", "account_profiles")}
+	return []schema.Annotation{sqlschema.SchemaTable("app", "account_profiles")}
 }
 
 type Role struct{ schema.Schema }
@@ -754,13 +756,13 @@ func (optionalFK) Edges() []schema.Edge {
 type sdIntID struct{ schema.Schema }
 
 func (sdIntID) Fields() []schema.Field {
-	return []schema.Field{field.Int64("id").SchemaDefault(map[string]string{field.Postgres: "1"})}
+	return []schema.Field{field.Int64("id").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "1"}))}
 }
 
 type sdStringID struct{ schema.Schema }
 
 func (sdStringID) Fields() []schema.Field {
-	return []schema.Field{field.String("id").SchemaDefault(map[string]string{field.Postgres: "gen_random_uuid()::text"})}
+	return []schema.Field{field.String("id").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "gen_random_uuid()::text"}))}
 }
 
 type emptyEnum struct{ schema.Schema }
@@ -837,7 +839,7 @@ func (joinClash) Edges() []schema.Edge { return []schema.Edge{edge.To("links", j
 type clashTable struct{ schema.Schema }
 
 func (clashTable) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("join_clash_links")}
+	return []schema.Annotation{sqlschema.Table("join_clash_links")}
 }
 
 type inlineNotSchema struct{ schema.Schema }
@@ -1064,7 +1066,9 @@ var long64 = strings.Repeat("x", 64)
 
 type longTable struct{ schema.Schema }
 
-func (longTable) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table(long64)} }
+func (longTable) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table(long64)}
+}
 
 type longColumn struct{ schema.Schema }
 
@@ -1109,7 +1113,7 @@ func (longJoinTable) Edges() []schema.Edge {
 type longEnumType struct{ schema.Schema }
 
 func (longEnumType) Fields() []schema.Field {
-	return []schema.Field{field.Enum("s").Values("a").SchemaType(map[string]string{field.Postgres: long64})}
+	return []schema.Field{field.Enum("s").Values("a").SchemaType(map[string]string{dialect.Postgres: long64})}
 }
 
 type twoSymbolsO2M struct{ schema.Schema }
@@ -1142,7 +1146,7 @@ type enumOrder struct{ schema.Schema }
 var enumOrderLine int
 
 func (enumOrder) Fields() []schema.Field {
-	f, l := field.Enum("status").Values("a", "b").SchemaType(map[string]string{field.Postgres: "status"}), here()
+	f, l := field.Enum("status").Values("a", "b").SchemaType(map[string]string{dialect.Postgres: "status"}), here()
 	enumOrderLine = l
 	return []schema.Field{f}
 }
@@ -1150,21 +1154,23 @@ func (enumOrder) Fields() []schema.Field {
 type enumTicket struct{ schema.Schema }
 
 func (enumTicket) Fields() []schema.Field {
-	return []schema.Field{field.Enum("state").Values("b", "a").SchemaType(map[string]string{field.Postgres: "status"})}
+	return []schema.Field{field.Enum("state").Values("b", "a").SchemaType(map[string]string{dialect.Postgres: "status"})}
 }
 
 // nsOrder's enum type orders_status is nsOrderStatus's table.
 type nsOrder struct{ schema.Schema }
 
-func (nsOrder) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("orders")} }
+func (nsOrder) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("orders")}
+}
 func (nsOrder) Fields() []schema.Field {
-	return []schema.Field{field.Enum("status").Values("a").SchemaType(map[string]string{field.Postgres: "orders_status"})}
+	return []schema.Field{field.Enum("status").Values("a").SchemaType(map[string]string{dialect.Postgres: "orders_status"})}
 }
 
 type nsOrderStatus struct{ schema.Schema }
 
 func (nsOrderStatus) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("orders_status")}
+	return []schema.Annotation{sqlschema.Table("orders_status")}
 }
 
 // lpPrefix is 58 bytes: lpA's and lpB's tables, of 59 and 60 bytes, share
@@ -1175,13 +1181,13 @@ var lpPrefix = "long_table_" + strings.Repeat("t", 47)
 type lpA struct{ schema.Schema }
 
 func (lpA) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table(lpPrefix + "a")}
+	return []schema.Annotation{sqlschema.Table(lpPrefix + "a")}
 }
 
 type lpB struct{ schema.Schema }
 
 func (lpB) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table(lpPrefix + "bb")}
+	return []schema.Annotation{sqlschema.Table(lpPrefix + "bb")}
 }
 
 // dupNamed's two indexes have one derived name: a full index takes no hash.
@@ -1225,7 +1231,7 @@ func TestBuildRules(t *testing.T) {
 		{"19 value from Values and GoType", []schema.Interface{enumGoTypeDup{}}, `schema enumGoTypeDup: field "s": value "a" is given twice`},
 		{"20 enum go name", []schema.Interface{badEnum{}}, `schema badEnum: field "s": value "in-progress" has no Go name; use NamedValues`},
 		{"21 optional id", []schema.Interface{optionalID{}}, `schema optionalID: field "id": the ID must be required, not Nillable, and have no UpdateDefault`},
-		{"21 schema default on an integer ID", []schema.Interface{sdIntID{}}, `schema sdIntID: field "id": an integer ID is assigned by the database and cannot have a SchemaDefault`},
+		{"21 schema default on an integer ID", []schema.Interface{sdIntID{}}, `schema sdIntID: field "id": an integer ID is assigned by the database and cannot have a database default`},
 		{"22 float id", []schema.Interface{floatID{}}, `schema floatID: field "id": the ID cannot be of type float64`},
 		{"23 unknown index field", []schema.Interface{unknownIndexField{}}, `schema unknownIndexField: index 0: names unknown field "nope"`},
 		{"23 near index field", []schema.Interface{nearIndexField{}}, `schema nearIndexField: index 0: names unknown field "nmae"; did you mean "name"?`},
@@ -1540,7 +1546,7 @@ func (optionalNoValueSchema) Fields() []schema.Field {
 		field.Enum("mood").Values("calm", "busy").Optional(),
 		field.Bytes("blob").Optional(),
 		field.Time("seen").Optional(),
-		field.Bool("live").Optional().SchemaDefault(map[string]string{field.Postgres: "true", field.MySQL: "1", field.SQLite: "1"}),
+		field.Bool("live").Optional().Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "true", dialect.MySQL: "1", dialect.SQLite: "1"})),
 		field.String("bio_n").Optional().Nillable(),
 		field.String("bio_d").Optional().Default(""),
 		field.Int("age_d").Optional().Default(0),
@@ -1612,12 +1618,12 @@ func (dupIndexes) Fields() []schema.Field {
 func (dupIndexes) Indexes() []schema.Index {
 	return []schema.Index{
 		index.Fields("a", "b"),
-		index.Fields("b", "a"),            // another order
-		index.Fields("a", "b"),            // rule 43
-		index.Fields("a", "b").Unique(),   // unique, but of index 0's name: rule 44
-		index.Fields("a", "b").Where("x"), // partial
-		index.Fields("a", "b").Where("y"), // another predicate
-		index.Fields("b"),                 // b's Unique is not compared
+		index.Fields("b", "a"),          // another order
+		index.Fields("a", "b"),          // rule 43
+		index.Fields("a", "b").Unique(), // unique, but of index 0's name: rule 44
+		index.Fields("a", "b").Annotations(sqlschema.IndexWhere("x")), // partial
+		index.Fields("a", "b").Annotations(sqlschema.IndexWhere("y")), // another predicate
+		index.Fields("b"), // b's Unique is not compared
 		index.Fields("a").StorageKey("dup"),
 		index.Fields("b", "a").Unique().StorageKey("dup"), // rule 44
 		index.Fields("b").Unique(),                        // beside b's Unique; index 6's name
@@ -1669,14 +1675,14 @@ schema dupIndexes: index 9: name "dup_indexes_dupindexes_b" is also this schema'
 type indexNames struct{ schema.Schema }
 
 func (indexNames) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("names")}
+	return []schema.Annotation{sqlschema.Table("names")}
 }
 func (indexNames) Fields() []schema.Field { return []schema.Field{field.String("a")} }
 func (indexNames) Indexes() []schema.Index {
 	return []schema.Index{
 		index.Fields("a"),
-		index.Fields("a").Where("x"),
-		index.Fields("a").Where("y"),
+		index.Fields("a").Annotations(sqlschema.IndexWhere("x")),
+		index.Fields("a").Annotations(sqlschema.IndexWhere("y")),
 		index.Fields("a").Unique().StorageKey("names_a_key"),
 	}
 }
@@ -1703,14 +1709,14 @@ func TestIndexNames(t *testing.T) {
 type fkPartial struct{ schema.Schema }
 
 func (fkPartial) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("fkpartial")}
+	return []schema.Annotation{sqlschema.Table("fkpartial")}
 }
 func (fkPartial) Fields() []schema.Field { return []schema.Field{field.Int64("owner_id")} }
 func (fkPartial) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("owner", Data.Type).Unique().Required().Field("owner_id")}
 }
 func (fkPartial) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("owner_id").Where("owner_id > 0")}
+	return []schema.Index{index.Fields("owner_id").Annotations(sqlschema.IndexWhere("owner_id > 0"))}
 }
 
 func TestPartialIndexOnForeignKeyKeepsItsName(t *testing.T) {
@@ -1723,7 +1729,7 @@ func TestPartialIndexOnForeignKeyKeepsItsName(t *testing.T) {
 type keyShareA struct{ schema.Schema }
 
 func (keyShareA) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("share")}
+	return []schema.Annotation{sqlschema.Table("share")}
 }
 func (keyShareA) Fields() []schema.Field { return []schema.Field{field.String("a")} }
 func (keyShareA) Indexes() []schema.Index {
@@ -1735,7 +1741,7 @@ func (keyShareA) Indexes() []schema.Index {
 type keyShareB struct{ schema.Schema }
 
 func (keyShareB) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("share_b")}
+	return []schema.Annotation{sqlschema.Table("share_b")}
 }
 func (keyShareB) Fields() []schema.Field { return []schema.Field{field.String("b")} }
 func (keyShareB) Indexes() []schema.Index {
@@ -1751,7 +1757,7 @@ func (keyShareC) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("c").StorageKey("shared")}
 }
 func (keyShareC) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("other", "share_b")}
+	return []schema.Annotation{sqlschema.SchemaTable("other", "share_b")}
 }
 
 type keyMix struct{ mixin.Schema }
@@ -1961,7 +1967,9 @@ type capIndexes struct{ schema.Schema }
 
 var capColumn = strings.Repeat("c", 63)
 
-func (capIndexes) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("caps")} }
+func (capIndexes) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("caps")}
+}
 func (capIndexes) Fields() []schema.Field {
 	return []schema.Field{field.String(capColumn), field.String("p"), field.String("q")}
 }
@@ -2017,18 +2025,20 @@ func TestIndexNamesCapped(t *testing.T) {
 
 type nsUser struct{ schema.Schema }
 
-func (nsUser) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("users")} }
+func (nsUser) Annotations() []schema.Annotation { return []schema.Annotation{sqlschema.Table("users")} }
 func (nsUser) Fields() []schema.Field {
 	return []schema.Field{field.Enum("role").Values("a", "b")}
 }
 
 type nsUsers struct{ schema.Schema }
 
-func (nsUsers) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("Users")} }
+func (nsUsers) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("Users")}
+}
 
 type nsPost struct{ schema.Schema }
 
-func (nsPost) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("posts")} }
+func (nsPost) Annotations() []schema.Annotation { return []schema.Annotation{sqlschema.Table("posts")} }
 func (nsPost) Fields() []schema.Field           { return []schema.Field{field.String("title")} }
 func (nsPost) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("title").StorageKey("titles")}
@@ -2038,14 +2048,14 @@ func (nsPost) Indexes() []schema.Index {
 type nsPostTitles struct{ schema.Schema }
 
 func (nsPostTitles) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("posts_titles")}
+	return []schema.Annotation{sqlschema.Table("posts_titles")}
 }
 
 // nsCheckUser's edge's symbol is its declared check's name.
 type nsCheckUser struct{ schema.Schema }
 
 func (nsCheckUser) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users"), schema.Check("users_role_check", "role <> ''")}
+	return []schema.Annotation{sqlschema.Table("users"), sqlschema.Checks(map[string]string{"users_role_check": "role <> ''"})}
 }
 func (nsCheckUser) Fields() []schema.Field {
 	return []schema.Field{field.String("role")}
@@ -2059,7 +2069,7 @@ func (nsCheckUser) Edges() []schema.Edge {
 type nsCheckOwn struct{ schema.Schema }
 
 func (nsCheckOwn) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users"), schema.Check("users_role_check", "role <> ''")}
+	return []schema.Annotation{sqlschema.Table("users"), sqlschema.Checks(map[string]string{"users_role_check": "role <> ''"})}
 }
 func (nsCheckOwn) Fields() []schema.Field {
 	return []schema.Field{field.String("role")}
@@ -2071,7 +2081,7 @@ func (nsCheckOwn) Edges() []schema.Edge {
 type nsVeloxNew struct{ schema.Schema }
 
 func (nsVeloxNew) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("velox_new_users")}
+	return []schema.Annotation{sqlschema.Table("velox_new_users")}
 }
 
 // nsOther holds a table of nsUser's name in another database schema, with
@@ -2079,7 +2089,7 @@ func (nsVeloxNew) Annotations() []schema.Annotation {
 type nsOther struct{ schema.Schema }
 
 func (nsOther) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("other", "users")}
+	return []schema.Annotation{sqlschema.SchemaTable("other", "users")}
 }
 func (nsOther) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("x")} }
 
@@ -2145,7 +2155,7 @@ func TestNamespace(t *testing.T) {
 type nsIndexedEnum struct{ schema.Schema }
 
 func (nsIndexedEnum) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("orders")}
+	return []schema.Annotation{sqlschema.Table("orders")}
 }
 func (nsIndexedEnum) Fields() []schema.Field { return []schema.Field{field.Enum("status").Values("a")} }
 func (nsIndexedEnum) Indexes() []schema.Index {

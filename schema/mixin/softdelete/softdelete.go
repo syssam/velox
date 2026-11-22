@@ -74,9 +74,9 @@
 // # Uniqueness
 //
 // A unique key over live rows only is a partial index. On PostgreSQL and
-// SQLite, declare the entity's unique keys with a Where:
+// SQLite, declare the entity's unique keys partial:
 //
-//	index.Fields("org_id", "email").Unique().Where("deleted_at IS NULL")
+//	index.Fields("org_id", "email").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))
 //
 // so that a deleted row does not block a new one with the same email. MySQL
 // has no partial index, and velox writes no workaround. There, either keep

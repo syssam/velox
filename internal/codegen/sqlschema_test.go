@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/schema"
@@ -24,7 +25,7 @@ import (
 type ssForms struct{ schema.Schema }
 
 func (ssForms) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("ss_forms")}
+	return []schema.Annotation{sqlschema.Table("ss_forms")}
 }
 func (ssForms) Fields() []schema.Field {
 	return []schema.Field{
@@ -98,38 +99,30 @@ func TestSQLSchemaForms(t *testing.T) {
 	}
 }
 
-// ssRefused holds what the old velox's annotations can say and velox does not:
-// each is refused with the schema's index or field named, and a default of two
-// kinds or beside SchemaDefault is refused.
+// ssRefused holds sqlschema annotations that contradict or are misplaced:
+// each is refused with the schema's index or field named.
 type ssRefused struct{ schema.Schema }
 
 func (ssRefused) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("a"),
 		field.Int("n").Annotations(sqlschema.Default("1"), sqlschema.DefaultExpr("2")),
-		field.Int("m").SchemaDefault(map[string]string{field.Postgres: "1"}).Annotations(sqlschema.Default("2")),
 		field.Int("k").Annotations(sqlschema.DefaultExprs(map[string]string{"oracle": "1"})),
 		field.Int("j").Annotations(sqlschema.DefaultExprs(map[string]string{"mysql": " "})),
 		field.String("id").Annotations(sqlschema.Desc()),
 		field.String("t").Annotations(sqlschema.Table("x")),
-		field.String("sz").Annotations(sqlschema.Size(10)),
 		field.Int64("nu").Annotations(sqlschema.NonUniqueFK()),
 	}
 }
 func (ssRefused) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.To("peers", ssRefused.Type).Annotations(sqlschema.OnDelete(sqlschema.Cascade)),
 		edge.To("others", ssRefused.Type).Annotations(sqlschema.Default("1")),
 	}
 }
 func (ssRefused) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("a").Annotations(sqlschema.StorageParams("fillfactor=90")),
-		index.Fields("a").Annotations(sqlschema.Prefix(10)),
-		index.Fields("a").Annotations(sqlschema.IncludeColumns("n")),
 		index.Fields("a").Annotations(sqlschema.IndexTypes(map[string]string{"mysql": "BTREE"})),
 		index.Fields("a").Annotations(sqlschema.IndexType("gin"), sqlschema.IndexTypes(map[string]string{"postgres": "hash"})),
-		index.Fields("a").Where("a <> ''").Annotations(sqlschema.IndexWhere("a <> 'x'")),
 		index.Fields("a").Annotations(sqlschema.Default("1")),
 	}
 }
@@ -145,22 +138,15 @@ func TestSQLSchemaRefusals(t *testing.T) {
 	}
 	got := fmt.Sprintf("%+v", m.Errors)
 	for _, w := range []string{
-		"sqlschema.StorageParams is not held by velox",
-		"sqlschema.Prefix and PrefixColumn are not held by velox",
-		"sqlschema.IncludeColumns is not held by velox",
 		`sqlschema.IndexTypes names the "mysql" dialect`,
 		`sqlschema.IndexType "gin" and IndexTypes postgres "hash" disagree`,
-		`the index has Where("a <> ''") and sqlschema.IndexWhere("a <> 'x'")`,
 		"sqlschema.Default and DefaultExpr are both set",
-		"the field has SchemaDefault and a sqlschema default",
 		`sqlschema.DefaultExprs names the dialect "oracle"`,
 		"sqlschema.DefaultExprs: the mysql default is empty",
 		"a sqlschema.IndexAnnotation (IndexType, Desc, OpClass, IndexWhere and the like) is an index's: put it on index.Fields(...).Annotations, not on a field",
 		"a sqlschema.Annotation is a schema's or a field's: put it there, not on an index",
 		"sqlschema Table, Schema, Collation and Checks are a schema's: put them in the schema's Annotations, not on a field",
 		"sqlschema Default, DefaultExpr and DefaultExprs are a field's: put them on the field, not on an edge",
-		"sqlschema.Size is not held by velox: use field.MaxLen",
-		"sqlschema.OnDelete is not held by velox: use edge.OnDelete",
 		"sqlschema.NonUniqueFK is an edge's: put it on the edge whose foreign key it keeps from being unique, not on a field",
 	} {
 		if !strings.Contains(got, w) {
@@ -215,8 +201,8 @@ func TestSQLSchemaSchemaLevel(t *testing.T) {
 	}
 }
 
-// ssBadSchema, ssNoTable and ssUnnamedCheck set what a schema cannot take from
-// the old velox's Annotation; the loader reports the first of a list.
+// ssBadSchema and ssNoTable set what a schema cannot take from an
+// Annotation; the loader reports the first of a list.
 type ssBadSchema struct{ schema.Schema }
 
 func (ssBadSchema) Annotations() []schema.Annotation {
@@ -231,18 +217,10 @@ func (ssNoTable) Annotations() []schema.Annotation {
 }
 func (ssNoTable) Fields() []schema.Field { return []schema.Field{field.String("a")} }
 
-type ssUnnamedCheck struct{ schema.Schema }
-
-func (ssUnnamedCheck) Annotations() []schema.Annotation {
-	return []schema.Annotation{sqlschema.Check("a > 0")}
-}
-func (ssUnnamedCheck) Fields() []schema.Field { return []schema.Field{field.String("a")} }
-
 func TestSQLSchemaSchemaLevelRefusals(t *testing.T) {
 	for s, want := range map[schema.Interface]string{
-		ssBadSchema{}:    "sqlschema Default, DefaultExpr and DefaultExprs are a field's: put them on the field, not on a schema",
-		ssNoTable{}:      "sqlschema.Schema without a Table",
-		ssUnnamedCheck{}: "sqlschema.Check is the old velox's unnamed constraint",
+		ssBadSchema{}: "sqlschema Default, DefaultExpr and DefaultExprs are a field's: put them on the field, not on a schema",
+		ssNoTable{}:   "sqlschema.Schema without a Table",
 	} {
 		b, err := load.Marshal("github.com/syssam/velox/internal/codegen", s)
 		if err != nil {
@@ -267,16 +245,16 @@ func (ssFragments) Fields() []schema.Field {
 		field.String("a"),
 		field.Int("n").Annotations(sqlschema.Default("1; DROP TABLE x")),
 		field.String("s").Annotations(sqlschema.DefaultExpr("lower('A') -- why")),
-		field.String("w").SchemaDefault(map[string]string{field.Postgres: "'x' /* c */"}),
+		field.String("w").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'x' /* c */"})),
 		field.String("ok1").Annotations(sqlschema.Default("'a;b--c'")),
 		field.String("ok2").Annotations(sqlschema.Default("'it''s; fine /*'")),
 	}
 }
 func (ssFragments) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("a").Where("a <> ''; DELETE FROM t"),
+		index.Fields("a").Annotations(sqlschema.IndexWhere("a <> ''; DELETE FROM t")),
 		index.Fields("a").Annotations(sqlschema.IndexWhere("a <> 'x' -- note")).StorageKey("ix_frag_where"),
-		index.Fields("a").Where("a <> ';--'").StorageKey("ix_frag_ok"),
+		index.Fields("a").Annotations(sqlschema.IndexWhere("a <> ';--'")).StorageKey("ix_frag_ok"),
 	}
 }
 

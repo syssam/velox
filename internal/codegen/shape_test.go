@@ -119,7 +119,7 @@ func checkShape(t *testing.T) {
 // The shape hash ignores comments and layout, and sees code.
 func TestShapeHash(t *testing.T) {
 	base := map[string][]byte{
-		"a/want/x.go": []byte("package x\n\nconst _ = velox.GeneratedCodeIsVersion3\n\nfunc F() int {\n\tx := 1\n\treturn x\n}\n"),
+		"a/want/x.go":  []byte("package x\n\nconst _ = velox.GeneratedCodeIsVersion3\n\nfunc F() int {\n\tx := 1\n\treturn x\n}\n"),
 		"a/want/y.txt": []byte("not Go"),
 	}
 	h0, err := shapeHash(base)

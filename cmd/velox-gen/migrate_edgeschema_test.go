@@ -36,12 +36,15 @@ func (Membership) Edges() []schema.Edge {
 }
 `
 		if len(table) > 0 {
-			ms += "\nfunc (Membership) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table(\"" + table[0] + "\")} }\n"
+			ms += "\nfunc (Membership) Annotations() []schema.Annotation { return []schema.Annotation{sqlschema.Table(\"" + table[0] + "\")} }\n"
 		}
 	}
 	imports := ""
 	if through {
 		imports = "\t\"time\"\n\n"
+		if len(table) > 0 {
+			imports += "\t\"github.com/syssam/velox/dialect/sqlschema\"\n"
+		}
 	}
 	return `package veloxschema
 

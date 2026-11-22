@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
@@ -32,7 +34,7 @@ type uniqueOptionalSchemaDefault struct{ schema.Schema }
 
 func (uniqueOptionalSchemaDefault) Fields() []schema.Field {
 	return []schema.Field{field.String("slug").Unique().Optional().Default("x").
-		SchemaDefault(map[string]string{field.Postgres: "gen_random_uuid()::text"})}
+		Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "gen_random_uuid()::text"}))}
 }
 
 type uniqueOptionalIndex struct{ schema.Schema }
@@ -58,7 +60,7 @@ func (uniqueOptionalOK) Fields() []schema.Field {
 
 func (uniqueOptionalOK) Indexes() []schema.Index {
 	return []schema.Index{
-		index.Fields("d").Unique().Where("d <> ''"),
+		index.Fields("d").Unique().Annotations(sqlschema.IndexWhere("d <> ''")),
 		index.Fields("c", "d").Unique(),
 	}
 }

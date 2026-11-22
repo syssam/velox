@@ -253,7 +253,7 @@ schema (`Through`) gives the links a table of their own, keyed by `id`.
 
 `diff` writes no file for either way of doing it:
 
-- Keeping the old name, with `schema.Table("user_groups")` on the edge
+- Keeping the old name, with `sqlschema.Table("user_groups")` on the edge
   schema, changes the table's primary key. `diff` refuses with
   `primary-key`: "write this migration by hand".
 - A new table, `memberships`, means dropping `user_groups`. `diff` refuses

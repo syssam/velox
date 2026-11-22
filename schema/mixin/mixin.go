@@ -7,8 +7,10 @@
 package mixin
 
 import (
+	"maps"
 	"time"
 
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 )
@@ -30,13 +32,21 @@ func (Schema) Indexes() []schema.Index { return nil }
 // Annotations returns no annotations.
 func (Schema) Annotations() []schema.Annotation { return nil }
 
-// nowDefault is the database default of created_at and updated_at. Each call
-// of SchemaDefault copies it. SQLite compares a time's text, so its default
+// nowDefault is the database default of created_at and updated_at, which
+// withNow copies. SQLite compares a time's text, so its default
 // writes the form velox binds a time in, with its zone and nine fractional
 // digits, of which SQLite knows three: CURRENT_TIMESTAMP's form sorts below a
 // parameter of the same instant.
-var nowDefault = map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)",
-	field.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
+var nowDefault = map[string]string{dialect.Postgres: "now()", dialect.MySQL: "CURRENT_TIMESTAMP(6)",
+	dialect.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
+
+// withNow gives the field f nowDefault as its database default. velox's own
+// mixins set it on the descriptor, as a schema's sqlschema.DefaultExprs
+// would, without an annotation in the model.
+func withNow(f schema.Field) schema.Field {
+	f.Descriptor().SchemaDefault = maps.Clone(nowDefault)
+	return f
+}
 
 // Time adds created_at and updated_at: the first is set once when the row is
 // created, the second on every update.
@@ -53,7 +63,7 @@ type CreateTime struct{ Schema }
 
 // Fields returns created_at.
 func (CreateTime) Fields() []schema.Field {
-	return []schema.Field{field.Time("created_at").Default(time.Now).Immutable().SchemaDefault(nowDefault)}
+	return []schema.Field{withNow(field.Time("created_at").Default(time.Now).Immutable())}
 }
 
 // UpdateTime adds updated_at, set to the current time when the row is created
@@ -62,5 +72,5 @@ type UpdateTime struct{ Schema }
 
 // Fields returns updated_at.
 func (UpdateTime) Fields() []schema.Field {
-	return []schema.Field{field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now).SchemaDefault(nowDefault)}
+	return []schema.Field{withNow(field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now))}
 }

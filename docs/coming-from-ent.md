@@ -113,7 +113,8 @@ column does nothing; its `Mutation.Set` stores the value
 
 A constant `Default` is also the column's `DEFAULT`, as in ent: `Default("")`
 gives `DEFAULT ''` and `Default(0)` gives `DEFAULT 0` (a bool, number, string
-or enum; a `DefaultFunc` gives none). `SchemaDefault` is for a column default
+or enum; a `DefaultFunc` gives none). `sqlschema.Default`, `DefaultExpr` and
+`DefaultExprs`, as ent's `entsql` has them, are for a column default
 that `Default` cannot say, such as `now()`, or for one without a Go default.
 An insert leaves such a column out when the row holds the field's zero
 value, so the database fills it, and velox reads the value back into the
@@ -338,7 +339,7 @@ delete hard. A deleted row keeps its unique values, so velox-gen warns of
 each unique key over every row of such an entity: a `Unique` field, a
 one-to-one edge's key, or a unique index with no `Where`. On PostgreSQL and
 SQLite, declare the key as
-`index.Fields("email").Unique().Where("deleted_at IS NULL")`; a one-to-one
+`index.Fields("email").Unique().Annotations(sqlschema.IndexWhere("deleted_at IS NULL"))`; a one-to-one
 key, or any key on MySQL, is freed by a delete under `softdelete.Skip(ctx)`. `scopetest.Isolates` checks, in a test, that an entity is
 confined, and that its column is immutable, NOT NULL and of the key's type.
 
@@ -389,6 +390,36 @@ It writes what `go tool velox-gen` writes with the same settings.
 A program with a plugin that runs only in the process is its own check: run
 it with `Check: true` in CI, where it returns `generate.ErrStale` when a file
 is out of date. `velox-gen -check` does not know such a plugin.
+
+## Removed schema options
+
+velox keeps one spelling of each schema option, `entsql`'s where ent has
+one. A port that names one of these does not compile; write the
+replacement.
+
+| Removed | Write instead |
+|---|---|
+| `schema.Table(name)` | `sqlschema.Table(name)` |
+| `schema.TableIn(schema, table)` | `sqlschema.SchemaTable(schema, table)` |
+| `schema.Collation(c)` | `sqlschema.Collation(c)` |
+| `schema.Check(name, expr)` | `sqlschema.Checks(map[string]string{name: expr})` |
+| `index.Fields(...).Where(pred)` | `index.Fields(...).Annotations(sqlschema.IndexWhere(pred))` |
+| `field.X(...).SchemaDefault(m)` | `field.X(...).Annotations(sqlschema.DefaultExprs(m))` |
+| `field.Postgres`, `field.MySQL`, `field.SQLite` | `dialect.Postgres`, `dialect.MySQL`, `dialect.SQLite` |
+| `sqlschema.Check(expr)`, `Annotation.Check` | `sqlschema.Checks`, which names the constraint |
+| `sqlschema.Size(n)`, `Annotation.Size` | `field.MaxLen(n)` |
+| `sqlschema.ColumnType(t)`, `Annotation.ColumnType` | `field.SchemaType`, by dialect |
+| `sqlschema.OnDelete(a)`, `Annotation.OnDelete` | `edge.OnDelete(a)` |
+| `sqlschema.CascadeAction`, `Cascade`, `SetNull`, `Restrict`, `NoAction` | `edge.Action`, `edge.Cascade`, `edge.SetNull`, `edge.Restrict`, `edge.NoAction` |
+| `sqlschema.SetDefault` | not supported |
+| `sqlschema.OnUpdate(a)`, `Annotation.OnUpdate` | not supported: velox writes no `ON UPDATE` |
+| `sqlschema.Charset(c)`, `Annotation.Charset` | not supported |
+| `sqlschema.Skip()`, `Annotation.Skip` | not supported |
+| `sqlschema.IncrementStart(n)`, `Annotation.IncrementStart` | not supported |
+| `sqlschema.WithComments(b)`, `Annotation.WithComments` | not needed: velox writes a comment where the dialect has them |
+| `sqlschema.StorageParams(p)`, `IndexAnnotation.StorageParams` | not supported |
+| `sqlschema.Prefix(n)`, `sqlschema.PrefixColumn(name, n)`, `IndexAnnotation.Prefix`, `PrefixColumns` | not supported: velox does not model a MySQL index prefix |
+| `sqlschema.IncludeColumns(...)`, `IndexAnnotation.IncludeColumns` | not supported: velox does not model a covering index |
 
 ## Refused by design
 

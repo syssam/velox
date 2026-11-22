@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/ddl"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema"
@@ -95,9 +97,9 @@ func (tbUser) Fields() []schema.Field {
 		field.Int("age").Optional().Default(0),
 		field.Float("score").Nillable().Default(1.5),
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
-		field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"}),
-		field.Enum("tier").Values("free", "pro").SchemaType(map[string]string{field.Postgres: "text", field.MySQL: "varchar(16)"}),
-		field.String("locale").SchemaDefault(map[string]string{field.Postgres: "'en'::text", field.MySQL: "'en'", field.SQLite: "'en'"}),
+		field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{dialect.Postgres: "mood"}),
+		field.Enum("tier").Values("free", "pro").SchemaType(map[string]string{dialect.Postgres: "text", dialect.MySQL: "varchar(16)"}),
+		field.String("locale").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'en'::text", dialect.MySQL: "'en'", dialect.SQLite: "'en'"})),
 		field.Strings("tags").Optional(),
 	}
 }
@@ -114,14 +116,14 @@ func (tbUser) Edges() []schema.Edge {
 func (u tbUser) Indexes() []schema.Index {
 	ixs := []schema.Index{index.Fields("name").StorageKey("users_by_name")}
 	if !u.noPartial {
-		ixs = append(ixs, index.Fields("email").Where("active").Unique())
+		ixs = append(ixs, index.Fields("email").Annotations(sqlschema.IndexWhere("active")).Unique())
 	}
 	return ixs
 }
 
 type tbPost struct{ schema.Schema }
 
-func (tbPost) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("posts")} }
+func (tbPost) Annotations() []schema.Annotation { return []schema.Annotation{sqlschema.Table("posts")} }
 func (tbPost) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("author_id").Optional().Nillable(),
@@ -132,8 +134,8 @@ func (tbPost) Fields() []schema.Field {
 		field.Time("published_at").Optional().Nillable(),
 		field.UUID("ref", UUIDValue{}).Optional().Nillable(),
 		field.JSON("meta", JSONShape{}),
-		field.Other("price", TbMoney{}).SchemaType(map[string]string{field.Postgres: "numeric(10,2)", field.MySQL: "decimal(10,2)", field.SQLite: "numeric"}),
-		field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"}),
+		field.Other("price", TbMoney{}).SchemaType(map[string]string{dialect.Postgres: "numeric(10,2)", dialect.MySQL: "decimal(10,2)", dialect.SQLite: "numeric"}),
+		field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{dialect.Postgres: "mood"}),
 	}
 }
 func (tbPost) Edges() []schema.Edge {
@@ -172,10 +174,10 @@ type tbInvoice struct {
 }
 
 func (tbInvoice) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("billing", "invoices"), schema.Comment("a bill")}
+	return []schema.Annotation{sqlschema.SchemaTable("billing", "invoices"), schema.Comment("a bill")}
 }
 func (tbInvoice) Fields() []schema.Field {
-	return []schema.Field{field.EnumOf[TbOrderStatus]("status"), field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"})}
+	return []schema.Field{field.EnumOf[TbOrderStatus]("status"), field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{dialect.Postgres: "mood"})}
 }
 func (i tbInvoice) Edges() []schema.Edge {
 	if i.local {
@@ -260,7 +262,7 @@ func TestTablesPositions(t *testing.T) {
 type tbTypes struct{ schema.Schema }
 
 func (tbTypes) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("tb_types")}
+	return []schema.Annotation{sqlschema.Table("tb_types")}
 }
 
 func (tbTypes) Fields() []schema.Field {
@@ -276,9 +278,9 @@ func (tbTypes) Fields() []schema.Field {
 		field.Bytes("by"), field.Bytes("by255").MaxLen(255), field.Bytes("by256").MaxLen(256),
 		field.Bytes("by65536").MaxLen(65536), field.Bytes("by16777216").MaxLen(16777216),
 		field.Time("t"), field.UUID("uu", UUIDValue{}), field.JSON("j", JSONShape{}),
-		field.Other("o", TbMoney{}).SchemaType(map[string]string{field.Postgres: "MONEY", field.MySQL: "INT(11)", field.SQLite: "NUMERIC"}),
-		field.Int32("st").SchemaType(map[string]string{field.MySQL: "INT(11)", field.Postgres: "int4"}),
-		field.String("q").SchemaType(map[string]string{field.MySQL: "ENUM('Draft', 'Published')", field.Postgres: `VARCHAR(20) COLLATE "en_US"`, field.SQLite: `TEXT COLLATE "NoCase"`}),
+		field.Other("o", TbMoney{}).SchemaType(map[string]string{dialect.Postgres: "MONEY", dialect.MySQL: "INT(11)", dialect.SQLite: "NUMERIC"}),
+		field.Int32("st").SchemaType(map[string]string{dialect.MySQL: "INT(11)", dialect.Postgres: "int4"}),
+		field.String("q").SchemaType(map[string]string{dialect.MySQL: "ENUM('Draft', 'Published')", dialect.Postgres: `VARCHAR(20) COLLATE "en_US"`, dialect.SQLite: `TEXT COLLATE "NoCase"`}),
 	}
 }
 
@@ -287,7 +289,7 @@ func (tbTypes) Fields() []schema.Field {
 type tbTypesWide struct{ schema.Schema }
 
 func (tbTypesWide) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("tb_types_wide")}
+	return []schema.Annotation{sqlschema.Table("tb_types_wide")}
 }
 func (tbTypesWide) Fields() []schema.Field {
 	return []schema.Field{field.String("s16381").MaxLen(16381)}
@@ -355,7 +357,7 @@ func TestTablesTypes(t *testing.T) {
 type tbIdentU64 struct{ schema.Schema }
 
 func (tbIdentU64) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users")}
+	return []schema.Annotation{sqlschema.Table("users")}
 }
 func (tbIdentU64) Fields() []schema.Field { return []schema.Field{field.Uint64("id")} }
 
@@ -370,7 +372,7 @@ func (tbIdentUUID) Fields() []schema.Field { return []schema.Field{field.UUID("i
 type tbIdentI64 struct{ schema.Schema }
 
 func (tbIdentI64) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users")}
+	return []schema.Annotation{sqlschema.Table("users")}
 }
 
 func TestTablesIdentity(t *testing.T) {
@@ -468,13 +470,13 @@ func TestTablesNullable(t *testing.T) {
 type tbDefaults struct{ schema.Schema }
 
 func (tbDefaults) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("tb_defaults")}
+	return []schema.Annotation{sqlschema.Table("tb_defaults")}
 }
 
 func (tbDefaults) Fields() []schema.Field {
 	return []schema.Field{
-		field.Time("at").SchemaDefault(map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}),
-		field.String("pg_only").SchemaDefault(map[string]string{field.Postgres: "'x'::text"}),
+		field.Time("at").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "now()", dialect.MySQL: "CURRENT_TIMESTAMP(6)", dialect.SQLite: "CURRENT_TIMESTAMP"})),
+		field.String("pg_only").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'x'::text"})),
 		field.String("s").Default(`it's a \ test`),
 		field.Text("txt").Default(`it's a \ test`),
 		field.Bool("flag").Nillable().Default(true),
@@ -495,9 +497,9 @@ func (tbDefaults) Fields() []schema.Field {
 		field.UUID("u", UUIDValue{}).Default(func() UUIDValue { return UUIDValue{} }),
 		field.JSON("j", JSONShape{}).Default(JSONShape{W: 1}),
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
-		field.Enum("mode").Values("a", "b").Default("a").SchemaType(map[string]string{field.MySQL: "text"}),
-		field.String("blobby").Default("x").SchemaType(map[string]string{field.MySQL: "blob"}),
-		field.String("doc").Optional().Default("").SchemaType(map[string]string{field.MySQL: "json"}),
+		field.Enum("mode").Values("a", "b").Default("a").SchemaType(map[string]string{dialect.MySQL: "text"}),
+		field.String("blobby").Default("x").SchemaType(map[string]string{dialect.MySQL: "blob"}),
+		field.String("doc").Optional().Default("").SchemaType(map[string]string{dialect.MySQL: "json"}),
 	}
 }
 
@@ -545,24 +547,24 @@ func TestTablesDefaults(t *testing.T) {
 type tbEnumUser struct{ schema.Schema }
 
 func (tbEnumUser) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("users")}
+	return []schema.Annotation{sqlschema.Table("users")}
 }
 func (tbEnumUser) Fields() []schema.Field {
 	return []schema.Field{
 		field.Enum("kind").NamedValues("X", "x", "ONeil", "o'neil"),
 		field.EnumOf[OrderStatus]("status"),
-		field.Enum("mood").Values("calm").SchemaType(map[string]string{field.Postgres: "mood"}),
-		field.Enum("role").Values("a", "b").SchemaType(map[string]string{field.Postgres: "text"}),
+		field.Enum("mood").Values("calm").SchemaType(map[string]string{dialect.Postgres: "mood"}),
+		field.Enum("role").Values("a", "b").SchemaType(map[string]string{dialect.Postgres: "text"}),
 	}
 }
 
 type tbEnumOrder struct{ schema.Schema }
 
 func (tbEnumOrder) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("orders")}
+	return []schema.Annotation{sqlschema.Table("orders")}
 }
 func (tbEnumOrder) Fields() []schema.Field {
-	return []schema.Field{field.EnumOf[OrderStatus]("status"), field.Enum("mood").Values("calm").SchemaType(map[string]string{field.Postgres: "mood"})}
+	return []schema.Field{field.EnumOf[OrderStatus]("status"), field.Enum("mood").Values("calm").SchemaType(map[string]string{dialect.Postgres: "mood"})}
 }
 
 type OrderStatus string
@@ -676,7 +678,7 @@ func (c tbIxC) Indexes() []schema.Index {
 	if c.noWhere {
 		return []schema.Index{index.Edges("owner")}
 	}
-	return []schema.Index{index.Edges("owner").Where("tb_ix_owner_c > 0")}
+	return []schema.Index{index.Edges("owner").Annotations(sqlschema.IndexWhere("tb_ix_owner_c > 0"))}
 }
 
 type tbIxTag struct{ schema.Schema }
@@ -844,7 +846,7 @@ func TestTablesComments(t *testing.T) {
 type tbCollated struct{ schema.Schema }
 
 func (tbCollated) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Collation("utf8mb4_0900_ai_ci")}
+	return []schema.Annotation{sqlschema.Collation("utf8mb4_0900_ai_ci")}
 }
 
 // TestTablesMySQLCollation: a table states a collation only by its annotation, and on
@@ -918,13 +920,13 @@ func TestTablesDeterministic(t *testing.T) {
 type tbPartialUniq struct{ schema.Schema }
 
 func (tbPartialUniq) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("accounts")}
+	return []schema.Annotation{sqlschema.Table("accounts")}
 }
 func (tbPartialUniq) Fields() []schema.Field {
 	return []schema.Field{field.String("email").Unique(), field.Bool("active").Nillable()}
 }
 func (tbPartialUniq) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("email").Where("active").Unique()}
+	return []schema.Index{index.Fields("email").Annotations(sqlschema.IndexWhere("active")).Unique()}
 }
 
 func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
@@ -959,7 +961,7 @@ type tbRfPartial struct{ schema.Schema }
 
 func (tbRfPartial) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 func (tbRfPartial) Indexes() []schema.Index {
-	ix, l := index.Fields("name").Where("name <> ''"), here()
+	ix, l := index.Fields("name").Annotations(sqlschema.IndexWhere("name <> ''")), here()
 	refusalLines["partial"] = l
 	return []schema.Index{ix}
 }
@@ -976,7 +978,7 @@ func (tbRfTextIndex) Indexes() []schema.Index {
 type tbRfJSONUnique struct{ schema.Schema }
 
 func (tbRfJSONUnique) Fields() []schema.Field {
-	f, l := field.String("doc").SchemaType(map[string]string{field.MySQL: "json"}).Unique(), here()
+	f, l := field.String("doc").SchemaType(map[string]string{dialect.MySQL: "json"}).Unique(), here()
 	refusalLines["json unique"] = l
 	return []schema.Field{f}
 }
@@ -992,16 +994,16 @@ func (tbRfLongValue) Fields() []schema.Field {
 type tbRfPGLongValue struct{ schema.Schema }
 
 func (tbRfPGLongValue) Fields() []schema.Field {
-	pg := map[string]string{field.Postgres: "long_e"}
+	pg := map[string]string{dialect.Postgres: "long_e"}
 	f, l := field.Enum("e").Values(strings.Repeat("b", 64)).SchemaType(pg), here()
 	refusalLines["pg long value"] = l
-	return []schema.Field{f, field.Enum("ok").Values(strings.Repeat("é", 31) + "b").SchemaType(map[string]string{field.Postgres: "long_ok"})} // 63 bytes
+	return []schema.Field{f, field.Enum("ok").Values(strings.Repeat("é", 31) + "b").SchemaType(map[string]string{dialect.Postgres: "long_ok"})} // 63 bytes
 }
 
 type tbRfEnumType struct{ schema.Schema }
 
 func (tbRfEnumType) Fields() []schema.Field {
-	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{field.MySQL: "int"}), here()
+	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{dialect.MySQL: "int"}), here()
 	refusalLines["mysql enum type"] = l
 	return []schema.Field{f}
 }
@@ -1028,7 +1030,7 @@ func (tbRfTableComment) Fields() []schema.Field {
 type tbRfPGEnumType struct{ schema.Schema }
 
 func (tbRfPGEnumType) Fields() []schema.Field {
-	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{field.Postgres: "integer"}), here()
+	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{dialect.Postgres: "integer"}), here()
 	refusalLines["pg enum type"] = l
 	return []schema.Field{f}
 }
@@ -1036,7 +1038,7 @@ func (tbRfPGEnumType) Fields() []schema.Field {
 type tbRfPGEnumBadName struct{ schema.Schema }
 
 func (tbRfPGEnumBadName) Fields() []schema.Field {
-	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{field.Postgres: "My Mood"}), here()
+	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{dialect.Postgres: "My Mood"}), here()
 	refusalLines["pg enum name"] = l
 	return []schema.Field{f}
 }
@@ -1060,7 +1062,7 @@ func (tbRfNULValue) Fields() []schema.Field {
 type tbRfTableIn struct{ schema.Schema }
 
 func (tbRfTableIn) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("billing", "rf_bills")}
+	return []schema.Annotation{sqlschema.SchemaTable("billing", "rf_bills")}
 }
 func (tbRfTableIn) Fields() []schema.Field {
 	f, l := field.String("s"), here()
@@ -1073,7 +1075,7 @@ func (tbRfTableIn) Fields() []schema.Field {
 type tbRfCrossDB struct{ schema.Schema }
 
 func (tbRfCrossDB) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.TableIn("billing", "rf_cross")}
+	return []schema.Annotation{sqlschema.SchemaTable("billing", "rf_cross")}
 }
 func (tbRfCrossDB) Edges() []schema.Edge {
 	e, l := edge.To("payer", tbRfCrossRef.Type).Unique().Required(), here()
@@ -1088,7 +1090,7 @@ func (tbRfCrossRef) Fields() []schema.Field { return []schema.Field{field.String
 type tbRfOther struct{ schema.Schema }
 
 func (tbRfOther) Fields() []schema.Field {
-	f, l := field.Other("o", TbMoney{}).SchemaType(map[string]string{field.Postgres: "money", field.SQLite: "numeric"}), here()
+	f, l := field.Other("o", TbMoney{}).SchemaType(map[string]string{dialect.Postgres: "money", dialect.SQLite: "numeric"}), here()
 	refusalLines["other"] = l
 	return []schema.Field{f}
 }
@@ -1096,7 +1098,7 @@ func (tbRfOther) Fields() []schema.Field {
 type tbRfIDType struct{ schema.Schema }
 
 func (tbRfIDType) Fields() []schema.Field {
-	f, l := field.Int("id").SchemaType(map[string]string{field.MySQL: "varchar(20)"}), here()
+	f, l := field.Int("id").SchemaType(map[string]string{dialect.MySQL: "varchar(20)"}), here()
 	refusalLines["id type"] = l
 	return []schema.Field{f}
 }
@@ -1104,7 +1106,7 @@ func (tbRfIDType) Fields() []schema.Field {
 type tbRfIDTypeSQLite struct{ schema.Schema }
 
 func (tbRfIDTypeSQLite) Fields() []schema.Field {
-	f, l := field.Int64("id").SchemaType(map[string]string{field.SQLite: "text"}), here()
+	f, l := field.Int64("id").SchemaType(map[string]string{dialect.SQLite: "text"}), here()
 	refusalLines["sqlite id type"] = l
 	return []schema.Field{f}
 }
@@ -1193,7 +1195,7 @@ func (tbRfOrderA) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("bs", tbRfOrderB.Type).Comment(strings.Repeat("c", 1025))}
 }
 func (tbRfOrderA) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("b").Where("b <> ''")}
+	return []schema.Index{index.Fields("b").Annotations(sqlschema.IndexWhere("b <> ''"))}
 }
 
 type tbRfOrderB struct{ schema.Schema }
@@ -1392,7 +1394,7 @@ var tbRoundedValue float64
 var tbRoundedLine int
 
 func (tbRoundedDefault) Fields() []schema.Field {
-	f, l := field.Float("price").Nillable().Default(tbRoundedValue).SchemaType(map[string]string{field.Postgres: "numeric(5,2)", field.MySQL: "decimal(5,2)"}), here()
+	f, l := field.Float("price").Nillable().Default(tbRoundedValue).SchemaType(map[string]string{dialect.Postgres: "numeric(5,2)", dialect.MySQL: "decimal(5,2)"}), here()
 	tbRoundedLine = l
 	return []schema.Field{f}
 }
@@ -1436,9 +1438,9 @@ var tbDecimalPG, tbDecimalMy, tbDecimalSD string
 var tbDecimalValue float64
 
 func (tbDecimalTypes) Fields() []schema.Field {
-	f := field.Float("price").Nillable().Default(tbDecimalValue).SchemaType(map[string]string{field.Postgres: tbDecimalPG, field.MySQL: tbDecimalMy})
+	f := field.Float("price").Nillable().Default(tbDecimalValue).SchemaType(map[string]string{dialect.Postgres: tbDecimalPG, dialect.MySQL: tbDecimalMy})
 	if tbDecimalSD != "" {
-		f = f.SchemaDefault(map[string]string{field.Postgres: tbDecimalSD, field.MySQL: tbDecimalSD})
+		f = f.Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: tbDecimalSD, dialect.MySQL: tbDecimalSD}))
 	}
 	return []schema.Field{f}
 }
@@ -1530,7 +1532,7 @@ func (tbRfKeyMixed) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("s").MaxLen(700), field.Int8("i8"), field.Int16("i16"), field.Int32("i32"), field.Int64("i64"),
 		field.Float32("f32"), field.Float("f64"), field.Time("t"), field.Enum("e").Values("a"), field.UUID("u", UUIDValue{}),
-		field.Bytes("b").MaxLen(100), field.Other("o", TbMoney{}).SchemaType(map[string]string{field.MySQL: "decimal(10,2)", field.Postgres: "numeric", field.SQLite: "numeric"}),
+		field.Bytes("b").MaxLen(100), field.Other("o", TbMoney{}).SchemaType(map[string]string{dialect.MySQL: "decimal(10,2)", dialect.Postgres: "numeric", dialect.SQLite: "numeric"}),
 	}
 }
 func (tbRfKeyMixed) Indexes() []schema.Index {
@@ -1961,8 +1963,8 @@ func (checkedSchema) Fields() []schema.Field {
 
 func (checkedSchema) Annotations() []schema.Annotation {
 	return []schema.Annotation{
-		schema.Check("total_positive", "total > 0"),
-		schema.Check("total_small", "total < 100"),
+		sqlschema.Checks(map[string]string{"total_positive": "total > 0"}),
+		sqlschema.Checks(map[string]string{"total_small": "total < 100"}),
 	}
 }
 
@@ -1984,7 +1986,7 @@ type unnamedCheckSchema struct{ schema.Schema }
 
 func (unnamedCheckSchema) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
 func (unnamedCheckSchema) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("", "1 = 1")}
+	return []schema.Annotation{sqlschema.Checks(map[string]string{"": "1 = 1"})}
 }
 
 func TestDeclaredCheckNeedsAName(t *testing.T) {
@@ -1998,7 +2000,7 @@ type notNullCheckSchema struct{ schema.Schema }
 
 func (notNullCheckSchema) Fields() []schema.Field { return []schema.Field{field.String("role")} }
 func (notNullCheckSchema) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("not_null_check_schemas_role_not_null", "1 = 1")}
+	return []schema.Annotation{sqlschema.Checks(map[string]string{"not_null_check_schemas_role_not_null": "1 = 1"})}
 }
 
 func TestDeclaredCheckTakesANotNullName(t *testing.T) {
@@ -2010,8 +2012,17 @@ func TestDeclaredCheckTakesANotNullName(t *testing.T) {
 type repeatedCheckSchema struct{ schema.Schema }
 
 func (repeatedCheckSchema) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
+func (repeatedCheckSchema) Mixin() []schema.Mixin  { return []schema.Mixin{repeatedCheckMixin{}} }
 func (repeatedCheckSchema) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("c", "total > 1"), schema.Check("c", "total > 2")}
+	return []schema.Annotation{sqlschema.Checks(map[string]string{"c": "total > 2"})}
+}
+
+// repeatedCheckMixin names the check its schema names, with another
+// expression.
+type repeatedCheckMixin struct{ mixin.Schema }
+
+func (repeatedCheckMixin) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Checks(map[string]string{"c": "total > 1"})}
 }
 
 func TestDeclaredCheckNamedTwice(t *testing.T) {
@@ -2025,14 +2036,14 @@ type sameCheckA struct{ schema.Schema }
 
 func (sameCheckA) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
 func (sameCheckA) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("positive", "total > 0")}
+	return []schema.Annotation{sqlschema.Checks(map[string]string{"positive": "total > 0"})}
 }
 
 type sameCheckB struct{ schema.Schema }
 
 func (sameCheckB) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
 func (sameCheckB) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("positive", "total > 0")}
+	return []schema.Annotation{sqlschema.Checks(map[string]string{"positive": "total > 0"})}
 }
 
 // TestDeclaredCheckNamespace: MySQL's check names are unique per database, so two
@@ -2053,7 +2064,7 @@ type longCheckSchema struct{ schema.Schema }
 
 func (longCheckSchema) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
 func (longCheckSchema) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check(strings.Repeat("c", 80), "total > 0")}
+	return []schema.Annotation{sqlschema.Checks(map[string]string{strings.Repeat("c", 80): "total > 0"})}
 }
 
 func TestDeclaredCheckNameLength(t *testing.T) {

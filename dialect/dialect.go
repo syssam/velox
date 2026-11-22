@@ -6,8 +6,8 @@
 //		dialect.MySQL:    "json",
 //	})
 //
-// The names are the same strings as field.Postgres, field.MySQL and
-// field.SQLite, which are these.
+// The names are the strings velox.Dialect's String method returns. They are
+// also the keys of sqlschema.DefaultExprs.
 package dialect
 
 // The dialects.

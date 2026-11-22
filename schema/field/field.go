@@ -65,53 +65,21 @@ func (c common[B]) Comment(s string) B { c.d.Comment = s; return c.self }
 // StorageKey sets the column name.
 func (c common[B]) StorageKey(s string) B { c.d.StorageKey = s; return c.self }
 
-// The dialects SchemaType knows, by the names package dialect gives them.
-const (
-	Postgres = dialect.Postgres
-	MySQL    = dialect.MySQL
-	SQLite   = dialect.SQLite
-)
-
 // SchemaType sets the column type per dialect, such as
-// {field.Postgres: "citext"}. The keys are Postgres, MySQL and SQLite; any
-// other is a misuse.
+// {dialect.Postgres: "citext"}. The keys are package dialect's Postgres,
+// MySQL and SQLite; any other is a misuse. A column's DEFAULT is
+// sqlschema.Default, DefaultExpr or DefaultExprs, in the field's Annotations.
 //
 // On an enum field, a PostgreSQL value that is not a string type names the
 // enum type; the planner creates and manages it, and fields may share it. A
 // string type opts that dialect out of the native enum, to text plus a CHECK.
 func (c common[B]) SchemaType(m map[string]string) B {
 	for _, k := range slices.Sorted(maps.Keys(m)) {
-		if k != Postgres && k != MySQL && k != SQLite {
-			fail(c.d, "SchemaType: unknown dialect %q; the keys are field.Postgres, field.MySQL and field.SQLite", k)
+		if k != dialect.Postgres && k != dialect.MySQL && k != dialect.SQLite {
+			fail(c.d, "SchemaType: unknown dialect %q; the keys are dialect.Postgres, dialect.MySQL and dialect.SQLite", k)
 		}
 	}
 	c.d.SchemaType = maps.Clone(m)
-	return c.self
-}
-
-// SchemaDefault sets the column's default in the database per dialect, as
-// SQL written as the database prints it, such as {field.Postgres: "now()"}.
-// An insert leaves the column out when every row holds the field's zero
-// value, so the database's default applies, and reads the stored value back
-// into the entity (RETURNING, or a SELECT by key on MySQL; ADR 0093). A
-// non-zero value, or a non-nil pointer to a zero, is written. A zero left
-// to the database skips the field's validators, so an enum inserts with
-// its zero; velox-gen warns of a non-zero literal default on a field that
-// is not Nillable, whose zero no Insert can store. It does not
-// count as the value of an Optional field. The keys are Postgres,
-// MySQL and SQLite; any other, or an empty value, is a misuse. A time's default
-// on SQLite must write velox's form, not CURRENT_TIMESTAMP's: see the velox
-// package's SQLite section.
-func (c common[B]) SchemaDefault(m map[string]string) B {
-	for _, k := range slices.Sorted(maps.Keys(m)) {
-		switch {
-		case k != Postgres && k != MySQL && k != SQLite:
-			fail(c.d, "SchemaDefault: unknown dialect %q; the keys are field.Postgres, field.MySQL and field.SQLite", k)
-		case m[k] == "":
-			fail(c.d, "SchemaDefault: the %s default is empty", k)
-		}
-	}
-	c.d.SchemaDefault = maps.Clone(m)
 	return c.self
 }
 

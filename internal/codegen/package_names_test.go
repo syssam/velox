@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/ddl"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema"
@@ -43,7 +44,7 @@ func (pnTesting) Indexes() []schema.Index {
 }
 
 func (pnTesting) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("ab_testing")}
+	return []schema.Annotation{sqlschema.Table("ab_testing")}
 }
 
 type pnMetric struct{ schema.Schema }
@@ -51,7 +52,7 @@ type pnMetric struct{ schema.Schema }
 func (pnMetric) Mixin() []schema.Mixin  { return []schema.Mixin{pnAudit{}} }
 func (pnMetric) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 func (pnMetric) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Table("ab_test_metric")}
+	return []schema.Annotation{sqlschema.Table("ab_test_metric")}
 }
 
 // Each index is "<table>_<name>" unless it starts with "<table>_" already,

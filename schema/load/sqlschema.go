@@ -39,7 +39,7 @@ func mergedIndexAnnotation(list []schema.Annotation) (sqlschema.IndexAnnotation,
 
 // lowerIndex sets the Method, Desc, OpClass and Where of out, the loaded form
 // of index d, from d's sqlschema.IndexAnnotation, as velox-gen's index rules
-// read them, and returns what it cannot hold or what contradicts the builder.
+// read them, and returns what contradicts.
 func lowerIndex(d *desc.Index, out *loadjson.Index) error {
 	if err := checkPlacement(d.Annotations, "index"); err != nil {
 		return err
@@ -47,14 +47,6 @@ func lowerIndex(d *desc.Index, out *loadjson.Index) error {
 	a, ok := mergedIndexAnnotation(d.Annotations)
 	if !ok {
 		return nil
-	}
-	switch {
-	case a.StorageParams != "":
-		return fmt.Errorf("sqlschema.StorageParams is not held by velox")
-	case a.Prefix != 0 || len(a.PrefixColumns) > 0:
-		return fmt.Errorf("sqlschema.Prefix and PrefixColumn are not held by velox: a MySQL index prefix is not modeled")
-	case len(a.IncludeColumns) > 0:
-		return fmt.Errorf("sqlschema.IncludeColumns is not held by velox: a covering index is not modeled")
 	}
 	out.Method = a.Type
 	for _, k := range slices.Sorted(maps.Keys(a.Types)) {
@@ -67,12 +59,7 @@ func lowerIndex(d *desc.Index, out *loadjson.Index) error {
 		}
 		out.Method = t
 	}
-	if a.Where != "" {
-		if d.Where != "" {
-			return fmt.Errorf("the index has Where(%q) and sqlschema.IndexWhere(%q); give it one", d.Where, a.Where)
-		}
-		out.Where = a.Where
-	}
+	out.Where = a.Where
 	names := slices.Concat(d.Fields, d.Edges)
 	if a.Desc {
 		out.Desc = slices.Clone(names)
@@ -99,9 +86,9 @@ func lowerIndex(d *desc.Index, out *loadjson.Index) error {
 // sqlite, as ent spells it.
 var fieldDialects = map[string]string{"postgres": "postgres", "mysql": "mysql", "sqlite": "sqlite", "sqlite3": "sqlite"}
 
-// lowerDefault returns the SchemaDefault of field d: the one its builder gave,
-// or the one its sqlschema annotation gives, as text for every dialect or for
-// each, and what contradicts.
+// lowerDefault returns the database default of field d: the one a mixin of
+// velox's gave, or the one its sqlschema annotation gives, as text for every
+// dialect or for each, and what contradicts.
 func lowerDefault(d *desc.Field) (map[string]string, error) {
 	if err := checkPlacement(d.Annotations, "field"); err != nil {
 		return nil, err
@@ -111,7 +98,7 @@ func lowerDefault(d *desc.Field) (map[string]string, error) {
 		return d.SchemaDefault, nil
 	}
 	if len(d.SchemaDefault) > 0 {
-		return nil, fmt.Errorf("the field has SchemaDefault and a sqlschema default; give it one")
+		return nil, fmt.Errorf("the field has a database default of velox's mixin and a sqlschema default; give it one")
 	}
 	if a.Default != "" && a.DefaultExpr != "" {
 		return nil, fmt.Errorf("sqlschema.Default and DefaultExpr are both set; give one")
@@ -155,35 +142,9 @@ func mergedAnnotation(list []schema.Annotation) (sqlschema.Annotation, bool) {
 	return out, found
 }
 
-// heldRefusal returns why velox holds none of the old velox's options that a
-// sets, naming velox's own spelling where it has one, or nil.
-func heldRefusal(a sqlschema.Annotation) error {
-	switch {
-	case a.Skip:
-		return fmt.Errorf("sqlschema.Skip is not held by velox")
-	case a.Size != 0:
-		return fmt.Errorf("sqlschema.Size is not held by velox: use field.MaxLen")
-	case a.ColumnType != "":
-		return fmt.Errorf("sqlschema.ColumnType is not held by velox: use field.SchemaType, which names the type for each dialect")
-	case a.OnDelete != "":
-		return fmt.Errorf("sqlschema.OnDelete is not held by velox: use edge.OnDelete")
-	case a.OnUpdate != "":
-		return fmt.Errorf("sqlschema.OnUpdate is not held by velox: a foreign key's ON UPDATE is not modeled")
-	case a.Charset != "":
-		return fmt.Errorf("sqlschema.Charset is not held by velox")
-	case a.IncrementStart != nil:
-		return fmt.Errorf("sqlschema.IncrementStart is not held by velox")
-	case a.WithComments != nil:
-		return fmt.Errorf("sqlschema.WithComments is not held by velox: a comment is written where the dialect has them")
-	case a.Check != "":
-		return fmt.Errorf("sqlschema.Check is the old velox's unnamed constraint: use sqlschema.Checks or schema.Check, which name it")
-	}
-	return nil
-}
-
 // checkPlacement returns why the sqlschema annotations of list, on an element
-// of kind "schema", "field", "edge" or "index", are not that element's, or what
-// velox holds of the old velox's options. The old velox ignored a misplaced one
+// of kind "schema", "field", "edge" or "index", are not that element's. The
+// old velox ignored a misplaced one
 // without a word, so a port's field that says Desc() did nothing; here it is an
 // error that names where it belongs.
 func checkPlacement(list []schema.Annotation, kind string) error {
@@ -201,9 +162,6 @@ func checkPlacement(list []schema.Annotation, kind string) error {
 	}
 	if kind == "index" {
 		return fmt.Errorf("a sqlschema.Annotation is a schema's or a field's: put it there, not on an index")
-	}
-	if err := heldRefusal(a); err != nil {
-		return err
 	}
 	if kind != "edge" && a.NonUniqueFK {
 		return fmt.Errorf("sqlschema.NonUniqueFK is an edge's: put it on the edge whose foreign key it keeps from being unique, not on %s", article(kind))
@@ -226,7 +184,7 @@ func article(kind string) string {
 }
 
 // lowerSchema returns the annotations of a schema or mixin with its
-// sqlschema.Annotation replaced by the core annotations velox-gen reads: the
+// sqlschema.Annotation replaced by the annotations velox-gen reads: the
 // table, its collation and its checks.
 func lowerSchema(list []schema.Annotation) ([]schema.Annotation, error) {
 	if err := checkPlacement(list, "schema"); err != nil {
@@ -245,17 +203,62 @@ func lowerSchema(list []schema.Annotation) ([]schema.Annotation, error) {
 	})
 	switch {
 	case a.Table != "":
-		out = append(out, schema.TableIn(a.Schema, a.Table))
+		out = append(out, &tableAnnotation{Schema: a.Schema, Table: a.Table})
 	case a.Schema != "":
-		return nil, fmt.Errorf("sqlschema.Schema without a Table: velox names the table with the schema, as sqlschema.SchemaTable or schema.TableIn")
+		return nil, fmt.Errorf("sqlschema.Schema without a Table: velox names the table with the schema, as sqlschema.SchemaTable")
 	}
 	if a.Collation != "" {
-		out = append(out, schema.Collation(a.Collation))
+		out = append(out, &collationAnnotation{Collation: a.Collation})
 	}
-	for _, n := range slices.Sorted(maps.Keys(a.Checks)) {
-		out = append(out, schema.Check(n, a.Checks[n]))
+	if len(a.Checks) > 0 {
+		c := &checkAnnotation{}
+		for _, n := range slices.Sorted(maps.Keys(a.Checks)) {
+			c.Checks = append(c.Checks, checkConstraint{Name: n, Expr: a.Checks[n]})
+		}
+		out = append(out, c)
 	}
 	return out, nil
+}
+
+// tableAnnotation is the table of a schema, as velox-gen reads it: the
+// "Table" annotation of the model.
+type tableAnnotation struct {
+	Schema string `json:"schema,omitempty"` // the database schema; "" for the connection's default
+	Table  string `json:"table"`
+}
+
+func (*tableAnnotation) Name() string { return "Table" }
+
+// collationAnnotation is the collation of a schema's table on MySQL: the
+// "Collation" annotation of the model.
+type collationAnnotation struct {
+	Collation string `json:"collation"`
+}
+
+func (*collationAnnotation) Name() string { return "Collation" }
+
+// checkAnnotation holds a schema's CHECK constraints: the "Check"
+// annotation of the model.
+type checkAnnotation struct {
+	Checks []checkConstraint `json:"checks"`
+}
+
+// checkConstraint is one CHECK constraint.
+type checkConstraint struct {
+	Name string `json:"name"`
+	Expr string `json:"expr"`
+}
+
+func (*checkAnnotation) Name() string { return "Check" }
+
+// Merge returns the constraints of a and of other, as a mixin's and its
+// schema's combine. velox-gen refuses one name given two expressions.
+func (a *checkAnnotation) Merge(other schema.Annotation) schema.Annotation {
+	o, ok := other.(*checkAnnotation)
+	if !ok {
+		return a
+	}
+	return &checkAnnotation{Checks: slices.Concat(o.Checks, a.Checks)}
 }
 
 // fragmentProblem says why text, a column default or an index predicate that

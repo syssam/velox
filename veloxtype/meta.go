@@ -12,7 +12,7 @@ type ColumnDescriptor struct {
 	Version       bool       // the optimistic-locking version: every update adds 1
 	Sensitive     bool       // the column holds a secret (velox logs no values)
 	// DBDefault lists the dialects on which the column has a DEFAULT that the
-	// schema declared (SchemaDefault, or a sqlschema default), as velox-gen
+	// schema declared (a sqlschema default, or mixin.Time's), as velox-gen
 	// sets it. On those dialects an insert whose rows all hold the field's
 	// zero value (nil, for a pointer) leaves the column out, so the database
 	// fills it, and reads the value back into the entity.

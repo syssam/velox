@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/internal/testmodel/kind"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
@@ -12,7 +13,7 @@ type Ledger struct{ schema.Schema }
 
 // Fields returns the columns after the ID.
 func (Ledger) Fields() []schema.Field {
-	dec := map[string]string{field.Postgres: "numeric(19,4)", field.MySQL: "decimal(19,4)", field.SQLite: "numeric"}
+	dec := map[string]string{dialect.Postgres: "numeric(19,4)", dialect.MySQL: "decimal(19,4)", dialect.SQLite: "numeric"}
 	return []schema.Field{
 		field.Other("amount", kind.Dec("")).SchemaType(dec),
 		field.Other("fee", kind.Dec("")).SchemaType(dec).Optional().Nillable(),

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema"
@@ -29,12 +30,12 @@ func (ChkOrder) Fields() []schema.Field {
 
 func (ChkOrder) Annotations() []schema.Annotation {
 	return []schema.Annotation{
-		schema.Check("chk_total_positive", "total > 0"),
-		schema.Check("chk_qty_range", "qty BETWEEN 1 AND 100"),
-		schema.Check("chk_code_lower", "code = lower(code)"),
-		schema.Check("chk_state_known", "state IN ('new', 'paid')"),
-		schema.Check("chk_both", "total <> 7 AND (qty <> 7 OR state <> 'new')"),
-		schema.Check("chk_code_set", "code <> ''"),
+		sqlschema.Checks(map[string]string{"chk_total_positive": "total > 0"}),
+		sqlschema.Checks(map[string]string{"chk_qty_range": "qty BETWEEN 1 AND 100"}),
+		sqlschema.Checks(map[string]string{"chk_code_lower": "code = lower(code)"}),
+		sqlschema.Checks(map[string]string{"chk_state_known": "state IN ('new', 'paid')"}),
+		sqlschema.Checks(map[string]string{"chk_both": "total <> 7 AND (qty <> 7 OR state <> 'new')"}),
+		sqlschema.Checks(map[string]string{"chk_code_set": "code <> ''"}),
 	}
 }
 

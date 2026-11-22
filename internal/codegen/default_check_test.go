@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
@@ -11,7 +12,7 @@ import (
 
 // everywhere is the same default text on every dialect.
 func everywhere(s string) map[string]string {
-	return map[string]string{field.Postgres: s, field.MySQL: s, field.SQLite: s}
+	return map[string]string{dialect.Postgres: s, dialect.MySQL: s, dialect.SQLite: s}
 }
 
 // ndOrder has database defaults of each kind: non-zero literals, which an
@@ -21,20 +22,20 @@ type ndOrder struct{ schema.Schema }
 
 func (ndOrder) Fields() []schema.Field {
 	return []schema.Field{
-		field.Bool("a").SchemaDefault(everywhere("true")),
-		field.Int("n").SchemaDefault(everywhere("5")),
+		field.Bool("a").Annotations(sqlschema.DefaultExprs(everywhere("true"))),
+		field.Int("n").Annotations(sqlschema.DefaultExprs(everywhere("5"))),
 		field.String("kind").Annotations(sqlschema.Default("'plain'")),
-		field.Bool("both").Default(true).SchemaDefault(everywhere("true")),
-		field.String("note").SchemaDefault(map[string]string{field.Postgres: "'x'::text", field.MySQL: "('x')", field.SQLite: "'x'"}),
+		field.Bool("both").Default(true).Annotations(sqlschema.DefaultExprs(everywhere("true"))),
+		field.String("note").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "'x'::text", dialect.MySQL: "('x')", dialect.SQLite: "'x'"})),
 		// No warning for the fields below.
-		field.Bool("off").SchemaDefault(everywhere("false")),
-		field.Int("zero").SchemaDefault(everywhere("0")),
-		field.String("empty").SchemaDefault(everywhere("''")),
-		field.Bool("maybe").Nillable().SchemaDefault(everywhere("true")),
-		field.Int("count").Optional().Nillable().SchemaDefault(everywhere("5")),
-		field.Enum("status").Values("new", "paid").SchemaDefault(everywhere("'new'")),
-		field.Time("at").SchemaDefault(everywhere("CURRENT_TIMESTAMP")),
-		field.String("code").SchemaDefault(map[string]string{field.Postgres: "gen_random_uuid()::text", field.MySQL: "(uuid())", field.SQLite: "(lower(hex(randomblob(16))))"}),
+		field.Bool("off").Annotations(sqlschema.DefaultExprs(everywhere("false"))),
+		field.Int("zero").Annotations(sqlschema.DefaultExprs(everywhere("0"))),
+		field.String("empty").Annotations(sqlschema.DefaultExprs(everywhere("''"))),
+		field.Bool("maybe").Nillable().Annotations(sqlschema.DefaultExprs(everywhere("true"))),
+		field.Int("count").Optional().Nillable().Annotations(sqlschema.DefaultExprs(everywhere("5"))),
+		field.Enum("status").Values("new", "paid").Annotations(sqlschema.DefaultExprs(everywhere("'new'"))),
+		field.Time("at").Annotations(sqlschema.DefaultExprs(everywhere("CURRENT_TIMESTAMP"))),
+		field.String("code").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "gen_random_uuid()::text", dialect.MySQL: "(uuid())", dialect.SQLite: "(lower(hex(randomblob(16))))"})),
 	}
 }
 
@@ -85,12 +86,12 @@ type ndMoney struct{ schema.Schema }
 func (ndMoney) Fields() []schema.Field {
 	dec := map[string]string{"postgres": "numeric(10,2)", "mysql": "decimal(10,2)", "sqlite": "numeric"}
 	return []schema.Field{
-		field.Other("fee", LwDecText("")).SchemaType(dec).SchemaDefault(everywhere("1.00")),
-		field.Other("quoted", LwDecText("")).SchemaType(dec).SchemaDefault(everywhere("'2.5'")),
+		field.Other("fee", LwDecText("")).SchemaType(dec).Annotations(sqlschema.DefaultExprs(everywhere("1.00"))),
+		field.Other("quoted", LwDecText("")).SchemaType(dec).Annotations(sqlschema.DefaultExprs(everywhere("'2.5'"))),
 		// No warning for the fields below.
-		field.Other("nothing", LwDecText("")).SchemaType(dec).SchemaDefault(everywhere("0.00")),
-		field.Other("maybe", LwDecText("")).SchemaType(dec).Optional().Nillable().SchemaDefault(everywhere("1.00")),
-		field.Other("word", LwDecText("")).SchemaType(map[string]string{"postgres": "citext"}).SchemaDefault(map[string]string{"postgres": "'x'"}),
+		field.Other("nothing", LwDecText("")).SchemaType(dec).Annotations(sqlschema.DefaultExprs(everywhere("0.00"))),
+		field.Other("maybe", LwDecText("")).SchemaType(dec).Optional().Nillable().Annotations(sqlschema.DefaultExprs(everywhere("1.00"))),
+		field.Other("word", LwDecText("")).SchemaType(map[string]string{"postgres": "citext"}).Annotations(sqlschema.DefaultExprs(map[string]string{"postgres": "'x'"})),
 	}
 }
 

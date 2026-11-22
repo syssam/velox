@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/internal/desc"
@@ -308,7 +309,7 @@ func TestBuildersAreDocumented(t *testing.T) {
 			methods[typ.Name] = append(methods[typ.Name], m.Name)
 		}
 	}
-	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "SchemaDefault", "Annotations", "Default"}
+	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "Annotations", "Default"}
 	for _, b := range []string{
 		"BoolBuilder", "NumberBuilder", "StringBuilder", "BytesBuilder", "TimeBuilder",
 		"UUIDBuilder", "UUIDOfBuilder", "JSONBuilder", "OtherBuilder", "EnumBuilder", "EnumOfBuilder",
@@ -413,44 +414,18 @@ func TestBytesMaxLenSetsSize(t *testing.T) {
 func TestSchemaTypeDialects(t *testing.T) {
 	// The keys are the core's dialect names; the external test package can
 	// import the core, which the field package must not.
-	for key, d := range map[string]velox.Dialect{field.Postgres: velox.Postgres, field.MySQL: velox.MySQL, field.SQLite: velox.SQLite} {
+	for key, d := range map[string]velox.Dialect{dialect.Postgres: velox.Postgres, dialect.MySQL: velox.MySQL, dialect.SQLite: velox.SQLite} {
 		if key != d.String() {
 			t.Errorf("key %q, the core's name %q", key, d.String())
 		}
 	}
-	d := field.String("s").SchemaType(map[string]string{field.Postgres: "citext", field.MySQL: "varchar(10)", field.SQLite: "text"}).Descriptor()
+	d := field.String("s").SchemaType(map[string]string{dialect.Postgres: "citext", dialect.MySQL: "varchar(10)", dialect.SQLite: "text"}).Descriptor()
 	if len(d.Errs) != 0 {
 		t.Fatal(d.Errs)
 	}
-	d = field.String("s").SchemaType(map[string]string{"postgress": "citext", field.Postgres: "citext"}).Descriptor()
-	if err := errors.Join(d.Errs...); err == nil || err.Error() != `SchemaType: unknown dialect "postgress"; the keys are field.Postgres, field.MySQL and field.SQLite` {
+	d = field.String("s").SchemaType(map[string]string{"postgress": "citext", dialect.Postgres: "citext"}).Descriptor()
+	if err := errors.Join(d.Errs...); err == nil || err.Error() != `SchemaType: unknown dialect "postgress"; the keys are dialect.Postgres, dialect.MySQL and dialect.SQLite` {
 		t.Fatalf("got %v", err)
-	}
-}
-
-func TestSchemaDefault(t *testing.T) {
-	m := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)"}
-	d := field.Time("t").SchemaDefault(m).Descriptor()
-	if len(d.Errs) != 0 {
-		t.Fatal(d.Errs)
-	}
-	// The descriptor holds a copy.
-	m[field.Postgres] = "changed"
-	m[field.SQLite] = "added"
-	if len(d.SchemaDefault) != 2 || d.SchemaDefault[field.Postgres] != "now()" || d.SchemaDefault[field.MySQL] != "CURRENT_TIMESTAMP(6)" {
-		t.Fatalf("%v", d.SchemaDefault)
-	}
-	for _, c := range []struct {
-		m    map[string]string
-		want string
-	}{
-		{map[string]string{"oracle": "x"}, `SchemaDefault: unknown dialect "oracle"; the keys are field.Postgres, field.MySQL and field.SQLite`},
-		{map[string]string{field.MySQL: ""}, `SchemaDefault: the mysql default is empty`},
-	} {
-		d := field.String("s").SchemaDefault(c.m).Descriptor()
-		if err := errors.Join(d.Errs...); err == nil || err.Error() != c.want {
-			t.Errorf("got %v, want %s", err, c.want)
-		}
 	}
 }
 
