@@ -381,6 +381,21 @@ itself; the driver parses a `datetime` column, slower, and velox reads that
 too. `migrate diff` on a database ent made plans the change to `datetime(9)`,
 a table rebuild on SQLite.
 
+## Tests and migrations
+
+ent's `client.Schema.Create` is an auto-migration that may run anywhere.
+velox migrates with versioned files: `velox-gen migrate diff` writes them,
+and `migrate apply` or `migrate.Up` runs them. For tests and development
+databases it has the bootstrap ent's tests use
+([decision 0111](decisions/0111-test-schema-create.md)).
+
+| ent | velox |
+|---|---|
+| `enttest.Open(t, "sqlite3", dsn)` | `veloxtest.Open(t, "sqlite", "", schemas)`, a new file in `t.TempDir()`, with `schemas` every schema value of the package |
+| `client.Schema.Create(ctx)` in a test or a development server | `migrate.Create(ctx, velox.Pool(db), s)`, with `s` from `veloxtest.Schema(dialect, schemas...)`: it makes the tables in an empty database, does nothing when they are there as the schema says, and refuses any other database |
+| `client.Schema.Create(ctx)` at deploy | `migrate diff`, then `migrate apply` or `migrate.Up` |
+| `migrate.WithDropColumn`, `WithDropIndex` | `migrate diff -allow drop-column=t.c`; `Create` never alters a table |
+
 ## Running the generator from Go
 
 ent's `entc.go` calls `entc.Generate` (veloxe's, `compiler.Generate`) with a

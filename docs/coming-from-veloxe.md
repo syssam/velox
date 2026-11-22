@@ -106,7 +106,10 @@ A veloxe application often migrates with a program like this:
 - `client.Schema.WriteTo(ctx, os.Stdout)` for a dry run;
 - hand-written SQL before and after, for what `Create` cannot do.
 
-velox has no auto-migration ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
+velox has no auto-migration at deploy ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
+A test or a development database gets its tables from `veloxtest.Open` or
+`migrate.Create`, which make them in an empty database and never alter one
+([ADR 0111](decisions/0111-test-schema-create.md)).
 It writes numbered SQL files from the schema, which you read and commit,
 and applies them in order. The database is adopted once, then each schema
 change is one file.
@@ -394,7 +397,9 @@ Queries and runtime:
   ([ADR 0038](decisions/0038-tenancy-is-a-mixin.md)).
 - **`privacy.NewPolicies` and `Policies`.** velox composes a schema's and
   its mixins' policies itself.
-- **Auto-migration** ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
+- **Auto-migration at deploy** ([ADR 0006](decisions/0006-own-migrate-and-atlas.md)).
+  Tests and development databases have `veloxtest.Open` and
+  `migrate.Create` ([ADR 0111](decisions/0111-test-schema-create.md)).
 
 GraphQL:
 

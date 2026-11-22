@@ -435,6 +435,28 @@ if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 }
 ```
 
+**In tests and on a development database** you need no directory.
+`veloxtest.Open` connects, makes the schema's tables with
+`migrate.Create`, and closes the database when the test ends, as ent's
+`enttest.Open` does. The tables are the ones `migrate diff` would plan,
+built in the test's process from the schema values you list
+([ADR 0111](decisions/0111-test-schema-create.md)):
+
+```go
+var schemas = []schema.Interface{veloxschema.User{}, veloxschema.Post{}}
+
+func TestPosts(t *testing.T) {
+	db := veloxtest.Open(t, "sqlite", "", schemas) // a new file in t.TempDir()
+	// ...
+}
+```
+
+`migrate.Create(ctx, velox.Pool(db), s)` is the same step for a
+development server: it makes the tables in an empty database, does
+nothing when the database already holds them as the schema says, and
+refuses anything else. It never alters a table and writes no history, so
+production keeps the versioned files and `migrate.Up`.
+
 **Using Atlas instead?** `go tool velox-gen migrate sql -dialect postgres
 ./veloxschema` prints the schema's `CREATE` statements for Atlas's
 `external_schema`. A directory is managed by one tool or the other, never
