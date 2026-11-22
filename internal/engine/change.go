@@ -192,14 +192,20 @@ func trackedWrite(ctx context.Context, db *DB, mu *MutationState, cols []int, st
 	}
 	tw := tracker{in: in, t: InfoTable(in), cols: cols, old: returnsOld(ctx, db)}
 	tw.read = keyAnd(in, tw.cols)
-	return versionedTx(ctx, db, &tw.old, func(ctx context.Context, tx *DB) error {
-		mu.Affected = 0
-		rows, err := tw.run(ctx, tx, mu, st)
+	// The closure counts into a local, not into mu: a closure that captured
+	// mu would move every caller's MutationState to the heap, recording on
+	// or not.
+	affected := mu.Affected
+	err := versionedTx(ctx, db, &tw.old, func(ctx context.Context, tx *DB) error {
+		affected = 0
+		rows, err := tw.run(ctx, tx, &affected, st)
 		if err != nil {
 			return err
 		}
 		return emit(tx, rows)
 	})
+	mu.Affected = affected
+	return err
 }
 
 // everyColumn is the index of each of in's columns, in order.
@@ -234,9 +240,9 @@ type tracker struct {
 }
 
 // run is trackedWrite's work on tx.
-func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *Statement) ([]ChangeRow, error) {
+func (tw *tracker) run(ctx context.Context, tx *DB, affected *int64, st *Statement) ([]ChangeRow, error) {
 	if tw.old {
-		return tw.both(ctx, tx, mu, st)
+		return tw.both(ctx, tx, affected, st)
 	}
 	order := make([]OrderTerm, len(tw.in.PrimaryKey))
 	for i, k := range tw.in.PrimaryKey {
@@ -276,7 +282,7 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *State
 			if err != nil {
 				return err
 			}
-			mu.Affected += res.Affected
+			*affected += res.Affected
 			if st.Op == OpDelete {
 				// MySQL returns no keys: its count must account for every
 				// row, or recording cannot tell which it deleted.
@@ -295,7 +301,7 @@ func (tw *tracker) run(ctx context.Context, tx *DB, mu *MutationState, st *State
 			cp.Returning, cp.recorded = tw.in.PrimaryKey, true
 		}
 		n, err := tw.returned(ctx, tx, &cp, at, lo, hi, news)
-		mu.Affected += n
+		*affected += n
 		return err
 	})
 	if err != nil {
@@ -567,9 +573,9 @@ func (tw *tracker) changes(st *Statement, olds TableRows, news []unsafe.Pointer)
 // the write and, for an update, after it. The values are those the write
 // itself saw, so no read comes first and no row can change between the
 // two. More rows than WithMaxRows fail the write, which trackedWrite runs
-// in a transaction when it may match more than one row. It sets
-// mu.Affected to the rows returned.
-func (tw *tracker) both(ctx context.Context, tx *DB, mu *MutationState, st *Statement) ([]ChangeRow, error) {
+// in a transaction when it may match more than one row. It adds the rows
+// returned to *affected.
+func (tw *tracker) both(ctx context.Context, tx *DB, affected *int64, st *Statement) ([]ChangeRow, error) {
 	cp := *st
 	cp.InTx = st.InTx || tx.InTx
 	cp.Returning, cp.returnOld, cp.recorded = tw.read, true, true
@@ -594,7 +600,7 @@ func (tw *tracker) both(ctx context.Context, tx *DB, mu *MutationState, st *Stat
 	if err != nil {
 		return nil, err
 	}
-	mu.Affected += int64(len(out))
+	*affected += int64(len(out))
 	if m := tx.Cfg.MaxRows; m > 0 && len(out) > m {
 		return nil, fmt.Errorf("velox: %s: a recorded %s wrote %d rows, more than %d, the cap WithMaxRows sets on the rows it records; the write is rolled back: %w", tw.in.Name, st.Op, len(out), m, ErrTooManyRows)
 	}

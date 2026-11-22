@@ -377,8 +377,8 @@ func (r *repoint) exec(ctx context.Context, tx *DB, st *Statement) (int64, error
 		res, err := ExecWrite(ctx, tx, st)
 		return res.Affected, err
 	}
-	var mu MutationState
-	rows, err := r.tw.run(ctx, tx, &mu, st)
+	var affected int64
+	rows, err := r.tw.run(ctx, tx, &affected, st)
 	if err != nil {
 		return 0, err
 	}
@@ -391,7 +391,7 @@ func (r *repoint) exec(ctx context.Context, tx *DB, st *Statement) (int64, error
 		r.at[k] = len(r.rows)
 		r.rows = append(r.rows, row)
 	}
-	return mu.Affected, nil
+	return affected, nil
 }
 
 // report adds rows, those of an insert, to what the write changed.
