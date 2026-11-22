@@ -434,7 +434,7 @@ func (Note) Fields() []schema.Field { return []schema.Field{field.String("text")
 func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.Type)} }
 `)
 	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
-	for _, want := range []string{"veloxgen/tag.go is out of date", "veloxgen/label.go is out of date", "veloxgen/note.go is out of date", "veloxgen/user.go is out of date"} {
+	for _, want := range []string{"veloxgen/tag.go is no longer generated; a run removes it", "veloxgen/label.go is missing", "veloxgen/note.go is missing", "veloxgen/user.go is out of date"} {
 		if !strings.Contains(errs, want) {
 			t.Errorf("-check lacks %q: %d %q %q", want, code, out, errs)
 		}

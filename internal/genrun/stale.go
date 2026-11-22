@@ -51,12 +51,25 @@ func reportSwept(dir string, swept []swept, stderr io.Writer) {
 	}
 }
 
-// reportCheck names, for a check, each changed file and each leftover of an
-// interrupted run, and returns their paths, relative to dir.
-func reportCheck(dir string, changed, leftovers []string, stderr io.Writer) []string {
+// reportCheck names, for a check, each file that a run would write or
+// remove, and each leftover of an interrupted run, and returns their paths,
+// relative to dir. A file to write is missing or out of date; one to remove
+// is no longer generated.
+func reportCheck(dir string, write, remove, leftovers []string, stderr io.Writer) []string {
+	gone := map[string]bool{}
+	for _, p := range remove {
+		gone[p] = true
+	}
 	var stale []string
-	for _, p := range changed {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %s is out of date\n", RelPath(dir, p))
+	for _, p := range slices.Sorted(slices.Values(slices.Concat(write, remove))) {
+		why := "is out of date"
+		switch _, err := os.Lstat(p); {
+		case gone[p]:
+			why = "is no longer generated; a run removes it"
+		case errors.Is(err, fs.ErrNotExist):
+			why = "is missing"
+		}
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %s %s\n", RelPath(dir, p), why)
 		stale = append(stale, RelPath(dir, p))
 	}
 	for _, p := range leftovers {

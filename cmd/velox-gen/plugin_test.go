@@ -156,7 +156,7 @@ func TestPluginFilesAreOwned(t *testing.T) {
 
 	// -check without -plugin: the plugin's files are left over.
 	code, _, errs = runCLI(t, dir, "-check", "./veloxschema")
-	if code != 3 || !strings.Contains(errs, "veloxgen/fake.graphql is out of date") || !strings.Contains(errs, "veloxgen/fake_gql.go is out of date") {
+	if code != 3 || !strings.Contains(errs, "veloxgen/fake.graphql is no longer generated; a run removes it") || !strings.Contains(errs, "veloxgen/fake_gql.go is no longer generated; a run removes it") {
 		t.Fatalf("-check without the plugin: %d %q", code, errs)
 	}
 
@@ -613,7 +613,7 @@ func TestStaleNestedFiles(t *testing.T) {
 
 	// -check without the plugin names the left-over files.
 	code, _, errs := runCLI(t, dir, "-check", "./veloxschema")
-	if code != 3 || !strings.Contains(errs, "veloxgen/pb/a.go is out of date") || !strings.Contains(errs, "veloxgen/pb/sub/b.proto is out of date") {
+	if code != 3 || !strings.Contains(errs, "veloxgen/pb/a.go is no longer generated; a run removes it") || !strings.Contains(errs, "veloxgen/pb/sub/b.proto is no longer generated; a run removes it") {
 		t.Fatalf("-check: %d %q", code, errs)
 	}
 
@@ -803,8 +803,8 @@ func TestPluginCaseRename(t *testing.T) {
 	t.Run("file", func(t *testing.T) {
 		generate(files(plugin.File{Path: "Fake.go", Content: "package veloxgen\n"}))
 		env := files(plugin.File{Path: "fake.go", Content: "package veloxgen\n"})
-		// -check sees the old spelling as out of date.
-		if code, _, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./veloxschema"); code != 3 || !strings.Contains(errs, "veloxgen/Fake.go is out of date") {
+		// -check sees the old spelling as no longer generated.
+		if code, _, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./veloxschema"); code != 3 || !strings.Contains(errs, "veloxgen/Fake.go is no longer generated; a run removes it") {
 			t.Errorf("-check: %d %q", code, errs)
 		}
 		generate(env)

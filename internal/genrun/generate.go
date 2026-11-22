@@ -363,10 +363,8 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 		return done(err)
 	}
 	stale, remove := sw.write, sw.remove
-	changed := append(slices.Clone(stale), remove...)
-	slices.Sort(changed)
 	if c.Check {
-		res.Stale = reportCheck(dir, changed, sw.leftovers, stderr)
+		res.Stale = reportCheck(dir, stale, remove, sw.leftovers, stderr)
 		if len(res.Stale) > 0 {
 			return done(ErrStale)
 		}
@@ -398,7 +396,7 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 		for _, p := range remove {
 			removed[p] = true
 		}
-		for _, p := range changed {
+		for _, p := range slices.Sorted(slices.Values(slices.Concat(stale, remove))) {
 			_, _ = fmt.Fprintln(stdout, RelPath(dir, p))
 			if removed[p] {
 				res.Removed = append(res.Removed, RelPath(dir, p))

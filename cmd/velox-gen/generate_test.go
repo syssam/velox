@@ -235,7 +235,7 @@ func TestCheckAndRewrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, _, errs = runCLI(t, dir, "-check", "./veloxschema")
-	if code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/tag.go is out of date") {
+	if code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/tag.go is no longer generated; a run removes it\n") {
 		t.Fatalf("-check after removal: %d %q", code, errs)
 	}
 	code, out, errs = runCLI(t, dir, "./veloxschema")
@@ -431,10 +431,11 @@ func TestPolicyAddedAfterGenerationFailsCheck(t *testing.T) {
 	}
 }
 
-// -check fails for a generated file that is missing, as for one that is stale.
+// -check fails for a generated file that is missing, as for one that is
+// stale, and says it is missing.
 func TestCheckFindsAMissingFile(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/user.go is out of date\n") {
+	if code, _, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 3 || !strings.Contains(errs, "velox-gen: veloxgen/user.go is missing\n") {
 		t.Errorf("-check before any generation: %d %q", code, errs)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "veloxgen")); !os.IsNotExist(err) {
@@ -447,7 +448,7 @@ func TestCheckFindsAMissingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
-	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: veloxgen/tag.go is out of date\n") || strings.Contains(errs, "user.go") {
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: veloxgen/tag.go is missing\n") || strings.Contains(errs, "user.go") {
 		t.Errorf("-check with a missing file: %d %q %q", code, out, errs)
 	}
 }

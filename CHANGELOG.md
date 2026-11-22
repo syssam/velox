@@ -1308,6 +1308,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   which run SQL from a string, and an `@` right before a name, a MySQL
   variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass
   when a space follows them.
+- `velox-gen -check` says why each file is stale: it is out of date, it is
+  missing, or it is no longer generated and a run removes it. It said "is
+  out of date" for all three.
 - velox-gen's check of a behaviour's column and relation names adds "did
   you mean" with the nearest name, as its other unknown-name errors do.
 - Rule 38, an Optional foreign key of an edge that is not Required, says

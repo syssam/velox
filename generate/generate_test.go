@@ -150,7 +150,7 @@ func TestRunCheck(t *testing.T) {
 	if got := tree(t, filepath.Join(dir, "veloxgen")); got != nil {
 		t.Errorf("a check wrote %v", slices.Sorted(maps.Keys(got)))
 	}
-	if !strings.Contains(stderr.String(), "velox-gen: "+want[0]+" is out of date\n") || strings.Contains(stderr.String(), "velox-gen: run") {
+	if !strings.Contains(stderr.String(), "velox-gen: "+want[0]+" is missing\n") || strings.Contains(stderr.String(), "velox-gen: run") {
 		t.Errorf("stderr: %q", stderr.String())
 	}
 }
