@@ -482,6 +482,9 @@ func (l *linter) alterType(i int, c alterColumn, target string) {
 		if class != Safe {
 			more = "; the table is rewritten under an exclusive lock"
 		}
+		if l.d == velox.MySQL && mysqlVarcharToText(from, to) {
+			more += l.textIndexNote(c)
+		}
 		l.add(i, "widen-type", class, target, c.To.Pos, "widens column %s from %s to %s%s", target, from, to, more)
 		return
 	}
@@ -798,9 +801,41 @@ func widening(d velox.Dialect, from, to string) (Class, bool) {
 			if m, ok := sizeOf(to, "varchar"); ok && m > n {
 				return Review, true
 			}
+			if mysqlVarcharToText(from, to) {
+				return Review, true
+			}
 		}
 	}
 	return 0, false
+}
+
+// mysqlVarcharToText reports whether a MySQL column goes from varchar(n) to
+// text, mediumtext or longtext. Each holds at least 65,535 bytes, the most a
+// varchar can, so no value is cut. tinytext holds 255 bytes and is left out.
+func mysqlVarcharToText(from, to string) bool {
+	_, ok := sizeOf(from, "varchar")
+	return ok && (to == "text" || to == "mediumtext" || to == "longtext")
+}
+
+// textIndexNote is what a MySQL varchar to text widening adds about the
+// indexes over the column: MySQL indexes a TEXT column only by a prefix, so
+// MODIFY fails while an index holds the whole column.
+func (l *linter) textIndexNote(c alterColumn) string {
+	more := "; an index over a TEXT column needs a prefix length, as (c(191))"
+	t := l.from.table(l.canon(c.Table))
+	if t == nil {
+		return more
+	}
+	var over []string
+	for _, ix := range t.Indexes {
+		if slices.Contains(ix.Columns, c.From.Name) {
+			over = append(over, indexLabel(ix))
+		}
+	}
+	if len(over) > 0 {
+		more += ", so MODIFY fails while " + strings.Join(over, ", ") + " holds the whole column"
+	}
+	return more
 }
 
 // sizeOf is n of a type of the form base(n).

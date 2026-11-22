@@ -229,7 +229,11 @@ func TestLintWidenType(t *testing.T) {
 		{my, "double", "float", alter, migrate.Destructive},
 		{my, "varchar(10)", "varchar(20)", widen, migrate.Review},
 		{my, "varchar(20)", "varchar(10)", alter, migrate.Destructive},
-		{my, "varchar(20)", "text", alter, migrate.Destructive},
+		{my, "varchar(20)", "text", widen, migrate.Review},
+		{my, "varchar(20)", "mediumtext", widen, migrate.Review},
+		{my, "varchar(20)", "longtext", widen, migrate.Review},
+		{my, "varchar(20)", "tinytext", alter, migrate.Destructive},
+		{my, "text", "varchar(20)", alter, migrate.Destructive},
 		{my, "tinytext", "text", widen, migrate.Review},
 		{my, "text", "mediumtext", widen, migrate.Review},
 		{my, "mediumtext", "longtext", widen, migrate.Review},
@@ -267,6 +271,29 @@ func TestLintWidenType(t *testing.T) {
 				t.Errorf("got %+v, want %s %v", got, r.code, r.class)
 			}
 		})
+	}
+}
+
+// TestLintVarcharToTextNamesIndexes: a MySQL varchar to text widening is
+// Review, and names an index over the column, which MySQL refuses to keep
+// over a TEXT column without a prefix length.
+func TestLintVarcharToTextNamesIndexes(t *testing.T) {
+	t.Parallel()
+	ref := migrate.TableRef{Name: "t"}
+	col := func(typ string) migrate.Column { return migrate.Column{Name: "c", Type: typ} }
+	from := &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
+		Name: "t", Columns: []migrate.Column{col("varchar(255)")},
+		Indexes: []migrate.Index{{Name: "t_c", Columns: []string{"c"}}},
+	}}}
+	cs := []migrate.Change{migrate.AlterColumn{Table: ref, From: col("varchar(255)"), To: col("text"), What: migrate.ColumnType}}
+	got := lint(t, from, cs)
+	if len(got) != 1 || got[0].Code != "widen-type" || got[0].Class != migrate.Review {
+		t.Fatalf("got %+v, want one widen-type Review", got)
+	}
+	for _, want := range []string{"prefix length", "MODIFY fails while t_c holds the whole column"} {
+		if !strings.Contains(got[0].Message, want) {
+			t.Errorf("the message lacks %q: %s", want, got[0].Message)
+		}
 	}
 }
 

@@ -560,6 +560,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- migrate: a MySQL `varchar(n)` to `text`, `mediumtext` or `longtext` is a
+  Review `widen-type`, not a destructive `alter-type`: each holds what any
+  varchar can. The finding names an index over the column, which MODIFY
+  fails on without a prefix length.
 - A `WithFilter` filter that restricts the join entity of a many-to-many
   edge, plain or an edge schema, fails `Has`, `Of`, a `With` load,
   `LoadEach` and `CountEach` through it (ADR 0098's amendment). It was
