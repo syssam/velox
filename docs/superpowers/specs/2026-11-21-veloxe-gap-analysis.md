@@ -357,6 +357,7 @@ the port), then how common the pattern is in ent and veloxe apps.
     walks nextapp's `cmd/migrate` through it. The same guide maps `Modify`
     and `sql.Selector` to `Expr`/`Calc`/`Select`, `intercept` to
     `WithFilter`, `gqlrelay` to `gqlgraph`, and `Unwrap` to nothing.
+    Done 2026-11-22 (UF N-V8): `docs/coming-from-veloxe.md`.
 
 11. **Window functions in projections (#74).** nextapp's generic aggregate
     service pages groups with `COUNT(*) OVER ()` (`aggregate/generic.go:253`).
@@ -612,4 +613,5 @@ These would need work:
 10. `docs/coming-from-veloxe.md` (UF N-V8), covering auto-migration →
     baseline + versioned files, `Modify`/`sql.Selector` → `Expr`/`Calc`/`Select`,
     `intercept` → `WithFilter`, and `gqlrelay` → `gqlgraph`. Allowing
-    `OVER (...)` in `Calc` would go with it.
+    `OVER (...)` in `Calc` would go with it. Done 2026-11-22:
+    `docs/coming-from-veloxe.md`.

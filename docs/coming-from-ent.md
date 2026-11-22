@@ -6,7 +6,8 @@ names. Most ent schemas port by changing imports. A few rules differ, because
 velox inserts and updates Go structs, where a zero field means unset. This page
 lists the differences that change what a schema means or what a call does.
 [Decision 0032](decisions/0032-ent-refusals.md) says which ent schemas velox-gen
-refuses, and why.
+refuses, and why. A veloxe application reads this page first, then
+[coming-from-veloxe.md](coming-from-veloxe.md).
 
 ## Finding schemas
 

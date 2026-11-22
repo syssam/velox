@@ -120,6 +120,35 @@ func TestAdoptKeepsDifferences(t *testing.T) {
 	}
 }
 
+// TestAdoptWithoutForeignKeys: a database made with no foreign keys, as
+// ent's and veloxe's WithForeignKeys(false) make it, is adopted as it is,
+// and the next diff adds the schema's key.
+func TestAdoptWithoutForeignKeys(t *testing.T) {
+	t.Parallel()
+	posts := func(fks ...migrate.ForeignKey) migrate.Table {
+		return migrate.Table{
+			Name:           "posts",
+			Columns:        []migrate.Column{{Name: "id", Type: "bigint", Identity: true}, {Name: "user_id", Type: "bigint"}},
+			PrimaryKey:     []string{"id"},
+			PrimaryKeyName: "posts_pkey",
+			ForeignKeys:    fks,
+		}
+	}
+	fk := migrate.ForeignKey{Name: "posts_users_posts", Columns: []string{"user_id"}, RefTable: migrate.TableRef{Name: "users"}, RefColumns: []string{"id"}}
+	want := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil), posts(fk))
+	snap, ws := adoptOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, nil), posts()), want)
+	if got := table(snap, "posts").ForeignKeys; len(got) != 0 || len(ws) > 0 {
+		t.Errorf("foreign keys %v, warnings:\n%s", got, adoptWarnings(ws))
+	}
+	changes, err := migrate.Diff(snap, want, migrate.DiffOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Kind() != "add-foreign-key" {
+		t.Errorf("the next diff: %v, want add-foreign-key", changes)
+	}
+}
+
 // warningObjects is the Object of each of ws.
 func warningObjects(ws []migrate.Warning) []string {
 	var out []string
