@@ -62,7 +62,7 @@ func TestMutationSetClonesOnce(t *testing.T) {
 // they gave, and a second render gives the same SQL.
 func TestBidiDeleteKeepsTheStatement(t *testing.T) {
 	in := &EntityInfo{Name: "links", Table: "links", Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}, PrimaryKey: []int{0, 1}}
-	setInfoBidi(in, true)
+	in.bidi = true
 	st := &Statement{Op: OpDelete, Entity: in, Where: []Predicate{ColumnEQ(0, int64(1))}}
 	db := &DB{D: Postgres, Cfg: newConfig(nil)}
 	const want = `DELETE FROM "links" WHERE ("a" = $1 OR "b" = $2)`

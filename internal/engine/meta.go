@@ -236,8 +236,6 @@ func InfoRels(in *EntityInfo) []*relation { return in.rels }
 // SetInfoPolicy sets in's policy.
 func SetInfoPolicy(in *EntityInfo, p *EntityPolicy) { in.policy = p }
 
-func setInfoBidi(in *EntityInfo, on bool) { in.bidi = on }
-
 // rootPkg is the import path of the root package, which holds One and Many.
 var rootPkg = strings.TrimSuffix(reflect.TypeFor[Holder]().PkgPath(), "/internal/engine")
 
