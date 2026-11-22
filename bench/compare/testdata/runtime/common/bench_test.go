@@ -19,8 +19,9 @@ func setup(tb testing.TB) *app {
 }
 
 // wantShape is the number of indexes and foreign keys of each table, the same
-// for every ORM: e1s..e3s have the prev_id index and foreign key. On postgres
-// the primary key's index counts too.
+// for every ORM: e1s..e5s have the prev_id index and foreign key, and e4s and
+// e5s one more index each, for the where and page benchmarks. On postgres the
+// primary key's index counts too.
 func wantShape() map[string]tableShape {
 	pk := 0
 	if dbDialect() == "postgres" {
@@ -29,6 +30,7 @@ func wantShape() map[string]tableShape {
 	return map[string]tableShape{
 		"e0s": {Indexes: pk}, "e1s": {Indexes: pk + 1, FKs: 1},
 		"e2s": {Indexes: pk + 1, FKs: 1}, "e3s": {Indexes: pk + 1, FKs: 1},
+		"e4s": {Indexes: pk + 2, FKs: 1}, "e5s": {Indexes: pk + 2, FKs: 1},
 	}
 }
 
@@ -98,6 +100,7 @@ func TestGuard(t *testing.T) {
 	if e1, _, _, err := a.rows(ctx); err != nil || e1 != 500 {
 		t.Errorf("e1 rows %d, %v; want 500", e1, err)
 	}
+	guardPages(t, a)
 }
 
 func BenchmarkInsertOne(b *testing.B) {
@@ -172,6 +175,50 @@ func BenchmarkCount(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		if _, err := a.count(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkWhereAnd(b *testing.B) {
+	ctx, a := context.Background(), setupPages(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := a.whereAnd(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkWhereHasEdge(b *testing.B) {
+	ctx, a := context.Background(), setupPages(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := a.whereHasEdge(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPageOffset(b *testing.B) {
+	ctx, a := context.Background(), setupPages(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := a.pageOffset(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPageKeyset(b *testing.B) {
+	ctx, a := context.Background(), setupPages(b)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := a.pageKeyset(ctx); err != nil {
 			b.Fatal(err)
 		}
 	}

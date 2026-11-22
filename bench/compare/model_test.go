@@ -206,3 +206,45 @@ func TestSchemasEquivalent(t *testing.T) {
 		}
 	}
 }
+
+// TestRuntimeSchemaIndexes checks that the runtime schema adds runtimeIndexes,
+// spelled the same in every DSL, and that the build schema has none of them.
+func TestRuntimeSchemaIndexes(t *testing.T) {
+	indexMethod := regexp.MustCompile(`(?s)\nfunc \(E\d+\) Indexes\(\).*?\n}\n`)
+	var ref map[string]string
+	for _, o := range orms {
+		rt, build := o.RuntimeSchema(), o.Schema(runtimeEntities)
+		if len(rt) != runtimeEntities {
+			t.Fatalf("%s: %d runtime files, want %d", o.Name, len(rt), runtimeEntities)
+		}
+		got := map[string]string{}
+		for i := range runtimeEntities {
+			name := filepath.Join(o.SchemaDir, "e"+strconv.Itoa(i)+".go")
+			for _, x := range runtimeIndexes[i] {
+				call := "index.Fields(" + x + ")"
+				if !strings.Contains(rt[name], call) {
+					t.Errorf("%s: runtime %s lacks %s:\n%s", o.Name, name, call, rt[name])
+				}
+				if strings.Contains(build[name], call) {
+					t.Errorf("%s: build %s has %s", o.Name, name, call)
+				}
+			}
+			if _, err := parser.ParseFile(token.NewFileSet(), name, rt[name], parser.AllErrors); err != nil {
+				t.Fatalf("%s: runtime %s does not parse: %v", o.Name, name, err)
+			}
+			if len(runtimeIndexes[i]) == 0 && rt[name] != build[name] {
+				t.Errorf("%s: runtime %s differs from the build's", o.Name, name)
+			}
+			got[strconv.Itoa(i)] = strings.ReplaceAll(indexMethod.FindString(rt[name]), o.dsl.IndexType, "INDEX")
+		}
+		if ref == nil {
+			ref = got
+			continue
+		}
+		for i, m := range got {
+			if m != ref[i] {
+				t.Errorf("%s: E%s's indexes differ from velox's:\n%s\nvs\n%s", o.Name, i, m, ref[i])
+			}
+		}
+	}
+}

@@ -99,7 +99,10 @@ const refMetric = "ref_cpu_s"
 var runtimeUnits = []string{"sec/op", "B/op", "allocs/op"}
 
 // benchNames are the benchmarks, in the order the tables list them.
-var benchNames = []string{"InsertOne", "InsertBulk100", "GetByID", "Query100", "EagerO2M100", "UpdateByID", "Count"}
+var benchNames = []string{
+	"InsertOne", "InsertBulk100", "GetByID", "Query100", "EagerO2M100", "UpdateByID", "Count",
+	"WhereAnd", "WhereHasEdge", "PageOffset", "PageKeyset",
+}
 
 var benchSuffixRE = regexp.MustCompile(`-\d+$`)
 
@@ -495,8 +498,8 @@ func summarize(results string, cfg map[string]any) (summary, error) {
 // summarizePartial is summarize with the completeness check made optional.
 // The results are complete when every ORM has a build JSON for every size and
 // every run 1..config.runs (none under steps=runtime), and a round file
-// holding all seven benchmarks, in every unit, for every dialect and every
-// round 1..bench_count; each configured variant needs the same on postgres.
+// holding every benchmark of benchNames, in every unit, for every dialect and
+// every round 1..bench_count; each configured variant needs the same on postgres.
 // A variant's round files are summarized whether or not config lists it. A
 // setting that config leaves out is the highest number found. Without
 // partial, anything missing is an error that names it; with partial, the

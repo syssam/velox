@@ -29,10 +29,14 @@ var (
 var created = time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)
 
 type app struct {
-	db  *velox.DB
-	ids []int64 // the E0s
-	e1  int64   // the first E1
-	e2  int64   // the seeded E2
+	db    *velox.DB
+	sqlDB *sql.DB // the tables' connection, for ANALYZE
+	ids   []int64 // the E0s
+	e1    int64   // the first E1
+	e2    int64   // the seeded E2
+	items []int64 // the E4s, by index: seedPages
+	kids  []int64 // the E5s, by index: seedPages
+	after *gen.E5 // PageKeyset's cursor, the last row of page 4
 }
 
 func newApp(tb testing.TB, sqlDB *sql.DB) *app {
@@ -50,7 +54,7 @@ func newApp(tb testing.TB, sqlDB *sql.DB) *app {
 		}
 	}
 	if os.Getenv("COMPARE_VELOX_PGX") != "1" {
-		return &app{db: velox.Open(d, sqlDB)}
+		return &app{db: velox.Open(d, sqlDB), sqlDB: sqlDB}
 	}
 	if d != velox.Postgres {
 		tb.Fatal("COMPARE_VELOX_PGX needs postgres")
@@ -65,7 +69,7 @@ func newApp(tb testing.TB, sqlDB *sql.DB) *app {
 		tb.Fatal("veloxpgx: pgxpool.New cannot parse $VELOX_COMPARE_POSTGRES with pool_max_conns=1")
 	}
 	tb.Cleanup(pool.Close)
-	a := &app{db: veloxpgx.Open(pool)}
+	a := &app{db: veloxpgx.Open(pool), sqlDB: sqlDB}
 	// The probe: an operation must acquire from the pool and leave sqlDB
 	// untouched. With no idle connection kept, a query on sqlDB would open a
 	// connection and close it on release, which MaxIdleClosed counts.
@@ -209,4 +213,103 @@ func (a *app) rows(ctx context.Context) (e1, e2, e3 int, err error) {
 	}
 	n3, err := a.db.Query[gen.E3]().Count(ctx)
 	return int(n1), int(n2), int(n3), err
+}
+
+// seedPages seeds one E3 under the seeded E2, the items under it, and the
+// kids under the items, and reads PageKeyset's cursor.
+func (a *app) seedPages(ctx context.Context) error {
+	e3 := gen.E3{Name: "s3", CreatedAt: created, Status: gen.E3StatusDraft, PrevID: a.e2}
+	if err := a.db.Insert(&e3).Exec(ctx); err != nil {
+		return err
+	}
+	items := make([]gen.E4, nItems)
+	for i := range items {
+		st := gen.E4StatusDraft
+		if itemLive(i) {
+			st = gen.E4StatusLive
+		}
+		items[i] = gen.E4{Name: itemName(i), Count: i, Active: i%2 == 0, CreatedAt: created, Status: st, PrevID: e3.ID}
+	}
+	if err := a.db.InsertAll(items).Exec(ctx); err != nil {
+		return err
+	}
+	// InsertAll reads no keys back: the keys are read by a query.
+	xs, err := a.db.Query[gen.E4]().Limit(nItems).All(ctx)
+	if err != nil {
+		return err
+	}
+	a.items = make([]int64, nItems)
+	for _, x := range xs {
+		a.items[x.Count] = x.ID
+	}
+	kids := make([]gen.E5, nKids)
+	for j := range kids {
+		kids[j] = gen.E5{Name: kidName(j), Count: kidCount(j), Active: kidActive(j), CreatedAt: created, Status: gen.E5StatusDraft, PrevID: a.items[kidParent(j)]}
+	}
+	if err := a.db.InsertAll(kids).Exec(ctx); err != nil {
+		return err
+	}
+	ks, err := a.db.Query[gen.E5]().Limit(nKids).All(ctx)
+	if err != nil {
+		return err
+	}
+	a.kids = make([]int64, nKids)
+	for _, k := range ks {
+		var j int
+		if _, err := fmt.Sscanf(k.Name, "k%d", &j); err != nil || j < 0 || j >= nKids {
+			return fmt.Errorf("E5 %d is named %q", k.ID, k.Name)
+		}
+		a.kids[j] = k.ID
+	}
+	last, err := a.db.Query[gen.E5]().OrderBy(gen.E5s.Count.Asc(), gen.E5s.ID.Asc()).Offset((pageNum-1)*pageSize - 1).First(ctx)
+	if err != nil {
+		return err
+	}
+	a.after = last
+	return nil
+}
+
+func (a *app) cursor() int64 { return a.after.ID }
+
+func (a *app) whereAnd(ctx context.Context) ([]int64, error) {
+	xs, err := a.db.Query[gen.E4]().Where(
+		gen.E4s.Status.EQ(gen.E4StatusLive),
+		gen.E4s.Count.GTE(whereFrom), gen.E4s.Count.LT(whereTo),
+		gen.E4s.Name.HasPrefix(wherePrefix),
+	).OrderBy(gen.E4s.Count.Asc()).Limit(pageSize).All(ctx)
+	return e4IDs(xs), err
+}
+
+func (a *app) whereHasEdge(ctx context.Context) ([]int64, error) {
+	xs, err := a.db.Query[gen.E4]().Where(gen.E4s.Next.HasWith(gen.E5s.Active.EQ(true))).
+		OrderBy(gen.E4s.ID.Asc()).Limit(pageSize).All(ctx)
+	return e4IDs(xs), err
+}
+
+func (a *app) pageOffset(ctx context.Context) ([]int64, error) {
+	ks, err := a.db.Query[gen.E5]().OrderBy(gen.E5s.Count.Asc(), gen.E5s.ID.Asc()).
+		Offset((pageNum - 1) * pageSize).Limit(pageSize).All(ctx)
+	return e5IDs(ks), err
+}
+
+func (a *app) pageKeyset(ctx context.Context) ([]int64, error) {
+	ks, err := a.db.Query[gen.E5]().OrderBy(gen.E5s.Count.Asc(), gen.E5s.ID.Asc()).
+		After(a.after).Limit(pageSize).All(ctx)
+	return e5IDs(ks), err
+}
+
+func e4IDs(xs []gen.E4) []int64 {
+	ids := make([]int64, len(xs))
+	for i, x := range xs {
+		ids[i] = x.ID
+	}
+	return ids
+}
+
+func e5IDs(xs []gen.E5) []int64 {
+	ids := make([]int64, len(xs))
+	for i, x := range xs {
+		ids[i] = x.ID
+	}
+	return ids
 }

@@ -100,7 +100,7 @@ func analyze(tb testing.TB, db *sql.DB) {
 }
 
 // shapeTables are the tables whose DDL shape the guard checks.
-var shapeTables = []string{"e0s", "e1s", "e2s", "e3s"}
+var shapeTables = []string{"e0s", "e1s", "e2s", "e3s", "e4s", "e5s"}
 
 // tableShape is the number of indexes and foreign keys of one table.
 type tableShape struct{ Indexes, FKs int }

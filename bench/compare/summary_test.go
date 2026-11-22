@@ -122,7 +122,7 @@ func TestSummarizeFixture(t *testing.T) {
 	if len(got.Runs) != 2 || got.Median <= 0 {
 		t.Errorf("postgres veloxe Count sec/op %+v", got)
 	}
-	if len(s.Runtime) != 2 || len(s.Runtime["sqlite"]) != 3 || len(s.Runtime["sqlite"]["ent"]) != 7 || len(s.Runtime["sqlite"]["ent"]["Count"]) != 3 {
+	if len(s.Runtime) != 2 || len(s.Runtime["sqlite"]) != 3 || len(s.Runtime["sqlite"]["ent"]) != len(benchNames) || len(s.Runtime["sqlite"]["ent"]["Count"]) != 3 {
 		t.Errorf("runtime has the wrong shape: %d dialects", len(s.Runtime))
 	}
 	if !slices.Equal(s.Config.Sizes, []int{100}) || s.Config.Runs != 2 || s.Config.Benchtime != "10x" || s.Config.BenchCount != 2 || s.Config.Services != 2 {

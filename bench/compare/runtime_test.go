@@ -14,12 +14,16 @@ import (
 )
 
 // appMethods are the methods of *app that every ORM's ops_test.go defines.
-var appMethods = []string{"count", "eager", "get", "insertBulk", "insertOne", "query", "rows", "seed", "seededID", "update"}
+var appMethods = []string{
+	"count", "cursor", "eager", "get", "insertBulk", "insertOne", "pageKeyset", "pageOffset", "query", "rows",
+	"seed", "seedPages", "seededID", "update", "whereAnd", "whereHasEdge",
+}
 
 // benchmarks are the Benchmark functions of common/bench_test.go.
 var benchmarks = []string{
 	"BenchmarkCount", "BenchmarkEagerO2M100", "BenchmarkGetByID", "BenchmarkInsertBulk100",
-	"BenchmarkInsertOne", "BenchmarkQuery100", "BenchmarkUpdateByID",
+	"BenchmarkInsertOne", "BenchmarkPageKeyset", "BenchmarkPageOffset", "BenchmarkQuery100", "BenchmarkUpdateByID",
+	"BenchmarkWhereAnd", "BenchmarkWhereHasEdge",
 }
 
 // parseRuntime parses one file of testdata/runtime.
@@ -38,7 +42,7 @@ func parseRuntime(t *testing.T, rel string) *ast.File {
 
 // TestRuntimeFilesAgree checks that each ORM's ops file defines ormName as its
 // directory's name and the same methods of *app, and that the shared file
-// holds exactly the seven benchmarks.
+// holds exactly the benchmarks.
 func TestRuntimeFilesAgree(t *testing.T) {
 	for _, o := range orms {
 		f := parseRuntime(t, o.Name+"/ops_test.go")

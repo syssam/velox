@@ -9,5 +9,9 @@ BenchmarkQuery100-14   	    1000	     239062 ns/op	    45000 B/op	     1050 allo
 BenchmarkEagerO2M100-14   	    1000	     637500 ns/op	   135000 B/op	     2250 allocs/op
 BenchmarkUpdateByID-14   	    1000	      79688 ns/op	     6000 B/op	       82 allocs/op
 BenchmarkCount-14   	    1000	      23906 ns/op	     1800 B/op	       38 allocs/op
+BenchmarkWhereAnd-14   	    1000	      71719 ns/op	    13500 B/op	     315 allocs/op
+BenchmarkWhereHasEdge-14   	    1000	      95625 ns/op	    18000 B/op	     420 allocs/op
+BenchmarkPageOffset-14   	    1000	      59766 ns/op	    11250 B/op	     262 allocs/op
+BenchmarkPageKeyset-14   	    1000	      47812 ns/op	     9000 B/op	     210 allocs/op
 PASS
 ok  	example.com/tmp	3.210s

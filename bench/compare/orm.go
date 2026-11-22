@@ -160,15 +160,41 @@ func runtimeORMByName(name string) (string, error) {
 // Schema returns the schema package's files for n entities (path relative to
 // the app → source): one file per entity, SchemaDir/e<i>.go.
 func (o orm) Schema(n int) map[string]string {
+	return o.schema(n, nil)
+}
+
+// runtimeEntities is the size of the runtime apps' schema.
+const runtimeEntities = 10
+
+// runtimeIndexes are the indexes that the runtime app's schema adds, by
+// entity, each as the arguments of index.Fields. The where and page
+// benchmarks read E4 and E5, which no other benchmark reads: WhereAnd's
+// filter is status = ? AND count range, ordered by count, and the pages are
+// ordered by E5's count. The build schemas leave them out, so that the build
+// measurements stay comparable with earlier runs.
+var runtimeIndexes = map[int][]string{
+	4: {`"status", "count"`},
+	5: {`"count"`},
+}
+
+// RuntimeSchema returns the runtime app's schema: Schema(runtimeEntities)
+// with runtimeIndexes.
+func (o orm) RuntimeSchema() map[string]string {
+	return o.schema(runtimeEntities, runtimeIndexes)
+}
+
+// schema is Schema with extra indexes, by entity.
+func (o orm) schema(n int, extra map[int][]string) map[string]string {
 	files := make(map[string]string, n)
 	for i := range n {
-		files[filepath.Join(o.SchemaDir, fmt.Sprintf("e%d.go", i))] = o.entity(i, n)
+		files[filepath.Join(o.SchemaDir, fmt.Sprintf("e%d.go", i))] = o.entity(i, n, extra[i])
 	}
 	return files
 }
 
-// entity is the source of entity i's schema file.
-func (o orm) entity(i, n int) string {
+// entity is the source of entity i's schema file. extra are the arguments of
+// the index.Fields calls it adds after the prev_id index.
+func (o orm) entity(i, n int, extra []string) string {
 	d := o.dsl
 	var b strings.Builder
 	b.WriteString("package schema\n\nimport (\n")
@@ -192,7 +218,11 @@ func (o orm) entity(i, n int) string {
 	if d.IndexType != "" && i > 0 {
 		// The edge key's index. No ORM indexes a foreign key by itself
 		// (velox's ADR 0090), so each schema declares it.
-		fmt.Fprintf(&b, "\nfunc (E%d) Indexes() []%s {\n\treturn []%s{index.Fields(\"prev_id\")}\n}\n", i, d.IndexType, d.IndexType)
+		fmt.Fprintf(&b, "\nfunc (E%d) Indexes() []%s {\n\treturn []%s{index.Fields(\"prev_id\")", i, d.IndexType, d.IndexType)
+		for _, x := range extra {
+			fmt.Fprintf(&b, ", index.Fields(%s)", x)
+		}
+		b.WriteString("}\n}\n")
 	}
 	src, err := format.Source([]byte(b.String()))
 	if err != nil {

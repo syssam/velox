@@ -20,11 +20,11 @@ import (
 //go:embed testdata/runtime
 var runtimeFS embed.FS
 
-// writeRuntimeApp writes o's runtime app in dir: the n=10 schema, its
-// generated code, for velox the DDL of both dialects, and the test files of
-// common/ and of o, all at the app root.
+// writeRuntimeApp writes o's runtime app in dir: RuntimeSchema, its generated
+// code, for velox the DDL of both dialects, and the test files of common/ and
+// of o, all at the app root.
 func writeRuntimeApp(dir string, o orm, tools string) error {
-	if err := writeApp(o, dir, o.Schema(10)); err != nil {
+	if err := writeApp(o, dir, o.RuntimeSchema()); err != nil {
 		return err
 	}
 	if _, _, err := codegen(dir, o, tools); err != nil {
