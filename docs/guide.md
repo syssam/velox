@@ -673,6 +673,26 @@ db.Query[veloxgen.Author]().Where(A.Posts.HasWith(P.Votes.GT(20)))   // ... with
 db.Query[veloxgen.Author]().Where(velox.Not(A.Posts.Has()))          // authors with none
 ```
 
+### Counting a relation: Count, Sum, Avg, Min and Max
+
+A relation's `Count`, and `Sum`, `Avg`, `Min` and `Max` of a column of its
+target, are terms of each row: a subquery correlated with the row. Order by
+one, select it, or compare it in an `Expr`:
+
+```go
+db.Query[veloxgen.Author]().OrderBy(A.Posts.Count().Desc(), A.ID.Asc()).Limit(20)     // most posts first
+db.Query[veloxgen.Author]().Select(A.Name, A.Posts.Sum(P.Votes)).Limit(20)            // votes per author
+db.Query[veloxgen.Author]().Where(velox.Expr[veloxgen.Author]("? >= ?", A.Posts.Count(), 3)) // three posts or more
+A.Posts.Where(P.Votes.GT(10)).Count()                                                 // only the popular ones
+```
+
+The target's interceptors, filters and Read policy apply inside, as in `Has`:
+a post the reader may not see, or a soft-deleted one, is not counted. A
+count is 0 for an author with no posts; the other aggregates are NULL, which
+orders last ascending. `After` pages over these orderings, the key breaking
+ties. A relation's aggregate is a value of each row: it cannot be grouped
+by, aggregated, or selected beside `GroupBy`.
+
 ### Inside a JSON column: Text, Number, Bool and HasKey
 
 A JSON field's handle can test a value inside the document, at a path of

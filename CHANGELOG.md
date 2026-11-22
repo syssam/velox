@@ -58,7 +58,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox: `WithStatementCounting` and `CountStatements` count a context's
   statements by shape; `StatementCounter.Check` with a `StatementBudget`
   reports an N+1 as a `*BudgetError` (ADR 0117).
-
+- velox: a relation's `Count()`, `Sum`, `Avg`, `Min` and `Max` are terms of
+  each row, ent's `ByPostsCount` and `ByPosts(sql.OrderBySum(...))`: order by
+  one, select it or compare it in an `Expr`. The target's interceptors,
+  filters and Read policy apply inside, so a row the reader may not see is
+  not counted, and `After` pages over them (decision 0111). Untyped:
+  `Table.RelAgg`.
+- velox-graphql: `graphql.OrderField("POSTS_COUNT")` on a to-many edge orders
+  the owner's connections by the edge's count, as entgql's, counting only
+  the nodes the reader may see; cursors page over it, and a request that
+  orders by it costs what a `has<Edge>With` costs (decision 0111).
+  `gqlgraph.Column.Count` is new; `veloxgql.GeneratedCodeIsVersion27` stays,
+  as code generated before uses nothing that changed.
 - velox-gen: `migrate rebase <file>...` moves a branch's migration files to
   the versions after the directory's others, as they are, writes the schema
   package's tables as `schema.json` and rebuilds `velox.sum`, after checking

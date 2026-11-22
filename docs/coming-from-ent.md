@@ -239,6 +239,9 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
 | `client.User.Update().SkipDefault(user.FieldUpdatedAt)` (veloxe) | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
+| `client.User.Query().Order(user.ByPostsCount(sql.OrderDesc()))` | `db.Query[veloxgen.User]().OrderBy(U.Posts.Count().Desc(), U.ID.Asc())`: the posts the reader may not see are not counted (decision 0111) |
+| `client.User.Query().Order(user.ByPosts(sql.OrderBySum(post.FieldViews)))` | `OrderBy(U.Posts.Sum(P.Views).Asc(), U.ID.Asc())`; `Avg`, `Min` and `Max` too, NULL for a user with no posts |
+| `user.HasPostsWith(...)` with a count, `sql.P` by hand | `velox.Expr[veloxgen.User]("? >= ?", U.Posts.Count(), 3)` in a `Where` |
 | `client.User.Query().IDs(ctx)` | `velox.IDs[int64](ctx, db.Query[veloxgen.User]().Limit(n))` |
 | `tx.OnCommit(...)` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed (decision 0100) |
 | a commit hook (`tx.OnCommit` returning a `Committer` that runs before `next.Commit`) | `velox.BeforeCommit(tx, fn)`: its error rolls back (decision 0111) |
@@ -517,6 +520,14 @@ replacement.
 - **OrderVia keeps every row.** An `orderBy` through an edge reads it with a
   LEFT JOIN: a row whose target is missing or hidden sorts as NULL, and the
   connection's rows and `totalCount` are the same as without the order.
+- **An edge's count orders as entgql's, and counts what the reader sees.**
+  `graphql.OrderField("POSTS_COUNT")` on a to-many edge adds `POSTS_COUNT`
+  to the owner's order field, as in entgql. It orders by `Rel.Count`, a
+  subquery under the target's Read policy, interceptors and filters, so a
+  post the reader may not see is not counted; entgql counts every row. The
+  connection's rows and `totalCount` are as without the order. It is refused
+  on a to-one edge (use `OrderVia`) and on an edge with an application
+  directive. A request that orders by it costs what a `has<Edge>With` costs.
 - **JSON lists are GraphQL lists.** A JSON field of `[]string`, `[]int`,
   `[]int64`, `[]float64` or `[]bool` (`field.Strings` and the like) is
   `[String!]` and so on, as in entgql, in the type and in the inputs. Other JSON
