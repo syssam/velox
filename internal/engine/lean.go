@@ -198,7 +198,10 @@ func PlanInsert(d Dialect, st *Statement, gen int) error {
 		st.fill = fill
 		return nil
 	}
-	if st.Conflict != nil && st.Conflict.DoNothing && len(st.Rows) > 1 {
+	// A conflict that keeps the row (DoNothing, or an empty Update) leaves
+	// that row out of RETURNING, so a multi-row read-back by position would
+	// give the next row's values to the wrong entities.
+	if st.Conflict != nil && keepsRow(st.Conflict) && len(st.Rows) > 1 {
 		return nil
 	}
 	var ret []int

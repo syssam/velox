@@ -220,6 +220,28 @@ func TestInsertAllDoNothingReturnsNothing(t *testing.T) {
 	}
 }
 
+// TestInsertAllKeepingReturnsNothing: an OnConflict with no update branch,
+// or with an empty Update, keeps a conflicting row as DoNothing does. The
+// rows it keeps are missing from RETURNING, so a multi-row insert reads
+// nothing back rather than giving entities other rows' keys by position.
+func TestInsertAllKeepingReturnsNothing(t *testing.T) {
+	for name, q := range map[string]func(velox.InsertQuery[dDef]) velox.InsertQuery[dDef]{
+		"OnConflict alone": func(q velox.InsertQuery[dDef]) velox.InsertQuery[dDef] { return q.OnConflict(dDefs.ID) },
+		"empty Update":     func(q velox.InsertQuery[dDef]) velox.InsertQuery[dDef] { return q.OnConflict(dDefs.ID).Update() },
+	} {
+		for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+			e := &fakeconn.Exec{Affected: 1}
+			xs := []dDef{{ID: 1, Name: "a"}, {ID: 2, Name: "b"}}
+			if err := q(openFake(d, e).InsertAll(xs)).Exec(ctx); err != nil {
+				t.Fatalf("%s %v: %v", name, d, err)
+			}
+			if strings.Contains(e.SQL, "RETURNING") {
+				t.Errorf("%s %v: SQL %s", name, d, e.SQL)
+			}
+		}
+	}
+}
+
 // colNames is the names of st's columns.
 func colNames(st *velox.Statement) []string {
 	out := make([]string, len(st.Columns))
