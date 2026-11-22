@@ -89,7 +89,7 @@ grep could not settle it.
 | 43 | `field.Deprecated` | field builders | **Missing**: only the GraphQL directive `graphql.Deprecated` | no (one comment) |
 | 44 | `field.ValueScanner` (external scanner) | field builders | **Missing** (grep is empty) | no |
 | 45 | Edges: To, From, Ref, Unique, Required, Immutable, Field, StorageKey (Column/Table/Symbol), Comment, Annotations | `veloxe/schema/edge/edge.go` | **Have**: `schema/edge`, plus `OnDelete` | yes (To 950, From 382) |
-| 46 | `edge.Through` (edge schema with extra columns) | `edge.go` | **Missing**: velox-gen writes the join entity itself; a join entity holds behaviour only (`docs/coming-from-ent.md`, "Finding schemas") | no |
+| 46 | `edge.Through` (edge schema with extra columns) | `edge.go` | **Have**: `edge.To(...).Through(name, T)` and `edge.From(...).Through`, an edge schema keyed by its own `id`; no composite `field.ID` (ADR 0109; 0110 reserved) | no |
 | 47 | Edge `StructTag` | `edge.go` | **Missing** | no |
 | 48 | Indexes: Fields, Edges, Unique, StorageKey, Annotations | `veloxe/schema/index/index.go` | **Have**, plus `Where` | yes (2352) |
 | 49 | `sqlschema` annotations: IndexType(s), Default, DefaultExpr(s), NonUniqueFK, Table, Schema, Check(s), Collation, Charset, Size, ColumnType, IncrementStart, WithComments, Prefix, OpClass, Desc, IncludeColumns, StorageParams, Skip, OnDelete/OnUpdate | `veloxe/dialect/sqlschema/annotation.go` | **Have**, same names (ADR 0075). `NonUniqueFK` is the veloxe default (ADR 0090) | yes (IndexType 252, Default 29, NonUniqueFK 10) |
@@ -225,10 +225,10 @@ grep could not settle it.
 
 | status | rows |
 |---|---|
-| Have | 53 |
+| Have | 54 |
 | Different by design | 23 |
 | Partial | 29 |
-| Missing | 30 |
+| Missing | 29 |
 | (context row #99, velox2-only) | 1 |
 | **Total** | 136 |
 
@@ -388,6 +388,8 @@ the port), then how common the pattern is in ent and veloxe apps.
   velox-gen already writes the join entity. Extra fields would become
   columns, and `Rel.Add` would need the extra values (a setter list).
   Until then the workaround is two one-to-many edges to an explicit entity.
+  Done 2026-11-22 (ADR 0109): Add fills defaults and fails when a column
+  has none, instead of a setter list.
 - **DISTINCT (#65).** `Query.Distinct()` for projections only, since entity
   reads are by key.
 - **Explain (#77).** `Query.Explain(ctx) (string, error)` reusing `SQL`, run
@@ -579,10 +581,10 @@ These would need work:
 
 | status | count |
 |---|---|
-| Have | 53 |
+| Have | 54 |
 | Different by design | 23 |
 | Partial | 29 |
-| Missing | 30 |
+| Missing | 29 |
 
 **Top 10 recommendations, in order:**
 

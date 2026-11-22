@@ -1,7 +1,8 @@
 # Operating migrations
 
-What to do when `migrate apply` refuses. Each recovery here is run by
-`TestOperationsDoc` in `cmd/velox-gen`. The commands take `-dir` and `-db`, or
+What to do when `migrate apply` refuses, and how to turn a join table into
+an edge schema's. Each recovery here is run by `TestOperationsDoc` in
+`cmd/velox-gen`, and the conversion by `TestConvertJoinTable`. The commands take `-dir` and `-db`, or
 `$VELOX_DB`; they are left out below. None of them changes the schema: `resolve` only
 writes the history table.
 
@@ -229,6 +230,42 @@ as `pg_stat_activity` shows, with the run's lock: the next `apply` waits for it 
 `-lock-wait`. Check what it did as in the section above. A unit `migrate diff` wrote
 starts by dropping what it makes, so `apply -resume` is right whatever ran, though a
 finished build is built again; `resolve -statements` spares it.
+
+## A join table becomes an edge schema
+
+A plain many-to-many relation keeps its links in a join table, such as
+`user_groups`, keyed by `(user_id, group_id)`. Giving the relation an edge
+schema (`Through`) gives the links a table of their own, keyed by `id`.
+`TestConvertJoinTable` in `cmd/velox-gen` runs these steps on each dialect.
+
+`diff` writes no file for either way of doing it:
+
+- Keeping the old name, with `schema.Table("user_groups")` on the edge
+  schema, changes the table's primary key. `diff` refuses with
+  `primary-key`: "write this migration by hand".
+- A new table, `memberships`, means dropping `user_groups`. `diff` refuses
+  the drop with `drop-table`, as it refuses any.
+
+The second way needs one line by hand:
+
+1. Run `migrate diff -allow drop-table=user_groups -name memberships`. The
+   file creates `memberships`, its foreign keys and the unique index over
+   `(user_id, group_id)`, then drops `user_groups`.
+2. Above the drop, add the statement that copies the links:
+
+   ```sql
+   INSERT INTO memberships (user_id, group_id) SELECT user_id, group_id FROM user_groups;
+   ```
+
+   The statement is the same on PostgreSQL, MySQL and SQLite. Each new row
+   takes the next `id`, and the defaults of the other columns.
+3. Run `migrate hash`, as the file changed.
+4. `apply` runs it. `drift` then finds nothing.
+
+A plain join table's keys are `ON DELETE CASCADE`. An edge schema's keys
+have the actions their edges declare, and none without `OnDelete`.
+velox-gen warns of an edge schema whose key edges declare no `OnDelete`.
+Declare `OnDelete(edge.Cascade)` on both to keep deletes as they were.
 
 ## Notes
 

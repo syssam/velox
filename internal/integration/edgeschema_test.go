@@ -192,3 +192,31 @@ func TestEdgeSchemaHooks(t *testing.T) {
 		}
 	}, velox.WithHooks[tm.Roster](hook))
 }
+
+// TestEdgeSchemaOtherUniqueKey: Add's insert names the pair of keys alone.
+// Given a link whose row collides with another only on a second unique key,
+// here a database-only key over (team_id, role), PostgreSQL and SQLite fail
+// the write, and MySQL, whose ON DUPLICATE KEY UPDATE applies to every unique
+// key, drops the link without an error, as velox-gen's warning says.
+func TestEdgeSchemaOtherUniqueKey(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		rosterSetup(t, tg)
+		tg.exec(t, "CREATE UNIQUE INDEX rosters_team_role ON rosters (team_id, role)")
+		a, b := tm.Player{Name: "a"}, tm.Player{Name: "b"}
+		if err := tg.db.Insert(&a).Set(tm.Players.Teams.Add(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		err := tg.db.Insert(&b).Set(tm.Players.Teams.Add(1)).Exec(ctx)
+		if tg.d != velox.MySQL {
+			if err == nil {
+				t.Fatal("a link that collides on another unique key was written")
+			}
+			return
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantTeams(t, tg, "b", b.ID)
+		wantTeams(t, tg, "a", a.ID, 1)
+	})
+}

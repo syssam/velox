@@ -37,9 +37,10 @@ one, where ent would skip it or fail later:
 - **A file of the schema package that only some builds include**, behind a
   tag or named for a system: the model would depend on the build.
 
-A schema's methods may be in any file of the package. A many-to-many join
-entity has no schema; its `Policy` or `Hooks` go on an empty struct of its
-name (`type UserFriend struct{}`), which is not a schema.
+A schema's methods may be in any file of the package. A plain many-to-many
+join entity has no schema; its `Policy` or `Hooks` go on an empty struct of
+its name (`type UserFriend struct{}`), which is not a schema. An edge schema,
+which `Through` names, is a schema, and its behaviour is its own (see Edges).
 
 ## Fields
 
@@ -148,6 +149,45 @@ for `post_tags`), and you link and unlink by inserting and deleting its rows.
 The core API has no `AddTagIDs` or `RemoveTagIDs`; the GraphQL update input
 has `add<Edge>IDs` and `remove<Edge>IDs`.
 [examples/relations](../examples/relations/README.md#many-to-many) shows how.
+With `Through`, the links are an edge schema's rows, as in ent, and
+velox-gen writes no join entity
+([examples/relations](../examples/relations/README.md#many-to-many-through-an-edge-schema),
+ADR 0109).
+
+**An edge schema's hooks and policies run on Add and Remove.** ent fills
+only defaults when `AddGroupIDs` inserts an edge schema's rows; its hooks
+and privacy do not run. velox inserts and deletes them as Membership rows,
+so Membership's hooks run, and a link its Write policy hides stays through
+`Clear`. velox is stricter on reads too. An edge schema cannot have a Read
+or Query policy, Interceptors or `softdelete.Mixin`, its own or a mixin's:
+`Has` and `With` through the many-to-many edge would not apply them.
+velox-gen refuses each. `Add` fails before any statement when a column it
+would insert is required and has no default; ent leaves that to the
+database.
+
+**An edge schema is keyed by its own `id`.** ent's
+`field.ID("user_id", "group_id")` annotation, a composite key, is not in
+velox, so a port that uses it fails to compile. Remove it: velox keys the
+rows by `id` and adds a unique index over the two keys. Composite keys are
+left to ADR 0110.
+
+**A bidirectional edge cannot go through an edge schema.** ent's
+`edge.To("friends", User.Type).Through("friendships", Friendship.Type)`,
+with no inverse, is refused (rule 69). Declare the inverse,
+`edge.From("friended", User.Type).Ref("friends")`, and velox stores each
+link once, in one direction.
+
+**A tenant column on an edge schema is a plain column.** A scope mixin's
+Policy sets Read, which an edge schema cannot have. Keep the column, set it
+with a Default or a hook, and read the links through the edge velox-gen
+adds: `U.Memberships.HasWith(M.OrgID.EQ(org))`, or
+`db.Query[veloxgen.Membership]()` with a condition on it.
+
+**On MySQL, a link that collides only on another unique key is dropped.**
+`Add`'s `ON DUPLICATE KEY UPDATE` applies to every unique key of the edge
+schema, so a new link whose row collides with another on a key other than
+the pair is not written, and there is no error. PostgreSQL and SQLite fail
+the write. velox-gen warns of an edge schema with such a key.
 
 **Relations are in an Edges struct, as in ent.** A post's author is
 `post.Edges.Author`, of `PostEdges`, tagged `json:"edges,omitzero"`. Each

@@ -208,11 +208,61 @@ func (Line) Edges() []velox.Edge {
 - `To` with an inverse that is `Unique` is one-to-many.
 - `To` with an inverse that is not `Unique` is many-to-many. velox-gen writes
   a join entity for it (in the relations example, `veloxgen.PostTag` for the
-  `post_tags` table).
+  `post_tags` table), or uses the edge schema `Through` names
+  ([Edge schemas](#edge-schemas)).
 - `OnDelete(edge.Cascade)` asks the database to delete children with their
   parent.
 
 The [relations example](../examples/relations) shows all three shapes.
+
+### Edge schemas
+
+A many-to-many edge can name an edge schema with `Through`, as in ent. Its
+rows are the links, with an ID and columns of their own:
+
+```go
+func (User) Edges() []velox.Edge {
+	return []velox.Edge{edge.To("groups", Group.Type).Through("memberships", Membership.Type)}
+}
+
+func (Group) Edges() []velox.Edge {
+	return []velox.Edge{edge.From("users", User.Type).Ref("groups").Through("memberships", Membership.Type)}
+}
+
+func (Membership) Fields() []velox.Field {
+	return []velox.Field{
+		field.Enum("role").Values("owner", "member").Default("member"),
+		field.Int64("user_id"),
+		field.Int64("group_id"),
+	}
+}
+
+func (Membership) Edges() []velox.Edge {
+	return []velox.Edge{
+		edge.To("user", User.Type).Unique().Required().Field("user_id").OnDelete(edge.Cascade),
+		edge.To("group", Group.Type).Unique().Required().Field("group_id").OnDelete(edge.Cascade),
+	}
+}
+```
+
+- Membership is an entity like any other: `db.Query[veloxgen.Membership]()`
+  reads its rows, and `db.Insert` writes one.
+- velox-gen writes no join entity. It adds the edge `memberships`, from
+  User to the rows, and a unique index over `(user_id, group_id)`.
+- `Groups.Add` inserts a row per group, with its defaults, and keeps a link
+  that exists. `Remove` and `Clear` delete rows.
+- Membership's hooks run on those inserts and deletes. A link its Write
+  policy hides stays through `Clear`.
+- `Add` fails before any statement when a required column has no default.
+  Insert the rows yourself then.
+- An edge schema cannot have a Read or Query policy, Interceptors or
+  `softdelete.Mixin`: `Has` and `With` through `groups` would not apply
+  them.
+- velox-gen warns when neither key edge declares `OnDelete`.
+
+[ADR 0109](decisions/0109-edge-schemas.md) records the design. The
+[relations example](../examples/relations/README.md#many-to-many-through-an-edge-schema)
+runs it.
 
 ### Indexes
 
