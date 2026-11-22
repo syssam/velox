@@ -56,7 +56,7 @@ func edgeSchemaBehaviour(g *Graph, bound map[string]Bound, mixins map[string][]M
 
 // mysqlDrops is the end of the warning of an edge schema's other unique
 // key: what Add does on MySQL.
-const mysqlDrops = "on MySQL, Add's ON DUPLICATE KEY UPDATE applies to every unique key, so a new link whose row collides with another only on this key is dropped without an error"
+const mysqlDrops = "on MySQL, Add's ON DUPLICATE KEY UPDATE applies to every unique key, so a new link whose row collides with another only on this key is dropped without an error: drop the key, or insert the edge schema's rows yourself"
 
 // EdgeSchemaWarnings returns a warning for each edge schema neither of whose
 // two key edges declares OnDelete: its keys have no action, as ent's do, so
@@ -89,13 +89,17 @@ func EdgeSchemaWarnings(g *Graph) []string {
 
 // otherUniques are the warnings of the unique fields and indexes of the edge
 // schema es, whose key edges are keys, but the ID and the index over the
-// pair of keys.
+// pair of keys. An edge schema with a column Add cannot fill gets none:
+// its relations' Add is refused before any statement.
 func otherUniques(es *Entity, keys []*Edge) []string {
 	var pair []string
 	for _, k := range keys {
 		if i := fieldIndex(es, k.Field); i >= 0 {
 			pair = append(pair, es.Fields[i].Column)
 		}
+	}
+	if len(pair) == 2 && len(unfilled(es, columnIndex(es, pair[0]), columnIndex(es, pair[1]))) > 0 {
+		return nil // Add is refused before any statement: it drops nothing
 	}
 	var out []string
 	for _, f := range es.Fields[1:] {

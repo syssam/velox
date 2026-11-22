@@ -1271,7 +1271,7 @@ func (l *lowerer) edgeSchema(s *entState, t *Entity, ed *Edge) string {
 func unfilled(es *Entity, jo, jt int) []int {
 	var cols []int
 	for i, f := range es.Fields {
-		filled := f.Optional || f.Nillable || f.Pointer || f.Default != nil || f.DefaultFunc || f.Version || len(dbDefaultDialects(f.SchemaDefault)) == 3
+		filled := f.Optional || f.Nillable || f.Pointer || f.Default != nil || f.DefaultFunc || f.Version || everyDialect(f.SchemaDefault)
 		if i == 0 {
 			filled = filled || f.AutoID || integer(f.Type)
 		}
@@ -1460,10 +1460,17 @@ func (l *lowerer) complete(s *entState) {
 // velox constants its ColumnDescriptor's DBDefault lists, in a fixed order.
 func dbDefaultDialects(m map[string]string) []string {
 	var out []string
-	for _, d := range [...]struct{ key, name string }{{"postgres", "velox.Postgres"}, {"mysql", "velox.MySQL"}, {"sqlite", "velox.SQLite"}} {
+	for _, d := range defaultDialects {
 		if m[d.key] != "" {
 			out = append(out, d.name)
 		}
 	}
 	return out
 }
+
+// defaultDialects are the dialects a SchemaDefault may name: its key, and
+// the velox constant of the dialect.
+var defaultDialects = [...]struct{ key, name string }{{"postgres", "velox.Postgres"}, {"mysql", "velox.MySQL"}, {"sqlite", "velox.SQLite"}}
+
+// everyDialect reports whether the SchemaDefault m names every dialect.
+func everyDialect(m map[string]string) bool { return len(dbDefaultDialects(m)) == len(defaultDialects) }

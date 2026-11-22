@@ -12,6 +12,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 // shared is a run of the harness at n=60 with two services, plain or with
@@ -347,11 +350,15 @@ func TestRunRefusesAnUsedDirectory(t *testing.T) {
 
 // TestAddM2MShape: k edges on the schemas with i%5 == 1, each with its
 // inverse on E<i+2>, and with through an edge schema L<i> per edge that the
-// edge names.
+// edge names. Without -short, velox-gen's model build accepts the schemas,
+// and lowers each edge to a join entity or to its edge schema; nothing is
+// compiled but the schema package.
 func TestAddM2MShape(t *testing.T) {
 	for _, through := range []bool{false, true} {
 		schemas, _ := generate(20, 1, false)
-		addM2M(schemas, 4, through)
+		if err := addM2M(schemas, 4, through); err != nil {
+			t.Fatal(err)
+		}
 		if want := 20 + map[bool]int{false: 0, true: 4}[through]; len(schemas) != want {
 			t.Fatalf("through %v: %d schemas, want %d", through, len(schemas), want)
 		}
@@ -364,6 +371,12 @@ func TestAddM2MShape(t *testing.T) {
 				t.Errorf("through %v: e%d names an edge schema: %v", through, i, got)
 			}
 		}
+		if !testing.Short() {
+			lowerProbe(t, schemas, through)
+		}
+	}
+	if err := addM2M(map[string]string{filepath.Join("schema", "e1.go"): "package schema\n"}, 1, false); err == nil {
+		t.Error("addM2M accepts a schema with no Edges method")
 	}
 	if _, err := run(config{n: 20, services: 1, through: true}); err == nil {
 		t.Error("-through without -m2m is accepted")
@@ -373,17 +386,40 @@ func TestAddM2MShape(t *testing.T) {
 	}
 }
 
-// TestScaleHarnessSmallThrough builds a small application whose many-to-many
-// edges go through edge schemas: velox-gen accepts the probe's schemas, and
-// the generated code builds.
-func TestScaleHarnessSmallThrough(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("builds an application; run without -short")
-	}
-	r, err := run(config{n: 20, services: 1, m2m: 4, through: true})
+// lowerProbe loads schemas as velox-gen does, builds the model and lowers
+// it: with through, the 4 edge schemas stand where 4 join entities would.
+func lowerProbe(t *testing.T, schemas map[string]string, through bool) {
+	t.Helper()
+	root, err := repo()
 	if err != nil {
 		t.Fatal(err)
 	}
-	measured(t, r)
+	dir := t.TempDir()
+	if err := tempmod.Write(dir, root, schemas); err != nil {
+		t.Fatal(err)
+	}
+	m, err := codegen.Load(dir, "./schema", append(os.Environ(), "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := codegen.Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o, err := codegen.Lower(g, codegen.Config{Package: "gen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joins, edgeSchemas := 0, 0
+	for _, e := range o.Entities {
+		if e.Join {
+			joins++
+		}
+		if strings.HasPrefix(e.Name, "L") {
+			edgeSchemas++
+		}
+	}
+	if want := map[bool][2]int{false: {4, 0}, true: {0, 4}}[through]; joins != want[0] || edgeSchemas != want[1] {
+		t.Errorf("through %v: %d join entities and %d edge schemas, want %v", through, joins, edgeSchemas, want)
+	}
 }

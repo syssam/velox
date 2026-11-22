@@ -45,7 +45,8 @@ func (Team) Edges() []schema.Edge {
 
 // Roster is the edge schema of Player's Teams: a link with a role, the time
 // it was made, and a code, a second unique key. Each column has a default,
-// so Rel.Add fills it.
+// so Rel.Add fills it. velox-gen warns of code on purpose: the integration
+// test needs a second unique key, on MySQL above all.
 type Roster struct{ schema.Schema }
 
 // Fields returns the role, the time, the code and the two keys.

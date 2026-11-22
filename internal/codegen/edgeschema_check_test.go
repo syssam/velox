@@ -154,7 +154,7 @@ func (Show) Edges() []schema.Edge {
 type Place struct{ schema.Schema }
 
 func (Place) Fields() []schema.Field {
-	return []schema.Field{field.Int64("viewer_id"), field.Int64("show_id"), field.String("code").Unique()}
+	return []schema.Field{field.Int64("viewer_id"), field.Int64("show_id"), field.String("code").DefaultFunc(func() string { return "c" }).Unique()}
 }
 func (Place) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("code", "show_id").Unique(), index.Fields("show_id", "viewer_id").Unique()}
@@ -166,14 +166,38 @@ func (Place) Edges() []schema.Edge {
 	}
 }
 
+// Stay is an edge schema with a unique tag and a note Add cannot fill: Add
+// is refused, so no link can be dropped, and the tag is not warned of.
+type Ward struct{ schema.Schema }
+
+func (Ward) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("beds", Bed.Type).Through("stays", Stay.Type)}
+}
+
+type Bed struct{ schema.Schema }
+
+func (Bed) Edges() []schema.Edge { return []schema.Edge{edge.From("wards", Ward.Type).Ref("beds")} }
+
+type Stay struct{ schema.Schema }
+
+func (Stay) Fields() []schema.Field {
+	return []schema.Field{field.Int64("ward_id"), field.Int64("bed_id"), field.String("tag").Unique(), field.String("note")}
+}
+func (Stay) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("ward", Ward.Type).Unique().Required().Field("ward_id").OnDelete(edge.Cascade),
+		edge.To("bed", Bed.Type).Unique().Required().Field("bed_id").OnDelete(edge.Cascade),
+	}
+}
+
 // An edge schema whose keys declare no OnDelete is warned of once, naming
 // both sides and both key edges; one whose keys cascade is not. Each unique
 // field and unique index of an edge schema but the pair's, in either order,
-// is warned of for MySQL.
+// is warned of for MySQL, unless Add is refused for an unfilled column.
 func TestEdgeSchemaWarnings(t *testing.T) {
-	g := mustBuild(t, Learner{}, Course{}, Enrollment{}, Fan{}, Follow{}, Viewer{}, Show{}, Place{})
+	g := mustBuild(t, Learner{}, Course{}, Enrollment{}, Fan{}, Follow{}, Viewer{}, Show{}, Place{}, Ward{}, Bed{}, Stay{})
 	got := EdgeSchemaWarnings(g)
-	const drops = "on MySQL, Add's ON DUPLICATE KEY UPDATE applies to every unique key, so a new link whose row collides with another only on this key is dropped without an error"
+	const drops = "on MySQL, Add's ON DUPLICATE KEY UPDATE applies to every unique key, so a new link whose row collides with another only on this key is dropped without an error: drop the key, or insert the edge schema's rows yourself"
 	want := []string{
 		`edgeschema_test.go:57: schema Enrollment: deleting Learner or Course rows fails while Enrollment rows name them; declare OnDelete(edge.Cascade) on edges "learner" and "course" to delete their links with them`,
 		`edgeschema_test.go:82: schema Follow: deleting Fan rows fails while Follow rows name them; declare OnDelete(edge.Cascade) on edges "fan" and "follower" to delete their links with them`,

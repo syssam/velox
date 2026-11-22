@@ -158,7 +158,9 @@ func run(c config) (report, error) {
 		}
 	}
 	schemas, services := generate(c.n, c.services, c.graphql)
-	addM2M(schemas, c.m2m, c.through)
+	if err := addM2M(schemas, c.m2m, c.through); err != nil {
+		return r, err
+	}
 	// The services import gen, which does not exist until velox-gen has run, and
 	// go mod tidy cannot resolve an import of a missing package: the module is
 	// written and tidied with the schemas alone, and the services follow gen.
@@ -398,7 +400,7 @@ func (E%[1]d) Edges() []schema.Edge {
 // L<i> of its own, with the two key fields and a role with a default, the
 // schema an edge schema of a port from ent has. The probe compares the build
 // cost of the two: a generated join entity per edge, or an edge schema.
-func addM2M(schemas map[string]string, k int, through bool) {
+func addM2M(schemas map[string]string, k int, through bool) error {
 	for j := range k {
 		i := 5*j + 1
 		th := ""
@@ -431,16 +433,26 @@ func (L%[1]d) Edges() []schema.Edge {
 }
 `, i, i+2)
 		}
-		addEdge(schemas, i, fmt.Sprintf("edge.To(\"tags\", E%d.Type)%s", i+2, th))
-		addEdge(schemas, i+2, fmt.Sprintf("edge.From(\"tagged\", E%d.Type).Ref(\"tags\")", i))
+		if err := addEdge(schemas, i, fmt.Sprintf("edge.To(\"tags\", E%d.Type)%s", i+2, th)); err != nil {
+			return err
+		}
+		if err := addEdge(schemas, i+2, fmt.Sprintf("edge.From(\"tagged\", E%d.Type).Ref(\"tags\")", i)); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-// addEdge adds the edge e first among schema E<i>'s edges.
-func addEdge(schemas map[string]string, i int, e string) {
+// addEdge adds the edge e first among schema E<i>'s edges, or fails when
+// the schema has no Edges method as generate writes it.
+func addEdge(schemas map[string]string, i int, e string) error {
 	p := filepath.Join("schema", fmt.Sprintf("e%d.go", i))
 	head := fmt.Sprintf("func (E%d) Edges() []schema.Edge {\n\treturn []schema.Edge{\n", i)
+	if !strings.Contains(schemas[p], head) {
+		return fmt.Errorf("%s has no Edges method to add %s to", p, e)
+	}
 	schemas[p] = strings.Replace(schemas[p], head, head+"\t\t"+e+",\n", 1)
+	return nil
 }
 
 // check compares r with the thresholds recorded under key ("500", or
