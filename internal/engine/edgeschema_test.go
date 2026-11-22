@@ -109,8 +109,9 @@ func (*esSecret) VeloxMeta() *velox.Meta[esSecret] {
 }
 
 // Add of a relation whose edge schema has a column it cannot fill fails
-// before any statement, the owner's insert or update included; Remove and
-// Clear still run.
+// before any statement, the owner's insert or update included; when a
+// column is the key, the advice leaves out Optional. An Add of no keys
+// runs, as do Remove and Clear.
 func TestEdgeSchemaAddUnfilled(t *testing.T) {
 	const want = "velox: engine_test.esUser: edge groups: Add cannot fill engine_test.esMember.Note, which has no default; insert engine_test.esMember rows, or give it a Default or Optional"
 	e := &fakeconn.Exec{}
@@ -121,17 +122,26 @@ func TestEdgeSchemaAddUnfilled(t *testing.T) {
 	if _, err := db.Update[esUser]().Set(esUsers.Groups.Add(1)).Where(esUsers.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("update: %v", err)
 	}
-	const two = "Add cannot fill engine_test.esMember.ID, engine_test.esMember.Note, which have no default; insert engine_test.esMember rows, or give them a Default or Optional"
+	const two = "Add cannot fill engine_test.esMember.ID, engine_test.esMember.Note, which have no default; insert engine_test.esMember rows, or give them a Default"
 	if err := db.Insert(&esUser{ID: 1}).Set(esUsers.Crews.Add(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), two) {
 		t.Errorf("two columns: %v", err)
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent: %s", e.Calls, e.SQL)
 	}
+	// An Add of no keys inserts nothing, and is no refusal: the owner's
+	// insert alone runs.
+	if err := db.Insert(&esUser{ID: 1}).Set(esUsers.Groups.Add()).Exec(ctx); err != nil {
+		t.Errorf("empty add: %v", err)
+	}
+	if e.Calls != 1 || !strings.HasPrefix(e.SQL, `INSERT INTO "es_users"`) {
+		t.Errorf("empty add sent %d statements, the last %s", e.Calls, e.SQL)
+	}
+	before := e.Calls
 	if _, err := db.Update[esUser]().Set(esUsers.Groups.Clear()).Where(esUsers.ID.EQ(1)).Exec(ctx); err != nil {
 		t.Errorf("clear: %v", err)
 	}
-	if e.Calls == 0 {
+	if e.Calls == before {
 		t.Error("clear sent no statement")
 	}
 }
@@ -144,7 +154,7 @@ func TestEdgeSchemaRefusedAtResolve(t *testing.T) {
 		rel  velox.Rel[esUser, esGroup]
 		want string
 	}{
-		{esUsers.Clubs, "its join entity engine_test.esSecret has a Read policy; a join entity is read through its two sides"},
+		{esUsers.Clubs, "its edge schema engine_test.esSecret has a Read policy; an edge schema is read through its two sides"},
 		{esUsers.Teams, "it names unfilled column 9 of engine_test.esMember, which has 4"},
 	} {
 		if _, err := db.Query[esUser]().Where(c.rel.Has()).Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), c.want) {

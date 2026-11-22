@@ -248,7 +248,9 @@ func (r Rel[E, T]) Set[_ Lazy[T]](key any) Setter[E] {
 // With do not apply. Add applies to a many-to-many edge (EdgeThrough) and to
 // an edge whose foreign key the target holds; an edge whose key is on the
 // owner's row is set by Set, or that column's handle, and its Add fails the
-// statement. InsertQuery.Set says when and how the edge is written.
+// statement. Through an edge schema with a column Add cannot fill, Add of
+// any key fails before any statement. InsertQuery.Set says when and how
+// the edge is written.
 func (r Rel[E, T]) Add[_ Lazy[T]](keys ...any) Setter[E] {
 	return r.edgeSetter(engine.EdgeAdd, keys)
 }
