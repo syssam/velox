@@ -54,11 +54,11 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	gofiles, err := gogen.RenderConfig(req.Model, req.OutPath, req.OutPackage, cfg)
+	surface, err := sdl.BuildConfig(req.Model, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	surface, err := sdl.BuildConfig(req.Model, cfg)
+	gofiles, err := gogen.RenderSurface(req.Model, surface, req.OutPath, req.OutPackage, cfg)
 	if err != nil {
 		return nil, nil, err
 	}

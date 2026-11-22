@@ -35,12 +35,18 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 // RenderConfig is Render under the options cfg, which must be those the SDL
 // is rendered under.
 func RenderConfig(m *plugin.Model, outPath, outPkg string, cfg sdl.Config) ([]plugin.File, error) {
-	if outPkg == "" {
-		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
-	}
 	s, err := sdl.BuildConfig(m, cfg)
 	if err != nil {
 		return nil, err
+	}
+	return RenderSurface(m, s, outPath, outPkg, cfg)
+}
+
+// RenderSurface is RenderConfig from s, sdl.BuildConfig's Surface of m under
+// cfg, for a caller that reads s too.
+func RenderSurface(m *plugin.Model, s *sdl.Surface, outPath, outPkg string, cfg sdl.Config) ([]plugin.File, error) {
+	if outPkg == "" {
+		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
 	}
 	r := newRenderer(m, outPath, outPkg)
 	r.veloxe, r.graphqlGo = cfg.Veloxe, cfg.GraphQLGo
