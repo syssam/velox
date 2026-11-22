@@ -43,7 +43,7 @@ func identical(err, core error) bool {
 		return false
 	}
 	t := reflect.TypeOf(err)
-	return t == reflect.TypeOf(core) && t.Comparable() && err == core
+	return t == reflect.TypeOf(core) && t.Comparable() && err == core //nolint:errorlint // identity, not wrapping, is what this asks
 }
 
 var (

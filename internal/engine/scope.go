@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -508,9 +509,9 @@ func (sc *Scoper) target(t *EntityInfo) (Predicate, error) {
 // in its condition, or from t's Read), with t at the front of its
 // path.
 func (sc *Scoper) inExists(t *EntityInfo, err error) error {
-	if e, ok := err.(*existsError); ok {
+	if e, ok := errors.AsType[*existsError](err); ok {
 		e.path = slices.Insert(e.path, 0, t.Name)
-		return e
+		return err
 	}
 	return &existsError{entity: sc.Entity, path: []string{t.Name}, err: err}
 }

@@ -20,9 +20,13 @@ func DryRefused(mu *MutationState, err error) bool {
 // onlyDryRun reports whether err is ErrDryRun, wrapped or joined, on every
 // branch of its tree: errors.Join(ErrDryRun, other) is not.
 func onlyDryRun(err error) bool {
-	switch x := err.(type) {
-	case nil:
+	if err == nil {
 		return false
+	}
+	if err == ErrDryRun { //nolint:errorlint // a branch is ErrDryRun itself; errors.Is would accept a join
+		return true
+	}
+	switch x := err.(type) { //nolint:errorlint // walks the tree of joined and wrapped errors, branch by branch
 	case interface{ Unwrap() []error }:
 		errs := x.Unwrap()
 		for _, e := range errs {
@@ -32,9 +36,9 @@ func onlyDryRun(err error) bool {
 		}
 		return len(errs) > 0
 	case interface{ Unwrap() error }:
-		return err == ErrDryRun || onlyDryRun(x.Unwrap())
+		return onlyDryRun(x.Unwrap())
 	}
-	return err == ErrDryRun
+	return false
 }
 
 // bidiWhere is the condition that ps, a bidirectional join entity's

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -57,7 +58,7 @@ func (c fkConnector) Connect(ctx context.Context) (driver.Conn, error) {
 func execPragma(ctx context.Context, cn driver.Conn, q string) error {
 	if ex, ok := cn.(driver.ExecerContext); ok {
 		_, err := ex.ExecContext(ctx, q, nil)
-		if err != driver.ErrSkip {
+		if !errors.Is(err, driver.ErrSkip) {
 			return err
 		}
 	}
