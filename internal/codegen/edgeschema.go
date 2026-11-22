@@ -245,24 +245,22 @@ func (b *builder) throughEdge(s *edgeState, es *node, key *edgeState, col string
 // as ent does, unless it declares one: unique, over every row, on the two
 // columns in either order. Add's ON CONFLICT names it.
 //
-// A declared index over every row on the two columns in their order that is
-// not unique is refused (rule 67): it would stand where the pair's index
-// goes, and its name is the one the pair's index would take.
+// Without such an index, a declared index over every row on the two columns
+// in their order that is not unique is refused (rule 67): it would stand
+// where the pair's index goes, and its name is the one the pair's index
+// would take.
 func (b *builder) linkIndex(n *node) {
 	e, link := n.ent, n.link
-	for i, ix := range e.Indexes {
-		if b.refused[ix] || ix.Where != "" || len(ix.Columns) != 2 {
-			continue
-		}
-		same := slices.Equal(ix.Columns, link)
-		switch {
-		case ix.Unique && (same || ix.Columns[0] == link[1] && ix.Columns[1] == link[0]):
-			return
-		case same:
-			b.fail(67, e.Name, indexLoc(i, ix), "over (%s) must be Unique: Through's links are unique pairs", strings.Join(link, ", "))
-			b.refused[ix] = true
-			return
-		}
+	full := func(ix *Index) bool { return !b.refused[ix] && ix.Where == "" && len(ix.Columns) == 2 }
+	if slices.ContainsFunc(e.Indexes, func(ix *Index) bool {
+		return full(ix) && ix.Unique && (slices.Equal(ix.Columns, link) || ix.Columns[0] == link[1] && ix.Columns[1] == link[0])
+	}) {
+		return
+	}
+	if i := slices.IndexFunc(e.Indexes, func(ix *Index) bool { return full(ix) && slices.Equal(ix.Columns, link) }); i >= 0 {
+		b.fail(67, e.Name, indexLoc(i, e.Indexes[i]), "over (%s) must be Unique: Through's links are unique pairs", strings.Join(link, ", "))
+		b.refused[e.Indexes[i]] = true
+		return
 	}
 	e.Indexes = append(e.Indexes, &Index{Name: indexName(e.Name, link), Derived: true, Columns: slices.Clone(link), Unique: true, Pos: n.linkPos})
 }

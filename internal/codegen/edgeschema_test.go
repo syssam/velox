@@ -616,6 +616,15 @@ func TestEdgeSchemaNonUniqueIndex(t *testing.T) {
 	if err == nil || err.Error() != want {
 		t.Fatalf("got\n%v\nwant\n%s", err, want)
 	}
+	// A unique index over the pair, in either order, stands for the pair's
+	// wherever it is declared: the plain index beside it is taken.
+	m = enrollments(t)
+	plain := loadjson.Index{Fields: []string{"learner_id", "course_id"}}
+	unique := loadjson.Index{Fields: []string{"course_id", "learner_id"}, Unique: true}
+	schemaIn(t, m, "Enrollment").Indexes = []*loadjson.Index{&plain, &unique}
+	if ixs := mustBuildModel(t, m).Entity("Enrollment").Indexes; len(ixs) != 2 {
+		t.Fatalf("indexes %s", jsonOf(t, ixs))
+	}
 	e := mustBuildModel(t, enrollments(t)).Entity("Enrollment")
 	if got, want := e.Indexes[0].Pos, edgeIn(t, enrollments(t), "Learner", "courses").Pos; got != want {
 		t.Fatalf("the pair's index is at %q, want %q", got, want)
