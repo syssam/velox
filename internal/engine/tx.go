@@ -526,19 +526,8 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		}
 		return false, fmt.Errorf("velox: transaction: %w", err)
 	}
-	if f.shared.Load() {
+	if err := f.uncommittable(); err != nil {
 		endTx(info, TxError)
-		err := fmt.Errorf("velox: transaction: %w", errTxShared)
-		if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) {
-			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
-		}
-		return false, err
-	}
-	if f.broken != nil {
-		// A savepoint did not roll back: its fn's work may still be in the
-		// transaction, which must not commit it.
-		endTx(info, TxError)
-		err := fmt.Errorf("velox: transaction: %w", f.broken)
 		if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
@@ -816,6 +805,19 @@ type txFrame struct {
 	// what nothing would run.
 	afterMu     sync.Mutex
 	afterClosed bool
+}
+
+// uncommittable is why f's transaction must roll back though fn returned
+// nil: it was used from two goroutines at once, or a savepoint did not roll
+// back, so its fn's work may still be in the transaction. nil if neither.
+func (f *txFrame) uncommittable() error {
+	switch {
+	case f.shared.Load():
+		return fmt.Errorf("velox: transaction: %w", errTxShared)
+	case f.broken != nil:
+		return fmt.Errorf("velox: transaction: %w", f.broken)
+	}
+	return nil
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.
