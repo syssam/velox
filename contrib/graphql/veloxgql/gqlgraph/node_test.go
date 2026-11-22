@@ -3,8 +3,10 @@ package gqlgraph_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
@@ -103,5 +105,157 @@ func TestResolveNodesCap(t *testing.T) {
 	many := make([]int64, veloxgql.DefaultLimits().MaxPage+1)
 	if _, err := gqlgraph.ResolveNodes(context.Background(), vdb, types, many); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("%d IDs by default: %v; want ErrPageTooLarge", len(many), err)
+	}
+}
+
+// nodeTypes is the Child and the Owner types, keyed by their id.
+func nodeTypes() []*gqlgraph.Type {
+	key := []gqlgraph.Column{{Name: "id", Index: 0}}
+	return []*gqlgraph.Type{
+		{Name: "Child", Table: untyped.TableOf[child], Key: key},
+		{Name: "Owner", Table: untyped.TableOf[owner], Key: key},
+	}
+}
+
+// twoKeys is a type whose key is two columns, which a Node cannot have.
+func twoKeys() *gqlgraph.Type {
+	return &gqlgraph.Type{Name: "Pair", Table: untyped.TableOf[child], Key: []gqlgraph.Column{{Name: "id", Index: 0}, {Name: "title", Index: 2}}}
+}
+
+// TestNodeKeyColumns: a type of two key columns is an error from LoadNode,
+// ResolveNode and ResolveNodes, and not a probe that finds nothing.
+func TestNodeKeyColumns(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := context.Background()
+	log.counts()
+	if n, err := gqlgraph.LoadNode(ctx, db, twoKeys(), int64(1)); n != nil || err == nil || !strings.Contains(err.Error(), "2 key columns") {
+		t.Errorf("LoadNode: %v, %v", n, err)
+	}
+	if n, err := gqlgraph.ResolveNode(ctx, db, []*gqlgraph.Type{twoKeys()}, int64(1)); n != nil || err == nil {
+		t.Errorf("ResolveNode: %v, %v", n, err)
+	}
+	if ns, err := gqlgraph.ResolveNodes(ctx, db, []*gqlgraph.Type{twoKeys()}, []int64{1}); ns != nil || err == nil || !strings.Contains(err.Error(), "2 key columns") {
+		t.Errorf("ResolveNodes: %v, %v", ns, err)
+	}
+	if got := log.counts(); len(got) != 0 {
+		t.Errorf("a type with two keys ran %v", got)
+	}
+}
+
+// TestNodeUnholdableIDs: an ID the key column cannot hold names no row, so
+// ResolveNodes gives nil for it, with no statement when no ID can be held.
+func TestNodeUnholdableIDs(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := context.Background()
+	types := nodeTypes()[1:]
+	log.counts()
+	ns, err := gqlgraph.ResolveNodes(ctx, db, types, []string{"x", "y"})
+	if err != nil || len(ns) != 2 || ns[0] != nil || ns[1] != nil {
+		t.Errorf("IDs no key holds: %v, %v", ns, err)
+	}
+	if got := log.counts(); len(got) != 0 {
+		t.Errorf("IDs no key holds ran %v", got)
+	}
+	if n, err := gqlgraph.LoadNode(ctx, db, types[0], "x"); n != nil || err != nil {
+		t.Errorf("LoadNode of an ID no key holds: %v, %v", n, err)
+	}
+	ns, err = gqlgraph.ResolveNodes(ctx, db, types, []any{int64(2), "x", int64(3)})
+	if err != nil || len(ns) != 3 || ns[1] != nil {
+		t.Fatalf("mixed IDs: %v, %v", ns, err)
+	}
+	if o, ok := ns[0].(*owner); !ok || o.ID != 2 {
+		t.Errorf("[0]: %#v, want owner 2", ns[0])
+	}
+	if o, ok := ns[2].(*owner); !ok || o.ID != 3 {
+		t.Errorf("[2]: %#v, want owner 3", ns[2])
+	}
+}
+
+// TestNodeStatements: a denied read is nil, as a row that is not there is,
+// and any other statement error is returned, by each of the readers.
+func TestNodeStatements(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := context.Background()
+	types := nodeTypes()
+	boom := errors.New("boom")
+	fail := func(err error) {
+		log.mu.Lock()
+		defer log.mu.Unlock()
+		log.fail = func(*velox.Statement) error { return err }
+	}
+
+	fail(velox.ErrDenied)
+	if n, err := gqlgraph.LoadNode(ctx, db, types[1], int64(1)); n != nil || err != nil {
+		t.Errorf("LoadNode of a denied read: %v, %v", n, err)
+	}
+	ns, err := gqlgraph.ResolveNodes(ctx, db, types, []int64{1, 4})
+	if err != nil || len(ns) != 2 || ns[0] != nil || ns[1] != nil {
+		t.Errorf("ResolveNodes of a denied read: %v, %v", ns, err)
+	}
+
+	fail(boom)
+	if n, err := gqlgraph.LoadNode(ctx, db, types[1], int64(1)); n != nil || !errors.Is(err, boom) {
+		t.Errorf("LoadNode: %v, %v", n, err)
+	}
+	if n, err := gqlgraph.ResolveNode(ctx, db, types, int64(1)); n != nil || !errors.Is(err, boom) {
+		t.Errorf("ResolveNode: %v, %v", n, err)
+	}
+	if ns, err := gqlgraph.ResolveNodes(ctx, db, types, []int64{1}); ns != nil || !errors.Is(err, boom) {
+		t.Errorf("ResolveNodes: %v, %v", ns, err)
+	}
+}
+
+// blob is an entity keyed by bytes, whose Go type a map cannot hold.
+type blob struct {
+	ID    []byte
+	Label string
+}
+
+var blobMeta velox.MetaOnce[blob]
+
+func (*blob) VeloxMeta() *velox.Meta[blob] { return blobMeta.Load(blobDescriptor) }
+
+func blobDescriptor() velox.Descriptor[blob] {
+	return velox.Descriptor[blob]{
+		Table:      "blobs",
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Label", Name: "label"}},
+		PrimaryKey: []int{0},
+		FieldPtr:   func(x *blob, i int) any { return [...]any{&x.ID, &x.Label}[i] },
+	}
+}
+
+// TestResolveNodesUncomparableKey: a key whose Go type is not comparable is
+// read by LoadNode of each ID, one statement each, in the IDs' order.
+func TestResolveNodesUncomparableKey(t *testing.T) {
+	db, raw, log := edgeDB(t)
+	for _, s := range []string{
+		`CREATE TABLE blobs (id BLOB PRIMARY KEY, label TEXT NOT NULL)`,
+		`INSERT INTO blobs (id, label) VALUES (x'01', 'one'), (x'02', 'two')`,
+	} {
+		if _, err := raw.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	types := []*gqlgraph.Type{{Name: "Blob", Table: untyped.TableOf[blob], Key: []gqlgraph.Column{{Name: "id", Index: 0}}}}
+	log.counts()
+	ns, err := gqlgraph.ResolveNodes(context.Background(), db, types, [][]byte{{2}, {9}, {1}})
+	if err != nil || len(ns) != 3 || ns[1] != nil {
+		t.Fatalf("got %#v, %v", ns, err)
+	}
+	for i, want := range map[int]string{0: "two", 2: "one"} {
+		if b, ok := ns[i].(*blob); !ok || b.Label != want {
+			t.Errorf("[%d]: %#v, want %s", i, ns[i], want)
+		}
+	}
+	if got := log.counts(); got["blobs"] != 3 {
+		t.Errorf("statements by table %v, want 3 of blobs", got)
+	}
+
+	boom := errors.New("boom")
+	log.mu.Lock()
+	log.fail = func(*velox.Statement) error { return boom }
+	log.mu.Unlock()
+	if ns, err := gqlgraph.ResolveNodes(context.Background(), db, types, [][]byte{{1}}); ns != nil || !errors.Is(err, boom) {
+		t.Errorf("a statement error: %v, %v", ns, err)
 	}
 }
