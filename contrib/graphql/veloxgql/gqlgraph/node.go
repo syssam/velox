@@ -21,7 +21,9 @@ var (
 	ErrNodeNotFound = errors.New("could not resolve to a node with the global ID")
 	// ErrAmbiguousNodeID: more than one type of Node has a row of the ID, as
 	// veloxe refused it. A Node's ID holds no type, so node(id:) needs IDs
-	// that are unique across tables, as a snowflake is.
+	// that are unique across tables, as a snowflake is. ResolveNode returns
+	// it in an error with the code BAD_USER_INPUT, which names the types the
+	// caller may read and not the ID.
 	ErrAmbiguousNodeID = errors.New("node id matches more than one type")
 )
 
@@ -79,7 +81,7 @@ func ResolveNode(ctx context.Context, db *velox.DB, types []*Type, id any) (any,
 	case 1:
 		return node, nil
 	}
-	return nil, fmt.Errorf("gqlgraph: %w: the ID is a %s; node(id:) needs IDs unique across types", ErrAmbiguousNodeID, strings.Join(found, " and a "))
+	return nil, gqlcore.InputErrorf("%w: the ID is a %s; node(id:) needs IDs unique across types", ErrAmbiguousNodeID, strings.Join(found, " and a "))
 }
 
 // ResolveNodes returns the row of each of ids, in order, as veloxe's

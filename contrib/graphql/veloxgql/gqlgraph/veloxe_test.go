@@ -320,6 +320,11 @@ func TestResolveNode(t *testing.T) {
 	if n != nil || !errors.Is(err, gqlgraph.ErrAmbiguousNodeID) || !strings.Contains(err.Error(), "Badge and a Person") {
 		t.Errorf("3: %#v, %v; want ErrAmbiguousNodeID", n, err)
 	}
+	// The ID the client sent names two rows: its error, not an internal
+	// one.
+	if code, msg := veloxgql.Present(err); code != veloxgql.CodeBadUserInput || !strings.Contains(msg, "more than one type") {
+		t.Errorf("3: presented %s %q; want BAD_USER_INPUT", code, msg)
+	}
 	n, err = gqlgraph.LoadNode(ctx, db, types[0], int64(21))
 	if n != nil || err != nil {
 		t.Errorf("LoadNode of hidden badge 21: %#v, %v; want nil, nil", n, err)

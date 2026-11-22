@@ -1204,6 +1204,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- GraphQL, compat=veloxe: `node(id:)` of an ID that more than one type has
+  (`gqlgraph.ErrAmbiguousNodeID`) reaches the client as BAD_USER_INPUT, not
+  INTERNAL_SERVER_ERROR.
 - veloxotel: a failed statement's or transaction's span no longer holds the
   error's text, which can quote a row's values (MySQL's "Duplicate entry
   'alice@example.com'"). Its status description is error.type, and its
