@@ -143,6 +143,45 @@ var (
 	}
 )
 
+// hook are the methods by which a hook reads and writes the column of a
+// Mutation or a Row by its type, for every handle kind: Mutation.Value,
+// Set and Fill, and Row.Value and Set, by name, checked at compile time.
+var (
+	hook = []method{
+		{"Value", "returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.", "(m *Mutation) (V, bool)",
+			"return mutValue[E, V](m, c.I)"},
+		{"Assign", "sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.", "(m *Mutation, v V) error",
+			`return mutSet[E]("Assign", m, c.I, v)`},
+		hookFill,
+		hookGet,
+		{"Put", "sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.", "(r Row, v V) error",
+			`return rowSet[E]("Put", r, c.I, v)`},
+	}
+	nullHook = []method{
+		{"Value", "returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.", "(m *Mutation) (V, bool)",
+			"return mutValue[E, V](m, c.I)"},
+		{"ValuePtr", "is Value as a fresh pointer: nil for NULL.", "(m *Mutation) (*V, bool)",
+			"return mutValuePtr[E, V](m, c.I)"},
+		{"Assign", "sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.", "(m *Mutation, v V) error",
+			`return mutSet[E]("Assign", m, c.I, v)`},
+		{"AssignNull", "sets the column to NULL, as Assign sets a value.", "(m *Mutation) error",
+			`return mutSet[E]("AssignNull", m, c.I, nil)`},
+		hookFill,
+		{"Get", "returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.", "(r Row) V",
+			"return rowValue[E, V](r, c.I)"},
+		{"GetPtr", "is Get as a fresh pointer: nil for NULL.", "(r Row) *V",
+			"return rowPtr[E, V](r, c.I)"},
+		{"Put", "sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.", "(r Row, v V) error",
+			`return rowSet[E]("Put", r, c.I, v)`},
+		{"PutNull", "sets the column of the insert's row r to NULL, as Put sets a value.", "(r Row) error",
+			`return rowSet[E]("PutNull", r, c.I, nil)`},
+	}
+	hookFill = method{"Fill", "sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.", "(m *Mutation, v V) error",
+		"return mutFill[E](m, c.I, v)"}
+	hookGet = method{"Get", "returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.", "(r Row) V",
+		"return rowValue[E, V](r, c.I)"}
+)
+
 // setPtr is the SetPtr method of every handle kind, its doc ending with more.
 func setPtr(more string) method {
 	return method{"SetPtr", "sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it." + more, "(p *V) Setter[E]",
@@ -159,18 +198,18 @@ type kind struct {
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", [][]method{base, key, count, set, values}},
-	{"TimeCol", "[E, V any]", "is the handle of a time column: a time field, of time.Time or a type defined on it.", [][]method{base, key, ordered, count, extremes, set, values}},
-	{"OtherCol", "[E, V any]", "is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database.", [][]method{base, key, ordered, count, extremes, set, values}},
-	{"NumberCol", "[E, V any]", "is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal.", [][]method{base, key, ordered, count, extremes, sums, set, arith, values}},
-	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, count, extremes, text, set, values}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, nullSet, null, nullValues, ptrs}},
-	{"NullTimeCol", "[E, V any]", "is TimeCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs}},
-	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, nullSet, null, nullValues, ptrs}},
-	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, jsonPaths, values}},
-	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{nullSet, jsonPaths, null, nullValues, ptrs}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", [][]method{base, key, count, set, values, hook}},
+	{"TimeCol", "[E, V any]", "is the handle of a time column: a time field, of time.Time or a type defined on it.", [][]method{base, key, ordered, count, extremes, set, values, hook}},
+	{"OtherCol", "[E, V any]", "is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database.", [][]method{base, key, ordered, count, extremes, set, values, hook}},
+	{"NumberCol", "[E, V any]", "is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal.", [][]method{base, key, ordered, count, extremes, sums, set, arith, values, hook}},
+	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, count, extremes, text, set, values, hook}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, nullSet, null, nullValues, ptrs, nullHook}},
+	{"NullTimeCol", "[E, V any]", "is TimeCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
+	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs, nullHook}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, nullSet, null, nullValues, ptrs, nullHook}},
+	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, jsonPaths, values, hook}},
+	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{nullSet, jsonPaths, null, nullValues, ptrs, nullHook}},
 }
 
 // Generate returns the source of handles.go.

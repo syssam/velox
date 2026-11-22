@@ -288,20 +288,64 @@ func (r Row) Value(name string) any {
 	return loadColumn(c, r.p)
 }
 
+// columnAt is the column at index i of the row's entity, which must be
+// want: a typed handle's. A row of another entity, or an index want has no
+// column at, is a misuse, recorded.
+func (r Row) columnAt(what string, want *EntityInfo, i int32) (*ColumnInfo, error) {
+	if r.in == nil {
+		return nil, r.record(errors.New("the zero Row has no columns"))
+	}
+	if r.in != want {
+		return nil, r.record(fmt.Errorf("%s: a column of %s, on a row of %s", what, want.Name, r.in.Name))
+	}
+	if i < 0 || int(i) >= len(r.in.Columns) {
+		return nil, r.record(fmt.Errorf("%s: no column %d, the entity has %d columns", what, i, len(r.in.Columns)))
+	}
+	return &r.in.Columns[i], nil
+}
+
+// RowValueAt is r.Value of the column at index i of entity want, a typed
+// handle's Get; what names the handle's method in a misuse. It is a
+// function, so that velox.Row, an alias of Row, does not show it.
+func RowValueAt(r Row, what string, want *EntityInfo, i int32) any {
+	c, err := r.columnAt(what, want, i)
+	if err != nil {
+		return nil
+	}
+	return loadColumn(c, r.p)
+}
+
+// RowSetAt is r.Set of the column at index i of entity want, a typed
+// handle's Put; what names the handle's method in a misuse. It is a
+// function, as RowValueAt is.
+func RowSetAt(r Row, what string, want *EntityInfo, i int32, v any) error {
+	c, err := r.columnAt(what, want, i)
+	if err != nil {
+		return err
+	}
+	return r.set(what+"("+c.Name, c, v)
+}
+
 // Set sets the column to v, converted as a condition's value is: a value
 // of another type of the same kind is converted, and one of another kind
 // is an error. nil sets NULL on a nullable column. In an Insert policy it
 // is a misuse: a policy decides, and does not change the row.
 func (r Row) Set(name string, v any) error {
-	if r.ro {
-		return r.record(fmt.Errorf("Set(%q) in an Insert policy: a policy decides and does not change the row; change it in a hook", name))
-	}
 	c, err := r.column("Set", name)
 	if err != nil {
 		return err
 	}
+	return r.set(fmt.Sprintf("Set(%q", name), c, v)
+}
+
+// set stores v in column c. call is the start of the call a misuse
+// names, `Set("title"`, which set closes.
+func (r Row) set(call string, c *ColumnInfo, v any) error {
+	if r.ro {
+		return r.record(fmt.Errorf("%s) in an Insert policy: a policy decides and does not change the row; change it in a hook", call))
+	}
 	if err := storeColumn(c, r.p, v); err != nil {
-		return r.record(fmt.Errorf("Set(%q, %v): %w", name, v, err))
+		return r.record(fmt.Errorf("%s, %v): %w", call, v, err))
 	}
 	return nil
 }
@@ -381,28 +425,63 @@ func (mu *MutationState) SetByName(name string, v any) error {
 	if i < 0 {
 		return mu.Err
 	}
+	return mu.set(fmt.Sprintf("Set(%q", name), i, v)
+}
+
+// columnAt checks that the mutation is of entity want, a typed handle's,
+// and that want has a column at index i, and returns i; else it records the
+// misuse and returns -1.
+func (mu *MutationState) columnAt(what string, want *EntityInfo, i int32) int {
+	in := mu.entity()
+	switch {
+	case in == nil:
+		mu.Record(fmt.Errorf("%s: the mutation has no entity", what))
+		return -1
+	case in != want:
+		mu.Record(fmt.Errorf("%s: a column of %s, on a mutation of %s", what, want.Name, in.Name))
+		return -1
+	case i < 0 || int(i) >= len(in.Columns):
+		mu.Record(fmt.Errorf("%s: no column %d, the entity has %d columns", what, i, len(in.Columns)))
+		return -1
+	}
+	return int(i)
+}
+
+// SetAt is SetByName of the column at index i of entity want, a typed
+// handle's Assign; what names the handle's method in a misuse.
+func (mu *MutationState) SetAt(what string, want *EntityInfo, i int32, v any) error {
+	c := mu.columnAt(what, want, i)
+	if c < 0 {
+		return mu.Err
+	}
+	return mu.set(what+"("+want.Columns[c].Name, c, v)
+}
+
+// set is SetByName of column i. call is the start of the call a misuse
+// names, `Set("title"`, which set closes.
+func (mu *MutationState) set(call string, i int, v any) error {
 	in := mu.entity()
 	c := &in.Columns[i]
 	switch mu.op() {
 	case OpInsert:
 		cv, err := columnValue(c, v)
 		if err != nil {
-			return mu.fail(fmt.Errorf("Set(%q, %v): %w", name, v, err))
+			return mu.fail(fmt.Errorf("%s, %v): %w", call, v, err))
 		}
 		storeAll(c, mu.Rows, cv)
 		return nil
 	case OpDelete:
-		return mu.fail(fmt.Errorf("Set(%q) on a delete: a delete assigns no columns", name))
+		return mu.fail(fmt.Errorf("%s) on a delete: a delete assigns no columns", call))
 	}
 	a := Assignment{Column: i, Op: AssignSet}
 	if v != nil {
 		cv, err := namedValue(c, v)
 		if err != nil {
-			return mu.fail(fmt.Errorf("Set(%q, %v): %w", name, v, err))
+			return mu.fail(fmt.Errorf("%s, %v): %w", call, v, err))
 		}
 		a.Value = cv
 	} else if !c.Nullable {
-		return mu.fail(fmt.Errorf("Set(%q, nil): %s is not nullable", name, name))
+		return mu.fail(fmt.Errorf("%s, nil): %s is not nullable", call, c.Name))
 	}
 	MutateSet(mu, a)
 	return nil
@@ -416,13 +495,29 @@ func (mu *MutationState) FillByName(name string, v any) error {
 	if i < 0 {
 		return mu.Err
 	}
+	return mu.fill(fmt.Sprintf("Fill(%q", name), i, v)
+}
+
+// FillAt is FillByName of the column at index i of entity want, a typed
+// handle's Fill; what names the handle's method in a misuse.
+func (mu *MutationState) FillAt(what string, want *EntityInfo, i int32, v any) error {
+	c := mu.columnAt(what, want, i)
+	if c < 0 {
+		return mu.Err
+	}
+	return mu.fill(what+"("+want.Columns[c].Name, c, v)
+}
+
+// fill is FillByName of column i. call is the start of the call a misuse
+// names, `Fill("title"`, which fill closes.
+func (mu *MutationState) fill(call string, i int, v any) error {
 	if mu.op() != OpInsert {
-		return mu.fail(fmt.Errorf("Fill(%q) on an update or a delete: Fill sets an insert's rows; Set sets an update's assignment", name))
+		return mu.fail(fmt.Errorf("%s) on an update or a delete: Fill sets an insert's rows; Set sets an update's assignment", call))
 	}
 	c := &mu.entity().Columns[i]
 	cv, err := columnValue(c, v)
 	if err != nil {
-		return mu.fail(fmt.Errorf("Fill(%q, %v): %w", name, v, err))
+		return mu.fail(fmt.Errorf("%s, %v): %w", call, v, err))
 	}
 	for _, p := range mu.Rows {
 		if zeroColumn(c, p) {
@@ -442,8 +537,24 @@ func (mu *MutationState) ValueByName(name string) (any, bool) {
 	if i < 0 {
 		return nil, false
 	}
+	return mu.value(fmt.Sprintf("Value(%q", name), i)
+}
+
+// ValueAt is ValueByName of the column at index i of entity want, a typed
+// handle's Value; what names the handle's method in a misuse.
+func (mu *MutationState) ValueAt(what string, want *EntityInfo, i int32) (any, bool) {
+	c := mu.columnAt(what, want, i)
+	if c < 0 {
+		return nil, false
+	}
+	return mu.value(what+"("+want.Columns[c].Name, c)
+}
+
+// value is ValueByName of column i. call is the start of the call a misuse
+// names, `Value("title"`, which value closes.
+func (mu *MutationState) value(call string, i int) (any, bool) {
 	if mu.St == nil {
-		mu.Record(fmt.Errorf("Value(%q) on an insert: read an insert's values from its rows", name))
+		mu.Record(fmt.Errorf("%s) on an insert: read an insert's values from its rows", call))
 		return nil, false
 	}
 	v, ok := Assigned(mu.St, i)

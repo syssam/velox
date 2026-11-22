@@ -181,7 +181,10 @@
 // update or a delete, Predicates returns the conditions the caller and the
 // earlier hooks gave, and not the policy's; it is empty when
 // the statement said All. Value returns the value an update assigns to a
-// column, by name, and whether it assigns one; Set and Fill assign one.
+// column, by name, and whether it assigns one; Set and Fill assign one. A
+// run-time hook, which can name the column handles, does the same by type:
+// Posts.Title.Value(m), Assign(m, v), Fill(m, v), and Get(r) and Put(r, v)
+// on an insert's rows, where a value of the wrong type does not compile.
 // WithHooks adds hooks at run time, for one DB, after the schema's.
 // Affected returns the rows the write changed once next has returned. A hook
 // that makes an update or delete itself, such as a soft delete, reports its

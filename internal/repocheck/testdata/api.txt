@@ -133,10 +133,13 @@ func (c Change) Diff() []FieldChange
 func (c Change) NewRow() any
 func (c Change) OldRow() any
 func (c Col[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c Col[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c Col[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c Col[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c Col[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c Col[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c Col[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
+func (c Col[E, V]) Get[_ Lazy[V]](r Row) V
 func (c Col[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c Col[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
@@ -145,10 +148,15 @@ func (c Col[E, V]) New[_ Lazy[V]](ch Change) V
 func (c Col[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c Col[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c Col[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c Col[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c Col[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
+func (c JSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
+func (c JSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
+func (c JSONCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
 func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
 func (c JSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E]
@@ -157,14 +165,21 @@ func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E]
 func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c JSONCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c JSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
+func (c JSONCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
+func (c NullCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c NullCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
+func (c NullCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
+func (c NullCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
@@ -177,11 +192,20 @@ func (c NullCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullCol[E, V]) PutNull[_ Lazy[V]](r Row) error
+func (c NullCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NullCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
+func (c NullCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
+func (c NullJSONCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
+func (c NullJSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
+func (c NullJSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
+func (c NullJSONCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
+func (c NullJSONCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullJSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
 func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E]
 func (c NullJSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E]
@@ -194,20 +218,29 @@ func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E]
 func (c NullJSONCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullJSONCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullJSONCol[E, V]) PutNull[_ Lazy[V]](r Row) error
+func (c NullJSONCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullJSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
+func (c NullJSONCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
+func (c NullJSONCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullNumberCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
+func (c NullNumberCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullNumberCol[E, V]) Avg[_ Lazy[V]]() Term[E]
 func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullNumberCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c NullNumberCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c NullNumberCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullNumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c NullNumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c NullNumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
+func (c NullNumberCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullNumberCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullNumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullNumberCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
@@ -224,20 +257,29 @@ func (c NullNumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullNumberCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullNumberCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullNumberCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullNumberCol[E, V]) PutNull[_ Lazy[V]](r Row) error
+func (c NullNumberCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NullNumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullNumberCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
 func (c NullNumberCol[E, V]) Sum[_ Lazy[V]]() Term[E]
+func (c NullNumberCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
+func (c NullNumberCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullOtherCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullOtherCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
+func (c NullOtherCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullOtherCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullOtherCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c NullOtherCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c NullOtherCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullOtherCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c NullOtherCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c NullOtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullOtherCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
+func (c NullOtherCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullOtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullOtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullOtherCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
@@ -254,11 +296,17 @@ func (c NullOtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullOtherCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullOtherCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullOtherCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullOtherCol[E, V]) PutNull[_ Lazy[V]](r Row) error
+func (c NullOtherCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NullOtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullOtherCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullOtherCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullOtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullOtherCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
+func (c NullOtherCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullStringCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
+func (c NullStringCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullStringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E]
 func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
@@ -267,8 +315,11 @@ func (c NullStringCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c NullStringCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullStringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
 func (c NullStringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E]
+func (c NullStringCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c NullStringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c NullStringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
+func (c NullStringCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullStringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E]
 func (c NullStringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E]
 func (c NullStringCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
@@ -288,18 +339,27 @@ func (c NullStringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullStringCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullStringCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullStringCol[E, V]) PutNull[_ Lazy[V]](r Row) error
+func (c NullStringCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NullStringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullStringCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullStringCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
+func (c NullStringCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullTimeCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullTimeCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
+func (c NullTimeCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullTimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NullTimeCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c NullTimeCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c NullTimeCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NullTimeCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c NullTimeCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c NullTimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullTimeCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
+func (c NullTimeCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullTimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullTimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullTimeCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
@@ -316,20 +376,27 @@ func (c NullTimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullTimeCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
 func (c NullTimeCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V
 func (c NullTimeCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NullTimeCol[E, V]) PutNull[_ Lazy[V]](r Row) error
+func (c NullTimeCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NullTimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NullTimeCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullTimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullTimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullTimeCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
+func (c NullTimeCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NumberCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NumberCol[E, V]) Avg[_ Lazy[V]]() Term[E]
 func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c NumberCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c NumberCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c NumberCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c NumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c NumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c NumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NumberCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
@@ -342,19 +409,24 @@ func (c NumberCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c NumberCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c NumberCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c NumberCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c NumberCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
 func (c NumberCol[E, V]) Sum[_ Lazy[V]]() Term[E]
+func (c NumberCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c OtherCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c OtherCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c OtherCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c OtherCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c OtherCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c OtherCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c OtherCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c OtherCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c OtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c OtherCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c OtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c OtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c OtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
@@ -367,10 +439,13 @@ func (c OtherCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c OtherCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c OtherCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c OtherCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c OtherCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c OtherCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c OtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c OtherCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c StringCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c StringCol[E, V]) ContainsFold[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
@@ -379,8 +454,10 @@ func (c StringCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c StringCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c StringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
 func (c StringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E]
+func (c StringCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c StringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c StringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c StringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
@@ -396,17 +473,22 @@ func (c StringCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c StringCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c StringCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c StringCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c StringCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c StringCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c TimeCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c TimeCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c TimeCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
 func (c TimeCol[E, V]) CountDistinct[_ Lazy[V]]() Term[E]
 func (c TimeCol[E, V]) Count[_ Lazy[V]]() Term[E]
 func (c TimeCol[E, V]) Desc[_ Lazy[V]]() Order[E]
 func (c TimeCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c TimeCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
 func (c TimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c TimeCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c TimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c TimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c TimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
@@ -419,9 +501,11 @@ func (c TimeCol[E, V]) New[_ Lazy[V]](ch Change) V
 func (c TimeCol[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c TimeCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
 func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V
+func (c TimeCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c TimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c TimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c TimeCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)

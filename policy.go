@@ -77,6 +77,11 @@ type Policy = engine.Policy
 // the row as its *E, for application code that can name E. A wrong name, a
 // value of another kind, or a Set in Policy.Insert is a misuse, which fails
 // the write.
+//
+// A column handle reads and writes a row by its type: Posts.Title.Get(r)
+// returns the title as a string, and Posts.Title.Put(r, "x") sets it, so a
+// value of the wrong type fails to compile. A handle of another entity is a
+// misuse.
 type Row = engine.Row
 
 // Mutation is the write that an entity's hooks see and may change, by
@@ -137,7 +142,8 @@ func (m *Mutation) Rows() iter.Seq[Row] { return m.mu.RowsByName() }
 // Set sets the column of the given name: in every row of an insert, or in
 // an update's assignment, which it replaces. v is converted as a
 // Predicate's value is, and nil sets NULL on a nullable column. On a delete it is a
-// misuse. A misuse is recorded, and returned.
+// misuse. A misuse is recorded, and returned. A column handle's Assign is
+// Set by type: Posts.Title.Assign(m, v).
 func (m *Mutation) Set(name string, v any) error { return m.mu.SetByName(name, v) }
 
 // Fill sets the column of the given name to v in each row of an insert
@@ -145,7 +151,7 @@ func (m *Mutation) Set(name string, v any) error { return m.mu.SetByName(name, v
 // sets it. On an update or a delete it is a misuse. It is how a mixin fills
 // a column the caller may also set, such as a tenant's. An insert fills the
 // columns' Defaults before the hooks run, so Fill of a column that has one
-// finds it set; Set replaces it.
+// finds it set; Set replaces it. A column handle's Fill is Fill by type.
 func (m *Mutation) Fill(name string, v any) error { return m.mu.FillByName(name, v) }
 
 // Value returns the value an update assigns to the column of the given
@@ -155,7 +161,8 @@ func (m *Mutation) Fill(name string, v any) error { return m.mu.FillByName(name,
 // column, or assigns it with Add, Sub or SetExpr, and on a delete. On an insert it
 // is a misuse: read an insert's values from Rows. A slice or map it returns
 // is shared with the statement, and often with the caller: change the
-// assignment with Set, not in place.
+// assignment with Set, not in place. A column handle's Value is Value by
+// type: Posts.Title.Value(m) returns a string.
 func (m *Mutation) Value(name string) (any, bool) { return m.mu.ValueByName(name) }
 
 // Where narrows the rows an update or a delete changes: all of ps must
@@ -253,3 +260,95 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // upsert that updates an entity with interceptors is refused with
 // ErrPolicyUpsert.
 type Interceptor = engine.Interceptor
+
+// mutValue is a handle's Value: the value the update m assigns to column
+// col of entity E, with Mutation.Value's rules; the zero V for NULL.
+func mutValue[E, V any](m *Mutation, col int32) (V, bool) {
+	var zero V
+	in, err := ownerOf[E]()
+	if err != nil {
+		m.mu.Record(err)
+		return zero, false
+	}
+	v, ok := m.mu.ValueAt("Value", in, col)
+	if !ok || v == nil {
+		return zero, ok
+	}
+	x, ok := v.(V)
+	return x, ok
+}
+
+// mutValuePtr is a Null handle's ValuePtr: mutValue as a fresh *V, nil for
+// NULL.
+func mutValuePtr[E, V any](m *Mutation, col int32) (*V, bool) {
+	in, err := ownerOf[E]()
+	if err != nil {
+		m.mu.Record(err)
+		return nil, false
+	}
+	v, ok := m.mu.ValueAt("ValuePtr", in, col)
+	if !ok || v == nil {
+		return nil, ok
+	}
+	x, ok := v.(V)
+	if !ok {
+		return nil, false
+	}
+	return &x, true
+}
+
+// mutSet is a handle's Assign (and a Null handle's AssignNull, with a nil
+// v): Mutation.Set of column col of entity E.
+func mutSet[E any](what string, m *Mutation, col int32, v any) error {
+	in, err := ownerOf[E]()
+	if err != nil {
+		m.mu.Record(err)
+		return err
+	}
+	return m.mu.SetAt(what, in, col, v)
+}
+
+// mutFill is a handle's Fill: Mutation.Fill of column col of entity E.
+func mutFill[E any](m *Mutation, col int32, v any) error {
+	in, err := ownerOf[E]()
+	if err != nil {
+		m.mu.Record(err)
+		return err
+	}
+	return m.mu.FillAt("Fill", in, col, v)
+}
+
+// rowValue is a handle's Get: Row.Value of column col of entity E, as a V;
+// the zero V for NULL.
+func rowValue[E, V any](r Row, col int32) V {
+	var zero V
+	in, err := ownerOf[E]()
+	if err != nil {
+		return zero
+	}
+	x, _ := engine.RowValueAt(r, "Get", in, col).(V)
+	return x
+}
+
+// rowPtr is a Null handle's GetPtr: rowValue as a fresh *V, nil for NULL.
+func rowPtr[E, V any](r Row, col int32) *V {
+	in, err := ownerOf[E]()
+	if err != nil {
+		return nil
+	}
+	x, ok := engine.RowValueAt(r, "GetPtr", in, col).(V)
+	if !ok {
+		return nil
+	}
+	return &x
+}
+
+// rowSet is a handle's Put (and a Null handle's PutNull, with a nil v):
+// Row.Set of column col of entity E.
+func rowSet[E any](what string, r Row, col int32, v any) error {
+	in, err := ownerOf[E]()
+	if err != nil {
+		return err
+	}
+	return engine.RowSetAt(r, what, in, col, v)
+}

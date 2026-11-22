@@ -47,6 +47,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   a NOT NULL column added to a table that exists with `''`, `0` or `false`
   as its default, as velox-gen gives a string, bool or number field with no
   Default (ADR 0090), says what the existing rows get.
+- Typed hook accessors on every column handle: `Value(m)`, `Assign(m, v)`
+  and `Fill(m, v)` on a `*Mutation`, and `Get(r)` and `Put(r, v)` on a
+  `Row`, so a run-time hook writes `T.Title.Value(m)` and
+  `T.Title.Assign(m, v)` where it wrote `m.Value("title")` and
+  `m.Set("title", v)`, and a value of the wrong type does not compile. The
+  Null handles add `ValuePtr`, `GetPtr`, `AssignNull` and `PutNull`. A
+  handle of another entity is a misuse, which fails the write. They are
+  methods of the shared handle types, not generated per entity; an entity
+  package's export data grows by about 1 KB.
 - Edge schemas, as ent's `edge.Through`: a many-to-many edge names a schema
   whose rows are its links, with an ID, fields and two Required to-one key
   edges. velox-gen generates it as any entity, adds the through edge and a

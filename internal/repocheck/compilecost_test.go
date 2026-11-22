@@ -289,7 +289,13 @@ var genericObjects = []struct {
 	// (GeneratedCodeIsVersion17): entityDescriptor took 136078 bytes, down from
 	// 287036 in the same worktree, entityDescUse 763846, down from 774634, and
 	// entityDescHooks 847422, down from 863410.
-	{"entityDescriptor", "", entityDescSrc, 142336}, // measured 141286 (Statement.Distinct, ADR 0102; was 141206)
+	// The handles' typed hook accessors (Value, Assign, Fill, Get, Put and
+	// the Null kinds' Ptr and Null forms) took entityDescriptor from 141360
+	// to 142374 bytes and entityDescUse from 775890 to 776888: about 1 KB a
+	// package, for Mutation and Row in the handles' method sets, whatever
+	// the entity's columns. The methods are lazy, so a handle's own cost
+	// (Col and the rest below) did not change.
+	{"entityDescriptor", "", entityDescSrc, 143360}, // measured 142374
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -361,7 +367,7 @@ var genericObjects = []struct {
 	// Query.Distinct, InsertQuery.UpdateAll and Statement.Distinct (ADR 0102)
 	// took entityDescUse from 771328 to 772452 bytes, entityDescHooks from
 	// 856428 to 857550 and entityDescMixin from 901728 to 902852.
-	{"entityDescUse", "", entityDescUseSrc, 776192},       // measured 772452
+	{"entityDescUse", "", entityDescUseSrc, 777216},       // measured 776888
 	{"entityDescHooks", "", entityDescHooksBound, 863232}, // measured 857550
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name

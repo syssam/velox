@@ -1179,6 +1179,24 @@ the DB. Inside it, `m.DB()` is the DB the write runs on, so inside `db.Tx`
 the audit row commits or rolls back with the write. See the
 [hooks example](../examples/hooks).
 
+A run-time hook can name the column handles, so it reads and writes columns
+by type rather than by name:
+
+```go
+T := veloxgen.Tasks
+title, ok := T.Title.Value(m)   // the update's title, a string
+err := T.Slug.Assign(m, slug(title)) // m.Set("slug", …)
+err = T.CreatedBy.Fill(m, user)      // m.Fill("created_by", user)
+for r := range m.Rows() {
+	err = T.Slug.Put(r, slug(T.Title.Get(r))) // r.Set and r.Value
+}
+```
+
+A value of the wrong type does not compile. A nullable column's handle adds
+`ValuePtr`, `GetPtr`, `AssignNull` and `PutNull`, which tell NULL apart. A
+handle of another entity is a misuse, which fails the write. The schema
+package cannot import `veloxgen`, so its hooks keep the names.
+
 A change log does not need a hook: a recording handle reports every row a
 write changes, with its old and new values. See
 [Recording changes](#recording-changes).

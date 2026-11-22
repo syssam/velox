@@ -78,6 +78,21 @@ func (c Col[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c Col[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
+// Value returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c Col[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c Col[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error { return mutSet[E]("Assign", m, c.I, v) }
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c Col[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.
+func (c Col[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c Col[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
 // TimeCol is the handle of a time column: a time field, of time.Time or a type defined on it. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type TimeCol[E, V any] struct{ I int32 }
 
@@ -186,6 +201,23 @@ func (c TimeCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c TimeCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c TimeCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c TimeCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c TimeCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.
+func (c TimeCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c TimeCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // OtherCol is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type OtherCol[E, V any] struct{ I int32 }
@@ -297,6 +329,23 @@ func (c OtherCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](c
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c OtherCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c OtherCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c OtherCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c OtherCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.
+func (c OtherCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c OtherCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // NumberCol is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NumberCol[E, V any] struct{ I int32 }
@@ -428,6 +477,23 @@ func (c NumberCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c NumberCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NumberCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NumberCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NumberCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.
+func (c NumberCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NumberCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // StringCol is the handle of a text column. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type StringCol[E any, V ~string] struct{ I int32 }
@@ -570,6 +636,23 @@ func (c StringCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c StringCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
 
+// Value returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c StringCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c StringCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c StringCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.
+func (c StringCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c StringCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
 // NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullCol[E, V any] struct{ I int32 }
 
@@ -664,6 +747,37 @@ func (c NullCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](
 
 // NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V { return changePtr[E, V](ch, ch.row.New, c.I) }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NullCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// ValuePtr is Value as a fresh pointer: nil for NULL.
+func (c NullCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool) { return mutValuePtr[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NullCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// AssignNull sets the column to NULL, as Assign sets a value.
+func (c NullCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error {
+	return mutSet[E]("AssignNull", m, c.I, nil)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NullCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.
+func (c NullCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// GetPtr is Get as a fresh pointer: nil for NULL.
+func (c NullCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V { return rowPtr[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NullCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
+// PutNull sets the column of the insert's row r to NULL, as Put sets a value.
+func (c NullCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }
 
 // NullTimeCol is TimeCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullTimeCol[E, V any] struct{ I int32 }
@@ -802,6 +916,39 @@ func (c NullTimeCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 func (c NullTimeCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NullTimeCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// ValuePtr is Value as a fresh pointer: nil for NULL.
+func (c NullTimeCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool) {
+	return mutValuePtr[E, V](m, c.I)
+}
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NullTimeCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// AssignNull sets the column to NULL, as Assign sets a value.
+func (c NullTimeCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error {
+	return mutSet[E]("AssignNull", m, c.I, nil)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NullTimeCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.
+func (c NullTimeCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// GetPtr is Get as a fresh pointer: nil for NULL.
+func (c NullTimeCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V { return rowPtr[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NullTimeCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
+// PutNull sets the column of the insert's row r to NULL, as Put sets a value.
+func (c NullTimeCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }
 
 // NullOtherCol is OtherCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullOtherCol[E, V any] struct{ I int32 }
@@ -944,6 +1091,39 @@ func (c NullOtherCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 func (c NullOtherCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NullOtherCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// ValuePtr is Value as a fresh pointer: nil for NULL.
+func (c NullOtherCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool) {
+	return mutValuePtr[E, V](m, c.I)
+}
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NullOtherCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// AssignNull sets the column to NULL, as Assign sets a value.
+func (c NullOtherCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error {
+	return mutSet[E]("AssignNull", m, c.I, nil)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NullOtherCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.
+func (c NullOtherCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// GetPtr is Get as a fresh pointer: nil for NULL.
+func (c NullOtherCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V { return rowPtr[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NullOtherCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
+// PutNull sets the column of the insert's row r to NULL, as Put sets a value.
+func (c NullOtherCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }
 
 // NullNumberCol is NumberCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullNumberCol[E, V any] struct{ I int32 }
@@ -1105,6 +1285,41 @@ func (c NullNumberCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 // NewPtr returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.
 func (c NullNumberCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
+}
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NullNumberCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// ValuePtr is Value as a fresh pointer: nil for NULL.
+func (c NullNumberCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool) {
+	return mutValuePtr[E, V](m, c.I)
+}
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NullNumberCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// AssignNull sets the column to NULL, as Assign sets a value.
+func (c NullNumberCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error {
+	return mutSet[E]("AssignNull", m, c.I, nil)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NullNumberCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.
+func (c NullNumberCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// GetPtr is Get as a fresh pointer: nil for NULL.
+func (c NullNumberCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V { return rowPtr[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NullNumberCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
+// PutNull sets the column of the insert's row r to NULL, as Put sets a value.
+func (c NullNumberCol[E, V]) PutNull[_ Lazy[V]](r Row) error {
+	return rowSet[E]("PutNull", r, c.I, nil)
 }
 
 // NullStringCol is StringCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
@@ -1279,6 +1494,41 @@ func (c NullStringCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
 
+// Value returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NullStringCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// ValuePtr is Value as a fresh pointer: nil for NULL.
+func (c NullStringCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool) {
+	return mutValuePtr[E, V](m, c.I)
+}
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NullStringCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// AssignNull sets the column to NULL, as Assign sets a value.
+func (c NullStringCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error {
+	return mutSet[E]("AssignNull", m, c.I, nil)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NullStringCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.
+func (c NullStringCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// GetPtr is Get as a fresh pointer: nil for NULL.
+func (c NullStringCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V { return rowPtr[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NullStringCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
+// PutNull sets the column of the insert's row r to NULL, as Put sets a value.
+func (c NullStringCol[E, V]) PutNull[_ Lazy[V]](r Row) error {
+	return rowSet[E]("PutNull", r, c.I, nil)
+}
+
 // JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column, and its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery and IsEmpty test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type JSONCol[E, V any] struct{ I int32 }
 
@@ -1332,6 +1582,23 @@ func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch
 
 // New returns the column's value in ch's new row, as Old does: the zero value for a delete. An insert's new row is the row as stored, read back with the insert: a key, a default, or a value the column rounds is as the database holds it.
 func (c JSONCol[E, V]) New[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.New, c.I) }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: false when it does not assign it with Set, and on a delete; on an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c JSONCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c JSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c JSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does. A row of another entity is a misuse, which fails the write.
+func (c JSONCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c JSONCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type NullJSONCol[E, V any] struct{ I int32 }
@@ -1411,3 +1678,36 @@ func (c NullJSONCol[E, V]) OldPtr[_ Lazy[V]](ch Change) *V {
 func (c NullJSONCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V {
 	return changePtr[E, V](ch, ch.row.New, c.I)
 }
+
+// Value returns the value the update m assigns to the column, as Mutation.Value does: the zero value for NULL, and false when it does not assign it with Set, and on a delete; ValuePtr tells NULL apart. On an insert, read the rows with Get. A mutation of another entity is a misuse, which fails the write.
+func (c NullJSONCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool) { return mutValue[E, V](m, c.I) }
+
+// ValuePtr is Value as a fresh pointer: nil for NULL.
+func (c NullJSONCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool) {
+	return mutValuePtr[E, V](m, c.I)
+}
+
+// Assign sets the column to v, as Mutation.Set does: in every row of an insert, or in an update's assignment, which it replaces; AssignNull sets NULL. On a delete, or on a mutation of another entity, it is a misuse, which is recorded and returned.
+func (c NullJSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error {
+	return mutSet[E]("Assign", m, c.I, v)
+}
+
+// AssignNull sets the column to NULL, as Assign sets a value.
+func (c NullJSONCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error {
+	return mutSet[E]("AssignNull", m, c.I, nil)
+}
+
+// Fill sets the column to v in each row of an insert that leaves it at its Go zero value (nil, for a nullable column), as Mutation.Fill does. On an update, a delete or a mutation of another entity it is a misuse, which is recorded and returned.
+func (c NullJSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error { return mutFill[E](m, c.I, v) }
+
+// Get returns the column's value in the insert's row r, as Row.Value does: the zero value for NULL; GetPtr tells NULL apart. A row of another entity is a misuse, which fails the write.
+func (c NullJSONCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
+
+// GetPtr is Get as a fresh pointer: nil for NULL.
+func (c NullJSONCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V { return rowPtr[E, V](r, c.I) }
+
+// Put sets the column of the insert's row r to v, as Row.Set does; PutNull sets NULL. In an Insert policy, or on a row of another entity, it is a misuse, which is recorded and returned.
+func (c NullJSONCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
+
+// PutNull sets the column of the insert's row r to NULL, as Put sets a value.
+func (c NullJSONCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }

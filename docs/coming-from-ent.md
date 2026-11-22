@@ -268,7 +268,11 @@ typed handle's `Pred[E]` into one. Its zero value fails the statement: it
 is a struct, not an interface, so it cannot be nil, and a policy that
 returns `velox.Predicate{}` with its error is refused, never read as
 "no condition". A hook reads and writes a row with `m.Value`, `m.Set` and `m.Fill`, and a
-policy's `Insert` reads it with `r.Value`. velox-gen refuses a constant name
+policy's `Insert` reads it with `r.Value`. A run-time hook, which can import
+the generated package, uses the handles instead, as ent's typed
+`m.Title()` and `m.SetTitle(v)`: `T.Title.Value(m)`, `T.Title.Assign(m, v)`,
+`T.Title.Fill(m, v)`, and `T.Title.Get(r)` and `Put(r, v)` on a row, where a
+value of the wrong type does not compile. velox-gen refuses a constant name
 the entity has no column of, at its line, and a constant value that does
 not fit the column; any other name the entity has no column of fails the
 statement. A velox interceptor is a row filter, not ent's query

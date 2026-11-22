@@ -35,18 +35,18 @@ func TestHandlesFileIsCurrent(t *testing.T) {
 func TestHandleMethodSets(t *testing.T) {
 	t.Parallel()
 	want := map[string]string{
-		"Col":           "Asc Count CountDistinct Desc EQ In InSelect Key NEQ New NotIn NotInSelect Old Select Set SetPtr column",
-		"TimeCol":       "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Select Set SetPtr column",
-		"OtherCol":      "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Select Set SetPtr column",
-		"NumberCol":     "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Select Set SetPtr Sub Sum column",
-		"StringCol":     "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect Key LT LTE Like Max Min NEQ New NotIn NotInSelect Old Select Set SetPtr column",
-		"NullCol":       "Asc Count CountDistinct Desc EQ In InSelect IsNull Key NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull SetPtr column",
-		"NullTimeCol":   "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull SetPtr column",
-		"NullOtherCol":  "Asc Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull SetPtr column",
-		"NullNumberCol": "Add Asc Avg Between Count CountDistinct Desc EQ GT GTE In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull SetPtr Sub Sum column",
-		"NullStringCol": "Asc Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold GT GTE HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Select Set SetNull SetPtr column",
-		"JSONCol":       "Bool Has HasEvery HasKey HasSome IsEmpty New Number Old Set SetPtr Text column",
-		"NullJSONCol":   "Bool Has HasEvery HasKey HasSome IsEmpty IsNull New NewPtr NotNull Number Old OldPtr Set SetNull SetPtr Text column",
+		"Col":           "Asc Assign Count CountDistinct Desc EQ Fill Get In InSelect Key NEQ New NotIn NotInSelect Old Put Select Set SetPtr Value column",
+		"TimeCol":       "Asc Assign Between Count CountDistinct Desc EQ Fill GT GTE Get In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Put Select Set SetPtr Value column",
+		"OtherCol":      "Asc Assign Between Count CountDistinct Desc EQ Fill GT GTE Get In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Put Select Set SetPtr Value column",
+		"NumberCol":     "Add Asc Assign Avg Between Count CountDistinct Desc EQ Fill GT GTE Get In InSelect Key LT LTE Max Min NEQ New NotIn NotInSelect Old Put Select Set SetPtr Sub Sum Value column",
+		"StringCol":     "Asc Assign Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold Fill GT GTE Get HasPrefix HasSuffix In InSelect Key LT LTE Like Max Min NEQ New NotIn NotInSelect Old Put Select Set SetPtr Value column",
+		"NullCol":       "Asc Assign AssignNull Count CountDistinct Desc EQ Fill Get GetPtr In InSelect IsNull Key NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Value ValuePtr column",
+		"NullTimeCol":   "Asc Assign AssignNull Between Count CountDistinct Desc EQ Fill GT GTE Get GetPtr In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Value ValuePtr column",
+		"NullOtherCol":  "Asc Assign AssignNull Between Count CountDistinct Desc EQ Fill GT GTE Get GetPtr In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Value ValuePtr column",
+		"NullNumberCol": "Add Asc Assign AssignNull Avg Between Count CountDistinct Desc EQ Fill GT GTE Get GetPtr In InSelect IsNull Key LT LTE Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Sub Sum Value ValuePtr column",
+		"NullStringCol": "Asc Assign AssignNull Between Contains ContainsFold Count CountDistinct Desc EQ EqualFold Fill GT GTE Get GetPtr HasPrefix HasSuffix In InSelect IsNull Key LT LTE Like Max Min NEQ New NewPtr NotIn NotInSelect NotNull Old OldPtr Put PutNull Select Set SetNull SetPtr Value ValuePtr column",
+		"JSONCol":       "Assign Bool Fill Get Has HasEvery HasKey HasSome IsEmpty New Number Old Put Set SetPtr Text Value column",
+		"NullJSONCol":   "Assign AssignNull Bool Fill Get GetPtr Has HasEvery HasKey HasSome IsEmpty IsNull New NewPtr NotNull Number Old OldPtr Put PutNull Set SetNull SetPtr Text Value ValuePtr column",
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(repoRoot(), "handles.go"), nil, parser.SkipObjectResolution)
 	if err != nil {

@@ -150,3 +150,54 @@ func group(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[f
 		}
 	}
 }
+
+// TestTypedHookAccessorsAtCompileTime: a hook's typed accessors take and
+// return the column's type, so a value of another type does not compile.
+func TestTypedHookAccessorsAtCompileTime(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("type-checks the module from source; run without -short")
+	}
+	const head = `package snippet
+
+import (
+	"time"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+)
+
+var I = testmodel.Invoices
+
+func hook(m *velox.Mutation, r velox.Row) {
+`
+	good := head + `	var total float64
+	total, _ = I.Total.Value(m)
+	_ = I.Total.Assign(m, total)
+	_ = I.Note.Fill(m, "x")
+	var n string = I.Number.Get(r)
+	_ = I.Number.Put(r, n)
+	var p *time.Time
+	p, _ = I.PaidAt.ValuePtr(m)
+	p = I.PaidAt.GetPtr(r)
+	_ = p
+	_ = I.PaidAt.AssignNull(m)
+	_ = I.PaidAt.PutNull(r)
+}
+`
+	if errs := typeCheck(t, good); len(errs) != 0 {
+		t.Fatalf("the control does not compile: %q", errs)
+	}
+	for _, bad := range []string{
+		`_ = I.Total.Assign(m, "x")`,
+		`_ = I.Note.Fill(m, 1)`,
+		`_ = I.Number.Put(r, 5)`,
+		`var s string; s, _ = I.Total.Value(m); _ = s`,
+		`var i int = I.Number.Get(r); _ = i`,
+		`_ = I.PaidAt.Assign(m, "x")`,
+	} {
+		if errs := typeCheck(t, head+"\t"+bad+"\n}\n"); len(errs) == 0 {
+			t.Errorf("%s compiles", bad)
+		}
+	}
+}

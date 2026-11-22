@@ -173,15 +173,17 @@ func run(ctx context.Context, w io.Writer) error {
 // auditRename writes an Audit row when an update renames a task, after the
 // update succeeded, on the write's DB: inside db.Tx it commits or rolls back
 // with the update. It is a run-time hook because it inserts a veloxgen.Audit,
-// which the schema cannot name. Under SQL(ctx) the insert is refused with
-// velox.ErrDryRun, so printing the statement records nothing.
+// which the schema cannot name. Being one, it reads the title through its
+// handle, as a string: Title.Value(m) of another type would not compile.
+// Under SQL(ctx) the insert is refused with velox.ErrDryRun, so printing the
+// statement records nothing.
 func auditRename(next velox.Mutator) velox.Mutator {
 	return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
-		title, renamed := m.Value("title")
+		title, renamed := veloxgen.Tasks.Title.Value(m)
 		if err := next.Mutate(ctx, m); err != nil || !renamed {
 			return err
 		}
-		a := veloxgen.Audit{Actor: auth.UserFromContext(ctx), Message: "renamed a task to " + title.(string)}
+		a := veloxgen.Audit{Actor: auth.UserFromContext(ctx), Message: "renamed a task to " + title}
 		return m.DB().Insert(&a).Exec(ctx)
 	})
 }
