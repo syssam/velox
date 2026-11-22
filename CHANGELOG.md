@@ -1305,6 +1305,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   which run SQL from a string, and an `@` right before a name, a MySQL
   variable such as `@@version`. PostgreSQL's `@@` and `@>` operators pass
   when a space follows them.
+- A field that holds the column of the foreign key velox adds for an edge
+  is reported at that edge's line, names the edge and says how to bind
+  the field: `.Field("x")` on the edge, or an inverse edge on the field's
+  schema when the edge is the other schema's to-many edge.
 - Every problem velox-gen reports has its file:line: a builder misuse or
   a panic at the line of the method that returned it, an error of the
   schema as a whole at the line of its type, of an implicit foreign key at

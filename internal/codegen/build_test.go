@@ -951,6 +951,18 @@ func (fkUnbound) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", fkUnbound.Type).Unique()}
 }
 
+type fkListOwner struct{ schema.Schema }
+
+func (fkListOwner) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("things", fkListThing.Type)}
+}
+
+type fkListThing struct{ schema.Schema }
+
+func (fkListThing) Fields() []schema.Field {
+	return []schema.Field{field.Int64("fk_list_owner_things").Optional().Nillable()}
+}
+
 type fieldStringFK struct{ schema.Schema }
 
 func (fieldStringFK) Fields() []schema.Field {
@@ -1188,7 +1200,8 @@ func TestBuildRules(t *testing.T) {
 	}{
 		{"1 duplicate field", []schema.Interface{dupField{}}, `schema dupField: field "a": declared twice`},
 		{"2 duplicate column", []schema.Interface{dupColumn{}}, `schema dupColumn: field "b": column "a" is also field "a"'s`},
-		{"2 unbound foreign key", []schema.Interface{fkUnbound{}}, `schema fkUnbound: field "fk_unbound_parent": column "fk_unbound_parent" is also field "fk_unbound_parent"'s; bind it with edge.Field(...)`},
+		{"2 unbound foreign key", []schema.Interface{fkUnbound{}}, `schema fkUnbound: field "fk_unbound_parent": column "fk_unbound_parent" is also the foreign key velox adds for fkUnbound's edge "parent"; bind it with .Field("fk_unbound_parent") on that edge`},
+		{"2 unbound foreign key of a to-many edge", []schema.Interface{fkListOwner{}, fkListThing{}}, `schema fkListThing: field "fk_list_owner_things": column "fk_list_owner_things" is also the foreign key velox adds for fkListOwner's edge "things"; bind it with an inverse edge on fkListThing, edge.From(...).Ref("things").Unique().Field("fk_list_owner_things"), or rename the field`},
 		{"3 duplicate edge", []schema.Interface{dupEdge{}}, `schema dupEdge: edge "e": declared twice`},
 		{"4 edge go name", []schema.Interface{edgeGoName{}}, `schema edgeGoName: edge "owner": its Go name Owner is also field "owner"'s`},
 		{"5 unknown target", []schema.Interface{unknownTarget{}}, `schema unknownTarget: edge "x": type notSchema is not a schema of this package`},
@@ -1343,7 +1356,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
-		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {loop{}}, {Man{}}, {cycle{}},
+		{fkUnbound{}}, {fkListOwner{}, fkListThing{}}, {fieldStringFK{}}, {immutableEdge{}}, {loop{}}, {Man{}}, {cycle{}},
 		{odM2M{}, odM2M2{}}, {odSetNullRequired{}, odSetNullTarget{}}, {odDiffOwner{}, odDiffPet{}},
 		{optionalEnum{}}, {optionalFK{}},
 		{nsOrder{}, nsOrderStatus{}}, {longTable{}}, {longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}},

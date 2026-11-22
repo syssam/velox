@@ -1156,13 +1156,39 @@ func (b *builder) uniqueFields(e *Entity) {
 		if first.Name == f.Name && first.Implicit == "" && f.Implicit == "" {
 			continue // rule 1
 		}
-		reason := fmt.Sprintf("column %q is also field %q's", f.Column, first.Name)
-		if isDeclared(first) && f.Implicit != "" || isDeclared(f) && first.Implicit != "" {
+		if s, decl := b.implicitClash(first, f); s != nil {
 			// The foreign key of an edge is declared but not bound to it.
-			reason += "; bind it with edge.Field(...)"
+			b.fail(2, e.Name, loc{fieldAt(decl.Name), s.ed.Pos}, "%s", unboundKey(e, s, decl))
+			continue
 		}
-		b.fail(2, e.Name, fieldLoc(f), "%s", reason)
+		b.fail(2, e.Name, fieldLoc(f), "column %q is also field %q's", f.Column, first.Name)
 	}
+}
+
+// implicitClash returns, when one of the two fields that share a column is
+// a declared field and the other the foreign key velox adds for an edge,
+// that edge and the declared field.
+func (b *builder) implicitClash(x, y *Field) (*edgeState, *Field) {
+	switch {
+	case isDeclared(x) && y.Implicit != "":
+		return b.implicits[y], x
+	case isDeclared(y) && x.Implicit != "":
+		return b.implicits[x], y
+	}
+	return nil, nil
+}
+
+// unboundKey is the reason of a declared field of e that shares its column
+// with the foreign key velox adds for the edge s: it says how to bind it.
+func unboundKey(e *Entity, s *edgeState, decl *Field) string {
+	owner := s.owner.ent.Name
+	reason := fmt.Sprintf("column %q is also the foreign key velox adds for %s's edge %q; ", decl.Column, owner, s.ed.Name)
+	if s.owner.ent == e {
+		return reason + fmt.Sprintf("bind it with .Field(%q) on that edge", decl.Name)
+	}
+	// The key is in e's table, the target's: the edge that binds it is an
+	// inverse edge on e.
+	return reason + fmt.Sprintf("bind it with an inverse edge on %s, edge.From(...).Ref(%q).Unique().Field(%q), or rename the field", e.Name, s.ed.Name, decl.Name)
 }
 
 // validateField checks the rules of one field f of e on its defaults,
