@@ -562,9 +562,12 @@ func CountStmt(ctx context.Context, db *DB, st Statement) (int64, error) {
 		err = db.Run(ctx, &c.St, func(r Rows) error { return ReadCount(c, r) }, nil)
 		n = c.N
 	} else {
-		c := CountRun{St: st}
-		err = db.Plain(ctx, &c.St, func(r Rows) error { return ReadCount(&c, r) }, nil)
-		n = c.N
+		// The count is scanned into a variable apart from st: Scan's
+		// destination escapes, and a CountRun's N would take its Statement
+		// to the heap.
+		var cnt int64
+		err = db.Plain(ctx, &st, func(r Rows) error { return scanCount(&cnt, r) }, nil)
+		n = cnt
 	}
 	if err != nil {
 		return 0, err

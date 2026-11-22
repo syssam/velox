@@ -264,10 +264,14 @@ type CountRun struct {
 }
 
 // ReadCount reads a count's one row from r into c.N, which stays 0 when r has none.
-func ReadCount(c *CountRun, r Rows) error {
-	c.N = 0
+func ReadCount(c *CountRun, r Rows) error { return scanCount(&c.N, r) }
+
+// scanCount reads a count's one row from r into *n, which stays 0 when r
+// has none.
+func scanCount(n *int64, r Rows) error {
+	*n = 0
 	if r.Next() {
-		return r.Scan(&c.N)
+		return r.Scan(n)
 	}
 	return nil
 }
