@@ -82,19 +82,24 @@ touches them. The change is every file that differs from the merge base with
 `main`, committed or not. `scripts/ci-changes.sh` reads it and prints the
 groups:
 
-| Group | Its lanes | Touched by |
+| Group | Its lanes | Its own files |
 |---|---|---|
-| `graphql` | `graphql`, `examples_graphql`, `root_graphql`, `scale_graphql`, `gqlgen_latest` | `contrib/graphql/**`, `examples/graphql/**`, `scripts/gqlgen-latest.sh`, `schema/**`, `internal/tempmod/**`, `bench/scale/**`, `scripts/scale-check.sh` |
-| `otel` | `veloxotel`, `examples_otel` | `contrib/veloxotel/**`, `examples/otel/**`, `internal/testmodel/**` |
+| `graphql` | `graphql`, `examples_graphql`, `root_graphql`, `scale_graphql`, `gqlgen_latest` | `contrib/graphql/**`, `examples/graphql/**`, `scripts/gqlgen-latest.sh`, `bench/scale/**`, `scripts/scale-check.sh` |
+| `otel` | `veloxotel`, `examples_otel` | `contrib/veloxotel/**`, `examples/otel/**` |
 | `bench` | `bench_compare`, then `scripts/bench-compare.sh` | `bench/**`, `scripts/bench-compare.sh` |
 
-`graphql` and `otel` also run on a change to what both contrib modules
-compile against: `internal/repocheck/testdata/api.txt` (an exported name),
-`plugin/**`, `internal/codegen/**`, `scope/**`, `veloxpgx/**`, the root's
-`go.mod` or `go.sum`, or the line that declares `GeneratedCodeIsVersionN`. A
-change to the CI itself (`ci.yml`, `ci-local.sh`, `ci-changes.sh`,
-`docker-compose.ci.yml`) runs all three. The header of `scripts/ci-changes.sh`
-has the rules.
+A group also runs on a change to a package its modules build from, which
+`ci-changes.sh` derives with `go list -deps`: a non-test `.go` file in the
+directory of such a package, or a file it embeds. `graphql`'s packages are
+those of `contrib/graphql`'s and `examples/graphql`'s packages and tests, and
+of velox-gen and the root module's public packages, which its tests build in
+temporary modules; `otel`'s, those of `contrib/veloxotel` and
+`examples/otel`; `bench`'s, those of `bench/compare`, and of velox-gen and
+the public packages. The root's `go.mod` and `go.sum` run all three, the
+examples' run `graphql` and `otel`, and so does the line that declares
+`GeneratedCodeIsVersionN`. A change to the CI itself (`ci.yml`,
+`ci-local.sh`, `ci-changes.sh`, `docker-compose.ci.yml`) runs all three. The
+header of `scripts/ci-changes.sh` has the rules.
 
 `--full` runs every group, and two checks the merge gate leaves out: the
 root's tests with `-coverpkg=./...` and a coverage profile, in place of the
@@ -175,7 +180,8 @@ tests measure coverage, and the floors are checked.
 `TestCILocalMirrorsCI` fails when the two scripts stop running the same
 commands in the same directories at the same levels. `TestCIGateIsTheORM`
 fails when the merge gate loses an ORM check or a contrib test joins it, and
-`TestCIChangesGroups` checks `ci-changes.sh`'s rules.
+`TestCIChangesGroups` and `TestCIChangesDerivesGroups` check
+`ci-changes.sh`'s rules.
 
 The script removes its containers on exit. It does not push.
 

@@ -21,7 +21,7 @@ jobs:
   # on a pull request those its files touch.
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       graphql: ${{ steps.groups.outputs.graphql }}
       otel: ${{ steps.groups.outputs.otel }}
@@ -30,6 +30,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0 # the pull request's base, which ci-changes.sh compares with
+      # ci-changes.sh derives each group's files with go list.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
       - id: groups
         env:
           BASE: ${{ github.event.pull_request.base.sha }}

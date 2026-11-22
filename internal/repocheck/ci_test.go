@@ -404,7 +404,9 @@ func TestCIGateIsTheORM(t *testing.T) {
 
 // TestCIGroupsAreCIChanges: the groups the two scripts name are the ones
 // scripts/ci-changes.sh prints, and ci.yml's changes job has an output for
-// each.
+// each. ci-changes.sh derives each group's files from go list in every
+// module a lane of the group runs in, but the root's, whose group files it
+// names by path.
 func TestCIGroupsAreCIChanges(t *testing.T) {
 	t.Parallel()
 	read := func(name string) string {
@@ -420,6 +422,15 @@ func TestCIGroupsAreCIChanges(t *testing.T) {
 	}
 	if !slices.Equal(printed, groups) {
 		t.Errorf("%s prints %v, want %v", ciChanges, printed, groups)
+	}
+	derived := map[string]bool{} // group and module directory
+	for _, m := range regexp.MustCompile(`(?m)^\s*(\w+)_deps\+=\$\(deps ([\w./-]+) `).FindAllStringSubmatch(read(ciChanges), -1) {
+		derived[m[1]+" "+m[2]] = true
+	}
+	for _, l := range scriptLines(t, ciWorkflow) {
+		if slices.Contains(groups, l.level) && l.dir != "." && ciCommand.MatchString(l.text) && !derived[l.level+" "+l.dir] {
+			t.Errorf("%s: a %s lane runs in %s, from which %s derives no files for %s", l.where, l.level, l.dir, ciChanges, l.level)
+		}
 	}
 	workflow := read(ciWorkflow)
 	for _, g := range groups {
