@@ -50,7 +50,6 @@ func TestAnnotationMisuse(t *testing.T) {
 		wants []string
 	}{
 		{"OrderField on a sensitive field", anns{secret: graphql.OrderField("SECRET")}, []string{"schema User, field secret", "graphql.OrderField", "sensitive"}},
-		{"OrderField on an edge", anns{posts: graphql.OrderField("POSTS")}, []string{"schema User, edge posts", "graphql.OrderField"}},
 		{"OrderField on a schema", anns{user: graphql.OrderField("X")}, []string{"schema User:", "graphql.OrderField"}},
 		{"Mutations on a field", anns{name: graphql.Mutations()}, []string{"schema User, field name", "graphql.Mutations"}},
 		{"Mutations on an edge", anns{posts: graphql.Mutations()}, []string{"schema User, edge posts", "graphql.Mutations"}},

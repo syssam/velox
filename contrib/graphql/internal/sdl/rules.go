@@ -31,7 +31,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		{"graphql.MultiOrder", a.MultiOrder, onSchema},
 		{"graphql.Resolvers", len(a.Resolvers) > 0, onSchema},
 		{"graphql.FieldName", a.FieldName != "", onField + " " + onEdge},
-		{"graphql.OrderField", a.OrderField != "", onField},
+		{"graphql.OrderField", a.OrderField != "", onField + " " + onEdge},
 		{"graphql.OrderUnguarded", a.OrderUnguarded, onField},
 		{"graphql.OrderVia", len(a.OrderVia) > 0, onEdge},
 		{"graphql.WhereOps", a.WhereOps != 0, onField},

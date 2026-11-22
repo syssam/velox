@@ -203,6 +203,11 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	if t.Order != nil {
 		f.p("\tOrder: []%s.Column{", impl)
 		for _, v := range t.Order {
+			if v.Count {
+				// The number of a to-many edge's nodes: no column.
+				f.p("\t\t{Name: %q, Index: -1, Edge: %s + 1, Target: %s.TableOf[%s], Count: true},", v.Value, edgeConst(e, e.Edges[v.Edge-1]), f.untyped(), v.Target.Name)
+				continue
+			}
 			fd, _ := orderField(e, v)
 			if v.Edge == 0 {
 				if err := r.checkTerm(e, fd); err != nil {

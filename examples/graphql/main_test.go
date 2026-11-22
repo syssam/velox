@@ -347,6 +347,66 @@ func TestOrderAndWhere(t *testing.T) {
 	})
 }
 
+// countCursor is the cursor of user key under orderBy {field: POSTS_COUNT,
+// direction: dir}: the count is not in the row, so it holds null.
+func countCursor(key int64, dir veloxgql.OrderDirection) string {
+	s, err := veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: key, Terms: []veloxgql.CursorTerm{{Field: "POSTS_COUNT", Direction: dir}}})
+	if err != nil {
+		panic(err) // the type and the key are given
+	}
+	return s
+}
+
+// TestOrderByCount orders users by their number of posts, POSTS_COUNT: a
+// subquery under the posts' org scope, so acme counts Ada's two posts and
+// globex only her one there. A tie is broken by the key; the next page
+// compares each row's count with the cursor row's, computed from its key.
+func TestOrderByCount(t *testing.T) {
+	s := newServer(t)
+	const q = `query($after: Cursor, $dir: OrderDirection!) {
+		users(first: 2, after: $after, orderBy: {field: POSTS_COUNT, direction: $dir}) {
+			totalCount edges { node { name } } pageInfo { hasNextPage endCursor }
+		}
+	}`
+	const count = `(SELECT COUNT(*) FROM "posts" AS "vx1" WHERE "vx1"."author_id" = %s AND "org_id" = ?)`
+	desc, asc := veloxgql.OrderDirectionDesc, veloxgql.OrderDirectionAsc
+	s.do(t, request{
+		org:   "1",
+		query: q,
+		vars:  map[string]any{"dir": "DESC"},
+		want: fmt.Sprintf(`{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Ada"}}, {"node": {"name": "Brian"}}],
+			"pageInfo": {"hasNextPage": true, "endCursor": %q}}}}`, countCursor(2, desc)),
+		stmts: []string{
+			`SELECT COUNT(*) FROM "users" []`,
+			`SELECT "id", "name" FROM "users" ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + ` DESC, "id" LIMIT 3 [1]`,
+		},
+	})
+	s.do(t, request{
+		org:   "1",
+		query: q,
+		vars:  map[string]any{"dir": "DESC", "after": countCursor(2, desc)},
+		want:  `{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Chen"}}], "pageInfo": {"hasNextPage": false, "endCursor": ` + fmt.Sprintf("%q", countCursor(3, desc)) + `}}}}`,
+		stmts: []string{
+			`SELECT COUNT(*) FROM "users" []`,
+			`SELECT "id", "name" FROM "users" WHERE ((` + fmt.Sprintf(count, `"users"."id"`) + ` < ` + fmt.Sprintf(count, `?`) + `) OR ((` +
+				fmt.Sprintf(count, `"users"."id"`) + ` = ` + fmt.Sprintf(count, `?`) + `) AND "id" > ?)) ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + ` DESC, "id" LIMIT 3 [1 2 1 1 2 1 2 1]`,
+		},
+	})
+	// Globex: Brian and Chen have none, Ada one; ascending, the tie of 0 by
+	// the key.
+	s.do(t, request{
+		org:   "2",
+		query: q,
+		vars:  map[string]any{"dir": "ASC"},
+		want: fmt.Sprintf(`{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Brian"}}, {"node": {"name": "Chen"}}],
+			"pageInfo": {"hasNextPage": true, "endCursor": %q}}}}`, countCursor(3, asc)),
+		stmts: []string{
+			`SELECT COUNT(*) FROM "users" []`,
+			`SELECT "id", "name" FROM "users" ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + `, "id" LIMIT 3 [2]`,
+		},
+	})
+}
+
 // nestedQuery reads edge connections two levels down under users(first:
 // $n), the many-to-many Tags among them.
 const nestedQuery = `query($n: Int) { users(first: $n, orderBy: {field: NAME}) { edges { node {
@@ -623,7 +683,7 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 				{"name": "role"}, {"name": "roleNEQ"}, {"name": "roleIn"}, {"name": "roleNotIn"},
 				{"name": "hasPosts"}, {"name": "hasPostsWith"}
 			]},
-			"order": {"enumValues": [{"name": "NAME"}, {"name": "JOINED_AT"}]},
+			"order": {"enumValues": [{"name": "NAME"}, {"name": "JOINED_AT"}, {"name": "POSTS_COUNT"}]},
 			"post": {"fields": [{"name": "id"}, {"name": "title"}, {"name": "status"}, {"name": "views"}, {"name": "publishedAt"}, {"name": "keywords"}, {"name": "author"}, {"name": "tags"}]},
 			"tag": null
 		}}`,

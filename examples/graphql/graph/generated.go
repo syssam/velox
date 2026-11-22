@@ -1035,6 +1035,8 @@ input UserOrder {
 enum UserOrderField {
   NAME
   JOINED_AT
+  """Orders by the number of posts of each User, counting only those the reader may see."""
+  POSTS_COUNT
 }
 
 """Filters User nodes: a node matches when every predicate given holds."""

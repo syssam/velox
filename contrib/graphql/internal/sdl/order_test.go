@@ -189,3 +189,70 @@ func TestOrderVia(t *testing.T) {
 	f.Annotations = ann(t, graphql.OrderVia("name", "X"))
 	renderErr(t, model(entity("User", f)), "graphql.OrderVia", "an edge")
 }
+
+// graphql.OrderField on a to-many edge orders a connection by the number of
+// the edge's nodes, as entgql's POSTS_COUNT.
+func TestOrderCount(t *testing.T) {
+	build := func(edgeAnn []graphql.Annotation, mutate func(user, post *plugin.Entity, edge *plugin.Edge)) *plugin.Model {
+		name := field("name", "string")
+		name.Annotations = ann(t, graphql.OrderField("NAME"))
+		user := entity("User", name)
+		user.Annotations = ann(t, graphql.QueryField("users"))
+		post := entity("Post", field("title", "string"))
+		post.Annotations = ann(t, graphql.QueryField("posts"))
+		posts := edge("posts", plugin.O2M, "Post")
+		posts.Annotations = ann(t, edgeAnn...)
+		user.Edges = []*plugin.Edge{posts}
+		if mutate != nil {
+			mutate(user, post, posts)
+		}
+		return model(post, user)
+	}
+	count := []graphql.Annotation{graphql.OrderField("POSTS_COUNT")}
+	s, text := load(t, build(count, nil))
+	var values []string
+	for _, v := range s.Types["UserOrderField"].EnumValues {
+		values = append(values, v.Name)
+	}
+	if want := []string{"NAME", "POSTS_COUNT"}; !slices.Equal(values, want) {
+		t.Errorf("UserOrderField: %v, want %v", values, want)
+	}
+	if d := s.Types["UserOrderField"].EnumValues.ForName("POSTS_COUNT").Description; !strings.HasPrefix(d, CountOrderDoc+"posts of each User") {
+		t.Errorf("POSTS_COUNT's description: %q\n%s", d, text)
+	}
+	surface, err := Build(build(count, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ty := range surface.Types {
+		if ty.Name == "User" {
+			if v := ty.Order[1]; v.Value != "POSTS_COUNT" || !v.Count || v.Edge != 1 || v.Field != -1 || v.Target == nil || v.Target.Name != "Post" {
+				t.Errorf("the surface's value: %+v", v)
+			}
+		}
+	}
+	// A many-to-many edge counts too, and a type whose only value is a count
+	// has an order.
+	m := build(count, func(user, _ *plugin.Entity, e *plugin.Edge) { e.Kind, user.Fields[1].Annotations = plugin.M2M, nil })
+	if s, _ = load(t, m); s.Types["UserOrderField"] == nil || len(s.Types["UserOrderField"].EnumValues) != 1 {
+		t.Errorf("a count alone, many-to-many: %+v", s.Types["UserOrderField"])
+	}
+
+	for _, c := range []struct {
+		name   string
+		edge   []graphql.Annotation
+		mutate func(user, post *plugin.Entity, edge *plugin.Edge)
+		want   []string
+	}{
+		{"a to-one edge", count, func(_, _ *plugin.Entity, e *plugin.Edge) { e.Unique, e.Kind = true, plugin.O2O }, []string{"schema User, edge posts", "to-one", "OrderVia"}},
+		{"an enum value that is not one", []graphql.Annotation{graphql.OrderField("by-count")}, nil, []string{`"by-count"`}},
+		{"a value that clashes with an own value", []graphql.Annotation{graphql.OrderField("NAME")}, nil, []string{"both order by", `"NAME"`}},
+		{"an edge with an application directive", append(slices.Clone(count), graphql.Directives(graphql.Directive{Name: "auth"})), nil, []string{"edge posts", "@auth"}},
+		{"an edge the type leaves out", append(slices.Clone(count), graphql.Skip()), nil, []string{"edge posts", "leaves out"}},
+		{"an edge to a type that is skipped", count, func(_, post *plugin.Entity, _ *plugin.Edge) { post.Annotations = ann(t, graphql.Skip()) }, []string{"edge posts", "no GraphQL type"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			renderErr(t, build(c.edge, c.mutate), c.want...)
+		})
+	}
+}

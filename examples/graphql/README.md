@@ -21,7 +21,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
 
 1. The schema, `veloxschema/schema.go`, with `graphql.*` annotations from
    `github.com/syssam/velox/contrib/graphql`: `QueryField` makes a root
-   connection, `OrderField` an `orderBy` value, `WhereOps` and `WhereEdge`
+   connection, `OrderField` an `orderBy` value (on the edge `posts`,
+   `POSTS_COUNT`, the number of a user's posts), `WhereOps` and `WhereEdge`
    the predicates of the `where` input, `MultiOrder` a list `orderBy`, and
    `Type` renames an entity's GraphQL type (`Tag` is `Label`), and
    `Mutations` the mutation inputs (`CreatePostInput`, `UpdatePostInput`,
@@ -378,6 +379,7 @@ gqlgen only).
 | an ID that is no integer (`authorID: "Ada"`) | a `BAD_USER_INPUT` error, and no query |
 | `first`/`after`, `last`/`before` | keyset pages, `n+1` rows read for `hasNextPage`/`hasPreviousPage` |
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
+| `users(orderBy: {field: POSTS_COUNT})` | `ORDER BY (SELECT COUNT(*) FROM "posts" … AND "org_id" = ?), "id"`: only the organization's posts count, and the next page computes the cursor row's count from its key |
 | nested edges, `Post.tags` many-to-many | one statement per edge per level, whatever the parents: a `ROW_NUMBER()` window for the pages, a `GROUP BY` for `totalCount` |
 | a page's fields | only their columns, the key, the foreign keys and the order fields' columns: never `password_hash` |
 | `initials`, the application's own field on `User` (`graph/app.graphql`) | every column, since velox-graphql cannot see what its resolver reads |

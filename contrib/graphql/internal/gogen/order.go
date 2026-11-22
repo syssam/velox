@@ -30,6 +30,16 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p("// The values of %sOrderField.", n)
 	f.p("const (")
 	for _, v := range t.Order {
+		if v.Count {
+			ed := e.Edges[v.Edge-1]
+			c := n + "OrderField" + ed.GoName + "Count"
+			if err := r.declare(c, what+", edge "+ed.Name); err != nil {
+				return err
+			}
+			f.p("\t// %s orders by the number of nodes of the edge %s.", c, ed.Name)
+			f.p("\t%s %sOrderField = %q", c, n, v.Value)
+			continue
+		}
 		fd, via := orderField(e, v)
 		c := n + "OrderField" + via + fd.GoName
 		label := fd.Name

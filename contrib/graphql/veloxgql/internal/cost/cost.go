@@ -30,6 +30,12 @@ const statementCost = 100
 // Contains over 90000 rows took 12.5 s, and the default MaxCost allows about 70.
 const scanCost = 20 * statementCost
 
+// countOrderDoc starts the description velox-graphql gives a value of an
+// XOrderField that orders by the number of a to-many edge's nodes
+// (graphql.OrderField on the edge): a subquery for each row read, as
+// has<Edge>With's, so ordering by it adds scanCost.
+const countOrderDoc = "Orders by the number of "
+
 // stringUnit is the bytes of a string in an input that cost one more: the default
 // MaxCost allows 19 MB of them, each use counted.
 const stringUnit = 128
@@ -479,8 +485,22 @@ func (c *coster) size(v *ast.Value, d *ast.Definition) int64 {
 		return n
 	case ast.StringValue, ast.BlockValue:
 		return 1 + int64(len(v.Raw))/stringUnit
+	case ast.EnumValue:
+		return 1 + countScan(d, v.Raw)
 	}
 	return 1
+}
+
+// countScan is scanCost when value is a value of the enum d that orders by
+// the number of an edge's nodes (countOrderDoc); else 0.
+func countScan(d *ast.Definition, value string) int64 {
+	if d == nil || d.Kind != ast.Enum {
+		return 0
+	}
+	if ev := d.EnumValues.ForName(value); ev != nil && strings.HasPrefix(ev.Description, countOrderDoc) {
+		return scanCost
+	}
+	return 0
 }
 
 // sizeOf is size of a variable's value.
@@ -510,7 +530,7 @@ func (c *coster) sizeOf(v reflect.Value, d *ast.Definition) int64 {
 			n = add(n, c.sizeOf(v.Index(i), d))
 		}
 	case reflect.String:
-		n = 1 + int64(v.Len())/stringUnit
+		n = 1 + int64(v.Len())/stringUnit + countScan(d, v.String())
 	default:
 		n = 1
 	}

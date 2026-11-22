@@ -155,6 +155,7 @@ var userType = gqlgraph.Type{
 	Order: []gqlgraph.Column{
 		{Name: "NAME", Index: userColName},
 		{Name: "JOINED_AT", Index: userColJoinedAt},
+		{Name: "POSTS_COUNT", Index: -1, Edge: userEdgePosts + 1, Target: untyped.TableOf[Post], Count: true},
 	},
 	AlwaysRead: []int{userColID},
 	Fields: []string{
@@ -202,6 +203,8 @@ const (
 	UserOrderFieldName UserOrderField = "NAME"
 	// UserOrderFieldJoinedAt orders by the field joined_at.
 	UserOrderFieldJoinedAt UserOrderField = "JOINED_AT"
+	// UserOrderFieldPostsCount orders by the number of the edge posts's nodes.
+	UserOrderFieldPostsCount UserOrderField = "POSTS_COUNT"
 )
 
 // IsValid reports whether o is a value of UserOrderField.

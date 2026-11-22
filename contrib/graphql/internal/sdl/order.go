@@ -13,6 +13,7 @@ type order struct {
 	fields  []int            // the index of each value's field, in the entity's Fields, or its edge target's
 	edges   []int            // the index in the entity's Edges of the edge the field is the target's by, plus one; 0 for the entity's own
 	targets []*plugin.Entity // the target entity of each value's edge; nil for the entity's own
+	counts  []bool           // the value orders by the number of its edge's nodes (graphql.OrderField on a to-many edge); fields holds -1
 	wheres  []string         // the field of each value, for errors
 }
 
@@ -46,6 +47,9 @@ func (g *graph) orderOf(o *object) error {
 	if err := g.orderVia(o, &ord, by); err != nil {
 		return err
 	}
+	if err := g.orderCount(o, &ord, by); err != nil {
+		return err
+	}
 	if len(ord.values) == 0 {
 		return nil
 	}
@@ -74,6 +78,7 @@ func (ord *order) add(v string, i int, where string, by map[string]string) error
 	ord.fields = append(ord.fields, i)
 	ord.edges = append(ord.edges, 0)
 	ord.targets = append(ord.targets, nil)
+	ord.counts = append(ord.counts, false)
 	ord.wheres = append(ord.wheres, where)
 	return nil
 }
@@ -105,7 +110,11 @@ func (w *writer) order(o *object) {
 	w.line("enum ", o.name, "OrderField", w.gen(o.name+"OrderField"), " {")
 	for i, v := range o.order.values {
 		w.at = o.order.wheres[i]
-		if k := o.order.edges[i] - 1; k >= 0 {
+		if k := o.order.edges[i] - 1; k >= 0 && o.order.counts[i] {
+			// A count reads the edge's nodes through their Read policy (0111).
+			edge, _ := o.edgeName(k)
+			w.line(`  """`, CountOrderDoc, edge, ` of each `, o.name, `, counting only those the reader may see."""`)
+		} else if k >= 0 {
 			// The connection joins the edge with a left join (0031), so a client is told
 			// where such an order puts the nodes the join finds nothing for.
 			edge, _ := o.edgeName(k) // checked as the type's fields were made
@@ -165,8 +174,55 @@ func (g *graph) orderVia(o *object, ord *order, by map[string]string) error {
 			ord.fields = append(ord.fields, fi)
 			ord.edges = append(ord.edges, i+1)
 			ord.targets = append(ord.targets, t.ent)
+			ord.counts = append(ord.counts, false)
 			ord.wheres = append(ord.wheres, where)
 		}
+	}
+	return nil
+}
+
+// CountOrderDoc starts the description of an XOrderField value that orders
+// by the number of an edge's nodes. veloxgql's cost reads it: such an order
+// is a subquery for each row read, and costs what has<Edge>With costs.
+const CountOrderDoc = "Orders by the number of "
+
+// orderCount adds to ord the values that order by the number of a to-many
+// edge's nodes (graphql.OrderField on the edge, entgql's POSTS_COUNT). The
+// count is a subquery that applies the target's Read policy (0111), so it
+// reveals no node the reader may not see, but it reveals how many there
+// are: an edge a directive guards or the type leaves out is refused, as is
+// one to an entity with no GraphQL type.
+func (g *graph) orderCount(o *object, ord *order, by map[string]string) error {
+	e := o.ent
+	for i, ed := range e.Edges {
+		ea := o.eanns[i]
+		if ea.OrderField == "" {
+			continue
+		}
+		where := "schema " + e.Name + ", edge " + ed.Name + ", graphql.OrderField(" + fmt.Sprintf("%q", ea.OrderField) + ")"
+		t := g.byName[ed.Target]
+		switch {
+		case ed.Unique && ed.Join == "":
+			return fmt.Errorf("%s: graphql.OrderField on a to-one edge: it orders by the number of a to-many edge's nodes; order by the target's field with graphql.OrderVia", where)
+		case ea.Skip&graphql.SkipType != 0:
+			return fmt.Errorf("%s: graphql.OrderField on an edge graphql.Skip leaves out of the type: the order would reveal how many nodes it has", where)
+		case t == nil:
+			return fmt.Errorf("%s: graphql.OrderField on an edge to %s, which has no GraphQL type", where, ed.Target)
+		case appDirective(ea) != "":
+			return fmt.Errorf("%s: graphql.OrderField on an edge with the directive @%s: the order would reveal how many nodes it has, which no directive guards; remove the directive or the OrderField", where, appDirective(ea))
+		case !validEnumValue(ea.OrderField):
+			return fmt.Errorf("%s: %q is not a GraphQL enum value", where, ea.OrderField)
+		}
+		if prev, ok := by[ea.OrderField]; ok {
+			return fmt.Errorf("%s and %s both order by %q", prev, where, ea.OrderField)
+		}
+		by[ea.OrderField] = where
+		ord.values = append(ord.values, ea.OrderField)
+		ord.fields = append(ord.fields, -1)
+		ord.edges = append(ord.edges, i+1)
+		ord.targets = append(ord.targets, t.ent)
+		ord.counts = append(ord.counts, true)
+		ord.wheres = append(ord.wheres, where)
 	}
 	return nil
 }

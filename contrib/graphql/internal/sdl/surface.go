@@ -168,10 +168,14 @@ type OrderValue struct {
 	Value string // the enum value, as "NAME"
 	Field int    // the index of the field in Entity.Fields, or in Target.Fields when Edge is set
 	// Edge is the index in Entity.Edges, plus one, of the to-one edge whose
-	// target's field this orders by (graphql.OrderVia); 0 for the entity's own.
+	// target's field this orders by (graphql.OrderVia), or of the to-many
+	// edge whose nodes it counts (Count); 0 for the entity's own.
 	Edge int
 	// Target is that edge's target entity; nil when Edge is 0.
 	Target *plugin.Entity
+	// Count says it orders by the number of the to-many edge Edge's nodes
+	// (graphql.OrderField on the edge); Field is then -1.
+	Count bool
 }
 
 // WhereKind is what a field of a where input does.
@@ -276,7 +280,7 @@ func (g *graph) surface() *Surface {
 		slices.SortStableFunc(t.Enums, func(a, b Enum) int { return a.Field - b.Field })
 		if o.order != nil {
 			for i, v := range o.order.values {
-				t.Order = append(t.Order, OrderValue{Value: v, Field: o.order.fields[i], Edge: o.order.edges[i], Target: o.order.targets[i]})
+				t.Order = append(t.Order, OrderValue{Value: v, Field: o.order.fields[i], Edge: o.order.edges[i], Target: o.order.targets[i], Count: o.order.counts[i]})
 			}
 		}
 		for _, ef := range o.edges {

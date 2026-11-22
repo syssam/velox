@@ -36,7 +36,7 @@ func (User) Fields() []schema.Field {
 
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.To("posts", Post.Type).Annotations(graphql.WhereEdge()),
+		edge.To("posts", Post.Type).Annotations(graphql.WhereEdge(), graphql.OrderField("POSTS_COUNT")),
 		edge.To("groups", Group.Type).Annotations(graphql.Connection(false), graphql.WhereEdge()),
 	}
 }
@@ -78,9 +78,10 @@ func (Group) Fields() []schema.Field { return []schema.Field{field.String("name"
 
 // peers is many-to-many with no inverse edge (an edge to its own schema
 // without edge.From): the edge method reads the join table through the
-// relation.
+// relation. USERS_COUNT orders groups by their users, whose org scope
+// hides some.
 func (Group) Edges() []schema.Edge {
-	return []schema.Edge{edge.From("users", User.Type).Ref("groups"), edge.To("peers", Group.Type)}
+	return []schema.Edge{edge.From("users", User.Type).Ref("groups").Annotations(graphql.OrderField("USERS_COUNT")), edge.To("peers", Group.Type)}
 }
 
 // Category's self-edges: FieldOn names Category for each, so only OwnsKey
@@ -285,7 +286,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection!\n",
 		"input AccountOrder {\n",
 		"  direction: OrderDirection! = ASC\n  \"\"\"The field to order by.\"\"\"\n  field: AccountOrderField!\n",
-		"enum AccountOrderField {\n  NAME\n}\n",
+		"enum AccountOrderField {\n  NAME\n  \"\"\"Orders by the number of posts of each Account, counting only those the reader may see.\"\"\"\n  POSTS_COUNT\n}\n",
 		"enum PostOrderField {\n  TITLE\n  \"\"\"Orders through author: each Post without one, or whose author the reader may not see, sorts as null, after every value ascending.\"\"\"\n  AUTHOR_NAME\n}\n",
 		"  displayNameHasSuffix: String\n  displayNameEqualFold: String\n  displayNameContainsFold: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
 		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
@@ -510,7 +511,7 @@ CREATE TABLE group_peers (group_id INTEGER NOT NULL, peer_id INTEGER NOT NULL, P
 INSERT INTO group_peers VALUES (1, 2), (2, 1), (2, 3);
 INSERT INTO posts VALUES (1, 1, 'b', ''), (2, 1, 'a', ''), (3, 2, 'c', ''), (4, 1, 'a', ''), (5, 3, 'z', '');
 INSERT INTO "groups" VALUES (1, 'g1'), (2, 'g2'), (3, 'g3');
-INSERT INTO user_groups VALUES (1, 1), (1, 2), (2, 2);
+INSERT INTO user_groups VALUES (1, 1), (1, 2), (2, 2), (3, 3);
 INSERT INTO categories VALUES (1, 'root', NULL, NULL, NULL), (2, 'kid', 1, 1, NULL), (3, 'kid2', NULL, 1, NULL);
 ` + "`" + `
 
@@ -605,6 +606,95 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	}
 	if got, _ := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{1, 2, 3, 4, 5}) {
 		t.Errorf("by key: %v", got)
+	}
+}
+
+// TestConnectionOrderedByCount orders by the number of an edge's nodes:
+// accounts by their posts, and g2's peers by their users, whom the org scope
+// filters. Cursors page both ways; a count holds null in a cursor; the
+// order changes neither the rows nor totalCount.
+func TestConnectionOrderedByCount(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	acct := func(e *gen.AccountEdge) int64 { return e.Node.ID }
+	by := func(d veloxgql.OrderDirection) *gen.AccountOrder {
+		return &gen.AccountOrder{Direction: d, Field: gen.AccountOrderFieldPostsCount}
+	}
+	wire := func(c *veloxgql.Cursor) *veloxgql.Cursor {
+		t.Helper()
+		var out veloxgql.Cursor
+		s, err := veloxgql.EncodeCursor(*c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := out.UnmarshalGQLContext(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+		return &out
+	}
+	// ann has posts 1, 2 and 4, bob post 3; cid is org 8's.
+	us, err := db.Query[gen.User]().Paginate(ctx, nil, intp(1), nil, nil, gen.WithAccountOrder(by(veloxgql.OrderDirectionDesc)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, info := keys(t, ctx, us, us.Edges, acct)
+	if !slices.Equal(got, []int64{1}) || !info.HasNextPage || info.EndCursor.Terms[0].Value != nil {
+		t.Fatalf("by posts DESC, first 1: %v %+v", got, info)
+	}
+	if n, err := us.TotalCount(ctx); err != nil || n != 2 {
+		t.Errorf("totalCount %d %v, want 2", n, err)
+	}
+	if us, err = db.Query[gen.User]().Paginate(ctx, wire(info.EndCursor), intp(1), nil, nil, gen.WithAccountOrder(by(veloxgql.OrderDirectionDesc))); err != nil {
+		t.Fatal(err)
+	}
+	if got, info = keys(t, ctx, us, us.Edges, acct); !slices.Equal(got, []int64{2}) || info.HasNextPage {
+		t.Errorf("by posts DESC after ann: %v %+v", got, info)
+	}
+	// Ascending, backward from the end, then before that.
+	if us, err = db.Query[gen.User]().Paginate(ctx, nil, nil, nil, intp(1), gen.WithAccountOrder(by(veloxgql.OrderDirectionAsc))); err != nil {
+		t.Fatal(err)
+	}
+	if got, info = keys(t, ctx, us, us.Edges, acct); !slices.Equal(got, []int64{1}) || !info.HasPreviousPage {
+		t.Fatalf("by posts ASC, last 1: %v %+v", got, info)
+	}
+	if us, err = db.Query[gen.User]().Paginate(ctx, nil, nil, wire(info.StartCursor), intp(1), gen.WithAccountOrder(by(veloxgql.OrderDirectionAsc))); err != nil {
+		t.Fatal(err)
+	}
+	if got, info = keys(t, ctx, us, us.Edges, acct); !slices.Equal(got, []int64{2}) || info.HasPreviousPage {
+		t.Errorf("by posts ASC before ann: %v %+v", got, info)
+	}
+	// g2's peers: g1 has ann; g3 has cid alone, whom the scope hides, so it
+	// counts 0 and comes first ascending.
+	g2, err := db.Query[gen.Group]().Where(gen.Groups.ID.EQ(2)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	group := func(e *gen.GroupEdge) int64 { return e.Node.ID }
+	byUsers := &gen.GroupOrder{Field: gen.GroupOrderFieldUsersCount}
+	peers, err := g2.Peers(ctx, nil, intp(1), nil, nil, byUsers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, info = keys(t, ctx, peers, peers.Edges, group); !slices.Equal(got, []int64{3}) || !info.HasNextPage {
+		t.Fatalf("g2's peers by users, first 1: %v %+v", got, info)
+	}
+	if peers, err = g2.Peers(ctx, wire(info.EndCursor), intp(1), nil, nil, byUsers); err != nil {
+		t.Fatal(err)
+	}
+	if got, info = keys(t, ctx, peers, peers.Edges, group); !slices.Equal(got, []int64{1}) || info.HasNextPage {
+		t.Errorf("g2's peers by users, after g3: %v %+v", got, info)
+	}
+	if n, err := peers.TotalCount(ctx); err != nil || n != 2 {
+		t.Errorf("g2's peers: totalCount %d %v", n, err)
 	}
 }
 
@@ -736,7 +826,7 @@ func TestConnections(t *testing.T) {
 		t.Errorf("g2's users: %v", got)
 	}
 	// Many-to-many with no inverse edge, through the join table.
-	peers, err := g2.Peers(ctx, nil, intp(1), nil, nil)
+	peers, err := g2.Peers(ctx, nil, intp(1), nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1536,8 +1626,9 @@ func TestConnectionsRun(t *testing.T) {
 	if out, err := run("mod", "tidy", "-e"); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
-	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$|TestPaginate|TestConnectionOrderedByAnEdge", ".")
-	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") || !strings.Contains(out, "--- PASS: TestPaginateLimitOffset") || !strings.Contains(out, "--- PASS: TestConnectionOrderedByAnEdge") {
+	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$|TestPaginate|TestConnectionOrderedBy", ".")
+	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") || !strings.Contains(out, "--- PASS: TestPaginateLimitOffset") || !strings.Contains(out, "--- PASS: TestConnectionOrderedByAnEdge") ||
+		!strings.Contains(out, "--- PASS: TestConnectionOrderedByCount") {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 }

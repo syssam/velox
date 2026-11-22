@@ -139,7 +139,8 @@ type Annotation struct {
 	MultiOrder bool `json:"multi_order,omitempty"`
 	// FieldName renames a field or an edge in GraphQL.
 	FieldName string `json:"field_name,omitempty"`
-	// OrderField makes a field orderable, under this enum value name.
+	// OrderField makes a field orderable, under this enum value name; on a
+	// to-many edge, the edge's number of nodes.
 	OrderField string `json:"order_field,omitempty"`
 	// OrderUnguarded allows OrderField on a field with an application
 	// directive, which guards neither the cursors nor the order.
@@ -395,6 +396,21 @@ func MultiOrder() Annotation { return Annotation{MultiOrder: true} }
 func FieldName(name string) Annotation { return Annotation{FieldName: name} }
 
 // OrderField makes a field orderable, with this name for its order enum value.
+//
+// On a to-many edge, as entgql's, it orders the connections to the edge's
+// entity by the number of the edge's nodes:
+//
+//	edge.To("posts", Post.Type).Annotations(graphql.OrderField("POSTS_COUNT"))
+//
+// The count is velox's Rel.Count, a subquery that applies the target's Read
+// policy, interceptors and filters, so a node the reader may not see is not
+// counted, unlike entgql's. The connection joins nothing for it: its rows and
+// totalCount are as without the order. A cursor holds null for the count, and
+// the next page computes the cursor row's count from its key. The plugin
+// refuses it on a to-one edge, an edge graphql.Skip leaves out of the type or
+// to an entity with no type, and an edge with an application directive: the
+// order would reveal how many nodes it has. The cost of an operation that
+// orders by it is that of a has<Edge>With.
 func OrderField(name string) Annotation { return Annotation{OrderField: name} }
 
 // OrderUnguarded allows OrderField on a field with an application directive,

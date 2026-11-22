@@ -36,10 +36,11 @@ func (User) Fields() []velox.Field {
 }
 
 // Edges returns Posts, the inverse of Post.Author. WhereEdge gives the where
-// input hasPosts and hasPostsWith.
+// input hasPosts and hasPostsWith; OrderField orders users by their number
+// of posts, POSTS_COUNT, counting only the posts the reader may see.
 func (User) Edges() []velox.Edge {
 	return []velox.Edge{
-		edge.To("posts", Post.Type).Comment("The posts the user wrote.").Annotations(graphql.WhereEdge()),
+		edge.To("posts", Post.Type).Comment("The posts the user wrote.").Annotations(graphql.WhereEdge(), graphql.OrderField("POSTS_COUNT")),
 	}
 }
 

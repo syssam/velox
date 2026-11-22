@@ -200,7 +200,9 @@
 // after every value ascending and before them descending, on every dialect,
 // and a cursor holds it as null. An OrderVia reads the edge with a LEFT JOIN,
 // so a row whose target is missing or hidden sorts as NULL, and the order
-// changes neither the connection's rows nor its totalCount. A where
+// changes neither the connection's rows nor its totalCount. An OrderField
+// on a to-many edge orders by the edge's count, velox's Rel.Count under the
+// target's policy, interceptors and filters; a cursor holds it as null. A where
 // argument's Pred is gqlgraph.Predicate of the input, which adds each
 // predicate the input sets as the type's WhereFields describe it; it refuses a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
 // or larger in all than MaxFilterNodes, before any query runs. A list edge

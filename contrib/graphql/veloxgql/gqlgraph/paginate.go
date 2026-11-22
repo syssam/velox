@@ -208,6 +208,14 @@ type Column struct {
 	Edge int
 	// Target is the relation's target, for an Edge.
 	Target func() untyped.Table
+	// Count says the order field is the number of the to-many relation
+	// Edge's nodes (graphql.OrderField on the edge), not a column; Index is
+	// then -1. The count is a subquery that applies the target's Read
+	// policy, interceptors and filters (velox's Rel.Count), so a node the
+	// caller may not read is not counted. The connection joins nothing for
+	// it, so its rows and totalCount are as without the order. A cursor
+	// holds null for it: After computes a row's count from its key.
+	Count bool
 }
 
 // Order is one term of a connection's order, as the client gave it: the
@@ -240,6 +248,11 @@ type term struct {
 	null  bool // the field is a pointer: nil is NULL, which a cursor holds as null
 	// A term of a related row (edge) is NULL too when the row has none: the
 	// connection reads the relation with a left join.
+
+	// count is, for a Column's Count, the number of the relation's nodes
+	// as a term of the node's entity; zero for a column.
+	count   untyped.Term
+	isCount bool
 }
 
 // newTerm is the term of c, in direction dir, on the connection's entity t.
@@ -250,6 +263,13 @@ func newTerm(t untyped.Table, c *Column, dir veloxgql.OrderDirection) (term, err
 	}
 	if err := tm.tbl.Err(); err != nil {
 		return tm, err
+	}
+	if c.Count {
+		if c.Edge == 0 {
+			return tm, fmt.Errorf("veloxgql: the order field %s counts no relation; run go tool velox-gen", c.Name)
+		}
+		tm.count, tm.isCount = t.RelAgg(c.Edge-1, tm.tbl, untyped.CountAll()), true
+		return tm, nil
 	}
 	info := tm.tbl.Info()
 	if c.Index < 0 || c.Index >= len(info.Columns) {
@@ -296,6 +316,9 @@ func baseType(ft reflect.Type) reflect.Type {
 
 // order is the term's column ordered ascending, or descending for desc.
 func (t *term) order(desc bool) velox.OrderTerm {
+	if t.isCount {
+		return untyped.OrderByTerm(t.count, desc)
+	}
 	return velox.OrderTerm{Column: t.col, Desc: desc, Rel: int32(t.edge)}
 }
 
@@ -312,6 +335,9 @@ func (t *term) row(p any, own untyped.Table) any {
 // get returns the term's value in the connection's row p as the base type,
 // nil for NULL.
 func (t *term) get(p any, own untyped.Table) any {
+	if t.isCount {
+		return nil // not in the row: After computes it from the key
+	}
 	r := t.row(p, own)
 	if r == nil {
 		// The left join found no related row, or the caller may not read
@@ -351,6 +377,9 @@ func (t *term) get(p any, own untyped.Table) any {
 // value: of the base type in a cursor from a page, a JSON value in one from
 // the wire, nil for NULL.
 func (t *term) set(p any, own untyped.Table, v any) error {
+	if t.isCount {
+		return nil // After computes it from the row's key
+	}
 	r := t.row(p, own)
 	if r == nil && t.edge != 0 && v == nil && !t.null {
 		// A NULL of a column that cannot hold one: the row has no related
@@ -575,7 +604,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order), veloxe: c.Veloxe}
 	var joined []int
 	for _, t := range terms {
-		if t.edge != 0 && !slices.Contains(joined, t.edge) {
+		if t.edge != 0 && !t.isCount && !slices.Contains(joined, t.edge) {
 			joined = append(joined, t.edge)
 			conn.query = conn.query.LeftJoin(t.edge-1, t.tbl)
 		}
