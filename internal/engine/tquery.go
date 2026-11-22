@@ -18,6 +18,26 @@ const (
 	RowGrowth = 8
 )
 
+// PageRows is the largest Limit All allocates in full ahead: a Limit that
+// small is likely a page's size, and growing from FirstRows to it costs a
+// second allocation and a copy. A larger Limit is a bound, and starts at
+// FirstRows.
+const PageRows = 128
+
+// FirstCap is the number of rows All allocates ahead for st: none for an
+// AllowUnbounded read, whose Limit is the row cap's, all of a Limit up to
+// PageRows, and FirstRows of a larger one.
+func FirstCap(st *Statement) int {
+	switch {
+	case st.Unbounded:
+		return 0
+	case st.Limit <= PageRows:
+		return st.Limit
+	default:
+		return FirstRows
+	}
+}
+
 // TableQuery is a SELECT on the entity of a Table, velox's Query with the
 // entity's type erased: package untyped's TableQuery. It builds the
 // Statement a Query builds, through the same pipeline, so the policies, a
@@ -266,10 +286,7 @@ type tableRun struct {
 func readTable(a *tableRun, r Rows) error {
 	rootN := ColumnCount(&a.st)
 	dst := make([]any, rootN+a.joins.Width())
-	n := 0
-	if !a.st.Unbounded {
-		n = min(a.st.Limit, FirstRows)
-	}
+	n := FirstCap(&a.st)
 	typ := a.t.slice.(reflect.Type)
 	a.buf, a.n = reflect.MakeSlice(typ, n, n), 0
 	for r.Next() {

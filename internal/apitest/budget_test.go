@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
 )
@@ -473,6 +474,26 @@ func TestLimitIsNotASize(t *testing.T) {
 	t.Logf("Limit(1) %.0f bytes, Limit(1000) %.0f bytes", one, bound)
 	if over := int(unsafe.Sizeof(testmodel.Invoice{})) * 20; bound > one+float64(over) {
 		t.Errorf("Limit(1000) returning one row costs %.0f bytes and Limit(1) %.0f: more than %d bytes over", bound, one, over)
+	}
+}
+
+// TestPageLimitIsASize: a Limit up to engine.PageRows is a page's size, and
+// All allocates it in full at once; a larger Limit starts at FirstRows and
+// grows.
+func TestPageLimitIsASize(t *testing.T) {
+	for _, c := range []struct{ limit, rows, cap int }{
+		{20, 20, 20}, {20, 1, 20}, {100, 100, 100}, {engine.PageRows, 1, engine.PageRows},
+		{engine.PageRows + 1, 1, engine.FirstRows},
+	} {
+		rows := make([][]any, c.rows)
+		for i := range rows {
+			rows[i] = invoiceRow(int64(i))
+		}
+		db := openFake(velox.Postgres, &fakeconn.Exec{Rows: rows})
+		got, err := db.Query[testmodel.Invoice]().Limit(c.limit).All(ctx)
+		if err != nil || len(got) != c.rows || cap(got) != c.cap {
+			t.Errorf("Limit(%d) of %d rows: len %d cap %d, %v; want cap %d", c.limit, c.rows, len(got), cap(got), err, c.cap)
+		}
 	}
 }
 

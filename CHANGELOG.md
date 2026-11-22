@@ -599,6 +599,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `All` allocates the rows of a `Limit` up to 128 at once, a page's size,
+  where it allocated 16 and grew: a `Limit(20)` read of 20 rows is one
+  allocation, and the runtime benchmarks of 20-row pages allocate about 40%
+  fewer bytes. A larger `Limit` is a bound, and still starts at 16 rows.
 - A bool column compared with a constant true or false binds no argument.
   PostgreSQL gets the column alone or `NOT` the column, as ent writes it: a
   bound bool led PostgreSQL's generic plan, which pgx's statement cache

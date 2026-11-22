@@ -294,11 +294,8 @@ func scanRow[E any](r engine.Rows, m *metaState[E], cols []int, dst []any, p *E)
 // none, the struct is a local and plain is used, which keeps it, and the
 // closure reading the rows, on the stack.
 
-// firstRows and rowGrowth are engine.FirstRows and engine.RowGrowth.
-const (
-	firstRows = engine.FirstRows
-	rowGrowth = engine.RowGrowth
-)
+// rowGrowth is engine.RowGrowth.
+const rowGrowth = engine.RowGrowth
 
 // allRun is the state of one All.
 type allRun[E any] struct {
@@ -312,15 +309,12 @@ type allRun[E any] struct {
 func readAll[E any](a *allRun[E], r engine.Rows) error {
 	rootN := engine.ColumnCount(&a.st)
 	dst := make([]any, rootN+a.joins.Width())
-	// Limit is mandatory, so it is a bound and not a likely size: at most firstRows
-	// are allocated ahead for it, then rowGrowth times as many as they fill. The
-	// Limit of an AllowUnbounded read is the row cap's (cap+1): nothing is allocated
-	// ahead for it, and append grows it.
-	n := 0
-	if !a.st.Unbounded {
-		n = min(a.st.Limit, firstRows)
-	}
-	a.out = make([]E, 0, n)
+	// Limit is mandatory, so a large one is a bound and not a likely size:
+	// engine.FirstCap allocates all of a Limit up to engine.PageRows, a page,
+	// and engine.FirstRows of a larger one, then rowGrowth times as many as they
+	// fill. The Limit of an AllowUnbounded read is the row cap's (cap+1):
+	// nothing is allocated ahead for it, and append grows it.
+	a.out = make([]E, 0, engine.FirstCap(&a.st))
 	for r.Next() {
 		if l := len(a.out); l == cap(a.out) && !a.st.Unbounded {
 			a.out = slices.Grow(a.out, max(min(a.st.Limit, l*rowGrowth)-l, 1))
