@@ -12,7 +12,7 @@
 
 **Tech Stack:** Go 1.27, velox engine (`internal/engine`), PostgreSQL 18 / MySQL 8.4 / SQLite in CI.
 
-**Spec:** `docs/superpowers/specs/2026-11-20-change-recording-design.md`. The rule numbers below (R1–R11) are that spec's numbered Rules.
+**Spec:** `docs/history/superpowers/specs/2026-11-20-change-recording-design.md`. The rule numbers below (R1–R11) are that spec's numbered Rules.
 
 ## Global Constraints
 

@@ -15,7 +15,7 @@ and Prisma keep the core general and let the application, or a small helper, exp
 tenancy through the general mechanism.
 
 The full comparison and the design are in
-`docs/superpowers/specs/2026-11-02-remove-tenant-design.md`.
+`docs/history/superpowers/specs/2026-11-02-remove-tenant-design.md`.
 
 ## Decision
 

@@ -2,7 +2,7 @@
 
 Status: accepted, 2026-11-05. Supersedes 0034's typing and package runtime,
 0037's gen/runtime half and 0036's typed binds. Revises 0038, 0029 and 0007.
-Spec: `docs/superpowers/specs/2026-11-05-untyped-schema-behaviour-design.md`.
+Spec: `docs/history/superpowers/specs/2026-11-05-untyped-schema-behaviour-design.md`.
 Revised by 0040: a descriptor names the schema's value, `Schema:
 schema.Issue{}`, in place of the method lists, gen imports the schema by its
 own name, and `velox.C`, `velox.Edge` and `Cond` are ent's `velox.FieldEQ`,

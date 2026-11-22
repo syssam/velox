@@ -2,10 +2,10 @@
 
 Status: proposal, 2026-11-22. Base: local main b816c01f (Phase A merged,
 ADRs 0098–0102). Replaces the parked
-`docs/superpowers/specs/2026-11-03-graphql-go-backend-design.md` (kept as
+`docs/history/superpowers/specs/2026-11-03-graphql-go-backend-design.md` (kept as
 history; section 0.3 says what carries over). Gap rows #115, #116, #117,
 #133 and UF N-V1, N-V2, N-V3 of
-`docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` (§1.11, §2.1
+`docs/history/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` (§1.11, §2.1
 item 1). ADR numbers start at 0103.
 
 ## 0. What this rests on
@@ -73,7 +73,7 @@ It stops there: velox-graphql's Go reaches gqlgen through `veloxgql`, its
 runtime only batches and projects inside a gqlgen field, and its SDL is
 one file. The migration design already chose the shape this spec builds:
 "SDL + autobind … gqlc binds, not the spec's 'emit graphql-go bindings
-directly' shape" (nextapp-graphql-velox2/docs/superpowers/specs/
+directly' shape" (nextapp-graphql-velox2/docs/history/superpowers/specs/
 2026-11-18-velox2-migration-design.md:110, :122-126).
 
 ### 0.4 The parked spec, refreshed

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.27; schema/edge, schema/load, internal/codegen, internal/engine, migrate, contrib/graphql.
 
-**Spec:** `docs/superpowers/specs/2026-11-22-edge-through-design.md` (binding; §7 holds the rulings).
+**Spec:** `docs/history/superpowers/specs/2026-11-22-edge-through-design.md` (binding; §7 holds the rulings).
 
 ## Global Constraints
 

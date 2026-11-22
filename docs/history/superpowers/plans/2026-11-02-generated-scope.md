@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.27, `internal/codegen` (Lower, Render, golden files), `cmd/velox-gen`, the `scope` package, the `examples` module.
 
-**Spec:** `docs/superpowers/specs/2026-11-02-generated-scope-design.md`
+**Spec:** `docs/history/superpowers/specs/2026-11-02-generated-scope-design.md`
 
 ## Global Constraints
 
@@ -122,7 +122,7 @@
 
 **Files:**
 - Create: `docs/decisions/0030-generated-scope.md`
-- Modify: `docs/decisions/README.md` (index line), `CHANGELOG.md` (Unreleased), `scope/scope.go` (package doc: the schema annotation is the normal way; the hand-written form is for rules the annotation does not cover), `docs/superpowers/specs/2026-11-02-generated-scope-design.md` (status: implemented)
+- Modify: `docs/decisions/README.md` (index line), `CHANGELOG.md` (Unreleased), `scope/scope.go` (package doc: the schema annotation is the normal way; the hand-written form is for rules the annotation does not cover), `docs/history/superpowers/specs/2026-11-02-generated-scope-design.md` (status: implemented)
 
 - [ ] **Step 1:** Write ADR 0030 in the format of 0029: context (hand-written `scope.go` and the silent-drop risk), decision (annotation, generated wiring, always-wrap), the generator-not-plugin reason, consequences (examples' `Org` is now `OrgKey`; no per-entity opt-out except `WithoutPolicy`).
 - [ ] **Step 2:** Add the CHANGELOG "Unreleased" entry (Added: `schema.Scoped`; Changed: examples) and the ADR index line.

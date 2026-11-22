@@ -14,7 +14,7 @@ custom-field hooks and a refund-status hook). velox had per-entity
 `WithHooks[E]`, schema hooks and Interceptors, and the low-level
 `WithRewrite`, which sees statements, not rows, and no entity name to
 dispatch on. The gap analysis
-(`docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 item 3)
+(`docs/history/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 item 3)
 asked for both at run time.
 
 ## Decision

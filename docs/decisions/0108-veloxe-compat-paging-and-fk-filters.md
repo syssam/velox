@@ -5,7 +5,7 @@ compat=veloxe only: a foreign key's predicates are the column's alone.
 
 ## Context
 
-The parity audit (`docs/superpowers/specs/2026-11-22-veloxe-behaviour-parity.md`)
+The parity audit (`docs/history/superpowers/specs/2026-11-22-veloxe-behaviour-parity.md`)
 probed veloxe's `examples/fullgql` and velox's paginator with the same
 arguments. Four differences reach a client that was written against
 veloxe, even under compat=veloxe:

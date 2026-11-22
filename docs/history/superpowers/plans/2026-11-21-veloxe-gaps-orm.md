@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go 1.27, velox root + `internal/engine`, `privacy`, `schema/mixin/softdelete`; PostgreSQL 18/16, MySQL 8.4, SQLite.
 
-**Spec:** `docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 items 3–9, 11–13 and §2.2 (Distinct, Explain, UpdateAll, privacy combinators/trace). The Decisions below settle every choice that section left open; the user's instruction was "follow your idea, and more".
+**Spec:** `docs/history/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 items 3–9, 11–13 and §2.2 (Distinct, Explain, UpdateAll, privacy combinators/trace). The Decisions below settle every choice that section left open; the user's instruction was "follow your idea, and more".
 
 ## Decisions (binding)
 

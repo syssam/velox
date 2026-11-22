@@ -256,7 +256,7 @@ the port), then how common the pattern is in ent and veloxe apps.
    (SDL + autobind, no `@goModel`/`@goField`) and `split=entity`, which
    writes `velox_<entity>.graphql` per entity. The generated code stays one
    line per method over `gqlgraph`, as ADR 0047 has it. The parked spec
-   `docs/superpowers/specs/2026-11-03-graphql-go-backend-design.md` should be
+   `docs/history/superpowers/specs/2026-11-03-graphql-go-backend-design.md` should be
    refreshed against ADRs 0045–0061 first. This is UF N-V1/N-V2/N-V3.
 
 2. **A Go API for generation, with a field-order rule (#1, #9, #12, §3).**

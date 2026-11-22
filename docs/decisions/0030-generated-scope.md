@@ -14,7 +14,7 @@ file said only what the schema already said: this column is the scope. It sat in
 mixed, unlike ent's. It could also be got wrong without an error: leave out `Fill()`,
 or write a `Policy` of one's own and not wrap it, and rows were unscoped.
 
-The design is in `docs/superpowers/specs/2026-11-02-generated-scope-design.md`.
+The design is in `docs/history/superpowers/specs/2026-11-02-generated-scope-design.md`.
 
 ## Decision
 

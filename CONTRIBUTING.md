@@ -36,7 +36,10 @@ each.
 
 `docs/decisions` records why the code is as it is. `docs/history` holds the specs,
 plans and reviews that built it, as written. It is a historical record: nothing
-depends on it, and it is not kept up to date.
+depends on it, and it is not kept up to date. A new design spec goes in
+`docs/history/superpowers/specs`, and its plan in
+`docs/history/superpowers/plans`; a decision it settles goes in
+`docs/decisions`.
 
 velox-gen writes an entity to `<entity>.go`, as ent does, and velox-graphql
 to `<entity>_gql.go`. When go build would read `<entity>.go` as a test or as

@@ -6,7 +6,7 @@ Status: accepted, 2026-11-21.
 
 nextapp, the veloxe application being ported, calls `SkipDefault(updated_at)`
 36 times, `SetNillableX(p)` 2,829 times and `IsConstraintError` 109 times.
-The gap analysis (`docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md`
+The gap analysis (`docs/history/superpowers/specs/2026-11-21-veloxe-gap-analysis.md`
 §2.1 items 4 to 6) asked for each. velox had none of them.
 
 A test first answered the open question of item 4: an update that assigns

@@ -6,7 +6,7 @@ Status: accepted, 2026-11-20.
 
 The user asked for SQL the builders cannot say to be easy to write, easier
 than in ent, with the policies still applying. The design
-(`docs/superpowers/specs/2026-11-20-inserts-changes-sql-design.md`, part 4)
+(`docs/history/superpowers/specs/2026-11-20-inserts-changes-sql-design.md`, part 4)
 asked for three things: an expression as a term, `velox.SQL[E]`; an
 expression as an assignment, `Col.SetSQL`; and a guide.
 

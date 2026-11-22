@@ -56,7 +56,7 @@ Supersedes ADR 0064.
 
 ## 3. Old values and changes (ADR 0094)
 
-Superseded by docs/superpowers/specs/2026-11-20-change-recording-design.md.
+Superseded by docs/history/superpowers/specs/2026-11-20-change-recording-design.md.
 
 ent gives `OldX(ctx)` on a one-row update only, loaded by a query of its
 own outside the update's lock. velox's hooks see bulk updates too.

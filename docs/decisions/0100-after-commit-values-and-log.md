@@ -8,7 +8,7 @@ nextapp, the veloxe application being ported, defers events until commit
 with veloxe's `tx.OnCommit` (`auditlog/status_events.go`). It reads one
 column, mostly the key, with `IDs(ctx)` and `Strings(ctx)` at more than 75
 call sites. It debugs with `Debug()`. The gap analysis
-(`docs/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 items 7 to
+(`docs/history/superpowers/specs/2026-11-21-veloxe-gap-analysis.md` §2.1 items 7 to
 9) asked for each. velox had none: `TxAround` wraps the whole `Tx` call, but
 nothing queued work on one transaction from code inside it.
 

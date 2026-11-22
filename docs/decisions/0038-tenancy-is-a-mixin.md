@@ -13,7 +13,7 @@ named the scope in `Descriptor.Scope`, which velox composed outside the entity's
 policy and hooks through `velox.Scoper` and `velox.ScopeKit`.
 
 Since 0034 an entity's behaviour is declared on its schema, and since the mixin
-work (spec `docs/superpowers/specs/2026-11-04-mixin-behaviour-design.md`) a
+work (spec `docs/history/superpowers/specs/2026-11-04-mixin-behaviour-design.md`) a
 mixin may declare `Policy[E any]()`, `Hooks[E any]()` and `Interceptors[E any]()`,
 generic methods that velox-gen binds for every entity that lists the mixin. That
 is ent's shape for tenancy and soft delete (ent's privacytenant example). With
