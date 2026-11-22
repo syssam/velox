@@ -270,8 +270,13 @@ The second way needs one line by hand:
 Stop writes to the relation while the file runs: a link written to the
 join table after the copy is lost with it. On PostgreSQL and SQLite the
 file is one transaction. On MySQL it is not: a failed `INSERT` leaves
-`memberships` created and `user_groups` as it was. Fix the statement, run
-`migrate hash`, and run `apply -resume` (see "A dirty MySQL version").
+`memberships` created, `user_groups` as it was, and the version dirty.
+`apply -resume` refuses an edited file, so undo the version instead:
+
+1. `DROP TABLE memberships`;
+2. `migrate resolve -version N -undone`;
+3. fix the `INSERT`, and run `migrate hash`;
+4. `migrate apply`.
 
 A plain join table's keys are `ON DELETE CASCADE`. An edge schema's keys
 have the actions their edges declare, and none without `OnDelete`.
