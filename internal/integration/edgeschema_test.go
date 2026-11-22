@@ -39,13 +39,17 @@ var rosterDDL = map[velox.Dialect][]string{
 	},
 }
 
-// rosterSetup creates the tables, and teams 1 "a", 2 "b" and 3 "c".
-func rosterSetup(t *testing.T, tg target) {
+// rosterSetup creates the tables, and teams 1 "a", 2 "b" and 3 "c". Each
+// of edit, when given, rewrites each statement first.
+func rosterSetup(t *testing.T, tg target, edit ...func(string) string) {
 	t.Helper()
 	for _, s := range []string{"rosters", "players", "teams"} {
 		tg.exec(t, "DROP TABLE IF EXISTS "+s)
 	}
 	for _, s := range rosterDDL[tg.d] {
+		for _, f := range edit {
+			s = f(s)
+		}
 		tg.exec(t, s)
 	}
 	for _, n := range []string{"a", "b", "c"} {
@@ -218,5 +222,42 @@ func TestEdgeSchemaOtherUniqueKey(t *testing.T) {
 		}
 		wantTeams(t, tg, "b", b.ID)
 		wantTeams(t, tg, "a", a.ID, 1)
+	})
+}
+
+// TestEdgeSchemaInverseAdd: Add through the inverse edge, Team.Players,
+// writes the team's key in team_id and the player's in player_id.
+func TestEdgeSchemaInverseAdd(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		rosterSetup(t, tg)
+		p := tm.Player{Name: "p"}
+		if err := tg.db.Insert(&p).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tg.db.Update[tm.Team]().Set(tm.Teams.Players.Add(p.ID)).Where(tm.Teams.ID.EQ(3)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if r := wantTeams(t, tg, "after add", p.ID, 3)[3]; r.PlayerID != p.ID || r.TeamID != 3 || r.Role != "member" {
+			t.Errorf("the link: %+v", r)
+		}
+	})
+}
+
+// TestEdgeSchemaReversedPairIndex: with the pair's unique index declared in
+// the other order, (team_id, player_id), adding a link again keeps its row.
+func TestEdgeSchemaReversedPairIndex(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		rosterSetup(t, tg, func(s string) string { return strings.Replace(s, "(player_id, team_id)", "(team_id, player_id)", 1) })
+		p := tm.Player{Name: "p"}
+		if err := tg.db.Insert(&p).Set(tm.Players.Teams.Add(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		first := wantTeams(t, tg, "after add", p.ID, 1)[1]
+		if _, err := tg.db.Update[tm.Player]().Set(tm.Players.Teams.Add(1)).Where(tm.Players.ID.EQ(p.ID)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if again := wantTeams(t, tg, "after re-add", p.ID, 1)[1]; again.ID != first.ID || again.Code != first.Code {
+			t.Errorf("re-add changed the row: %+v, then %+v", first, again)
+		}
 	})
 }
