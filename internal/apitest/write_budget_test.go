@@ -16,6 +16,11 @@ import (
 // Statement on the stack, and the update's, which escapes, stays in the
 // 640-byte size class.
 func TestWriteAllocationBudgets(t *testing.T) {
+	if testing.CoverMode() != "" {
+		// Coverage counters change what the compiler inlines, so an update
+		// by key allocates once more under -coverpkg.
+		t.Skip("allocation budgets are measured without coverage")
+	}
 	measure := func(name string, allocBudget, byteBudget float64, run func() error) {
 		t.Helper()
 		if err := run(); err != nil { // fill the render cache

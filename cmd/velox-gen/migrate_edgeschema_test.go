@@ -149,7 +149,7 @@ func TestConvertJoinTable(t *testing.T) {
 				t.Errorf("%d links, %d with the default role; want 3 and 3", n, members)
 			}
 			cli(0, "migrate", "drift", "-db", dsn)
-			cli(0, "migrate", "diff", "-check")
+			cli(0, "migrate", "diff", "-check", "-replay=false") // apply and drift above were the replay
 		})
 	}
 }
