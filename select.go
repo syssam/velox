@@ -88,27 +88,6 @@ func (q Query[E]) Distinct[_ Lazy[E]]() Query[E] {
 	return q
 }
 
-// Explain returns the database's plan for the statement q's All, or Rows
-// for a projection, would send for ctx: PostgreSQL's EXPLAIN, MySQL's
-// EXPLAIN FORMAT=TREE or SQLite's EXPLAIN QUERY PLAN, its lines joined by
-// newlines:
-//
-//	plan, err := velox.Explain(ctx, db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(false)).Limit(50))
-//
-// The statement is built as All builds it: the guard, the Rewrite hooks,
-// the Read policy, the scope, the interceptors and WithFilter's filters
-// apply. It runs through the Around hooks, so WithLog masks its arguments
-// as it masks any statement's. EXPLAIN without ANALYZE plans the statement
-// and does not run it. q's With loads are not explained. It is a function,
-// not a method of Query, as Sum is (ADR 0022): a method would add about
-// 0.9 KB to every entity's package for a debugging aid (ADR 0102).
-func Explain[E any](ctx context.Context, q Query[E]) (string, error) {
-	if q.meta.Err != nil {
-		return "", q.meta.Err
-	}
-	return engine.Explain(ctx, &q.s, q.meta.Info)
-}
-
 // GroupBy returns the query grouped by terms: the rows that agree on all of
 // them are one result row. It needs Select, and each plain term Select
 // reads must be among them, or the database refuses the statement.

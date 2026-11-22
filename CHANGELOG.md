@@ -86,31 +86,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - Package `generate` runs velox-gen's generate from Go, as ent's
   `entc.Generate` and veloxe's `compiler.Generate` did (ADR 0097):
   `generate.Run(ctx, dir, generate.Config{Schema, Out, Package, Plugins,
-  Check, Env, FieldOrder, Stdout, Stderr})`, with `ErrStale` for a stale
+  Check, Env, Stdout, Stderr})`, with `ErrStale` for a stale
   check and `ErrInterrupted` for a signal during the write. velox-gen calls
   it, and its output is unchanged. A `Plugin` with `Run` answers in the
   process; `contrib/graphql/graphqlgen.Plugin(opts)` is velox-graphql so,
-  with the tool's output byte for byte. `FieldOrder` orders each entity's
-  declared fields and must return a permutation of them.
+  with the tool's output byte for byte.
 - `Query.Distinct()` (ADR 0102): `SELECT DISTINCT` for a projection and for
   `velox.Values` and `velox.IDs`. A read of entities, `Count`, `Exists` or
   an aggregate with it fails before anything is sent, and so does an
   ordering by a term it does not read.
-- `velox.Explain(ctx, q)` (ADR 0102) returns the database's plan for the
-  statement `All` or `Rows` would send, policies and filters applied:
-  PostgreSQL's `EXPLAIN`, MySQL's `EXPLAIN FORMAT=TREE` or SQLite's
-  `EXPLAIN QUERY PLAN`, its lines joined by newlines. `WithLog` masks its
-  arguments as any statement's.
 - `InsertQuery.UpdateAll()` (ADR 0102), ent's `UpdateNewValues`: an upsert
   that updates every column but the key, the conflict columns, `Immutable`
   and `Version` columns and skipped `SetPtr` columns. `UpdateDefault` still
   does not fire (ADR 0017).
-- `privacy.And`, `privacy.Or` and `privacy.Not` (ADR 0102), with veloxe's
-  semantics, except that an `Or` none of whose rules allows returns a
-  failing rule's error rather than a later `Skip`; and
-  `privacy.WithTrace(ctx, func(privacy.TraceEntry))`, which reports each
-  rule's decision with the rule, the entity (`"Doc"`) and the rule list's
-  op.
 - Window functions in `Calc` and `SelectRaw` (ADR 0101): `COUNT(*) OVER ()`,
   `ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)` and the like, as a result
   column or an ordering. Beside `GroupBy` and `Limit`, `COUNT(*) OVER ()`
@@ -1208,6 +1196,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
   velox-gen's join tables delete their rows with the row (ON DELETE CASCADE) where the
   database enforces foreign keys; elsewhere delete them in the same transaction.
+- `velox.Explain`, `privacy.And`, `privacy.Or`, `privacy.Not`,
+  `privacy.WithTrace`, `privacy.TraceEntry` and `generate.Config.FieldOrder`
+  (ADR 0097, 0102): none has a caller, and ent has none. For a plan, run
+  `EXPLAIN` on `q.SQL(ctx)` through `db.Rows`. `CREATE TABLE` follows the
+  schema's declaration order, so declare the fields in the order wanted.
 
 ### Fixed
 

@@ -73,8 +73,8 @@ type MutationPolicy []MutationRule
 // with that error. A list that runs out returns nil. The conditions the
 // rules gave the filter before the end stay.
 func (p QueryPolicy) EvalQuery(ctx context.Context, q PrivacyQuery) error {
-	for i, r := range p {
-		if done, err := decided(EvalQueryRule(ctx, r, q, i)); done {
+	for _, r := range p {
+		if done, err := decided(r.EvalQuery(ctx, q)); done {
 			return err
 		}
 	}
@@ -83,8 +83,8 @@ func (p QueryPolicy) EvalQuery(ctx context.Context, q PrivacyQuery) error {
 
 // EvalMutation runs the rules in order, as QueryPolicy.EvalQuery does.
 func (p MutationPolicy) EvalMutation(ctx context.Context, m PrivacyMutation) error {
-	for i, r := range p {
-		if done, err := decided(EvalMutationRule(ctx, r, m, i)); done {
+	for _, r := range p {
+		if done, err := decided(r.EvalMutation(ctx, m)); done {
 			return err
 		}
 	}
@@ -159,7 +159,6 @@ func (q privacyQuery) Filter() PrivacyFilter { return q.f }
 // (row set) or an update's or a delete's.
 type privacyMutation struct {
 	op  Op
-	in  *EntityInfo
 	f   PrivacyFilter
 	row *Row
 }
@@ -215,7 +214,7 @@ func mutationCond(in *EntityInfo, p MutationPolicy) func(ctx context.Context, op
 			return decisionCond(d)
 		}
 		f := &privacyFilter{in: in}
-		if err := p.EvalMutation(ctx, privacyMutation{op: op, in: in, f: f}); err != nil {
+		if err := p.EvalMutation(ctx, privacyMutation{op: op, f: f}); err != nil {
 			return Predicate{}, err
 		}
 		return f.cond(), nil
@@ -229,7 +228,7 @@ func mutationInsert(in *EntityInfo, p MutationPolicy) func(ctx context.Context, 
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return d
 		}
-		return p.EvalMutation(ctx, privacyMutation{op: OpInsert, in: in, f: ignoredFilter{in}, row: &r})
+		return p.EvalMutation(ctx, privacyMutation{op: OpInsert, f: ignoredFilter{in}, row: &r})
 	}
 }
 

@@ -2,13 +2,10 @@ package apitest
 
 import (
 	"context"
-	"log/slog"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 	"github.com/syssam/velox/internal/testmodel"
 )
@@ -75,8 +72,6 @@ func TestDistinctRefusesEntityReads(t *testing.T) {
 	}
 	_, _, err = q.SQL(ctx)
 	refused("SQL", err)
-	_, err = velox.Explain(ctx, q)
-	refused("Explain", err)
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
@@ -103,8 +98,6 @@ func TestDistinctOrder(t *testing.T) {
 		refused("projection by a column it does not read", err)
 		_, _, err = q.Select(I.OrgID).OrderBy(I.Total.Sum().Desc()).GroupBy(I.OrgID).SQL(ctx)
 		refused("projection by an aggregate it does not read", err)
-		_, err = velox.Explain(ctx, q.Select(I.OrgID).OrderBy(I.Number.Desc()))
-		refused("Explain", err)
 		if e.Calls != 0 {
 			t.Errorf("%v: %d statements sent", d, e.Calls)
 		}
@@ -129,74 +122,6 @@ func TestDistinctRewriteRefused(t *testing.T) {
 	}
 	if _, err := velox.Values(ctx, db.Query[testmodel.Invoice]().Distinct().Limit(1), I.Number.Key()); err == nil || !strings.Contains(err.Error(), "changed the statement's Distinct") {
 		t.Errorf("cleared: %v", err)
-	}
-}
-
-// TestExplain sends each dialect's EXPLAIN before the statement All would
-// send, the policy's scope included, reads the plan's text column (SQLite's
-// fourth) and joins the rows by newlines. Around hooks see it, and WithLog
-// masks a Sensitive argument in it.
-func TestExplain(t *testing.T) {
-	for _, c := range []struct {
-		d    velox.Dialect
-		rows [][]any
-		sql  string
-	}{
-		{velox.Postgres, [][]any{{"Limit  (cost=0.00..1.00)"}, {"  ->  Seq Scan on tickets"}},
-			`EXPLAIN SELECT "id", "created_by", "org_id", "owner", "title", "done", "invoice_id", "parent_id" FROM "tickets" WHERE "title" = $1 AND "org_id" = $2 AND "owner" = $3 LIMIT $4`},
-		{velox.MySQL, [][]any{{"-> Limit: 10 row(s)"}, {"    -> Table scan on tickets"}},
-			"EXPLAIN FORMAT=TREE SELECT `id`, `created_by`, `org_id`, `owner`, `title`, `done`, `invoice_id`, `parent_id` FROM `tickets` WHERE `title` = ? AND `org_id` = ? AND `owner` = ? LIMIT ?"},
-		{velox.SQLite, [][]any{{int64(2), int64(0), int64(0), "Limit  (cost=0.00..1.00)"}, {int64(3), int64(2), int64(0), "  ->  Seq Scan on tickets"}},
-			`EXPLAIN QUERY PLAN SELECT "id", "created_by", "org_id", "owner", "title", "done", "invoice_id", "parent_id" FROM "tickets" WHERE "title" = ? AND "org_id" = ? AND "owner" = ? LIMIT 10`},
-	} {
-		e := &fakeconn.Exec{Rows: c.rows}
-		var arounds int
-		db := openPolicied(c.d, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-			arounds++
-			return next(ctx)
-		}))
-		plan, err := velox.Explain(asUser("ann"), db.Query[testmodel.Ticket]().Where(Tk.Title.EQ("t")).Limit(10))
-		if err != nil || e.SQL != c.sql {
-			t.Errorf("%v: sent\n got %s, %v\nwant %s", c.d, e.SQL, err, c.sql)
-		}
-		lines := strings.Split(plan, "\n")
-		if len(lines) != 2 || !strings.HasSuffix(lines[1], "scan on tickets") && !strings.HasSuffix(lines[1], "Scan on tickets") || arounds != 1 {
-			t.Errorf("%v: plan %q, %d around calls", c.d, plan, arounds)
-		}
-	}
-
-	l, records, buf := logged(t, slog.LevelDebug)
-	e := &fakeconn.Exec{Rows: [][]any{{"Seq Scan on d_authors"}}}
-	db := openFake(velox.Postgres, e, velox.WithLog(l, velox.LogArgs()))
-	plan, err := velox.Explain(ctx, db.Query[fixture.DAuthor]().Where(DA.Email.EQ("a-secret"), DA.Name.EQ("ada")).Limit(1))
-	if err != nil || plan != "Seq Scan on d_authors" {
-		t.Fatalf("%q, %v", plan, err)
-	}
-	if strings.Contains(buf.String(), "secret") {
-		t.Fatalf("a secret was logged:\n%s", buf)
-	}
-	rec := records()[0]
-	if got := argsOf(t, rec); !slices.Equal(got, []any{"<sensitive>", "ada", float64(1)}) || !strings.HasPrefix(rec["sql"].(string), "EXPLAIN SELECT") {
-		t.Errorf("logged %v", rec)
-	}
-}
-
-// TestExplainOfAProjection explains Rows' statement, Distinct included, and
-// refuses what Rows refuses. The row cap does not count the plan's rows.
-func TestExplainOfAProjection(t *testing.T) {
-	e := &fakeconn.Exec{Rows: [][]any{{"HashAggregate"}}}
-	db := openFake(velox.Postgres, e)
-	if _, err := velox.Explain(ctx, db.Query[testmodel.Invoice]().Distinct().Select(I.OrgID).Limit(5)); err != nil ||
-		e.SQL != `EXPLAIN SELECT DISTINCT "org_id" FROM "invoices" LIMIT $1` {
-		t.Errorf("%s, %v", e.SQL, err)
-	}
-	if _, err := velox.Explain(ctx, db.Query[testmodel.Invoice]().Select(I.OrgID)); err == nil || !strings.Contains(err.Error(), "Limit") {
-		t.Errorf("no Limit: %v", err)
-	}
-	// The plan's rows are not the statement's: the row cap does not count them.
-	e.Rows = [][]any{{"Limit"}, {"  ->  Seq Scan on invoices"}, {"        Filter: paid"}}
-	if plan, err := velox.Explain(ctx, db.Query[testmodel.Invoice]().MaxRows(1).Limit(1)); err != nil || strings.Count(plan, "\n") != 2 {
-		t.Errorf("MaxRows(1): %q, %v", plan, err)
 	}
 }
 

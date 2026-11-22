@@ -83,17 +83,15 @@ maps each `gen` option. veloxe's codegen hooks map as follows:
 
 | veloxe hook | velox |
 | --- | --- |
-| a hook that sorts each entity's fields | `generate.Config.FieldOrder` |
+| a hook that sorts each entity's fields | none: `CREATE TABLE` follows the schema's declaration order, so declare the fields in the order wanted |
 | a hook that prefixes index names with the table | the default |
 | a where-input whitelist hook | `where=whitelist` |
 | a hook that widens string where operators | the default |
 | `compiler.BuildFlags("-p=" + n)` | `Env: append(os.Environ(), "GOFLAGS=-p="+n)` |
 | `compiler.Extensions(graphqlgen.NewExtension(...))` | `Plugins: []generate.Plugin{graphqlgen.Plugin(opts)}`, from `contrib/graphql/graphqlgen` |
 
-`FieldOrder` orders the generated code, not the table: `CREATE TABLE`
-keeps the schema's declaration order. A program with `FieldOrder` is its
-own check: run it with `Check: true` in CI, since `velox-gen -check` does
-not know it.
+A program that calls `generate.Run` with a plugin's `Run` is its own check:
+run it with `Check: true` in CI, since `velox-gen -check` does not know it.
 
 `gen.FeatureBidiEdgeRefs` has no velox form; see
 [Behaviour that changes](#behaviour-that-changes).
@@ -244,11 +242,6 @@ when that edge is loaded, with `With` on the child's query
 nothing set still ran its hooks and set `updated_at`
 ([ADR 0099](decisions/0099-keep-defaults-and-set-ptr.md)).
 
-**`privacy.Or` fails closed.** An `Or` whose rules do not allow returns a
-failing rule's error, which denies. veloxe's returned the last result, so
-`Or(failing, Skip)` gave `Skip`
-([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
-
 **A self one-to-one reads from the right end.** With the key on the assoc
 edge, as in `reversed_by`/`reversal_of`, the inverse edge now returns the
 row whose key holds its ID. veloxe returned the same row as the assoc edge
@@ -328,8 +321,8 @@ Generator:
   dependency injection.** The generated package is velox-gen's alone, so
   `velox-gen -check` proves it current from the schema
   ([ADR 0034](decisions/0034-schema-declares-behaviour.md),
-  [0097](decisions/0097-generate-package.md)). `FieldOrder` is the one
-  rewrite.
+  [0097](decisions/0097-generate-package.md)). A hook that sorts each
+  entity's fields has no form: declare the fields in the order wanted.
 - **veloxe's `velox init`, `watch` and `velox.yaml`.** velox-gen has `generate`,
   `verify`, `describe`, `migrate` and `version`.
 - **An `AGENTS.md` written into the generated package.**

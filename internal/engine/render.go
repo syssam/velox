@@ -970,9 +970,6 @@ func RenderStmt(d Dialect, st *Statement) (string, []any, error) {
 
 // statement writes a statement of any kind.
 func (w *writer) statement(st *Statement) {
-	if st.explain {
-		w.str(explainSQL[w.d])
-	}
 	switch st.Op {
 	case OpSelect:
 		w.selectStmt(st)

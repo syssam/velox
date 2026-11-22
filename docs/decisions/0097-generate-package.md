@@ -2,6 +2,11 @@
 
 Status: accepted, 2026-11-21.
 
+Amended 2026-11-22: `Config.FieldOrder` removed; no caller, and ent has
+none. `CREATE TABLE` follows the schema's declaration order, so declare the
+fields in the order wanted. The Decision bullet and the Consequences that
+named it are gone; the Context is as it was.
+
 ## Context
 
 velox-gen's generate ran only as a command. ent and veloxe applications
@@ -52,13 +57,6 @@ that `velox-gen -check` and `verify` no longer prove the package current.
   with it and compares. The package is not named `generate`, which a
   generate.go would have to rename on import beside velox's; `graphqlgen` is
   veloxe's name for its GraphQL generator.
-- **`Config.FieldOrder`** is the one model rewrite. It is called per entity
-  between building the graph and lowering it, with the declared fields'
-  names (mixins' included) in declaration order, and must return a
-  permutation of them; a name left out, added or repeated fails the run,
-  naming the schema. The ID stays first and is not given. The foreign keys
-  velox adds for edges stay last and are not given, as ent's `Fields` holds
-  neither. A field declared for an edge is a declared field and is given.
 - **No hooks, templates, features or extensions.** Features are always on
   (privacy, interceptors, locking, upsert, raw SQL, defaults, migrations).
   Templates and graph hooks are not offered, for 0034's reason: the
@@ -66,15 +64,9 @@ that `velox-gen -check` and `verify` no longer prove the package current.
 
 ## Consequences
 
-- A Config that only a program can express, FieldOrder or a plugin with
-  Run, is checked by running the program with `Check` set. `velox-gen
-  -check` and `verify` do not know FieldOrder; `verify -plugin` compares the
-  plugins' Go files and would report a reordered file stale.
-- FieldOrder shapes the generated code and the plugins' model. velox-gen
-  migrate reads the schema, so new columns are planned in declaration order.
-- CREATE TABLE keeps the schema's declaration order: FieldOrder is cosmetic,
-  as velox compares columns by name. For a physical order, declare the
-  fields in that order.
+- A Config that only a program can express, a plugin with Run, is checked
+  by running the program with `Check` set. `velox-gen -check` and `verify`
+  do not know a plugin's Run.
 - An error about `Package` names the flag, `-package`, as the command's
   does: the message is shared.
 - cmd/velox-graphql is one line over `internal/gqlplugin`, which holds its

@@ -155,67 +155,6 @@ func TestRunCheck(t *testing.T) {
 	}
 }
 
-// FieldOrder orders the declared fields: the ID stays first and is not
-// given; a result that is not a permutation fails the run, naming the
-// schema, and writes nothing.
-func TestRunFieldOrder(t *testing.T) {
-	t.Parallel()
-	dir := module(t, map[string]string{"veloxschema/user.go": userSchema})
-	var given []string
-	order := func(entity string, fields []string) []string {
-		given = append([]string{entity}, fields...)
-		// workspace_id first, the timestamps last.
-		out := []string{"workspace_id"}
-		for _, f := range fields {
-			if f != "workspace_id" && f != "created_at" {
-				out = append(out, f)
-			}
-		}
-		return append(out, "created_at")
-	}
-	if _, err := generate.Run(context.Background(), dir, generate.Config{Env: offline(), FieldOrder: order}); err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"User", "name", "created_at", "email", "workspace_id"}; !slices.Equal(given, want) {
-		t.Errorf("FieldOrder is given %v, want %v", given, want)
-	}
-	src, err := os.ReadFile(filepath.Join(dir, "veloxgen", "user.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := string(src)
-	i := strings.Index(s, "type User struct {")
-	if i < 0 {
-		t.Fatalf("no User struct:\n%s", s)
-	}
-	body := s[i : i+strings.Index(s[i:], "\n}")]
-	pos := func(f string) int { return strings.Index(body, "\n\t"+f+" ") }
-	ps := []int{pos("ID"), pos("WorkspaceID"), pos("Name"), pos("Email"), pos("CreatedAt")}
-	if ps[0] < 0 || !slices.IsSorted(ps) {
-		t.Errorf("the struct's fields are not in FieldOrder's order:\n%s", body)
-	}
-
-	for name, c := range map[string]struct {
-		order func(string, []string) []string
-		want  string
-	}{
-		"missing":   {func(_ string, f []string) []string { return f[1:] }, `field "name" is left out`},
-		"extra":     {func(_ string, f []string) []string { return append(f, "id") }, `field "id" is not a declared field of the schema`},
-		"duplicate": {func(_ string, f []string) []string { return append(f[:3:3], f[0]) }, `field "name" is returned twice`},
-	} {
-		t.Run(name, func(t *testing.T) {
-			out := filepath.Join(dir, "other")
-			_, err := generate.Run(context.Background(), dir, generate.Config{Env: offline(), Out: out, FieldOrder: c.order})
-			if err == nil || !strings.Contains(err.Error(), "FieldOrder of schema User: "+c.want) {
-				t.Errorf("%v, want %q", err, c.want)
-			}
-			if got := tree(t, out); got != nil {
-				t.Errorf("a failed run wrote %v", slices.Sorted(maps.Keys(got)))
-			}
-		})
-	}
-}
-
 // An in-process plugin is given the request a tool would read; its files
 // are written with velox-gen's header, its warnings printed and returned,
 // and a check sees its files as a tool's.

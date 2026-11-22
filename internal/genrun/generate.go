@@ -165,14 +165,9 @@ func ExplainLoad(ctx context.Context, dir, pattern, out string, env []string, er
 	return err
 }
 
-// FieldOrder gives an entity's declared fields their order; see
-// Config.FieldOrder.
-type FieldOrder func(entity string, fields []string) []string
-
-// LoadModel loads and builds the schema package at pattern, puts each
-// entity's fields in the order order gives (when it is not nil), and lowers
-// the graph to the names of its generated entities.
-func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string, order FieldOrder) (*Model, error) {
+// LoadModel loads and builds the schema package at pattern and lowers the
+// graph to the names of its generated entities.
+func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string) (*Model, error) {
 	importPath, name, schemas, err := codegen.InspectContext(ctx, dir, pattern, env)
 	if err != nil {
 		return nil, ExplainLoad(ctx, dir, pattern, out, env, RelErrors(dir, err), nil)
@@ -184,11 +179,6 @@ func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string,
 	g, err := codegen.Build(m)
 	if err != nil {
 		return nil, RelErrors(dir, err)
-	}
-	if order != nil {
-		if err := orderFields(g, order); err != nil {
-			return nil, err
-		}
 	}
 	o, err := codegen.Lower(g, codegen.Config{Package: pkg, SchemaPath: importPath, SchemaName: name})
 	if err != nil {
@@ -202,63 +192,6 @@ func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string,
 		}
 	}
 	return gm, nil
-}
-
-// orderFields puts the declared fields of each entity of g in the order
-// order gives them: every field but the ID, Fields[0], and the foreign keys
-// velox adds for edges, which keep their places. order must return a
-// permutation of the names it is given; anything else is an error that
-// names the entity.
-func orderFields(g *codegen.Graph, order FieldOrder) error {
-	for _, e := range g.Entities {
-		byName := map[string]*codegen.Field{}
-		var names []string
-		var implicit []*codegen.Field
-		for _, f := range e.Fields[1:] {
-			if f.Implicit != "" {
-				implicit = append(implicit, f)
-				continue
-			}
-			byName[f.Name] = f
-			names = append(names, f.Name)
-		}
-		got := order(e.Name, slices.Clone(names))
-		if err := checkPermutation(names, got); err != nil {
-			return fmt.Errorf("FieldOrder of schema %s: %w", e.Name, err)
-		}
-		fields := make([]*codegen.Field, 0, len(e.Fields))
-		fields = append(fields, e.Fields[0])
-		for _, n := range got {
-			fields = append(fields, byName[n])
-		}
-		e.Fields = append(fields, implicit...)
-	}
-	return nil
-}
-
-// checkPermutation reports how got is not a permutation of want: a name
-// it repeats, one that want lacks, or one it leaves out.
-func checkPermutation(want, got []string) error {
-	left := make(map[string]bool, len(want))
-	for _, n := range want {
-		left[n] = true
-	}
-	seen := make(map[string]bool, len(got))
-	for _, n := range got {
-		switch {
-		case seen[n]:
-			return fmt.Errorf("field %q is returned twice", n)
-		case !left[n]:
-			return fmt.Errorf("field %q is not a declared field of the schema", n)
-		}
-		seen[n] = true
-	}
-	for _, n := range want {
-		if !seen[n] {
-			return fmt.Errorf("field %q is left out", n)
-		}
-	}
-	return nil
 }
 
 // Log is where a run reports: the lines it prints to Stderr, as velox-gen
@@ -370,7 +303,6 @@ type Config struct {
 	Plugins              []Plugin
 	Check                bool
 	Env                  []string
-	FieldOrder           FieldOrder
 	Stdout, Stderr       io.Writer
 }
 
@@ -413,7 +345,7 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 	if err != nil {
 		return done(err)
 	}
-	gm, err := LoadModel(ctx, dir, pattern, out, pkg, c.Env, c.FieldOrder)
+	gm, err := LoadModel(ctx, dir, pattern, out, pkg, c.Env)
 	if err != nil {
 		return done(err)
 	}

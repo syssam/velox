@@ -106,7 +106,7 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	if err != nil {
 		return fail(err)
 	}
-	gm, err := genrun.LoadModel(context.Background(), dir, pattern, out, pkg, env, nil)
+	gm, err := genrun.LoadModel(context.Background(), dir, pattern, out, pkg, env)
 	if err != nil {
 		return fail(err)
 	}

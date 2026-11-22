@@ -6,11 +6,11 @@
 // the same files: Schema is the package argument, Out is -out, Package is
 // -package, Plugins are the -plugin flags and Check is -check. Run also
 // takes what the command cannot: a plugin called in the process, with no
-// tool to build, and a FieldOrder rule.
+// tool to build.
 //
 // A Config that only the program can express is checked by the program:
 // run it with Check set in CI, in place of velox-gen -check. velox-gen
-// -check and verify know nothing of FieldOrder or of a plugin's Run.
+// -check and verify know nothing of a plugin's Run.
 package generate
 
 import (
@@ -50,21 +50,6 @@ type Config struct {
 	// It is os.Environ() when nil.
 	// GOFLAGS=-p=4 in it bounds the builds those commands run.
 	Env []string
-	// FieldOrder, if set, gives each entity's field order before code is
-	// generated.
-	// It is called once per schema, with the schema's Go name and the names
-	// of its declared fields, mixins' fields among them, in declaration
-	// order.
-	// The ID is not among them and stays first.
-	// The foreign keys velox adds for edges are not among them and stay
-	// last.
-	// A field declared for an edge, which edge.Field names, is among them.
-	// It must return a permutation of fields.
-	// A name it leaves out, adds or repeats fails the run with an error
-	// that names the schema.
-	// The order shapes the generated code, the plugins' model among it.
-	// velox-gen migrate reads the schema and does not see it.
-	FieldOrder func(entity string, fields []string) []string
 	// Stdout receives each path Run writes or removes, one per line.
 	// It is io.Discard when nil.
 	Stdout io.Writer
@@ -153,7 +138,7 @@ func Run(ctx context.Context, dir string, cfg Config) (Result, error) {
 	res, err := genrun.Run(ctx, dir, genrun.Config{
 		Schema: cfg.Schema, Out: cfg.Out, Package: cfg.Package,
 		Plugins: plugins, Check: cfg.Check, Env: cfg.Env,
-		FieldOrder: cfg.FieldOrder, Stdout: cfg.Stdout, Stderr: cfg.Stderr,
+		Stdout: cfg.Stdout, Stderr: cfg.Stderr,
 	})
 	return Result(res), err
 }

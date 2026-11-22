@@ -359,9 +359,9 @@ A Go program can run the same generate with package
 `generate.go`. Its `Config` has a field for each flag: `Schema`, `Out`,
 `Package`, `Plugins` and `Check`. It also takes what the command cannot: a
 plugin called in the process, such as `graphqlgen.Plugin(opts)` from
-`contrib/graphql/graphqlgen`, with no tool to build, and `FieldOrder`, which
-orders each entity's fields. Such a program is the check too: have CI run it
-with `Check: true`, as `velox-gen -check` knows neither.
+`contrib/graphql/graphqlgen`, with no tool to build. Such a program is the
+check too: have CI run it with `Check: true`, as `velox-gen -check` does not
+know a plugin's `Run`.
 
 ```go
 //go:build ignore
@@ -1321,23 +1321,7 @@ not a denial. `velox.Not(velox.NoFilter())` matches no row, for a caller who
 may see none. Several filters AND, in the order given.
 
 A schema written for veloxe keeps its `privacy` rules
-([ADR 0089](decisions/0089-veloxe-privacy-shape.md)). `privacy.And`, `Or` and
-`Not` combine rules with veloxe's semantics: `And` returns the first result
-that is not `Allow`, `Or` allows at the first `Allow`, and `Not` turns
-`Allow` into `Deny` and only the bare `Deny` into `Allow`. An `Or` whose
-rules do not allow returns a failing rule's error, which denies, where
-veloxe's returned the last result. To see why a
-statement was allowed or denied, `privacy.WithTrace` reports each rule's
-decision:
-
-```go
-ctx = privacy.WithTrace(ctx, func(e privacy.TraceEntry) {
-	log.Printf("%s %v: rule %d (%s): %s", e.Entity, e.Op, e.Index, e.Rule, e.Decision)
-})
-```
-
-Until a process first calls it, a rule costs one atomic load more
-([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
+([ADR 0089](decisions/0089-veloxe-privacy-shape.md)).
 
 ## Recording changes
 
@@ -1809,11 +1793,9 @@ in your code, and metrics. See the [otel example](../examples/otel).
 
 For something lighter, `velox.WithAround` runs your function around every
 statement, and `Query.SQL(ctx)` shows what a query would send, policy
-conditions included. `velox.Explain(ctx, q)` returns the database's plan
-for it: PostgreSQL's `EXPLAIN`, MySQL's `EXPLAIN FORMAT=TREE` or SQLite's
-`EXPLAIN QUERY PLAN`, policies and filters applied. It runs no `ANALYZE`, so
-nothing is executed
-([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
+conditions included. To read the database's plan for a query, take
+`q.SQL(ctx)` and run `EXPLAIN` on it through `db.Rows`, with the arguments
+`SQL` returned.
 
 `velox.WithLog(slog.Default(), velox.LogArgs())` logs every statement at
 Debug: its SQL, duration, rows and error. With `LogArgs`, it logs the

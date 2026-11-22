@@ -221,7 +221,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 | `client.User.Create().OnConflict(...).UpdateNewValues()` | `db.Insert(&u).OnConflict(U.Email).UpdateAll().Exec(ctx)` |
 | `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
-| none: `EXPLAIN` by hand on what `client.Debug()` logs | `velox.Explain(ctx, q)` |
+| none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
 | `client.User.Update().SkipDefault(user.FieldUpdatedAt)` (veloxe) | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
 | `client.User.Query().IDs(ctx)` | `velox.IDs[int64](ctx, db.Query[veloxgen.User]().Limit(n))` |
@@ -259,7 +259,6 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
 | `privacy.Allow` | `velox.Allow()` |
-| `privacy.And`, `privacy.Or`, `privacy.Not` (veloxe) | `privacy.And`, `Or`, `Not`; an `Or` that does not allow returns a failing rule's error, where veloxe's returned the last result (decision 0102) |
 
 ent's `sql.FieldContainsFold` has no velox form: the engine has no
 case-insensitive substring match. A `velox.Predicate` is a `Pred` of no
@@ -376,16 +375,15 @@ It writes what `go tool velox-gen` writes with the same settings.
 | `gen.WithPackage(path)` | not needed: the import path is the module's path joined to `Out`'s; `Package` names the package (default `Out`'s base name) |
 | `gen.WithSchema(path)` | `Schema`, a package pattern (default `./veloxschema`) |
 | `gen.WithFeatures(FeaturePrivacy, FeatureIntercept, ...)` | always on, so no flag: privacy is `Policy` and package `privacy`, intercept is `Interceptors` as row filters, lock is `ForUpdate`, modifier is `Expr`, `Calc`, `Select` and `SetExpr`, upsert is `OnConflict`, execquery is `db.Exec`, `Rows` and `Raw`, autodefault is the zero `DEFAULT` (decision 0090), entpredicates are the handles and `FieldEQ`, versioned migrations are velox-gen migrate, schemaconfig is `TableIn` and `sqlschema.Schema`; snapshot is not needed, as velox-gen loads a schema whose generated package is stale |
-| `gen.WithHooks(...)` | not offered. One rewrite is: `FieldOrder` gives each entity's field order, the rule a field-sorting hook implemented. A prefix hook for index names is the default (decision 0090). |
+| `gen.WithHooks(...)` | not offered. A hook that sorts each entity's fields has no form: `CREATE TABLE` follows the schema's declaration order, so declare the fields in the order wanted. A prefix hook for index names is the default (decision 0090). |
 | `gen.WithTemplates`, `compiler.TemplateDir`… | not offered: the generated package is entirely velox-gen's, reproducible from the schema alone, so `velox-gen -check` proves it current (decision 0034). Code of your own goes in a file of yours beside it. |
 | `compiler.Extensions(entgql.NewExtension(...))` | `Plugins`: `generate.Plugin{Tool: "velox-graphql"}` runs the tool; `graphqlgen.Plugin(opts)` from `contrib/graphql/graphqlgen` runs it in the process, with the same output |
 | `gen.WithBuildFlags`, `compiler.BuildFlags("-p=4")` | `Env: append(os.Environ(), "GOFLAGS=-p=4")`, the environment of every go command Run starts |
 | `gen.WithStorageDriver`, `gen.WithIDType`, `gen.WithHeader` | not offered: the dialect is the migration directory's, IDs are int64 unless the schema declares one, and the header is velox-gen's, which marks the files it owns |
 
-A program with `FieldOrder`, or a plugin that runs only in the process, is
-its own check: run it with `Check: true` in CI, where it returns
-`generate.ErrStale` when a file is out of date. `velox-gen -check` knows
-neither.
+A program with a plugin that runs only in the process is its own check: run
+it with `Check: true` in CI, where it returns `generate.ErrStale` when a file
+is out of date. `velox-gen -check` does not know such a plugin.
 
 ## Refused by design
 

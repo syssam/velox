@@ -583,7 +583,6 @@ func DriverCode(err error) (string, bool)
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int, unfilled ...int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
-func Explain[E any](ctx context.Context, q Query[E]) (string, error)
 func Expr[E any](text string, args ...any) Pred[E]
 func FieldContains(name, s string) Predicate
 func FieldContainsFold(name, s string) Predicate
@@ -1274,7 +1273,7 @@ type Supports struct { Protocol, Model int }
 
 package generate
 func Run(ctx context.Context, dir string, cfg Config) (Result, error)
-type Config struct { Schema string Out string Package string Plugins []Plugin Check bool Env []string FieldOrder func(entity string, fields []string) []string Stdout io.Writer Stderr io.Writer }
+type Config struct { Schema string Out string Package string Plugins []Plugin Check bool Env []string Stdout io.Writer Stderr io.Writer }
 type Plugin struct { Tool string Options map[string]string Run func(context.Context, *plugin.Request) (*plugin.Response, error) }
 type Result struct { Written []string Removed []string Stale []string Warnings []string }
 var ErrInterrupted
@@ -1291,12 +1290,6 @@ Query is interface { Filter() PrivacyFilter }
 QueryPolicy is []QueryRule
 QueryPolicy.EvalQuery(ctx context.Context, q PrivacyQuery) error
 QueryRule is interface { EvalQuery(ctx context.Context, q PrivacyQuery) error }
-TraceEntry.Decision string
-TraceEntry.Entity string
-TraceEntry.Err error
-TraceEntry.Index int
-TraceEntry.Op Op
-TraceEntry.Rule string
 func (f FilterFunc) EvalMutation(ctx context.Context, m Mutation) error
 func (f FilterFunc) EvalQuery(ctx context.Context, q Query) error
 func (f MutationRuleFunc) EvalMutation(ctx context.Context, m Mutation) error
@@ -1304,18 +1297,14 @@ func (f QueryRuleFunc) EvalQuery(ctx context.Context, q Query) error
 func Allowf(format string, a ...any) error
 func AlwaysAllowRule() QueryMutationRule
 func AlwaysDenyRule() QueryMutationRule
-func And(rules ...QueryMutationRule) QueryMutationRule
 func ContextQueryMutationRule(eval func(context.Context) error) QueryMutationRule
 func DecisionContext(parent context.Context, decision error) context.Context
 func DecisionFromContext(ctx context.Context) (error, bool)
 func DenyMutationOperationRule(op velox.Op) MutationRule
 func Denyf(format string, a ...any) error
 func IsDecision(err error) bool
-func Not(rule QueryMutationRule) QueryMutationRule
 func OnMutationOperation(rule MutationRule, op velox.Op) MutationRule
-func Or(rules ...QueryMutationRule) QueryMutationRule
 func Skipf(format string, a ...any) error
-func WithTrace(ctx context.Context, fn func(TraceEntry)) context.Context
 type Decision = engine.Decision
 type Filter = engine.PrivacyFilter
 type FilterFunc func(context.Context, Filter) error
@@ -1330,7 +1319,6 @@ type QueryMutationRule interface { QueryRule MutationRule }
 type QueryPolicy = engine.QueryPolicy
 type QueryRule = engine.QueryRule
 type QueryRuleFunc func(context.Context, Query) error
-type TraceEntry = engine.TraceEntry
 var Allow
 var Deny
 var Skip

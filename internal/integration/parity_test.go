@@ -2,7 +2,6 @@ package integration
 
 import (
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,28 +19,6 @@ func TestDistinct(t *testing.T) {
 			t.Errorf("Values: %v, %v", orgs, err)
 		}
 		wantRows(t, "projection", rowsOf(t, ctx, q.Select(I.OrgID), 1), []string{"1", "2"})
-	})
-}
-
-// TestExplain runs each database's EXPLAIN on a query, its parameters
-// bound, and reads a plan that names the table. It sends no write: the
-// rows stay.
-func TestExplain(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
-		plan, err := velox.Explain(ctx, tg.db.Query[testmodel.Invoice]().Where(I.Number.EQ("INV-1"), I.Paid.EQ(true)).Limit(5))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(plan, "invoices") || len(strings.TrimSpace(plan)) == 0 {
-			t.Errorf("plan:\n%s", plan)
-		}
-		plan, err = velox.Explain(ctx, tg.db.Query[testmodel.Invoice]().Distinct().Select(I.OrgID).Limit(5))
-		if err != nil || !strings.Contains(plan, "invoices") {
-			t.Errorf("projection: %v\n%s", err, plan)
-		}
-		if n, err := tg.db.Query[testmodel.Invoice]().Count(ctx); err != nil || n != 5 {
-			t.Errorf("count after: %d, %v", n, err)
-		}
 	})
 }
 

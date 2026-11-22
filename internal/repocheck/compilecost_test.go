@@ -360,8 +360,7 @@ var genericObjects = []struct {
 	//
 	// Query.Distinct, InsertQuery.UpdateAll and Statement.Distinct (ADR 0102)
 	// took entityDescUse from 771328 to 772452 bytes, entityDescHooks from
-	// 856428 to 857550 and entityDescMixin from 901728 to 902852. Explain as a
-	// method of Query cost about 900 bytes more in each, so it is a function.
+	// 856428 to 857550 and entityDescMixin from 901728 to 902852.
 	{"entityDescUse", "", entityDescUseSrc, 776192},       // measured 772452
 	{"entityDescHooks", "", entityDescHooksBound, 863232}, // measured 857550
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,

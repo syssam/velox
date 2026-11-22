@@ -189,8 +189,6 @@ type Statement struct {
 	// columnRead says the SELECT reads one column for Values or IDs
 	// (ColumnRead), which Distinct may apply to.
 	columnRead bool
-	// explain says the SELECT is sent under the dialect's EXPLAIN (Explain).
-	explain bool
 }
 
 // KeepDefaults adds cols to the columns of st, an UPDATE, whose UpdateDefault
