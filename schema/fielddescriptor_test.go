@@ -6,6 +6,7 @@ import (
 
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/internal/desc"
 	"github.com/syssam/velox/schema/mixin"
 )
 
@@ -17,13 +18,20 @@ func (Doc) Fields() []schema.Field {
 	return []schema.Field{field.String("token").DefaultFunc(func() string { return "tok" })}
 }
 
-// Holey lists a nil mixin and a nil field, which velox-gen refuses and
+// Holey lists a nil mixin, a nil field and a field with no descriptor, which velox-gen refuses and
 // FieldDescriptors skips.
 type Holey struct{ schema.Schema }
 
 func (Holey) Mixin() []schema.Mixin { return []schema.Mixin{nil} }
 
-func (Holey) Fields() []schema.Field { return []schema.Field{nil, field.String("name")} }
+func (Holey) Fields() []schema.Field {
+	return []schema.Field{nil, noDescriptor{}, field.String("name")}
+}
+
+// noDescriptor is a Field with no descriptor, which FieldDescriptors skips.
+type noDescriptor struct{}
+
+func (noDescriptor) Descriptor() *desc.Field { return nil }
 
 // Counted counts the calls of its Mixin and Fields.
 type Counted struct {
