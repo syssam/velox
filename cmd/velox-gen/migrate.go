@@ -23,10 +23,10 @@ import (
 const defaultMigrations = "./migrations"
 
 // runMigrate is velox-gen migrate: diff, apply, status, drift, baseline,
-// lint, hash, resolve and sql.
+// lint, hash, resolve, rebase and sql.
 func runMigrate(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "velox-gen: migrate needs a subcommand: diff, apply, status, drift, baseline, lint, hash, resolve or sql")
+		_, _ = fmt.Fprintln(stderr, "velox-gen: migrate needs a subcommand: diff, apply, status, drift, baseline, lint, hash, resolve, rebase or sql")
 		printUsage(stderr)
 		return 2
 	}
@@ -43,6 +43,8 @@ func runMigrate(args []string, dir string, env []string, stdout, stderr io.Write
 		return runMigrateBaseline(args[1:], dir, env, stdout, stderr)
 	case "resolve":
 		return runMigrateResolve(args[1:], dir, env, stdout, stderr)
+	case "rebase":
+		return runMigrateRebase(args[1:], dir, env, stdout, stderr)
 	case "lint":
 		return runMigrateLint(args[1:], dir, stderr)
 	case "hash":

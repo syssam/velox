@@ -57,10 +57,21 @@ leave the file to run again, which meets the real schema and Up's checks.
 Both branches ran `migrate diff` from 0001, so each has a `0002_*.sql`, and `velox.sum`
 and `schema.json` conflict in the merge.
 
-1. Keep the main branch's `velox.sum`, `schema.json` and `0002_main.sql`, and delete
-   your `0002_mine.sql`.
-2. Run `migrate diff -name mine` on the merged schema. It writes `0003_mine.sql`. Do
-   not rename a file by hand: the snapshot and sum follow from `diff`.
+1. Keep the main branch's `schema.json` and `0002_main.sql`, and your
+   `0002_mine.sql`. `velox.sum` may stay in conflict.
+2. On the merged schema package, run:
+
+       migrate rebase 0002_mine.sql
+
+   It moves the file to the next free version, `0003_mine.sql`, as it is, with
+   the statements you wrote by hand; writes the schema package's tables as
+   `schema.json`; and rebuilds `velox.sum`. Name every file of your branch, as
+   `0002_mine_enum.sql 0003_mine.sql`: they keep their order. Before it writes
+   it applies the files to an empty database, a temporary SQLite file or
+   `-scratch-db` on PostgreSQL and MySQL, and refuses, writing nothing, unless
+   they make `schema.json`: two files that touch one column, or a schema change
+   no file makes yet, are found here. `TestMigrateRebase` runs these steps. Do
+   not rename a file by hand: the snapshot and sum follow from `rebase`.
 
 A database your branch ran on now holds version 2 as `0002_mine.sql`, and `apply` says:
 

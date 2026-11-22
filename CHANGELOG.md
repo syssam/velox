@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-gen: `migrate rebase <file>...` moves a branch's migration files to
+  the versions after the directory's others, as they are, writes the schema
+  package's tables as `schema.json` and rebuilds `velox.sum`, after checking
+  that the files make it (`migrate.Rebase`). It replaces deleting the file
+  and running `diff` again when two branches took one version.
 - migrate: `WithDryRun` makes `Up` check the pending files and change
   nothing: on SQLite it applies them to a copy of the database, on
   PostgreSQL and MySQL it runs the apply-time walk of each file read-only.

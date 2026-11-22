@@ -441,12 +441,12 @@ func TestMigrateUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := runCLI(t, dir, "migrate")
-	want(t, "migrate", code, out, errs, 2, "", "velox-gen: migrate needs a subcommand: diff, apply, status, drift, baseline, lint, hash, resolve or sql\n"+string(usage))
+	want(t, "migrate", code, out, errs, 2, "", "velox-gen: migrate needs a subcommand: diff, apply, status, drift, baseline, lint, hash, resolve, rebase or sql\n"+string(usage))
 	code, out, errs = runCLI(t, dir, "migrate", "nope")
 	want(t, "nope", code, out, errs, 2, "", "velox-gen: migrate: unknown subcommand \"nope\"\n"+string(usage))
 	code, out, errs = runCLI(t, dir, "migrate", "-h")
 	want(t, "-h", code, out, errs, 0, "", string(usage))
-	for _, sub := range []string{"diff", "apply", "status", "drift", "baseline", "lint", "hash", "resolve"} {
+	for _, sub := range []string{"diff", "apply", "status", "drift", "baseline", "lint", "hash", "resolve", "rebase"} {
 		code, _, errs := runCLI(t, dir, "migrate", sub, "-h")
 		if code != 0 || !strings.HasPrefix(errs, string(usage)) || !strings.Contains(errs, "Flags of migrate "+sub+":\n") || !strings.Contains(errs, "  -dir string\n") {
 			t.Errorf("%s -h: %d\n%s", sub, code, errs)

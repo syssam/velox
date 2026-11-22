@@ -33,6 +33,9 @@ Usage:
         compare the database with schema.json, or, when files above the
         version are pending, with the files up to it applied to -scratch-db,
         and refuse a difference unless -force gives the reason
+  velox-gen migrate rebase [-dir ./migrations] [-scratch-db dsn] [-replay=false] file.sql... [package]
+        move a branch's migration files after the directory's others, as two
+        branches that took one version need, and rebuild schema.json and velox.sum
   velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
         print the schema package's DDL, for Atlas's external_schema
 

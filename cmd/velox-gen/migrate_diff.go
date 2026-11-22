@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -334,16 +335,24 @@ func (c *migrateCmd) checkDiff(dir string, d *migrate.Dir, to *migrate.Schema, o
 
 // checkReplay is the rest of diff -check: it applies the directory's files to
 // an empty database, as migrate.Verify does, and fails unless the result is
-// schema.json. The database is dsn, which must be empty and is left with the
-// files applied, or with no dsn on SQLite a temporary file, removed after. A
-// PostgreSQL or MySQL directory with no dsn is a usage error: SQLite cannot
-// run its files, and a check that ran nothing would pass.
+// schema.json; see replayed.
 func (c *migrateCmd) checkReplay(dir string, d *migrate.Dir, dsn string) int {
+	return c.replayed(os.DirFS(c.abs(dir)), d.Config.Dialect, dsn, "-check", "the files do not make schema.json")
+}
+
+// replayed applies the files of the directory fsys to an empty database with
+// migrate.Verify and returns 0 when they make its schema.json, else 1 after
+// it says why, after fails. The database is dsn, which must be empty and is
+// left with the files applied, or with no dsn on SQLite a temporary file,
+// removed after. A PostgreSQL or MySQL directory with no dsn is exit 2, which
+// who, the flag or command that replays, starts: SQLite cannot run its files,
+// and a check that ran nothing would pass.
+func (c *migrateCmd) replayed(fsys fs.FS, dialect velox.Dialect, dsn, who, fails string) int {
 	bc := &dbCmd{migrateCmd: c, db: &dsn}
 	where := "-scratch-db"
 	if dsn == "" {
-		if d.Config.Dialect != velox.SQLite {
-			_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate diff: -check applies the files to an empty database and compares it with schema.json, and the files of this %s directory need a %s one: pass -scratch-db <dsn>, or -replay=false to compare the schema package with schema.json alone\n", d.Config.Dialect, d.Config.Dialect)
+		if dialect != velox.SQLite {
+			_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate %s: %s applies the files to an empty database and compares it with schema.json, and the files of this %s directory need a %s one: pass -scratch-db <dsn>, or -replay=false to compare the schema package with schema.json alone\n", c.name, who, dialect, dialect)
 			return 2
 		}
 		tmp, err := os.MkdirTemp("", "velox-check-")
@@ -353,18 +362,18 @@ func (c *migrateCmd) checkReplay(dir string, d *migrate.Dir, dsn string) int {
 		defer func() { _ = os.RemoveAll(tmp) }()
 		dsn, where = filepath.Join(tmp, "check.db"), "a temporary SQLite file"
 	}
-	db, code, ok := bc.open(d.Config.Dialect, dsn, "-scratch-db", false)
+	db, code, ok := bc.open(dialect, dsn, "-scratch-db", false)
 	if !ok {
 		return code
 	}
 	defer func() { _ = db.Close() }()
 	ctx, stop := signalContext()
 	defer stop()
-	if err := migrate.Verify(ctx, db, os.DirFS(c.abs(dir))); err != nil {
+	if err := migrate.Verify(ctx, db, fsys); err != nil {
 		if ctx.Err() != nil {
 			return bc.fail(1, ctx.Err())
 		}
-		return bc.fail(1, fmt.Errorf("the files do not make schema.json: applied to %s, %s", where, strings.TrimPrefix(err.Error(), "migrate: ")))
+		return bc.fail(1, fmt.Errorf("%s: applied to %s, %s", fails, where, strings.TrimPrefix(err.Error(), "migrate: ")))
 	}
 	return 0
 }

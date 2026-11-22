@@ -36,6 +36,7 @@
 //	velox-gen migrate hash [-dir ./migrations] [-check]
 //	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
 //	                          [-force reason] [-scratch-db dsn]
+//	velox-gen migrate rebase [-dir ./migrations] [-scratch-db dsn] [-replay=false] file.sql... [package]
 //	velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
@@ -275,6 +276,21 @@
 // (-forget). A version not in the state its way needs is exit 1; no -version,
 // or not exactly one way, is exit 2. docs/migrations-operations.md has when.
 //
+// migrate rebase moves the migration files named, the ones a branch wrote,
+// to the versions after the directory's other files, in their order, with
+// their names and content, hand-written statements and all, as package
+// migrate's Rebase does: what two branches that each took the next version
+// need once they meet. schema.json becomes the schema package's tables
+// (default ./veloxschema), with the constraints the directory's schema.json,
+// the main branch's, holds; velox.sum is rebuilt, so a merge's conflict in it
+// does not matter. Before it writes it applies the files to an empty
+// database and refuses, writing nothing, unless they make schema.json, as
+// diff -check does: a temporary SQLite file, or -scratch-db on PostgreSQL and
+// MySQL, without which it is exit 2. -replay=false writes unchecked. It
+// prints "<old path> -> <new path>" for each file, then schema.json and
+// velox.sum. An argument that ends in .sql is a file, by its name in -dir;
+// another is the package. No file is exit 2.
+//
 // -applied and -adopt check the claim first. With m the highest version the
 // history then holds, the database must hold what the directory says it
 // holds at m: schema.json when m is the directory's last file, else what the
@@ -501,6 +517,9 @@ func printUsage(w io.Writer) {
         compare the database with schema.json, or, when files above the
         version are pending, with the files up to it applied to -scratch-db,
         and refuse a difference unless -force gives the reason
+  velox-gen migrate rebase [-dir ./migrations] [-scratch-db dsn] [-replay=false] file.sql... [package]
+        move a branch's migration files after the directory's others, as two
+        branches that took one version need, and rebuild schema.json and velox.sum
   velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
         print the schema package's DDL, for Atlas's external_schema
 

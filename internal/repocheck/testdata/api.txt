@@ -1189,6 +1189,7 @@ func NewPlan(from, to *Schema, opts PlanOptions) (*Plan, error)
 func ParseAllow(s string) ([]Allow, error)
 func ParseFile(d velox.Dialect, path string, data []byte) (File, error)
 func ReadDir(fsys fs.FS) (*Dir, error)
+func Rebase(fsys fs.FS, paths []string, to *Schema) (map[string][]byte, map[string]string, error)
 func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error)
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error
 func SchemaAt(ctx context.Context, scratch *sql.DB, dir fs.FS, version uint64) (*Schema, error)
