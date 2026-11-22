@@ -512,6 +512,9 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 		Field: d.Field, OnDelete: d.OnDelete, Table: d.Table, Columns: d.Columns, Symbols: d.Symbols, Comment: d.Comment,
 		Position: pos, Pos: l.pos(d.PC),
 	}
+	if t := d.Through; t != nil {
+		out.Through = &loadjson.Through{Name: t.Name, Type: t.Type, TypePkg: t.TypePkg}
+	}
 	err := checkPlacement(d.Annotations, "edge")
 	if err == nil {
 		out.Annotations, err = listAnnotations(d.Annotations)

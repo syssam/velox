@@ -926,6 +926,7 @@ func (b *AssocBuilder) Immutable() *AssocBuilder
 func (b *AssocBuilder) OnDelete(a Action) *AssocBuilder
 func (b *AssocBuilder) Required() *AssocBuilder
 func (b *AssocBuilder) StorageKey(opts ...StorageOption) *AssocBuilder
+func (b *AssocBuilder) Through(name string, t any) *AssocBuilder
 func (b *AssocBuilder) Unique() *AssocBuilder
 func (b *InverseBuilder) Annotations(as ...schema.Annotation) *InverseBuilder
 func (b *InverseBuilder) Comment(s string) *InverseBuilder
@@ -936,6 +937,7 @@ func (b *InverseBuilder) OnDelete(a Action) *InverseBuilder
 func (b *InverseBuilder) Ref(name string) *InverseBuilder
 func (b *InverseBuilder) Required() *InverseBuilder
 func (b *InverseBuilder) StorageKey(opts ...StorageOption) *InverseBuilder
+func (b *InverseBuilder) Through(name string, t any) *InverseBuilder
 func (b *InverseBuilder) Unique() *InverseBuilder
 func Column(name string) StorageOption
 func Columns(to, from string) StorageOption

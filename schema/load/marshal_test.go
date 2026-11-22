@@ -546,3 +546,41 @@ func TestMarshalRefusesAPromotedPolicy(t *testing.T) {
 		t.Errorf("pos %q, want line %d", p, policyBaseLine)
 	}
 }
+
+type throughGroup struct{ schema.Schema }
+
+func (throughGroup) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("members", User.Type).Through("memberships", throughLink.Type),
+		edge.To("following", throughGroup.Type).Through("follows", throughLink.Type).From("followers").Through("follows", throughLink.Type),
+	}
+}
+
+type throughLink struct{ schema.Schema }
+
+// Through survives the round trip through the load model, on an assoc edge
+// and on an inverse declared inline.
+func TestMarshalThrough(t *testing.T) {
+	m := marshal(t, throughGroup{}, throughLink{})
+	g := m.Schemas[0]
+	want := &loadjson.Through{Name: "memberships", Type: "throughLink", TypePkg: "github.com/syssam/velox/schema/load_test"}
+	if len(g.Edges) != 3 || !reflect.DeepEqual(g.Edges[0].Through, want) {
+		t.Fatalf("members %+v", g.Edges[0])
+	}
+	if g.Edges[1].Through == nil || g.Edges[1].Through.Name != "follows" || g.Edges[2].Through == nil || g.Edges[2].Through.Name != "follows" || !g.Edges[2].Inline {
+		t.Fatalf("following %+v followers %+v", g.Edges[1], g.Edges[2])
+	}
+	if m.Schemas[1].Edges != nil {
+		t.Fatalf("throughLink %+v", m.Schemas[1].Edges)
+	}
+	bad := decode(t, badThrough{})
+	if got := errorText(bad); got != "schema badThrough: edge \"members\": Through needs the name of the edge to the edge schema\n" {
+		t.Fatalf("errors %q", got)
+	}
+}
+
+type badThrough struct{ schema.Schema }
+
+func (badThrough) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("members", User.Type).Through("", throughLink.Type)}
+}

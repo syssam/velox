@@ -247,10 +247,17 @@ type Edge struct {
 	Table               string // the join table or the foreign-key table
 	Columns             []string
 	Symbols             []string
+	Through             *Through // the edge schema of a many-to-many edge; nil without one
 	Comment             string
 	Annotations         []Annotation
 	PC                  uintptr // the constructor's call, for PosOf
 	Errs                []error // every misuse of the builder, each a reason without the edge's name
+}
+
+// Through names the edge schema of a many-to-many edge: the schema whose
+// table holds the edge's links, and the name of the edge to it.
+type Through struct {
+	Name, Type, TypePkg string // Type is the edge schema's type name; TypePkg its package path
 }
 
 // Index is the descriptor of one index. The index package's builders fill it.

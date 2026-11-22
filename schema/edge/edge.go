@@ -71,6 +71,21 @@ func setOnDelete(d *desc.Edge, a Action) {
 	}
 }
 
+// setThrough records the edge schema t names, under name, on d, or the
+// misuse.
+func setThrough(d *desc.Edge, name string, t any) {
+	if name == "" {
+		d.Errs = append(d.Errs, errors.New("Through needs the name of the edge to the edge schema"))
+		return
+	}
+	typeName, pkg, ok := typ(t)
+	if !ok {
+		d.Errs = append(d.Errs, errors.New("the type of Through must be a schema's Type method expression, such as Membership.Type"))
+		return
+	}
+	d.Through = &desc.Through{Name: name, Type: typeName, TypePkg: pkg}
+}
+
 // StorageOption sets where an edge is stored: the table, the columns and the
 // constraint symbols.
 type StorageOption func(*desc.Edge)
@@ -141,6 +156,15 @@ func (b *AssocBuilder) StorageKey(opts ...StorageOption) *AssocBuilder {
 // key to act on. Both edges of a relation must agree.
 func (b *AssocBuilder) OnDelete(a Action) *AssocBuilder { setOnDelete(b.d, a); return b }
 
+// Through makes the schema t names the edge schema of a many-to-many edge:
+// its table holds the links, which have their own ID and fields. The owner
+// gains a to-many edge named name to the edge schema. As in ent, the edge
+// schema binds the two key fields with two Required to-one edges.
+func (b *AssocBuilder) Through(name string, t any) *AssocBuilder {
+	setThrough(b.d, name, t)
+	return b
+}
+
 // Comment sets the edge's documentation.
 func (b *AssocBuilder) Comment(s string) *AssocBuilder { b.d.Comment = s; return b }
 
@@ -206,6 +230,14 @@ func (b *InverseBuilder) StorageKey(opts ...StorageOption) *InverseBuilder {
 // key when the row they reference is deleted. On an inverse declared inline
 // with To(...).From(...), it sets the inverse's side. See AssocBuilder.OnDelete.
 func (b *InverseBuilder) OnDelete(a Action) *InverseBuilder { setOnDelete(b.d, a); return b }
+
+// Through makes the schema t names the edge schema of the inverse of a
+// many-to-many edge: the target gains a to-many edge named name to it. It
+// names the edge schema the assoc edge names. See AssocBuilder.Through.
+func (b *InverseBuilder) Through(name string, t any) *InverseBuilder {
+	setThrough(b.d, name, t)
+	return b
+}
 
 // Comment sets the edge's documentation.
 func (b *InverseBuilder) Comment(s string) *InverseBuilder { b.d.Comment = s; return b }

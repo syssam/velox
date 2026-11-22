@@ -162,3 +162,45 @@ func TestBuildersSetTheirFields(t *testing.T) {
 		t.Errorf("From: %+v", from)
 	}
 }
+
+type Group struct{ schema.Schema }
+type Membership struct{ schema.Schema }
+
+func TestThrough(t *testing.T) {
+	to := edge.To("groups", User.Type).Through("memberships", Membership.Type).Descriptor()
+	if len(to.Errs) != 0 || to.Through == nil || *to.Through != (desc.Through{Name: "memberships", Type: "Membership", TypePkg: "github.com/syssam/velox/schema/edge_test"}) {
+		t.Fatalf("To: %+v through %+v", to, to.Through)
+	}
+	from := edge.From("users", User.Type).Ref("groups").Through("memberships", Membership.Type).Descriptor()
+	if len(from.Errs) != 0 || from.Through == nil || from.Through.Name != "memberships" || from.Through.Type != "Membership" {
+		t.Fatalf("From: %+v through %+v", from, from.Through)
+	}
+	inline := edge.To("following", User.Type).Through("follows", Membership.Type).From("followers").Through("follows", Membership.Type).Descriptor()
+	if inline.Through == nil || inline.Ref == nil || inline.Ref.Through == nil || inline.Ref.Through.Name != "follows" {
+		t.Fatalf("inline: the inverse's Through is the inverse's: %+v ref %+v", inline, inline.Ref)
+	}
+	if d := edge.To("groups", User.Type).Descriptor(); d.Through != nil {
+		t.Fatalf("an edge without Through has none: %+v", d.Through)
+	}
+}
+
+func TestThroughMisuse(t *testing.T) {
+	for _, d := range []*desc.Edge{
+		edge.To("groups", User.Type).Through("", Membership.Type).Descriptor(),
+		edge.From("users", User.Type).Through("", Membership.Type).Descriptor(),
+	} {
+		if len(d.Errs) != 1 || d.Errs[0].Error() != "Through needs the name of the edge to the edge schema" {
+			t.Errorf("empty name: %v", d.Errs)
+		}
+	}
+	for _, v := range []any{nil, "Membership", func() {}} {
+		for _, d := range []*desc.Edge{
+			edge.To("groups", User.Type).Through("memberships", v).Descriptor(),
+			edge.From("users", User.Type).Through("memberships", v).Descriptor(),
+		} {
+			if len(d.Errs) != 1 || d.Errs[0].Error() != "the type of Through must be a schema's Type method expression, such as Membership.Type" || d.Through != nil {
+				t.Errorf("Through with %T: %v %+v", v, d.Errs, d.Through)
+			}
+		}
+	}
+}

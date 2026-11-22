@@ -7,7 +7,7 @@ package loadjson
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 8
+const Version = 9
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -144,12 +144,21 @@ type Edge struct {
 	Table       string                     `json:"table,omitempty"`
 	Columns     []string                   `json:"columns,omitempty"`
 	Symbols     []string                   `json:"symbols,omitempty"`
+	Through     *Through                   `json:"through,omitempty"` // the edge schema of a many-to-many edge
 	Comment     string                     `json:"comment,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position    Position                   `json:"position"`
 	Inline      bool                       `json:"inline,omitempty"`        // an inverse declared with To(...).From(...)
 	NonUniqueFK bool                       `json:"non_unique_fk,omitempty"` // sqlschema.NonUniqueFK: a to-one edge meant as many-to-one, whose key is not unique
 	Pos         string                     `json:"pos,omitempty"`           // file:line of the constructor's call
+}
+
+// Through names the edge schema of a many-to-many edge, and the name of the
+// edge to it that velox-gen adds to the edge's owner.
+type Through struct {
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	TypePkg string `json:"type_pkg"`
 }
 
 // OpClass is the operator class of one field or edge an index covers.

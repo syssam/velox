@@ -21,3 +21,10 @@ func ExampleTo() {
 	// Output:
 	// posts Post CASCADE
 }
+
+func ExampleAssocBuilder_Through() {
+	groups := edge.To("groups", Group.Type).Through("memberships", Membership.Type).Descriptor()
+	fmt.Println(groups.Name, groups.Type, groups.Through.Name, groups.Through.Type)
+	// Output:
+	// groups Group memberships Membership
+}
