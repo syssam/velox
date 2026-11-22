@@ -1,5 +1,6 @@
-// Package modeltest holds the model the GraphQL packages' tests share: one
-// JSON document whose annotations cover every annotation.
+// Package modeltest holds the models the GraphQL packages' tests share: one
+// JSON document whose annotations cover every annotation, and one of edge
+// schemas.
 package modeltest
 
 import (
@@ -13,11 +14,27 @@ import (
 //go:embed model.json
 var modelJSON []byte
 
+//go:embed edgeschema.json
+var edgeSchemaJSON []byte
+
 // Model returns a fresh copy of model.json, so a test may change it.
 func Model(t testing.TB) *plugin.Model {
 	t.Helper()
 	var m plugin.Model
 	if err := json.Unmarshal(modelJSON, &m); err != nil {
+		t.Fatal(err)
+	}
+	return &m
+}
+
+// EdgeSchema returns a fresh copy of edgeschema.json: velox-gen's model of
+// internal/codegen's edgeschema golden case, users in groups through the
+// edge schema Membership and following users through Follow, whose note Add
+// cannot fill, with GraphQL annotations added.
+func EdgeSchema(t testing.TB) *plugin.Model {
+	t.Helper()
+	var m plugin.Model
+	if err := json.Unmarshal(edgeSchemaJSON, &m); err != nil {
 		t.Fatal(err)
 	}
 	return &m

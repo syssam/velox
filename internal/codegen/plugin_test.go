@@ -683,8 +683,32 @@ func TestPluginModelEdgeSchemaGolden(t *testing.T) {
 	if len(m.Entities) != 4 {
 		t.Fatalf("%d entities, want User, Group, Membership and Follow alone", len(m.Entities))
 	}
-	if ms := pluginEntity(t, m, "Membership"); ms.Join || len(ms.PrimaryKey) != 1 || len(ms.Edges) != 2 {
+	if ms := pluginEntity(t, m, "Membership"); ms.Join || !ms.EdgeSchema || len(ms.PrimaryKey) != 1 || len(ms.Edges) != 2 {
 		t.Fatalf("Membership %+v", ms)
+	}
+	if pluginEntity(t, m, "User").EdgeSchema {
+		t.Fatal("User is an edge schema")
+	}
+	user := pluginEntity(t, m, "User")
+	// The M2M edge names the edge schema as the entity of its links, and its
+	// through edge; Follow's note is a column Add cannot fill.
+	if g := pluginEdge(t, user, "groups"); g.Join != "Membership" || g.Through != "memberships" || len(g.Unfilled) != 0 {
+		t.Fatalf("groups %+v", g)
+	}
+	for _, name := range []string{"following", "followers"} {
+		if f := pluginEdge(t, user, name); f.Join != "Follow" || strings.Join(f.Unfilled, ",") != "note" {
+			t.Fatalf("%s %+v", name, f)
+		}
+	}
+	if f := pluginEdge(t, user, "followers"); f.Through != "" {
+		t.Fatalf("followers declares no Through: %+v", f)
+	}
+	// The through edge's Ref names the key edge, which names no edge back.
+	if ms := pluginEdge(t, user, "memberships"); ms.Kind != plugin.O2M || ms.Ref != "user" || ms.Join != "" || ms.Through != "" {
+		t.Fatalf("memberships %+v", ms)
+	}
+	if key := pluginEdge(t, pluginEntity(t, m, "Membership"), "user"); key.Ref != "" {
+		t.Fatalf("the key edge names %q back", key.Ref)
 	}
 	got, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {

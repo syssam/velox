@@ -7,6 +7,7 @@
       "label": "follow",
       "handles": "Follows",
       "table": "follows",
+      "edge_schema": true,
       "fields": [
         {
           "name": "id",
@@ -111,7 +112,9 @@
           "target": "User",
           "ref": "groups",
           "kind": "M2M",
-          "inverse": true
+          "inverse": true,
+          "join": "Membership",
+          "through": "memberships"
         },
         {
           "name": "memberships",
@@ -134,6 +137,7 @@
       "label": "membership",
       "handles": "Memberships",
       "table": "memberships",
+      "edge_schema": true,
       "fields": [
         {
           "name": "id",
@@ -258,14 +262,21 @@
           "go_name": "Groups",
           "target": "Group",
           "ref": "users",
-          "kind": "M2M"
+          "kind": "M2M",
+          "join": "Membership",
+          "through": "memberships"
         },
         {
           "name": "following",
           "go_name": "Following",
           "target": "User",
           "ref": "followers",
-          "kind": "M2M"
+          "kind": "M2M",
+          "join": "Follow",
+          "through": "follows",
+          "unfilled": [
+            "note"
+          ]
         },
         {
           "name": "followers",
@@ -273,7 +284,11 @@
           "target": "User",
           "ref": "following",
           "kind": "M2M",
-          "inverse": true
+          "inverse": true,
+          "join": "Follow",
+          "unfilled": [
+            "note"
+          ]
         },
         {
           "name": "memberships",

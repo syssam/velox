@@ -55,7 +55,9 @@ type Model struct {
 	Enums      []*Enum   `json:"enums"`       // sorted by Type
 }
 
-// Entity is a schema, or a many-to-many join entity.
+// Entity is a schema, or a many-to-many join entity. A schema may be an edge
+// schema (edge.Through): a many-to-many relation's links, an entity of its
+// own with an ID.
 type Entity struct {
 	Name        string   `json:"name"`                   // the Go type name, e.g. "User": the schema's struct name, or for a join entity the one velox-gen gives it
 	Label       string   `json:"label"`                  // snake_case of Name
@@ -63,6 +65,7 @@ type Entity struct {
 	Table       string   `json:"table"`                  // the table's name
 	TableSchema string   `json:"table_schema,omitempty"` // the database schema that holds Table, from schema.TableIn; "" for the connection's default
 	Join        bool     `json:"join,omitempty"`         // a many-to-many join entity
+	EdgeSchema  bool     `json:"edge_schema,omitempty"`  // a schema whose rows are a many-to-many relation's links (edge.Through); Join is false
 	Comment     string   `json:"comment,omitempty"`      // the Comment annotation's text, for descriptions
 	Fields      []*Field `json:"fields"`                 // Fields[0] is the ID
 	Edges       []*Edge  `json:"edges"`
@@ -158,7 +161,7 @@ type Edge struct {
 	Name      string   `json:"name"`                // the schema's edge name, e.g. "posts"
 	GoName    string   `json:"go_name"`             // its Go name, e.g. "Posts"
 	Target    string   `json:"target"`              // the target entity's Name
-	Ref       string   `json:"ref,omitempty"`       // the Name of the paired edge on Target, set on both edges of a pair; "" for an edge without an inverse
+	Ref       string   `json:"ref,omitempty"`       // the Name of the paired edge on Target, set on both edges of a pair; "" for an edge without an inverse. A through edge (Edge.Through) names the edge schema's key edge, which does not name it back
 	Kind      EdgeKind `json:"kind"`                // the relation, seen from this edge's entity
 	Unique    bool     `json:"unique,omitempty"`    // the edge points to at most one row (O2O, M2O)
 	Required  bool     `json:"required,omitempty"`  // such a row is created with its foreign key (Field, on FieldOn's table) set: the key is NOT NULL, or, on an edge to its own entity, NULL-able as in ent, and velox refuses it nil on insert and update (velox.ColumnDescriptor.RequiredEdge)
@@ -173,9 +176,17 @@ type Edge struct {
 	// target's rows (O2M, and an O2O whose key the target holds) or join
 	// rows (M2M). For an edge from an entity to itself FieldOn names the
 	// entity either way, so only OwnsKey tells.
-	OwnsKey     bool                       `json:"owns_key,omitempty"`
-	Comment     string                     `json:"comment,omitempty"`     // for descriptions
-	Join        string                     `json:"join,omitempty"`        // the join entity's Name for M2M, else ""
+	OwnsKey bool   `json:"owns_key,omitempty"`
+	Comment string `json:"comment,omitempty"` // for descriptions
+	Join    string `json:"join,omitempty"`    // for M2M, the Name of the entity that holds the links: a join entity, or an edge schema (Entity.EdgeSchema); else ""
+	// Through is, on an M2M edge that declares edge.Through, the Name of its
+	// O2M edge to the edge schema; "" otherwise.
+	Through string `json:"through,omitempty"`
+	// Unfilled are, on an M2M edge through an edge schema, the Names of the
+	// edge schema's fields an insert would write as a zero that the schema
+	// calls required. velox refuses the edge's Add then, so a plugin writes
+	// no input that adds links.
+	Unfilled    []string                   `json:"unfilled,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"` // the edge's annotations by name, each the JSON of its value
 }
 

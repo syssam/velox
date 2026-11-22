@@ -33,6 +33,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `velox.GeneratedCodeIsVersion26` replaces Version25, as `EdgeThrough`
   takes the columns Add cannot fill. `loadjson.Version` is 9, for
   `Edge.Through`.
+- The plugin model has `Entity.EdgeSchema`, `Edge.Through` and
+  `Edge.Unfilled`; an M2M edge's `Join` names its edge schema. velox-graphql
+  gives an edge schema a type like any schema's. An M2M edge whose edge
+  schema has a column Add cannot fill has no create or add input, and
+  velox-graphql warns of it.
 - velox-graphql takes `engine=graphql-go` (ADR 0107), and so does
   `graphqlgen.Plugin(opts)`: velox.graphql and the Go are for
   github.com/syssam/graphql-go's generator gqlc, which binds every field but

@@ -279,7 +279,9 @@ type edgeInput struct {
 //     refuses to unlink it: on update, an O2M has add<Edge>IDs only, and an
 //     O2O nothing; create keeps its inputs, which only link;
 //   - an immutable key on o's row is set on create only;
-//   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
+//   - an M2M edge writes join rows: <edge>IDs, add/remove/clear; through an
+//     edge schema with a column Add cannot fill (Edge.Unfilled), only
+//     remove and clear;
 //   - an edge to a type that has no ID has no input. When that
 //     edge is required and holds its key on o's row, the create input could never
 //     succeed: an error.
@@ -330,13 +332,18 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	clearEdge := func() { add("clear"+upper(name), "Boolean", "Clear"+goEdge, InputClearEdge) }
 	switch {
 	case ed.Kind == plugin.M2M:
-		if immutable && !create {
-			break
-		}
-		if create {
+		// An edge schema with a column Add cannot fill refuses Add: the edge
+		// has no input that adds links, only remove and clear.
+		adds := len(ed.Unfilled) == 0
+		switch {
+		case immutable && !create:
+		case create && adds:
 			add(many+"IDs", "[ID!]", goOne+"IDs", InputEdgeIDs)
-		} else {
-			add("add"+one+"IDs", "[ID!]", "Add"+goOne+"IDs", InputAddIDs)
+		case create:
+		default:
+			if adds {
+				add("add"+one+"IDs", "[ID!]", "Add"+goOne+"IDs", InputAddIDs)
+			}
 			add("remove"+one+"IDs", "[ID!]", "Remove"+goOne+"IDs", InputRemoveIDs)
 			clearEdge()
 		}
@@ -462,6 +469,9 @@ func edgeInputDesc(kind InputKind, ed *plugin.Edge, t *object) string {
 	case InputClearEdge:
 		if ed.Unique {
 			return fmt.Sprintf("Unlinks the edge %s: it leads to no %s afterwards.", ed.Name, t.name)
+		}
+		if len(ed.Unfilled) > 0 {
+			return fmt.Sprintf("Removes every %s from the edge %s, before the IDs to remove.", t.name, ed.Name)
 		}
 		return fmt.Sprintf("Removes every %s from the edge %s, before the IDs to remove and to add.", t.name, ed.Name)
 	}

@@ -57,7 +57,7 @@ func (User) Fields() []velox.Field {
 }
 
 func (User) Edges() []velox.Edge {
-	return []velox.Edge{edge.To("posts", Post.Type).Annotations(graphql.WhereEdge())}
+	return []velox.Edge{edge.To("posts", Post.Type).Annotations(graphql.WhereEdge()), edge.From("liked", Post.Type).Ref("fans")}
 }
 
 func (User) Annotations() []velox.Annotation {
@@ -80,6 +80,7 @@ func (Post) Edges() []velox.Edge {
 	return []velox.Edge{
 		edge.From("author", User.Type).Ref("posts").Unique().Required().Field("author_id"),
 		edge.To("tags", Tag.Type).Annotations(graphql.WhereEdge()),
+		edge.To("fans", User.Type).Through("likes", Like.Type),
 	}
 }
 
@@ -102,6 +103,21 @@ func (Tag) Edges() []velox.Edge {
 
 func (Tag) Annotations() []velox.Annotation {
 	return []velox.Annotation{graphql.Type("Label"), graphql.QueryField("labels")}
+}
+
+// Like is the edge schema of Post.fans: its note has no default, so the
+// post inputs have no field that adds fans.
+type Like struct{ velox.Schema }
+
+func (Like) Fields() []velox.Field {
+	return []velox.Field{field.String("note"), field.Int64("post_id"), field.Int64("user_id")}
+}
+
+func (Like) Edges() []velox.Edge {
+	return []velox.Edge{
+		edge.To("post", Post.Type).Unique().Required().Field("post_id"),
+		edge.To("user", User.Type).Unique().Required().Field("user_id"),
+	}
 }
 `
 
@@ -253,10 +269,12 @@ func TestServe(t *testing.T) {
 // nextapp pins) binds them with the keys the package documentation lists,
 // and its Resolvers hold the root fields and the JSON field alone: every
 // other field is bound to velox's struct fields and methods, every input
-// and enum to velox's Go types, and no model is generated. The
-// application's module then builds and serves a query and mutations
-// through graphqlgo.With on SQLite, and graphql-go binds every input of the
-// test model's Go, compat or not, to its SDL by name (TestInputNames).
+// and enum to velox's Go types, and no model is generated. Like is an edge
+// schema and binds like any type; UpdatePostInput, which has no field that
+// adds fans, binds too. The application's module then builds and serves a
+// query and mutations through graphqlgo.With on SQLite, and graphql-go binds
+// every input of the test model's Go, compat or not, to its SDL by name
+// (TestInputNames).
 //
 // It builds three tools and a module, offline, from the module cache, as
 // the other end-to-end tests do, and is left out under -short.
@@ -274,6 +292,18 @@ func TestGqlcBinds(t *testing.T) {
 	}
 	if out, err := run("tool", "gqlc", "-config", "gqlc.yaml"); err != nil {
 		t.Fatalf("gqlc: %v\n%s", err, out)
+	}
+	sdlb, err := os.ReadFile(filepath.Join(dir, "gen", "velox.graphql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"type Like ", "likes(", "removeFanIDs: [ID!]"} {
+		if !strings.Contains(string(sdlb), want) {
+			t.Errorf("the SDL has no %q", want)
+		}
+	}
+	if strings.Contains(string(sdlb), "addFanIDs") || strings.Contains(string(sdlb), " fanIDs") {
+		t.Error("the SDL has an input that adds fans")
 	}
 	for group, want := range map[string][]string{"velox": {"Labels", "Posts", "UserPrefs", "Users"}, "app": {"CreatePost", "UpdatePost"}} {
 		b, err := os.ReadFile(filepath.Join(dir, "graph", group, "generated.go"))

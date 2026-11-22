@@ -23,7 +23,9 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // (sdl.Config's WhereWhitelist); with engine=graphql-go, the schema and the
 // Go are for graphql-go's gqlc (sdl.Config's GraphQLGo), and engine=gqlgen
 // is the default. only=enums writes the same Go for either engine. It
-// refuses any other option, as the plugin protocol asks.
+// refuses any other option, as the plugin protocol asks. It warns of each
+// many-to-many edge it writes no add input for, as its edge schema has a
+// column Add cannot fill.
 func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	var cfg sdl.Config
 	for k, v := range req.Options {
@@ -55,7 +57,31 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return append([]plugin.File{{Path: "velox.graphql", Content: s}}, gofiles...), nil, nil
+	return append([]plugin.File{{Path: "velox.graphql", Content: s}}, gofiles...), unfilledWarnings(req.Model), nil
+}
+
+// unfilledWarnings are the warnings of the many-to-many edges whose edge
+// schema has columns Add cannot fill: the SDL has no input that adds links
+// for them.
+func unfilledWarnings(m *plugin.Model) []string {
+	var out []string
+	for _, e := range m.Entities {
+		for _, ed := range e.Edges {
+			if ed.Kind != plugin.M2M || len(ed.Unfilled) == 0 {
+				continue
+			}
+			fields := make([]string, len(ed.Unfilled))
+			for i, f := range ed.Unfilled {
+				fields[i] = ed.Join + "." + f
+			}
+			has := "has"
+			if len(fields) > 1 {
+				has = "have"
+			}
+			out = append(out, fmt.Sprintf("%s.%s: no add inputs; %s %s no default", e.Name, ed.Name, strings.Join(fields, ", "), has))
+		}
+	}
+	return out
 }
 
 // options are opts as written, in key order: key=value, or key alone.

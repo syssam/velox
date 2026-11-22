@@ -113,6 +113,8 @@ func (r *renderer) writeInput(f *file, t *sdl.Type, in string, fs []sdl.InputFie
 		case sdl.InputClearEdge:
 			if e.Edges[fi.Edge].Unique {
 				f.doc("\t", fmt.Sprintf("%s unlinks the edge %s: it leads to no %s afterwards.", fi.GoName, e.Edges[fi.Edge].Name, fi.Target))
+			} else if len(e.Edges[fi.Edge].Unfilled) > 0 {
+				f.doc("\t", fmt.Sprintf("%s removes every %s from the edge %s, before the IDs to remove.", fi.GoName, fi.Target, e.Edges[fi.Edge].Name))
 			} else {
 				f.doc("\t", fmt.Sprintf("%s removes every %s from the edge %s, before the IDs to remove and to add.", fi.GoName, fi.Target, e.Edges[fi.Edge].Name))
 			}

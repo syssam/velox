@@ -99,6 +99,21 @@ func TestRunChecksLiterals(t *testing.T) {
 		{"no join", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
 			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "J"}}}}}}),
 			"edge friends: no join entity J"},
+		{"join not a join", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "User"}}}}}}),
+			"edge friends: User holds its links but is neither a join entity nor an edge schema"},
+		{"unfilled without edge schema", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "J", Unfilled: []string{"note"}}}},
+			{Name: "J", Join: true}}}}),
+			"edge friends: it lists unfilled fields but goes through no edge schema"},
+		{"unfilled not a field", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "F", Unfilled: []string{"note"}}}},
+			{Name: "F", EdgeSchema: true}}}}),
+			"edge friends: an unfilled field is not a field of F"},
+		{"no through edge", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
+			{Name: "User", Edges: []*plugin.Edge{{Name: "friends", Target: "User", Join: "F", Through: "follows"}}},
+			{Name: "F", EdgeSchema: true}}}}),
+			"entity User: edge friends: its through edge follows is not an edge of User"},
 		{"no key holder", current, request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 3, Entities: []*plugin.Entity{
 			{Name: "User", Edges: []*plugin.Edge{{Name: "boss", Target: "User", Field: "boss_id", FieldOn: "X"}}}}}}),
 			"edge boss: no entity X, which holds its key"},

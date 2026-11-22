@@ -99,8 +99,10 @@ func call(gen GenerateFunc, req *Request) (files []File, warnings []string, err 
 
 // check reports the first reference in m that names nothing: a nil entity,
 // field or edge, a key index out of Fields, or an edge's target, join
-// entity, pair, foreign key, or an index's field, that is not in m. A plugin
-// reads the model by those, so it gets one that holds.
+// entity, pair, through edge, unfilled field, foreign key, or an index's
+// field, that is not in m. An edge's Join names a join entity or an edge
+// schema, and only an edge through an edge schema lists unfilled fields. A
+// plugin reads the model by those, so it gets one that holds.
 func (m *Model) check() error {
 	byName := make(map[string]*Entity, len(m.Entities))
 	for i, e := range m.Entities {
@@ -146,6 +148,9 @@ func (e *Entity) check(byName map[string]*Entity) error {
 		if err := ed.check(byName); err != nil {
 			return fmt.Errorf("edge %s: %w", ed.Name, err)
 		}
+		if ed.Through != "" && !slices.ContainsFunc(e.Edges, func(t *Edge) bool { return t != nil && t.Name == ed.Through }) {
+			return fmt.Errorf("edge %s: its through edge %s is not an edge of %s", ed.Name, ed.Through, e.Name)
+		}
 	}
 	return nil
 }
@@ -160,6 +165,12 @@ func (ed *Edge) check(byName map[string]*Entity) error {
 		return fmt.Errorf("its pair %s is not an edge of %s", ed.Ref, ed.Target)
 	case ed.Join != "" && byName[ed.Join] == nil:
 		return fmt.Errorf("no join entity %s", ed.Join)
+	case ed.Join != "" && !byName[ed.Join].Join && !byName[ed.Join].EdgeSchema:
+		return fmt.Errorf("%s holds its links but is neither a join entity nor an edge schema", ed.Join)
+	case len(ed.Unfilled) > 0 && (ed.Join == "" || !byName[ed.Join].EdgeSchema):
+		return fmt.Errorf("it lists unfilled fields but goes through no edge schema")
+	case slices.ContainsFunc(ed.Unfilled, func(f string) bool { return byName[ed.Join].field(f) == nil }):
+		return fmt.Errorf("an unfilled field is not a field of %s", ed.Join)
 	case ed.Field != "" && byName[ed.FieldOn] == nil:
 		return fmt.Errorf("no entity %s, which holds its key", ed.FieldOn)
 	case ed.Field != "" && byName[ed.FieldOn].field(ed.Field) == nil:

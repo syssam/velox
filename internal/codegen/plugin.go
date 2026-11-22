@@ -40,7 +40,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 	for _, oe := range o.Entities {
 		pe := &plugin.Entity{
 			Name: oe.Name, Label: oe.Label, Handles: oe.Handles, Table: oe.Table, TableSchema: oe.TableSchema, Join: oe.Join,
-			Comment: oe.Comment, Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{}, Indexes: []*plugin.Index{},
+			EdgeSchema: g.Entity(oe.Name) != nil && g.Entity(oe.Name).EdgeSchema, Comment: oe.Comment, Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{}, Indexes: []*plugin.Index{},
 			PrimaryKey: append([]int{}, oe.PrimaryKey...),
 		}
 		if oe.Join {
@@ -69,7 +69,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 				Name: ed.Name, GoName: ed.GoName, Target: ed.Target, Ref: ed.Ref,
 				Kind: plugin.EdgeKind(ed.Rel.Kind), Unique: ed.Unique, Required: ed.Required, Inverse: ed.Inverse,
 				Immutable: ed.Immutable, Field: ed.Field, FieldOn: fieldOn(ge, ed), OwnsKey: ed.Field != "" && ownFK(ed), Join: joinOf(ed, joins),
-				Comment: ed.Comment, Annotations: ed.Annotations,
+				Through: ed.Through, Unfilled: unfilledNames(g, ed), Comment: ed.Comment, Annotations: ed.Annotations,
 			})
 		}
 		m.Entities = append(m.Entities, pe)
@@ -219,12 +219,31 @@ func fieldOn(e *Entity, ed *Edge) string {
 	return ed.Target
 }
 
-// joinOf is the name of the join entity of the many-to-many edge ed, or "".
+// joinOf is the name of the entity that holds the links of the many-to-many
+// edge ed, its join entity or its edge schema, or "".
 func joinOf(ed *Edge, joins map[string]string) string {
-	if ed.Rel.Kind != "M2M" {
+	switch {
+	case ed.Rel.Kind != "M2M":
 		return ""
+	case ed.Rel.EdgeSchema != "":
+		return ed.Rel.EdgeSchema
 	}
 	return joins[ed.Rel.Table]
+}
+
+// unfilledNames are the Names of the fields of the edge schema of the M2M
+// edge ed that its Add cannot fill, as EdgeThrough lists their columns; nil
+// for any other edge.
+func unfilledNames(g *Graph, ed *Edge) []string {
+	es := g.Entity(ed.Rel.EdgeSchema)
+	if ed.Rel.Kind != "M2M" || es == nil {
+		return nil
+	}
+	var names []string
+	for _, i := range unfilled(es, columnIndex(es, ed.Rel.Columns[0]), columnIndex(es, ed.Rel.Columns[1])) {
+		names = append(names, es.Fields[i].Name)
+	}
+	return names
 }
 
 // joinFields are the fields of the join entity oe. The schema holds no field

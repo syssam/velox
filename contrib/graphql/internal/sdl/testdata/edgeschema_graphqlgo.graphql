@@ -1,0 +1,243 @@
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
+
+"""A time, as an RFC 3339 string."""
+scalar Time @goModel(model: "time.Time")
+
+"""A UUID, as a string."""
+scalar UUID @goModel(model: "github.com/google/uuid.UUID")
+
+"""Bytes, as a base64 string."""
+scalar Bytes @goModel(model: "[]byte")
+
+"""A JSON value."""
+scalar JSON @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.JSON")
+
+"""An unsigned 64-bit integer, as a decimal string."""
+scalar Uint64 @goModel(model: "uint64")
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.Cursor")
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+
+"""Information about a page of a connection."""
+type PageInfo @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo") {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.OrderDirection") {
+  ASC
+  DESC
+}
+
+# The root query.
+
+type Query {
+  """The connection to the Group nodes, ordered by the key, and paged by the other arguments."""
+  groups(after: Cursor, first: Int, before: Cursor, last: Int): GroupConnection!
+  """The connection to the Membership nodes, ordered by the key, and paged by the other arguments."""
+  memberships(after: Cursor, first: Int, before: Cursor, last: Int): MembershipConnection!
+  """The connection to the User nodes, ordered by the key, and paged by the other arguments."""
+  users(after: Cursor, first: Int, before: Cursor, last: Int): UserConnection!
+}
+
+# Follow
+
+type Follow @goModel(model: "example.com/app/gen.Follow") {
+  id: ID!
+  note: String!
+  user: User
+  follower: User
+}
+
+"""A connection to a list of Follow."""
+type FollowConnection @goModel(model: "example.com/app/gen.FollowConnection") {
+  """The edges of this page."""
+  edges: [FollowEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Follow."""
+type FollowEdge @goModel(model: "example.com/app/gen.FollowEdge") {
+  """The Follow at the end of the edge."""
+  node: Follow!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""The input that creates a Follow."""
+input CreateFollowInput @goModel(model: "example.com/app/gen.CreateFollowInput") {
+  note: String!
+  """The ID of the User the edge user leads to."""
+  userID: ID!
+  """The ID of the User the edge follower leads to."""
+  followerID: ID!
+}
+
+# Group
+
+type Group @goModel(model: "example.com/app/gen.Group") {
+  id: ID!
+  name: String!
+  users(after: Cursor, first: Int, before: Cursor, last: Int): UserConnection!
+  memberships(after: Cursor, first: Int, before: Cursor, last: Int): MembershipConnection!
+}
+
+"""A connection to a list of Group."""
+type GroupConnection @goModel(model: "example.com/app/gen.GroupConnection") {
+  """The edges of this page."""
+  edges: [GroupEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Group."""
+type GroupEdge @goModel(model: "example.com/app/gen.GroupEdge") {
+  """The Group at the end of the edge."""
+  node: Group!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""The input that creates a Group."""
+input CreateGroupInput @goModel(model: "example.com/app/gen.CreateGroupInput") {
+  name: String!
+  """The IDs of the User nodes the edge users leads to."""
+  userIDs: [ID!]
+}
+
+"""The input that updates a Group: a field not given is left as it is."""
+input UpdateGroupInput @goModel(model: "example.com/app/gen.UpdateGroupInput") {
+  name: String
+  """The IDs of User nodes to add to the edge users."""
+  addUserIDs: [ID!]
+  """The IDs of User nodes to remove from the edge users; an ID the edge does not lead to is ignored."""
+  removeUserIDs: [ID!]
+  """Removes every User from the edge users, before the IDs to remove and to add."""
+  clearUsers: Boolean
+}
+
+# Membership
+
+type Membership @goModel(model: "example.com/app/gen.Membership") {
+  id: ID!
+  role: MembershipRole!
+  joinedAt: Time!
+  user: User
+  group: Group
+}
+
+enum MembershipRole @goModel(model: "example.com/app/gen.MembershipRole") {
+  OWNER
+  MEMBER
+}
+
+"""A connection to a list of Membership."""
+type MembershipConnection @goModel(model: "example.com/app/gen.MembershipConnection") {
+  """The edges of this page."""
+  edges: [MembershipEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Membership."""
+type MembershipEdge @goModel(model: "example.com/app/gen.MembershipEdge") {
+  """The Membership at the end of the edge."""
+  node: Membership!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""The input that creates a Membership."""
+input CreateMembershipInput @goModel(model: "example.com/app/gen.CreateMembershipInput") {
+  role: MembershipRole
+  joinedAt: Time
+  """The ID of the User the edge user leads to."""
+  userID: ID!
+  """The ID of the Group the edge group leads to."""
+  groupID: ID!
+}
+
+"""The input that updates a Membership: a field not given is left as it is."""
+input UpdateMembershipInput @goModel(model: "example.com/app/gen.UpdateMembershipInput") {
+  role: MembershipRole
+  """The ID of the User the edge user leads to."""
+  userID: ID
+  """The ID of the Group the edge group leads to."""
+  groupID: ID
+}
+
+# User
+
+type User @goModel(model: "example.com/app/gen.User") {
+  id: ID!
+  name: String!
+  groups(after: Cursor, first: Int, before: Cursor, last: Int): GroupConnection!
+  following(after: Cursor, first: Int, before: Cursor, last: Int): UserConnection!
+  followers(after: Cursor, first: Int, before: Cursor, last: Int): UserConnection!
+  memberships(after: Cursor, first: Int, before: Cursor, last: Int): MembershipConnection!
+  follows(after: Cursor, first: Int, before: Cursor, last: Int): FollowConnection!
+}
+
+"""A connection to a list of User."""
+type UserConnection @goModel(model: "example.com/app/gen.UserConnection") {
+  """The edges of this page."""
+  edges: [UserEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of User."""
+type UserEdge @goModel(model: "example.com/app/gen.UserEdge") {
+  """The User at the end of the edge."""
+  node: User!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""The input that creates a User."""
+input CreateUserInput @goModel(model: "example.com/app/gen.CreateUserInput") {
+  name: String!
+  """The IDs of the Group nodes the edge groups leads to."""
+  groupIDs: [ID!]
+}
+
+"""The input that updates a User: a field not given is left as it is."""
+input UpdateUserInput @goModel(model: "example.com/app/gen.UpdateUserInput") {
+  name: String
+  """The IDs of Group nodes to add to the edge groups."""
+  addGroupIDs: [ID!]
+  """The IDs of Group nodes to remove from the edge groups; an ID the edge does not lead to is ignored."""
+  removeGroupIDs: [ID!]
+  """Removes every Group from the edge groups, before the IDs to remove and to add."""
+  clearGroups: Boolean
+  """The IDs of User nodes to remove from the edge following; an ID the edge does not lead to is ignored."""
+  removeFollowingIDs: [ID!]
+  """Removes every User from the edge following, before the IDs to remove."""
+  clearFollowing: Boolean
+  """The IDs of User nodes to remove from the edge followers; an ID the edge does not lead to is ignored."""
+  removeFollowerIDs: [ID!]
+  """Removes every User from the edge followers, before the IDs to remove."""
+  clearFollowers: Boolean
+}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox/contrib/graphql/internal/modeltest"
 	"github.com/syssam/velox/plugin"
 )
 
@@ -132,5 +133,44 @@ func TestRun(t *testing.T) {
 				t.Errorf("%+v, want an error with %q", resp, c.want)
 			}
 		})
+	}
+}
+
+// TestUnfilledWarning: an M2M edge whose edge schema has a column Add cannot
+// fill is written without add inputs, and velox-graphql says so, once per
+// edge, for either engine. The edge whose edge schema fills every column
+// draws no warning.
+func TestUnfilledWarning(t *testing.T) {
+	for _, engine := range []string{"gqlgen", "graphql-go"} {
+		files, warnings, err := Generate(&plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen",
+			Options: map[string]string{"engine": engine}, Model: modeltest.EdgeSchema(t)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) == 0 {
+			t.Fatal("no files")
+		}
+		want := []string{
+			"User.following: no add inputs; Follow.note has no default",
+			"User.followers: no add inputs; Follow.note has no default",
+		}
+		if !reflect.DeepEqual(warnings, want) {
+			t.Errorf("%s: warnings %q, want %q", engine, warnings, want)
+		}
+	}
+	m := modeltest.EdgeSchema(t)
+	for _, e := range m.Entities {
+		for _, ed := range e.Edges {
+			if ed.Name == "following" {
+				ed.Unfilled = append(ed.Unfilled, "id")
+			}
+		}
+	}
+	_, warnings, err := Generate(&plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen", Model: m})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "User.following: no add inputs; Follow.note, Follow.id have no default"; len(warnings) == 0 || warnings[0] != want {
+		t.Errorf("warnings %q, want %q first", warnings, want)
 	}
 }

@@ -1259,9 +1259,9 @@ func Run(s Supports, in io.Reader, out io.Writer, gen GenerateFunc) error
 func Singular(s string) string
 func Snake(s string) string
 type Check struct { Kind string Args []json.RawMessage }
-type Edge struct { Name string GoName string Target string Ref string Kind EdgeKind Unique bool Required bool Inverse bool Immutable bool Field string FieldOn string OwnsKey bool Comment string Join string Annotations map[string]json.RawMessage }
+type Edge struct { Name string GoName string Target string Ref string Kind EdgeKind Unique bool Required bool Inverse bool Immutable bool Field string FieldOn string OwnsKey bool Comment string Join string Through string Unfilled []string Annotations map[string]json.RawMessage }
 type EdgeKind string
-type Entity struct { Name string Label string Handles string Table string TableSchema string Join bool Comment string Fields []*Field Edges []*Edge Indexes []*Index PrimaryKey []int Annotations map[string]json.RawMessage }
+type Entity struct { Name string Label string Handles string Table string TableSchema string Join bool EdgeSchema bool Comment string Fields []*Field Edges []*Edge Indexes []*Index PrimaryKey []int Annotations map[string]json.RawMessage }
 type Enum struct { Type string Values []string Consts []string }
 type Field struct { Name string GoName string Column string Type string GoType string ElemType string PkgPath string Imports []string Kind string Pointer bool Nullable bool Optional bool Immutable bool Version bool Sensitive bool Unique bool AutoID bool Size int HasDefault bool Default json.RawMessage UpdateDefault bool Implicit string Enum string EnumValues []string Checks []Check SchemaType map[string]string Comment string Annotations map[string]json.RawMessage }
 type File struct { Path string Content string }
