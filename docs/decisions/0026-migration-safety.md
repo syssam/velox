@@ -159,10 +159,10 @@ follows the edit.
 The checks of a pending file run when `Up` reaches it, as an earlier pending file
 may add or remove the object. Files before it stay applied.
 
-`migrate drift` cannot do this job: it refuses while a file is pending, and the
-directory holds no snapshot per version to compare an applied state with. It stays so.
-The lines above are what stands in for it: a hand edit under a pending plan is seen
-at `Up`, for what the plan touches.
+`migrate drift` cannot do this job: the directory holds no snapshot per version to
+compare an applied state with. The lines above are what stands in for it: a hand edit
+under a pending plan is seen at `Up`, for what the plan touches. (Amended 2026-11-22:
+drift with files pending compares with a replay, below.)
 
 A refusal's advice to change a statement says on a file not yet applied anywhere, as
 an environment that applied it would give a `ChecksumError`; elsewhere it is a
@@ -414,7 +414,8 @@ Beside this, in the same spirit, each found by running it:
 - SQLite check text is compared by the normaliser, so a check spelled otherwise in a
   rewritten rebuild, which it cannot parse as the same, is refused.
 - `LintFile` judges `MERGE` by its `WHEN` clauses, not by what they reach.
-- `migrate drift` cannot report a hand-added column while a file is pending.
+- `migrate drift` reports a hand-added column while a file is pending only by a
+  replay of the files up to the applied version, on a scratch database.
 
 ## Review
 
@@ -463,3 +464,27 @@ words, not by a grammar (`guard*.go`, `split.go`, `lintfile.go`,
   above, not a new reading. A shape they cannot split, as a trigger body, is
   marked by the file with `-- velox:statement begin` and `end`, not taught
   to the splitter.
+
+## Amendment, 2026-11-22: a dry run checks, and drift replays
+
+A review found that `apply -dry-run` printed the pending files and checked
+nothing, so a dry run passed where the apply refused; that `migrate diff
+-check` never applied the files, so a file deleted, or edited and hashed, with
+`schema.json` left as it was, passed it, and `status` and `apply` too; and that
+`drift` refused while a file was pending.
+
+- `WithDryRun` makes `Up` check without changing anything. On SQLite it applies
+  the files to a copy of the database (`VACUUM INTO` a temporary file, foreign
+  keys as the session has them), so every check runs, each file after the ones
+  before it. A transaction rolled back per file was not enough: a later file
+  meets the database without the earlier ones, and `PRAGMA foreign_keys` cannot
+  change inside one transaction for all. On PostgreSQL and MySQL it walks each
+  file read-only, as `Up` does before it runs one, against the database as it
+  is: a table an earlier pending file makes is read as absent.
+- `diff -check` applies the files to an empty database and compares it with
+  `schema.json`, as `Verify` does: a temporary SQLite file, or `-scratch-db` for
+  PostgreSQL and MySQL, whose files SQLite cannot run, so a check without one
+  is refused rather than passed.
+- `drift` with files pending compares with what the files up to the last
+  applied version make (`SchemaAt`), the replay `resolve -applied` uses: no
+  snapshot per version is kept, and the replay stands in for one when asked.

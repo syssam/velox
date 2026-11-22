@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -148,14 +149,15 @@ func versions(rows []migrate.Applied) string {
 
 // runMigrateApply is velox-gen migrate apply: it applies the directory's
 // pending files with migrate.Up and prints each it applied; with -dry-run
-// it prints them instead. With -baseline it first records the files up to
+// it checks them as Up would, with migrate.WithDryRun, and prints them
+// instead. With -baseline it first records the files up to
 // that version, as migrate.WithBaseline does, and prints each.
 func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("apply", stderr)
 	to := c.fs.Uint64("to", 0, "apply the files up to `version` and none above it (default: every file)")
 	resume := c.fs.Bool("resume", false, "continue the dirty version, from its first unit not done, before the pending files")
 	lockWait := c.fs.Duration("lock-wait", 5*time.Minute, "how long to wait for another runner's migration lock; 0 tries it once")
-	dryRun := c.fs.Bool("dry-run", false, "print the files to apply instead of applying them")
+	dryRun := c.fs.Bool("dry-run", false, "check the files to apply as apply would, changing nothing, and print them")
 	var baseline uint64
 	baselineSet := false
 	c.fs.Func("baseline", "record the files up to `version` as applied without running them, on a database made before the directory, then apply the rest", func(v string) error {
@@ -200,14 +202,18 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	defer stop()
 
 	if a.dryRun {
-		st, err := migrate.Status(ctx, db, a.fsys, migrate.WithLockWait(a.lockWait))
+		r, err := migrate.Up(ctx, db, a.fsys, append(a.options(stderr), migrate.WithDryRun())...)
 		if err != nil {
 			return c.fail(1, err)
 		}
-		if len(st.Ahead) > 0 {
+		if r.Ahead {
+			st, err := migrate.Status(ctx, db, a.fsys)
+			if err != nil {
+				return c.fail(1, err)
+			}
 			return a.ahead(st.Ahead)
 		}
-		return a.show(st.Pending)
+		return a.show(applying(d, r.Applied))
 	}
 
 	r, err := migrate.Up(ctx, db, a.fsys, a.options(stderr)...)
@@ -272,13 +278,25 @@ func (a *applyRun) show(files []migrate.File) int {
 	return 0
 }
 
+// applying is the files of d that rows, a dry run's report, would apply.
+func applying(d *migrate.Dir, rows []migrate.Applied) []migrate.File {
+	var out []migrate.File
+	for _, r := range rows {
+		if i := slices.IndexFunc(d.Files, func(f migrate.File) bool { return f.Version == r.Version }); i >= 0 {
+			out = append(out, d.Files[i])
+		}
+	}
+	return out
+}
+
 // unmadeDryRun handles a dry run on a SQLite file not made yet, and a
 // missing DSN or unreadable directory. It reports the exit code, and
 // whether the run is done.
 func (a *applyRun) unmadeDryRun(dir string, env []string) (int, bool) {
 	c := a.c
 	// A SQLite file not made yet is an empty database: every file is
-	// pending, and nothing is opened.
+	// pending. They are applied to a temporary file, as Up would apply
+	// them, and the file named is not made.
 	dsn, src, ok := c.dsn(env)
 	if !ok {
 		return 2, true
@@ -289,10 +307,32 @@ func (a *applyRun) unmadeDryRun(dir string, env []string) (int, bool) {
 	}
 	if d.Config.Dialect == velox.SQLite && dsnForm(d.Config.Dialect, dsn, src, c.dialectOf()) == nil {
 		if _, err := os.Stat(sqlitePath(dsn)); errors.Is(err, fs.ErrNotExist) {
-			return a.show(d.Files), true
+			return a.emptyDryRun(d), true
 		}
 	}
 	return 0, false
+}
+
+// emptyDryRun is a dry run on a SQLite database not made yet: Up on an
+// empty temporary file, removed after, then the files it applied.
+func (a *applyRun) emptyDryRun(d *migrate.Dir) int {
+	tmp, err := os.MkdirTemp("", "velox-dry-run-")
+	if err != nil {
+		return a.c.fail(1, err)
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	db, err := openDB(velox.SQLite, filepath.Join(tmp, "dry-run.db"))
+	if err != nil {
+		return a.c.fail(1, err)
+	}
+	defer func() { _ = db.Close() }()
+	ctx, stop := signalContext()
+	defer stop()
+	r, err := migrate.Up(ctx, db, a.fsys, a.options(a.c.stderr)...)
+	if err != nil {
+		return a.c.fail(1, err)
+	}
+	return a.show(applying(d, r.Applied))
 }
 
 // ahead prints that the database is ahead of the directory, by rows, and
@@ -478,6 +518,7 @@ type driftJSON struct {
 func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("drift", stderr)
 	asJSON := c.fs.Bool("json", false, "print the changes and warnings as JSON")
+	scratch := c.fs.String("scratch-db", "", "an empty database's `dsn`, which the files up to the last applied version are applied to, to compare with when files are pending (default on SQLite: a temporary file)")
 	rest, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
@@ -499,16 +540,6 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 		return c.fail(1, errors.New(behind+dirty.Path+" is dirty"))
 	case err != nil:
 		return c.fail(1, err)
-	case len(st.Pending) > 0:
-		paths := make([]string, len(st.Pending))
-		for i, f := range st.Pending {
-			paths[i] = f.Path
-		}
-		verb := " is pending"
-		if len(paths) > 1 {
-			verb = " are pending"
-		}
-		return c.fail(1, errors.New(behind+strings.Join(paths, ", ")+verb))
 	case len(st.Ahead) > 0:
 		verb := " is applied"
 		if len(st.Ahead) > 1 {
@@ -516,7 +547,11 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 		}
 		return c.fail(1, errors.New(behind+versions(st.Ahead)+verb+" above the directory's last file"))
 	}
-	r, err := migrate.Drift(ctx, db, d.Snapshot)
+	want, code, ok := c.driftWant(ctx, dir, d, st, *scratch)
+	if !ok {
+		return code
+	}
+	r, err := migrate.Drift(ctx, db, want)
 	if err != nil {
 		return c.fail(1, err)
 	}
@@ -543,6 +578,59 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 		return 3
 	}
 	return 0
+}
+
+// driftWant is what drift compares the database with: schema.json, at the
+// directory's last version; else, with files pending, what the files up to
+// the last applied version make on an empty database: dsn, or with no dsn on
+// SQLite a temporary file, removed after. A PostgreSQL or MySQL directory
+// with files pending and no dsn is refused, naming them. It reports the exit
+// code and false when it fails.
+func (c *dbCmd) driftWant(ctx context.Context, dir string, d *migrate.Dir, st *migrate.State, dsn string) (*migrate.Schema, int, bool) {
+	if len(st.Pending) == 0 {
+		return d.Snapshot, 0, true
+	}
+	paths := make([]string, len(st.Pending))
+	for i, f := range st.Pending {
+		paths[i] = f.Path
+	}
+	pending := strings.Join(paths, ", ") + " is pending"
+	if len(paths) > 1 {
+		pending = strings.Join(paths, ", ") + " are pending"
+	}
+	if len(st.Applied) == 0 {
+		_, _ = fmt.Fprintf(c.stderr, "velox-gen: note: %s, and no version is applied: nothing to compare\n", c.text(pending))
+		return &migrate.Schema{Dialect: d.Config.Dialect}, 0, true
+	}
+	m := st.Applied[len(st.Applied)-1].Version
+	j := slices.IndexFunc(d.Files, func(f migrate.File) bool { return f.Version == m })
+	if j < 0 {
+		return nil, c.fail(1, fmt.Errorf("the database is not at the directory's last version: %s, and the last applied version, %d, has no file in the directory to replay", pending, m)), false
+	}
+	if dsn == "" && d.Config.Dialect != velox.SQLite {
+		return nil, c.fail(1, fmt.Errorf("the database is not at the directory's last version: %s; to compare it with what the files up to %s make, give an empty %s database with -scratch-db", pending, d.Files[j].Path, d.Config.Dialect)), false
+	}
+	if dsn == "" {
+		tmp, err := os.MkdirTemp("", "velox-drift-")
+		if err != nil {
+			return nil, c.fail(1, err), false
+		}
+		defer func() { _ = os.RemoveAll(tmp) }()
+		dsn = filepath.Join(tmp, "scratch.db")
+	}
+	hidden := c.secret
+	sdb, code, ok := c.open(d.Config.Dialect, dsn, "-scratch-db", false)
+	c.secret = hidden.and(c.secret)
+	if !ok {
+		return nil, code, false
+	}
+	defer func() { _ = sdb.Close() }()
+	want, err := migrate.SchemaAt(ctx, sdb, os.DirFS(c.abs(dir)), m)
+	if err != nil {
+		return nil, c.fail(1, err), false
+	}
+	_, _ = fmt.Fprintf(c.stderr, "velox-gen: note: %s; compared with what the files up to %s make\n", c.text(pending), c.text(d.Files[j].Path))
+	return want, 0, true
 }
 
 // runMigrateResolve is velox-gen migrate resolve: it ends the dirty version

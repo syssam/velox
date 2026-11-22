@@ -308,6 +308,20 @@ another `-- velox:` line inside one, is refused. The lines are statements' text,
 the history's checksum covers them. `TestUpStatementBlock` runs a block on SQLite,
 MySQL and PostgreSQL. A PostgreSQL function written `AS $$ … $$` needs no block.
 
+## Checking before an apply
+
+`apply -dry-run` checks the pending files as `apply` would and changes nothing.
+On SQLite it applies them to a copy of the database in a temporary file. On
+PostgreSQL and MySQL it reads what each file would replace, as `apply` does
+before it runs one, against the database as it is now. A refusal is the one
+`apply` would give.
+
+`drift` with files pending compares the database with what the files up to its
+last applied version make on an empty database: a temporary SQLite file, or
+`-scratch-db` on PostgreSQL and MySQL, which is left with the files applied, so
+give a new one each time. `diff -check` applies the whole directory the same
+way and fails unless the result is `schema.json`.
+
 ## Notes
 
 `apply` and `resolve` print `velox-gen: note:` lines for what stops nothing: a SQLite

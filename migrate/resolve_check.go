@@ -166,13 +166,39 @@ func (s *session) expected(ctx context.Context, fsys fs.FS, dir *Dir, after []Ap
 			return nil, "", fmt.Sprintf("files above version %d are pending, so only the files up to it, applied to an empty database, say what the database holds; give one with -scratch-db", m), nil
 		}
 		var done func()
-		if scratch, done, err = tempSQLite(s.pool); err != nil {
+		if scratch, _, done, err = tempSQLite(s.pool, "velox-resolve-"); err != nil {
 			return nil, "", "", err
 		}
 		defer done()
 	}
 	want, why, err = replay(ctx, scratch, fsys, dir.Config, m)
 	return want, against, why, err
+}
+
+// SchemaAt is what the files of dir up to version make: it applies them to
+// scratch, an empty database of the directory's dialect, and reads every
+// table of its default schema but the history, as Inspect does. scratch is
+// left with the files applied. It is how a database behind the directory is
+// compared, by Drift, with what its history says it holds, since schema.json
+// is the last file's. A database that is not empty is an *Error of Code
+// "drift", and files that fail on it one of Code "unverified". On SQLite,
+// scratch must be a file database, as for Verify.
+func SchemaAt(ctx context.Context, scratch *sql.DB, dir fs.FS, version uint64) (*Schema, error) {
+	d, err := ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	if scratch == nil {
+		return nil, &Error{Code: "nil", Reason: "SchemaAt needs a database"}
+	}
+	want, failed, err := replay(ctx, scratch, dir, d.Config, version)
+	if err != nil {
+		return nil, err
+	}
+	if failed != "" {
+		return nil, &Error{Code: "unverified", Reason: failed}
+	}
+	return want, nil
 }
 
 // replay applies the files of fsys up to version m to scratch, which must be
@@ -197,22 +223,23 @@ func replay(ctx context.Context, scratch *sql.DB, fsys fs.FS, cfg Config, m uint
 }
 
 // tempSQLite is a SQLite database in a new temporary file, opened with db's
-// driver, and what closes and removes it.
-func tempSQLite(db *sql.DB) (*sql.DB, func(), error) {
-	dir, err := os.MkdirTemp("", "velox-resolve-")
+// driver, the file's path, which is not made until a connection is, and what
+// closes and removes it. prefix starts the temporary directory's name.
+func tempSQLite(db *sql.DB, prefix string) (*sql.DB, string, func(), error) {
+	dir, err := os.MkdirTemp("", prefix)
 	if err != nil {
-		return nil, nil, &Error{Code: "unverified", Reason: "making a scratch database: " + err.Error(), cause: err}
+		return nil, "", nil, &Error{Code: "unverified", Reason: "making a scratch database: " + err.Error(), cause: err}
 	}
 	path := filepath.Join(dir, "scratch.db")
 	var c driver.Connector = pathConnector{path, db.Driver()}
 	if dc, ok := db.Driver().(driver.DriverContext); ok {
 		if c, err = dc.OpenConnector(path); err != nil {
 			_ = os.RemoveAll(dir)
-			return nil, nil, &Error{Code: "unverified", Reason: "making a scratch database: " + err.Error(), cause: err}
+			return nil, "", nil, &Error{Code: "unverified", Reason: "making a scratch database: " + err.Error(), cause: err}
 		}
 	}
 	scratch := sql.OpenDB(c)
-	return scratch, func() { _ = scratch.Close(); _ = os.RemoveAll(dir) }, nil
+	return scratch, path, func() { _ = scratch.Close(); _ = os.RemoveAll(dir) }, nil
 }
 
 // pathConnector opens name with a driver that has no connector of its own.

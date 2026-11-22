@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- migrate: `WithDryRun` makes `Up` check the pending files and change
+  nothing: on SQLite it applies them to a copy of the database, on
+  PostgreSQL and MySQL it runs the apply-time walk of each file read-only.
+  `velox-gen migrate apply -dry-run` uses it, so a dry run refuses what the
+  apply would; it printed the files and checked nothing before.
+- migrate: `SchemaAt` is what the files up to a version make, read from an
+  empty scratch database. `velox-gen migrate drift` with files pending
+  compares the database with it, on a temporary SQLite file or
+  `-scratch-db`; it refused before.
 - migrate: `-- velox:statement begin` and `-- velox:statement end` lines
   mark one statement the split does not cut, so a SQLite or MySQL trigger,
   a MySQL routine, or a PostgreSQL `BEGIN ATOMIC` body can be in a file.

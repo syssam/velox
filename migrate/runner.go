@@ -30,6 +30,7 @@ type options struct {
 	statements    int           // ResolveStatements': WithStatements
 	statementsSet bool
 	resume        bool
+	dryRun        bool   // Up's: WithDryRun
 	force         string // Resolve's: WithForce
 	forceSet      bool
 	scratch       *sql.DB // Resolve's: WithScratch
@@ -99,6 +100,21 @@ func WithResume() Option {
 // and Resolve ignore it.
 func WithBaseline(version uint64) Option {
 	return Option{func(o *options) { o.baseline, o.baselineSet = version, true }}
+}
+
+// WithDryRun makes Up check the pending files as it would before running
+// them, and change nothing. On SQLite it applies them to a copy of the
+// database, made with VACUUM INTO in a temporary file with foreign keys as
+// the session has them, so each file meets every check Up makes, after the
+// files before it; the copy is removed after. On PostgreSQL and MySQL it
+// takes the lock, reads the history, creating no table, and walks each file
+// as Up does before it runs one, with the database as it is now: a table an
+// earlier pending file makes is read as absent, and nothing of it is
+// checked. Report.Applied lists the files Up would apply, with no time or
+// duration. A refusal is Up's for that file. It cannot be combined with
+// WithBaseline. Status and Resolve ignore it.
+func WithDryRun() Option {
+	return Option{func(o *options) { o.dryRun = true }}
 }
 
 // WithLockWait bounds how long Up and Resolve wait for the migration lock,
@@ -245,6 +261,14 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 			return nil, err
 		}
 	}
+	if o.dryRun && d.Config.Dialect == velox.SQLite {
+		return upCopy(ctx, db, d, o)
+	}
+	return up(ctx, db, d, o)
+}
+
+// up is Up once the directory is read and the options checked.
+func up(ctx context.Context, db *sql.DB, d *Dir, o options) (*Report, error) {
 	s, err := open(ctx, db, d.Config, o.lockWait)
 	if err != nil {
 		return nil, err
@@ -263,7 +287,11 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return nil, err
 	}
 	defer s.unstrict(ctx)
-	rows, err := s.prepare(ctx)
+	read := s.prepare
+	if o.dryRun {
+		read = s.history // a dry run makes no table
+	}
+	rows, err := read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +327,67 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	if err := s.checkToApply(todo, o); err != nil {
 		return nil, err
 	}
+	if o.dryRun {
+		return r, s.checkFiles(ctx, r, todo, past, resumed, st.Dirty)
+	}
 	return r, s.applyFiles(ctx, r, todo, past, resumed, st.Dirty, o)
+}
+
+// checkFiles is a dry run's walk of todo on PostgreSQL and MySQL: each file's
+// check before it runs, from the statement a resumed one goes on from, with
+// the files after it, past included, as the later ones. It adds each file
+// that passes to r, with no time.
+func (s *session) checkFiles(ctx context.Context, r *Report, todo, past []File, resumed *File, dirty *Applied) error {
+	for i, f := range todo {
+		s.later = slices.Concat(todo[i+1:], past)
+		from := 0
+		if resumed != nil && f.Version == resumed.Version {
+			from = min(dirty.Statements, len(f.Statements))
+		}
+		if err := s.checkRecreates(ctx, f, from); err != nil {
+			return err
+		}
+		r.Applied = append(r.Applied, Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, Statements: len(f.Statements)})
+	}
+	return nil
+}
+
+// upCopy is a dry run on SQLite: Up on a copy of db in a temporary file,
+// made by VACUUM INTO, with foreign keys as db's session has them. The copy
+// is removed after.
+func upCopy(ctx context.Context, db *sql.DB, d *Dir, o options) (*Report, error) {
+	s, err := open(ctx, db, d.Config, o.lockWait)
+	if err != nil {
+		return nil, err
+	}
+	defer s.close()
+	if err := s.lasting(ctx); err != nil {
+		return nil, err
+	}
+	var fk int
+	if err := s.conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil {
+		return nil, wrap(ctx, "reading foreign_keys", err)
+	}
+	cp, path, done, err := tempSQLite(db, "velox-dry-run-")
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	if _, err := s.conn.ExecContext(ctx, "VACUUM INTO ?", path); err != nil {
+		return nil, wrap(ctx, "copying the database for the dry run", err)
+	}
+	cp.SetMaxOpenConns(1) // the one connection keeps the pragma below
+	if _, err := cp.ExecContext(ctx, fmt.Sprintf("PRAGMA foreign_keys = %d", fk)); err != nil {
+		return nil, wrap(ctx, "copying the database for the dry run", err)
+	}
+	o.dryRun, o.logger = false, nil // the logger would log files applied to the copy
+	r, err := up(ctx, cp, d, o)
+	if r != nil {
+		for i := range r.Applied { // on the copy, not db
+			r.Applied[i].AppliedAt, r.Applied[i].Duration = time.Time{}, 0
+		}
+	}
+	return r, err
 }
 
 // toApply is the files Up applies, the resumed one first, and past, the
@@ -375,6 +463,8 @@ func (o options) checkBaseline(d *Dir) error {
 	switch {
 	case o.resume:
 		return refuse("a baseline cannot resume a dirty version")
+	case o.dryRun:
+		return refuse("a baseline cannot be a dry run")
 	case o.targetSet && o.target < o.baseline:
 		return refuse("the target %d is below the baseline %d", o.target, o.baseline)
 	case !slices.ContainsFunc(d.Files, func(f File) bool { return f.Version == o.baseline }):

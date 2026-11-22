@@ -56,3 +56,37 @@ func TestMigrateDiffCheckScratchDB(t *testing.T) {
 		})
 	}
 }
+
+// TestMigrateDriftPendingScratchDB: drift on a PostgreSQL or MySQL database
+// with a file pending needs -scratch-db, and then compares with what the
+// files up to the last applied version make there.
+func TestMigrateDriftPendingScratchDB(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
+		t.Run(d.String(), func(t *testing.T) {
+			dsn := testDSN(t, d)
+			dir := t.TempDir()
+			handDir(t, dir, d, map[string]string{
+				"0001_a.sql": "CREATE TABLE a (id integer NOT NULL PRIMARY KEY);\n",
+			})
+			o := &opsDB{t: t, dir: dir, dsn: dsn}
+			o.ok("apply")
+			db, err := openDB(d, dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			o.db = db
+			o.files(nil, map[string]string{"0002_b.sql": "CREATE TABLE b (id integer NOT NULL PRIMARY KEY);\n"})
+			code, out, errs := o.run("drift")
+			if code != 1 || out != "" || !strings.Contains(errs, "0002_b.sql is pending; to compare it with what the files up to 0001_a.sql make, give an empty "+d.String()+" database with -scratch-db") {
+				t.Errorf("no scratch: %d %q %q", code, out, errs)
+			}
+			o.exec("ALTER TABLE a ADD COLUMN x integer")
+			scratch := testDSN(t, d)
+			code, out, errs = o.run("drift", "-scratch-db", scratch)
+			if code != 3 || out != "change: drop-column a.x\n" || !strings.Contains(errs, "compared with what the files up to 0001_a.sql make") || strings.Contains(errs, scratch) {
+				t.Errorf("drift: %d %q %q", code, out, errs)
+			}
+		})
+	}
+}

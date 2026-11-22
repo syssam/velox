@@ -794,10 +794,23 @@ func TestMigrateDrift(t *testing.T) {
 		t.Errorf("drift -json twice:\n%s\n%s", out, again)
 	}
 
+	// With a file pending, drift compares with what the files up to the last
+	// applied version make, on a temporary SQLite file.
 	writeMigrations(t, mig, velox.SQLite, postsSchema)
 	code, out, errs = m("drift")
-	want(t, "pending", code, out, errs, 1, "", "velox-gen: migrate drift: the database is not at the directory's last version: "+
-		filepath.Join("migrations", "0003_create_posts.sql")+" is pending\n")
+	note := "velox-gen: note: " + filepath.Join("migrations", "0003_create_posts.sql") + " is pending; compared with what the files up to " +
+		filepath.Join("migrations", "0002_add_users_email.sql") + " make\n"
+	want(t, "pending", code, out, errs, 3, "change: drop-column users.extra\n", note)
+	db, err = sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("ALTER TABLE users DROP COLUMN extra"); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	code, out, errs = m("drift")
+	want(t, "pending, no drift", code, out, errs, 0, "", note)
 }
 
 func TestMigrateAhead(t *testing.T) {
@@ -896,7 +909,12 @@ func TestMigrateApplyRefusesRebuildLoss(t *testing.T) {
 		}
 	}
 	write("")
-	code, _, errs := m("apply")
+	// The dry run refuses as apply does, before it.
+	code, out, errs := m("apply", "-dry-run")
+	if code != 1 || out != "" || !strings.Contains(errs, "users.users_ai") {
+		t.Errorf("apply -dry-run: exit %d\n%s\n%s", code, out, errs)
+	}
+	code, _, errs = m("apply")
 	if code != 1 {
 		t.Errorf("apply: exit %d", code)
 	}
@@ -906,6 +924,9 @@ func TestMigrateApplyRefusesRebuildLoss(t *testing.T) {
 		}
 	}
 	write("-- velox:allow unmodeled-loss users.users_ai\n")
+	if code, out, errs := m("apply", "-dry-run"); code != 0 || !strings.HasPrefix(out, "== "+filepath.Join("migrations", "0002_rebuild.sql")+"\n") {
+		t.Errorf("apply -dry-run with the directive: %d %s %s", code, out, errs)
+	}
 	if code, _, errs := m("apply"); code != 0 {
 		t.Errorf("apply with the directive: %d %s", code, errs)
 	}

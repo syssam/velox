@@ -30,7 +30,7 @@
 //	velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume] [-lock-wait 5m] [-dry-run]
 //	                        [-baseline version]
 //	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
-//	velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
+//	velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json] [-scratch-db dsn]
 //	velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
@@ -214,8 +214,12 @@
 // migrate apply applies the pending files, as package migrate's Up does,
 // and prints "applied <path> in <duration>" for each. -to stops at a
 // version, -resume continues a dirty version first, and -lock-wait bounds
-// the wait for another runner's lock (default 5m). -dry-run prints each
-// file it would apply after "== <path>" and applies nothing. -baseline
+// the wait for another runner's lock (default 5m). -dry-run checks the files
+// as apply would, with package migrate's WithDryRun, and changes nothing: on
+// SQLite it applies them to a copy of the database in a temporary file, or to
+// an empty one when the file is not there; on PostgreSQL and MySQL it walks
+// each as apply does before it runs one. A refusal is apply's, exit 1;
+// else it prints each file it would apply after "== <path>". -baseline
 // adopts a database made before the directory, as Up's WithBaseline does:
 // it records the files up to its version as applied without running them,
 // printing "baselined <path>" for each, then applies the rest; it is run
@@ -239,12 +243,16 @@
 // directory.
 //
 // migrate drift compares the database's tables with schema.json, on a
-// database at the directory's last version (else exit 1, naming the pending,
-// dirty or ahead versions), and prints each difference as "change: <the
+// database at the directory's last version, and prints each difference as
+// "change: <the
 // change that would remove it>" and each warning as "warning: <object>:
 // <message>". A change is exit 3; warnings alone are not. -json prints
 // {"changes": [{"kind", "target", "text"}], "warnings": [{"object",
-// "message"}]} instead.
+// "message"}]} instead. With files pending it compares with what the files
+// up to the last applied version make, as package migrate's SchemaAt reads
+// them from an empty database: a temporary SQLite file, or -scratch-db on
+// PostgreSQL and MySQL, without which it is exit 1; a note on stderr says
+// so. A dirty version, or one above the directory's last file, is exit 1.
 //
 // migrate baseline adopts a database made before the directory, such as one
 // ent made. It builds the schema package's tables for -dialect, reads them
@@ -479,7 +487,7 @@ func printUsage(w io.Writer) {
         apply the pending migration files to the database (-db or $VELOX_DB)
   velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
         print the applied, pending, dirty and ahead versions
-  velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
+  velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json] [-scratch-db dsn]
         print how the database's tables differ from schema.json
   velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
         adopt an existing database into a new migration directory

@@ -1191,11 +1191,13 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error)
 func ReadDir(fsys fs.FS) (*Dir, error)
 func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error)
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error
+func SchemaAt(ctx context.Context, scratch *sql.DB, dir fs.FS, version uint64) (*Schema, error)
 func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State, error)
 func Sum(fsys fs.FS) ([]byte, error)
 func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error)
 func Verify(ctx context.Context, db *sql.DB, dir fs.FS) error
 func WithBaseline(version uint64) Option
+func WithDryRun() Option
 func WithForce(reason string) Option
 func WithLockWait(d time.Duration) Option
 func WithLogger(l *slog.Logger) Option
