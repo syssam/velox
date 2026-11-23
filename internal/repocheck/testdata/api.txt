@@ -961,6 +961,7 @@ type TxOutcome = veloxtype.TxOutcome
 type TxRetry = veloxtype.TxRetry
 type UpdateQuery[E any] struct { }
 type ValidationError = veloxtype.ValidationError
+var ErrCommitUnknown
 var ErrDenied
 var ErrDryRun
 var ErrImmutable

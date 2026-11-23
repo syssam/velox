@@ -40,6 +40,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   ([ADR 0133](docs/decisions/0133-tx-defaults-and-none.md)).
 - `velox.None()`, the condition that matches no row, `1 = 0` on every
   dialect, beside `velox.Allow()`.
+- `velox.ErrCommitUnknown` is matched by a `Tx`'s error when its COMMIT
+  failed and the error does not say the transaction rolled back, so a
+  caller that retries on its own can stop before applying a committed
+  transaction twice
+  ([ADR 0134](docs/decisions/0134-commit-unknown.md)).
 
 - velox-graphql: `sdlfiles=entity` writes the SDL as `velox.graphql`, with
   Query and the vocabulary, and one `velox_<label>.graphql` per entity.

@@ -554,8 +554,12 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		endTx(info, TxError)
 		// A deferred constraint is checked here: it is a *ConstraintError,
 		// with no entity, as the commit is no one statement's.
+		// A serialization failure or deadlock there is a rollback too.
+		// Anything else leaves the outcome unknown: ErrCommitUnknown.
 		if ce := dberr.Constraint("", err); ce != nil {
 			err = ce
+		} else if !dberr.Retryable(err) {
+			err = commitUnknown{err}
 		}
 		return true, endedErr(ctx, "transaction", fmt.Errorf("velox: commit: %w", err))
 	}
@@ -856,3 +860,11 @@ func (db *DB) Foreign(ctx context.Context) bool {
 	m, _ := ctx.Value(txKey{}).(*txFrame)
 	return m != nil && m != db.txRoot && !m.ended.Load()
 }
+
+// commitUnknown wraps a COMMIT's error to match ErrCommitUnknown, leaving
+// its message and the driver's error as they were.
+type commitUnknown struct{ err error }
+
+func (e commitUnknown) Error() string        { return e.err.Error() }
+func (e commitUnknown) Unwrap() error        { return e.err }
+func (e commitUnknown) Is(target error) bool { return target == ErrCommitUnknown } //nolint:errorlint // a sentinel compared by identity, as errors.Is does.

@@ -76,6 +76,16 @@ var (
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = errors.New("statement outside its transaction")
+	// ErrCommitUnknown is matched by a Tx's error when its COMMIT failed and
+	// the error does not say the transaction rolled back: a lost connection,
+	// a driver error, or a context that ended while COMMIT was sent. The
+	// database may have committed. TxRetrySerializable does not run fn again
+	// after it, and a caller that retries on its own should not either: it
+	// reconciles, as for a lost acknowledgement. A deferred constraint
+	// checked at COMMIT (a *ConstraintError) and a serialization failure or
+	// deadlock there are rollbacks and do not match. The error's message and
+	// the driver's error in it are unchanged.
+	ErrCommitUnknown = errors.New("the commit's outcome is unknown")
 	// ErrTxControl is returned by raw SQL, in a transaction, that would end it:
 	// COMMIT, END, ROLLBACK (ROLLBACK TO is allowed), ABORT, BEGIN, START, PREPARE
 	// TRANSACTION, and on MySQL DDL, which commits. Nothing was sent. On SQLite it
