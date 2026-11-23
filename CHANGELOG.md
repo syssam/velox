@@ -29,7 +29,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - A JSON handle's `Array(keys...)` tests the elements of the array at a
   path of object keys: `Has`, `HasSome`, `HasEvery` and `IsEmpty`, alike
   on PostgreSQL, MySQL and SQLite, false where the path holds no array.
-  It is ent's `sqljson.ValueContains` with `sqljson.Path` (ADR 0140).
+  It is ent's `sqljson.ValueContains` with `sqljson.Path` (ADR 0141).
 - A policy function, privacy rule or interceptor Filter is not applied
   to a statement made under its own ctx, so one that reads its own
   entity ends instead of calling itself without end. One that reads

@@ -1,4 +1,4 @@
-# 0140. The elements of a JSON array at a path: Array(keys...)
+# 0141. The elements of a JSON array at a path: Array(keys...)
 
 - Status: accepted, 2026-11-23. Does what 0080 left under Not done for a
   path; amends nothing else in it.

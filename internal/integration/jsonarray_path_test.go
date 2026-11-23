@@ -7,7 +7,7 @@ import (
 )
 
 // TestJSONArrayAtPath: a JSON handle's Array(keys...) tests the elements of
-// the array at a path of object keys alike on every dialect (ADR 0140): a
+// the array at a path of object keys alike on every dialect (ADR 0141): a
 // missing path, a scalar or an object at the path, and an array on the way
 // hold no element and are not empty, so the negation matches them; a NULL
 // column matches neither the condition nor its negation; elements compare by

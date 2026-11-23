@@ -794,7 +794,7 @@ Where the path is missing, or holds a scalar or an object, the array holds
 nothing and is not empty, so `Not` matches the row. A NULL column matches
 neither. `Array()` with no key is the column's own array. On PostgreSQL the
 condition keeps `column @> '{"receiptIds":["…"]}'`, which a GIN index on the
-column serves. See [ADR 0140](decisions/0140-json-array-at-a-path.md).
+column serves. See [ADR 0141](decisions/0141-json-array-at-a-path.md).
 
 ### Subqueries on a column: Select and InSelect
 

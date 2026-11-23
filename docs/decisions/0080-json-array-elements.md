@@ -81,7 +81,7 @@ OpIsEmpty`), so a port that keeps the annotation expects it to work.
 - An element that is an object or an array, and a path into a nested array:
   containment of a structure differs by dialect (`@>` is structural on
   PostgreSQL, `JSON_CONTAINS` too on MySQL, and SQLite has neither).
-  A scalar element of an array at a path is done by 0140, `Array(keys...)`.
+  A scalar element of an array at a path is done by 0141, `Array(keys...)`.
 - Typed elements: `Has("x")` on a `[]int` column is a valid condition that
   matches nothing, as the dialects say; only GraphQL's types make it typed.
 - A by-name form for a policy (`velox.FieldHas`): no consumer needs one yet.

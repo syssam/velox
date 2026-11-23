@@ -11,7 +11,7 @@ import (
 )
 
 // TestJSONArrayAtPathSQL: Array(keys...) tests the array at a path of
-// object keys (ADR 0140). PostgreSQL asks for an array at the path and keeps
+// object keys (ADR 0141). PostgreSQL asks for an array at the path and keeps
 // a bare @> of the column against a document holding the element there, so a
 // GIN index serves it and a missing path is false; MySQL and SQLite are a
 // CASE, false where the path holds no array, NULL for a NULL column.
