@@ -105,5 +105,12 @@ Order can go. The engine still maps GraphQL names to column names.
 `untyped` gains none of these; its `Term` is engine's, so an untyped
 DateTrunc is a small addition when a caller needs one.
 
+On MySQL, an ordering by an expression puts NULL last with `x IS NULL, x`.
+ONLY_FULL_GROUP_BY refuses `x IS NULL` when x is a GROUP BY key that is an
+expression: only the key as GROUP BY writes it may appear. In a grouped
+projection the NULL test of a term with no aggregate is therefore
+`ANY_VALUE(x) IS NULL`, which is the group's value. Grouping by a `Calc`
+and ordering by it had the same failure before this decision.
+
 No generated code changes; the root's `Term` and `Order` gain generic
 methods.

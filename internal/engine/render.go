@@ -25,6 +25,8 @@ type writer struct {
 	// subquery: an upsert's condition is on the existing row, and on
 	// PostgreSQL a bare column there may also be EXCLUDED's.
 	qualify bool
+	// grouped is set while a grouped projection's ORDER BY is written.
+	grouped bool
 	// upsert is set while an upsert's update branch is written: an
 	// ExcludedTerm may name the inserted row there, and nowhere else.
 	upsert bool

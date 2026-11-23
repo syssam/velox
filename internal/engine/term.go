@@ -492,7 +492,9 @@ func (w *writer) projectStmt(st *Statement) {
 		}
 		w.pred(h.n)
 	}
+	w.grouped = len(p.GroupBy) > 0
 	w.orderBy(st.OrderBy, false)
+	w.grouped = false
 	w.qualify = false
 	w.selectTail(st)
 }
@@ -521,11 +523,21 @@ func (w *writer) orderTerm(o OrderTerm) {
 	t, _ := o.Expr.(Term)
 	// A relation's count is never NULL.
 	null := w.d != Postgres && (t.kind != termRel || relNullable(t))
+	// MySQL's ONLY_FULL_GROUP_BY takes an expression of the GROUP BY keys
+	// only as GROUP BY writes it: x IS NULL is refused where the key is x.
+	// ANY_VALUE of a key is the group's value, and lifts the check.
+	anyValue := w.d == MySQL && w.grouped && !hasAgg(t)
 	for k := range 2 {
 		if k == 0 && !null {
 			continue
 		}
-		w.term(t)
+		if k == 0 && anyValue {
+			w.str("ANY_VALUE(")
+			w.term(t)
+			w.str(")")
+		} else {
+			w.term(t)
+		}
 		if k == 0 {
 			w.str(" IS NULL")
 		}

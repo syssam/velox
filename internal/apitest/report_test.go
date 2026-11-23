@@ -119,7 +119,7 @@ func TestDateTruncSQL(t *testing.T) {
 			`ORDER BY (date_trunc('month', ("created_at" AT TIME ZONE INTERVAL '+08:00')) AT TIME ZONE INTERVAL '+08:00') LIMIT 12`},
 		{velox.MySQL, "SELECT CONVERT_TZ(CAST(DATE_FORMAT(CONVERT_TZ(`created_at`, '+00:00', '+08:00'), '%Y-%m-01') AS DATETIME), '+08:00', '+00:00'), COUNT(*) FROM `invoices` " +
 			"GROUP BY CONVERT_TZ(CAST(DATE_FORMAT(CONVERT_TZ(`created_at`, '+00:00', '+08:00'), '%Y-%m-01') AS DATETIME), '+08:00', '+00:00') " +
-			"ORDER BY CONVERT_TZ(CAST(DATE_FORMAT(CONVERT_TZ(`created_at`, '+00:00', '+08:00'), '%Y-%m-01') AS DATETIME), '+08:00', '+00:00') IS NULL, " +
+			"ORDER BY ANY_VALUE(CONVERT_TZ(CAST(DATE_FORMAT(CONVERT_TZ(`created_at`, '+00:00', '+08:00'), '%Y-%m-01') AS DATETIME), '+08:00', '+00:00')) IS NULL, " +
 			"CONVERT_TZ(CAST(DATE_FORMAT(CONVERT_TZ(`created_at`, '+00:00', '+08:00'), '%Y-%m-01') AS DATETIME), '+08:00', '+00:00') LIMIT 12"},
 		{velox.SQLite, `SELECT datetime(datetime("created_at", '+480 minutes', 'start of month'), '-480 minutes'), COUNT(*) FROM "invoices" ` +
 			`GROUP BY datetime(datetime("created_at", '+480 minutes', 'start of month'), '-480 minutes') ` +
@@ -304,5 +304,24 @@ func TestRawRowColumns(t *testing.T) {
 		if cols, err := r.Columns(); err != nil || !slices.Equal(cols, []string{"one", "two"}) {
 			t.Errorf("DB.Rows: got %q %v", cols, err)
 		}
+	}
+}
+
+// TestGroupedOrderMySQL: on MySQL an ordering by a grouped expression puts
+// its NULL test in ANY_VALUE, as ONLY_FULL_GROUP_BY refuses x IS NULL where
+// the key is x; an aggregate's ordering and an ungrouped one are as before.
+func TestGroupedOrderMySQL(t *testing.T) {
+	db := openFake(velox.MySQL, &fakeconn.Exec{})
+	k := velox.Calc[inv]("? * 2", I.Total)
+	text, _, err := db.Query[inv]().Select(k, I.Total.Sum()).GroupBy(k).OrderBy(k.Desc(), I.Total.Sum().Asc()).Limit(5).SQL(ctx)
+	want := "SELECT (`total` * 2), SUM(`total`) FROM `invoices` GROUP BY (`total` * 2) " +
+		"ORDER BY ANY_VALUE((`total` * 2)) IS NULL DESC, (`total` * 2) DESC, SUM(`total`) IS NULL, SUM(`total`) LIMIT 5"
+	if err != nil || text != want {
+		t.Errorf("grouped:\n got %s %v\nwant %s", text, err, want)
+	}
+	text, _, err = db.Query[inv]().Select(I.ID).OrderBy(k.Asc()).Limit(5).SQL(ctx)
+	want = "SELECT `id` FROM `invoices` ORDER BY (`total` * 2) IS NULL, (`total` * 2) LIMIT 5"
+	if err != nil || text != want {
+		t.Errorf("ungrouped:\n got %s %v\nwant %s", text, err, want)
 	}
 }
