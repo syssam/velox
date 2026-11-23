@@ -814,6 +814,7 @@ func WithReplicaBackoff(d time.Duration) Option
 func WithReplicas(conns ...Conn) Option
 func WithRewrite(r Rewrite) Option
 func WithSQLComment(app string, tags ...string) Option
+func WithSQLiteLockingReads() Option
 func WithScopeValue(ctx context.Context, name string, value any) context.Context
 func WithSession(ctx context.Context) context.Context
 func WithShard(ctx context.Context, name string) context.Context

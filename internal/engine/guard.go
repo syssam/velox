@@ -163,13 +163,15 @@ func distinctOrdered(st *Statement, o OrderTerm) bool {
 
 // guardLock checks a locking read: it needs a lock to wait on, a database
 // with locking reads, a transaction to hold the locks, and rows to lock.
+// On SQLite, WithSQLiteLockingReads stands in for locking reads: the read
+// is rendered without its lock clause, and every other check still holds.
 func (db *DB) guardLock(st *Statement) error {
 	name := st.Entity.Name
 	switch {
 	case st.Lock == 0:
 		return fmt.Errorf("velox: %s: SkipLocked and NoWait need ForUpdate or ForShare", name)
-	case db.D == SQLite:
-		return fmt.Errorf("velox: %s: SQLite has no locking reads; its transactions lock the whole database", name)
+	case db.D == SQLite && !db.Cfg.SQLiteLocks:
+		return fmt.Errorf("velox: %s: SQLite has no locking reads; its transactions lock the whole database (WithSQLiteLockingReads runs them without the lock)", name)
 	case !st.InTx:
 		return fmt.Errorf("velox: %s: a locking read (ForUpdate or ForShare) runs only inside Tx", name)
 	case st.Count || st.Aggregate != 0:

@@ -601,7 +601,7 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 			want, ok := c.sql[d]
 			_, _, err := engineOf(openFake(d, &fakeconn.Exec{})).DryRun(context.Background(), c.st())
 			if !ok {
-				const refusal = "velox: velox.inv: SQLite has no locking reads; its transactions lock the whole database"
+				const refusal = "velox: velox.inv: SQLite has no locking reads; its transactions lock the whole database (WithSQLiteLockingReads runs them without the lock)"
 				if err == nil || err.Error() != refusal {
 					t.Errorf("%s, %v: the guard gives %v, want %s", c.name, d, err, refusal)
 				}

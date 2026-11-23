@@ -38,6 +38,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   row removed wraps `ErrNotFound`, a hidden or soft-deleted row included;
   by key it is one DELETE, otherwise a transaction that rolls back with
   `ErrNotSingular` on more than one row (ADR 0121).
+- sqlite: the option `WithSQLiteLockingReads()` runs `ForUpdate` and
+  `ForShare` on SQLite without the lock clause, where they are refused by
+  default; the other locking-read checks still hold. It does not change
+  how `Tx` begins: `_txlock=immediate` in the DSN gives a row lock's wait
+  (ADR 0122).
 - insert: `UpdateSet(setters...)` gives an upsert's update branch `Set`,
   `SetNull`, `Add`, `Sub` and `SetExpr`, and `velox.Excluded(c)` names the
   inserted row in it; `UpdateWhere`, `OnConflictWhere` (a partial index) and

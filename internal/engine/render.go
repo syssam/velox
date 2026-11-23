@@ -447,7 +447,7 @@ func (w *writer) selectTail(st *Statement) {
 		w.str(" OFFSET ")
 		w.plainArg(st.Offset)
 	}
-	if st.Lock != 0 {
+	if st.Lock != 0 && w.d != SQLite { // SQLite: WithSQLiteLockingReads, which drops the clause
 		w.str(lockSQL[st.Lock])
 		if st.LockWait != 0 {
 			w.str(lockWaitSQL[st.LockWait])

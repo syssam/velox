@@ -59,7 +59,7 @@ func TestLockRefusals(t *testing.T) {
 			{"SQLite", velox.SQLite, func(ctx context.Context, tx *velox.DB) error {
 				_, err := tx.Query[testmodel.Invoice]().Limit(1).ForUpdate().All(ctx)
 				return err
-			}, pre + "SQLite has no locking reads; its transactions lock the whole database"},
+			}, pre + "SQLite has no locking reads; its transactions lock the whole database (WithSQLiteLockingReads runs them without the lock)"},
 			{"Count", velox.Postgres, func(ctx context.Context, tx *velox.DB) error {
 				_, err := tx.Query[testmodel.Invoice]().ForUpdate().Count(ctx)
 				return err

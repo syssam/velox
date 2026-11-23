@@ -128,6 +128,28 @@ func WithFilter(f Filter) Option {
 // n must be at least 2, the limit One uses; a smaller n panics.
 func WithMaxLimit(n int) Option { return engine.WithMaxLimit(n) }
 
+// WithSQLiteLockingReads lets ForUpdate and ForShare run on SQLite, where
+// they are refused otherwise. A locking read is then sent without its lock
+// clause, and SkipLocked and NoWait without theirs: SkipLocked skips no
+// row. The other checks still hold: the read runs only inside Tx, Count
+// and the aggregates cannot lock, and SkipLocked and NoWait need a lock.
+// It changes nothing on PostgreSQL or MySQL.
+//
+// SQLite locks the whole database, not rows. velox's Tx begins as
+// database/sql's BeginTx does, and the driver sends a plain BEGIN, which
+// SQLite runs DEFERRED, unless the DSN asks otherwise. A DEFERRED
+// transaction takes the write lock at its first write, not at the read: two
+// of them may read the same row, and when one has written it, the other's
+// write fails with SQLITE_BUSY, which TxRetrySerializable retries. No
+// update is lost, but the second transaction fails where FOR UPDATE would
+// have made it wait. Open the database with _txlock=immediate in the DSN
+// to make every Tx take the write lock at its BEGIN: a second writer then
+// waits, up to the busy timeout, before it reads, as it would behind a row
+// lock, and so does every other transaction, a TxReadOnly one included.
+//
+//	db, err := velox.Connect("sqlite", "app.db?_txlock=immediate&_pragma=busy_timeout(5000)", velox.WithSQLiteLockingReads())
+func WithSQLiteLockingReads() Option { return engine.WithSQLiteLockingReads() }
+
 // WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
 // rows: a relation load and Iter included, Count and an insert's RETURNING
 // not. velox sends such a query with LIMIT n+1 (or the query's own Limit,

@@ -63,7 +63,7 @@ func TestLocksOnRealDatabases(t *testing.T) {
 				_, err := inv(tx).Where(I.ID.EQ(1)).ForUpdate().All(ctx)
 				return err
 			})
-			if want := "velox: testmodel.Invoice: SQLite has no locking reads; its transactions lock the whole database"; err == nil || err.Error() != want {
+			if want := "velox: testmodel.Invoice: SQLite has no locking reads; its transactions lock the whole database (WithSQLiteLockingReads runs them without the lock)"; err == nil || err.Error() != want {
 				t.Errorf("SQLite: %v", err)
 			}
 			return

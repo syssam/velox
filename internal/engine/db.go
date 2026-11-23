@@ -18,6 +18,9 @@ type config struct {
 	Callers   *callers   // WithCallers; nil: off
 	Comment   *commenter // WithSQLComment; nil: off
 	TxArounds []TxAround
+	// SQLiteLocks is WithSQLiteLockingReads': a locking read on SQLite runs,
+	// without its lock clause, where it is refused otherwise.
+	SQLiteLocks bool
 	// MaxParams is WithMaxParams': the most parameters a statement may
 	// have; 0: the dialect's limit.
 	MaxParams int
@@ -72,6 +75,10 @@ func WithMaxLimit(n int) Option {
 	}
 	return Option{func(c *config) { c.MaxLimit = n }}
 }
+
+// WithSQLiteLockingReads lets a locking read run on SQLite, rendered
+// without its lock clause; the root's documents what that guarantees.
+func WithSQLiteLockingReads() Option { return Option{func(c *config) { c.SQLiteLocks = true }} }
 
 // WithMaxParams lowers the most parameters a statement may have below the
 // dialect's limit, so that tests split statements at a small size. The root
