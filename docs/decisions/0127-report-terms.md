@@ -94,6 +94,16 @@ ordering back: its term (the column's term for a handle's ordering), its
 direction, and the name of the column a term is. An ordering by a joined
 relation's column has no term of E; its Term fails the statement.
 
+**`Term[E].Equal(Term[E])`** (added later the same day) tells whether two
+terms are the same, by 0128's `sameTerm`: the same text and columns at
+every depth, bound values of one type equal by `==`, the name aside. A
+report engine compares an ordering's Term with a bucket it groups by to
+see whether the bucket is sorted already. It is the one rule velox uses to
+write a repeated term once, so the two cannot disagree. A kind accessor or
+a `String` was not added: Column, Descending and Equal answer what the port
+asked, and a text form would differ per dialect. `sameTerm` now also
+matches an upsert's `Excluded` column, which nothing repeated before.
+
 **`RawRow.Columns()`** returns the result's column names, as `Raw` reads
 them: a term named with `As` by its name, a column by its own.
 

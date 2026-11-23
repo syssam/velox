@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `Term[E].Equal` reports whether two terms are the same: written alike,
+  with equal bound values, their names aside. A report compares an
+  ordering's `Term()` with its bucket by it (ADR 0127).
 - velox-graphql: `sdlfiles=entity` writes the SDL as `velox.graphql`, with
   Query and the vocabulary, and one `velox_<label>.graphql` per entity.
   gqlc makes a package of each file, so `Query.salesOrderItems` and

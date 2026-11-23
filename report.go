@@ -44,6 +44,16 @@ func (t Term[E]) Column[_ Lazy[E]]() (string, bool) {
 	return m.Info.Columns[i].Name, true
 }
 
+// Equal reports whether t and o are the same term: the same kind, function,
+// columns and text, at every depth, with bound values of one type equal by
+// ==. A name from As is ignored. So an ordering's Term is equal to the
+// bucket a report groups by when it orders by that bucket. A value that ==
+// cannot compare, such as a slice, is equal to no other. A relation's
+// aggregate (Rel's Count…), the zero Term and an invalid term are equal to
+// no term. It is the rule by which velox writes a repeated term once in a
+// statement.
+func (t Term[E]) Equal[_ Lazy[E]](o Term[E]) bool { return engine.SameTerm(t.t, o.t) }
+
 // Term returns what o orders by: the column, as a Term, for a handle's Asc
 // or Desc, or the term of a Term's. An ordering by a column of a joined
 // relation has no term of E: its Term fails the statement that holds it.

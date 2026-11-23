@@ -154,6 +154,10 @@ func termArgs(t Term) bool {
 	return false
 }
 
+// SameTerm reports whether a and b are written alike and bind equal values,
+// their names aside, as sameTerm says: Term.Equal in the root.
+func SameTerm(a, b Term) bool { return sameTerm(a, b) }
+
 // sameTerm reports whether a and b are written alike and bind equal values,
 // their names aside. A relation's aggregate is never the same: GROUP BY
 // refuses one, and its conditions are not compared.
@@ -162,7 +166,7 @@ func sameTerm(a, b Term) bool {
 		return false
 	}
 	switch a.kind {
-	case termColumn:
+	case termColumn, termExcluded:
 		return true
 	case termExpr:
 		return sameExpr(a.x, b.x)

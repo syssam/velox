@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
@@ -281,6 +282,49 @@ func TestOrderReadable(t *testing.T) {
 	named, _ := velox.ColumnByName[inv]("note")
 	if n, ok := named.As("memo").Column(); !ok || n != "note" {
 		t.Errorf("a named column: %q %v", n, ok)
+	}
+}
+
+// TestTermEqual: two terms are equal when they are written alike over the
+// same columns with equal values, whatever their names, so a report can
+// tell whether an ordering is already by a bucket it groups by.
+func TestTermEqual(t *testing.T) {
+	org, _ := velox.ColumnByName[inv]("org_id")
+	month := func(zone string) velox.Term[inv] {
+		return velox.DateTrunc[inv](velox.UnitMonth, I.CreatedAt, velox.InZone(zone))
+	}
+	calc := func(v any) velox.Term[inv] { return velox.Calc[inv]("? * ?", I.Total, v) }
+	for _, c := range []struct {
+		name string
+		a, b velox.Term[inv]
+		want bool
+	}{
+		{"column by name and handle's ordering", org, I.OrgID.Desc().Term(), true},
+		{"named column", org.As("o"), org, true},
+		{"other column", org, I.Total.Asc().Term(), false},
+		{"date bucket", month("+08:00"), month("+08:00").Asc().Term(), true},
+		{"other zone", month("+08:00"), month("UTC"), false},
+		{"calc", calc(2), calc(2).As("net"), true},
+		{"other value", calc(2), calc(3), false},
+		{"other type", calc(2), calc(int64(2)), false},
+		{"slice", calc([]int{2}), calc([]int{2}), false},
+		{"aggregate", calc(2).Sum(), calc(2).Sum().Desc().Term(), true},
+		{"other aggregate", calc(2).Sum(), calc(2).Avg(), false},
+		{"count", velox.CountAll[inv](), velox.CountAll[inv](), true},
+		{"excluded", velox.Excluded(I.Total), velox.Excluded(I.Total), true},
+		{"zero", velox.Term[inv]{}, velox.Term[inv]{}, false},
+	} {
+		if got := c.a.Equal(c.b); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+		if got := c.b.Equal(c.a); got != c.want {
+			t.Errorf("%s, reversed: %v, want %v", c.name, got, c.want)
+		}
+	}
+	// A relation's aggregate compares no conditions: it equals no term.
+	O := fixture.IOwners
+	if O.Notes.Count().Equal(O.Notes.Count()) {
+		t.Error("a relation's aggregate is equal to another")
 	}
 }
 
