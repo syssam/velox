@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/syssam/graphql-go"
@@ -24,32 +25,81 @@ import (
 // bind: a value outside the Go type's range, or Int's, is the client's
 // error. A pointer to each binds with it, nil being null. The schema must
 // declare Time, UUID, Bytes and Uint64, as the vocabulary velox-graphql
-// writes does; NewSchema fails on one it lacks. gqlc binds Cursor, JSON,
-// OrderDirection and PageInfo from their own methods and fields. Give it
-// to graphql.NewSchema with the generated bindings.
+// writes does; NewSchema fails on one it lacks, and ScalarsOnly binds some
+// of them. gqlc binds Cursor, JSON, OrderDirection and PageInfo from their
+// own methods and fields. Give it to graphql.NewSchema with the generated
+// bindings.
 func Scalars() graphql.SchemaOption {
+	return ScalarsOnly(scalarNames...)
+}
+
+// ScalarsOnly is Scalars of the named scalars alone, of Time, UUID, Bytes
+// and Uint64, for a schema that does not declare them all: under
+// compat=veloxe velox.graphql leaves UUID, Uint64 and Bytes to the
+// application, and a schema served in slices may lack any of them.
+// graphql-go's NewSchema refuses a binding of a scalar the schema does not
+// declare, and an option cannot see the schema, so the caller names them,
+// as gqlc lists the scalars that need a binding:
+//
+//	s, err := graph.NewSchema(app.Bindings(r), graphqlgo.ScalarsOnly("Time"))
+//
+// GraphQL's Int binds to the small integer types whatever the names. It
+// panics on any other name.
+func ScalarsOnly(names ...string) graphql.SchemaOption {
+	opts := []graphql.SchemaOption{
+		intScalar[int8](), intScalar[int16](), intScalar[uint8](), intScalar[uint16](), intScalar[uint32](),
+	}
+	for _, name := range names {
+		switch name {
+		case "Time":
+			opts = append(opts, graphql.Time("Time"))
+		case "UUID":
+			opts = append(opts, uuidScalar())
+		case "Bytes":
+			opts = append(opts, bytesScalar())
+		case "Uint64":
+			opts = append(opts, uint64Scalars())
+		default:
+			panic(fmt.Sprintf("graphqlgo.ScalarsOnly: %q is not one of velox's scalars: %s", name, strings.Join(scalarNames, ", ")))
+		}
+	}
+	return graphql.Options(opts...)
+}
+
+// scalarNames are the scalars Scalars binds, which ScalarsOnly takes.
+var scalarNames = []string{"Time", "UUID", "Bytes", "Uint64"}
+
+// uuidScalar binds UUID to uuid.UUID.
+func uuidScalar() graphql.SchemaOption {
+	return graphql.Scalar("UUID", func(w *graphql.Writer, u uuid.UUID) error {
+		w.String(veloxgql.UUID(u).String())
+		return nil
+	}, func(v any) (uuid.UUID, error) {
+		var u veloxgql.UUID
+		err := u.UnmarshalGQL(v)
+		return uuid.UUID(u), err
+	})
+}
+
+// bytesScalar binds Bytes to []byte.
+func bytesScalar() graphql.SchemaOption {
+	return graphql.Scalar("Bytes", func(w *graphql.Writer, b []byte) error {
+		if b == nil {
+			w.Null() // a NULL column, as gqlgen writes it
+			return nil
+		}
+		w.String(base64.StdEncoding.EncodeToString(b))
+		return nil
+	}, func(v any) ([]byte, error) {
+		var b veloxgql.Bytes
+		err := b.UnmarshalGQL(v)
+		return b, err
+	})
+}
+
+// uint64Scalars binds Uint64 to uint64 and uint.
+func uint64Scalars() graphql.SchemaOption {
 	return graphql.Options(
-		graphql.Time("Time"),
-		graphql.Scalar("UUID", func(w *graphql.Writer, u uuid.UUID) error {
-			w.String(veloxgql.UUID(u).String())
-			return nil
-		}, func(v any) (uuid.UUID, error) {
-			var u veloxgql.UUID
-			err := u.UnmarshalGQL(v)
-			return uuid.UUID(u), err
-		}),
-		graphql.Scalar("Bytes", func(w *graphql.Writer, b []byte) error {
-			if b == nil {
-				w.Null() // a NULL column, as gqlgen writes it
-				return nil
-			}
-			w.String(base64.StdEncoding.EncodeToString(b))
-			return nil
-		}, func(v any) ([]byte, error) {
-			var b veloxgql.Bytes
-			err := b.UnmarshalGQL(v)
-			return b, err
-		}),
 		graphql.Scalar("Uint64", func(w *graphql.Writer, u uint64) error {
 			w.String(strconv.FormatUint(u, 10))
 			return nil
@@ -62,7 +112,6 @@ func Scalars() graphql.SchemaOption {
 			w.String(strconv.FormatUint(uint64(u), 10))
 			return nil
 		}, decodeUint),
-		intScalar[int8](), intScalar[int16](), intScalar[uint8](), intScalar[uint16](), intScalar[uint32](),
 	)
 }
 

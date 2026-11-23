@@ -71,7 +71,9 @@ go tool velox-gen -out ./velox \
 
 Under `engine=graphql-go`, the generated code serves graphql-go through
 `veloxgql/graphqlgo`: `graphqlgo.With(db)` as an executor option,
-`graphqlgo.Scalars()` and `graphqlgo.ErrorPresenter`. veloxe's `Paginate` ran in any context;
+`graphqlgo.Scalars()` and `graphqlgo.ErrorPresenter`. A schema that does
+not declare all of Time, UUID, Bytes and Uint64 binds the ones it declares
+with `graphqlgo.ScalarsOnly`. veloxe's `Paginate` ran in any context;
 velox's runs outside a request only under `veloxgql.Service(ctx, db)`.
 
 ### generate.go

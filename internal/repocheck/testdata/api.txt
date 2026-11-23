@@ -1771,6 +1771,7 @@ type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPrese
 package contrib/graphql/veloxgql/graphqlgo
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter
 func Scalars() graphql.SchemaOption
+func ScalarsOnly(names ...string) graphql.SchemaOption
 func With(db *velox.DB) graphql.ExecutorOption
 
 package contrib/veloxotel

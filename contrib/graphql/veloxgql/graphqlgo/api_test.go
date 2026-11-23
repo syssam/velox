@@ -16,6 +16,7 @@ import (
 var publicAPI = []string{
 	"ErrorPresenter",
 	"Scalars",
+	"ScalarsOnly",
 	"With",
 }
 

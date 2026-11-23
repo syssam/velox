@@ -801,7 +801,11 @@
 // nor (when no field is bytes) Bytes, as veloxe left them to the
 // application. Its gqlc models of UUID, Uint64 and Bytes must then be
 // velox's Go types, uuid.UUID, uint64 and []byte, which graphqlgo.Scalars
-// binds, or gqlc leaves the fields to Resolver stubs. JSON fields are on
+// binds, or gqlc leaves the fields to Resolver stubs. A schema that
+// declares only some of Time, UUID, Bytes and Uint64, such as one without
+// a UUID field under compat=veloxe, binds them with
+// graphqlgo.ScalarsOnly("Time", …): graphql-go's NewSchema refuses a
+// binding of a scalar the schema does not declare. JSON fields are on
 // the Resolver either way: with JSON modelled as any, as veloxe's
 // applications have it, each resolver returns the field (obj.Settings),
 // and with it modelled as veloxgql.JSON, the getter's value.

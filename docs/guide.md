@@ -2074,7 +2074,8 @@ exec := graphql.NewExecutor(s,
 
 `graphqlgo.With(db)` puts velox's state in each operation, so edges batch
 and reads are projected as under gqlgen, and `graphqlgo.Scalars()` binds
-velox's scalars in the schema. graphql-go's own options limit a request's
+velox's scalars in the schema. A schema that declares only some of them
+binds those with `graphqlgo.ScalarsOnly("Time", "UUID")`. graphql-go's own options limit a request's
 size, depth, complexity and cost; velox keeps only its fixed bounds on a
 page (100 rows), a list edge (1000) and a where filter. A mutation runs
 in no transaction: a resolver that needs one opens it with `db.Tx` or
