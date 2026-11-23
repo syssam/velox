@@ -34,6 +34,11 @@
 // Mutation.Value reads the row, and Filter.Where is ignored, as in veloxe),
 // and narrow every UPDATE, DELETE and Save (velox.OpUpdate, velox.OpDelete).
 //
+// A rule that reads to decide, as veloxe's did through a client from the
+// context, reads with ctx on its DB joined to the statement's
+// transaction, velox.TxFrom(ctx, db), as velox.Policy shows. A statement
+// made under a rule's ctx is not judged by its Policy's list.
+//
 // DecisionContext puts a decision in a context: every Query and Mutation
 // list then returns it without running its rules, Allow lifting them and
 // Deny refusing. It does not lift Read, Write, Insert or an interceptor,

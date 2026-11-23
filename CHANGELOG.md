@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A policy function, privacy rule or interceptor Filter is not applied
+  to a statement made under its own ctx, so one that reads its own
+  entity ends instead of calling itself without end. One that reads
+  joins the statement's transaction with `velox.TxFrom(ctx, db)`, as an
+  ent rule uses `ent.TxFromContext` (ADR 0135).
 - `velox.IsZero(p)` reports the zero `Pred` or `Predicate`: a helper with no
   condition returns it, and its caller tests it. A function, not a method,
   so a package pays only where it calls it (ADR 0137).

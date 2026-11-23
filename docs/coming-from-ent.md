@@ -283,6 +283,7 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
 | `privacy.Allow` | `privacy.Allow`; `velox.Allow()` is the condition that matches every row |
+| a privacy rule's or interceptor's `ent.TxFromContext(ctx)`, else the client | `rdb, ok := velox.TxFrom(ctx, db); if !ok { rdb = db }`; a read under the rule's ctx is not judged by that rule (decision 0135) |
 
 A `velox.Predicate` is a `Pred` of no
 entity, so `And`, `Or` and `Not` take it, and `velox.Predicate(p)` turns a

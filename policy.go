@@ -38,11 +38,23 @@ import (
 // path that forgot to return a condition never lets a caller through. Any
 // error they return denies the statement.
 //
-// A policy function decides from ctx and, for Insert, the row; it does not
-// query. A rule that must see other rows, such as that an inserted comment's
-// parent is one the caller may read, is a hook (Hook): it queries through
-// Mutation.DB, on the write's DB, and returns the error that refuses the
-// write. This is ent's split: privacy rules decide, hooks query.
+// A policy function decides from ctx and, for Insert, the row. Prefer a
+// condition that reads nothing itself, such as HasEdgeWith, which runs
+// inside the statement. A function that must read to decide, such as a
+// lookup of an organization's subtree, reads with ctx on the DB it was
+// given, joined to the statement's transaction, as an ent rule uses
+// ent.TxFromContext:
+//
+//	rdb, ok := velox.TxFrom(ctx, db)
+//	if !ok {
+//		rdb = db
+//	}
+//
+// Inside Tx the DB alone fails with ErrOutsideTx. A statement made under a
+// policy function's ctx is not judged by that function, whatever DB it
+// runs on, so a policy that reads its own entity ends. A rule that refuses
+// a write after seeing other rows may also be a hook (Hook), which reads
+// through Mutation.DB.
 //
 // Read is ANDed into every SELECT, Count, With load and Has/HasWith
 // subquery on the entity, into every UPDATE, DELETE and Save, and into the
@@ -289,6 +301,10 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // Filter returns Allow() for no restriction. Its zero Predicate fails the
 // statement, as a policy's does. An error fails the statement and is not a
 // denial: errors.Is(err, ErrDenied) holds only when the error is a Deny.
+//
+// A Filter that reads joins the statement's transaction with TxFrom, as a
+// policy does (Policy); a statement made under its ctx is not narrowed by
+// it.
 //
 // A generated entity's interceptors are declared in the schema package, on
 // the entity's schema or a mixin, and bound by velox-gen. An entity written

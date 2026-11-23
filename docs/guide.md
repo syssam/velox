@@ -1591,6 +1591,48 @@ and it only affects code that is handed that DB; a context carries no bypass
 ([ADR 0054](decisions/0054-fail-closed-runtime.md)). See the
 [policy example](../examples/policy).
 
+Prefer a condition that reads nothing itself, such as `velox.HasEdgeWith`,
+which runs inside the statement. A policy function, privacy rule or
+interceptor that must read to decide, such as a lookup of an
+organization's subtree, reads with its ctx on the DB the application gave
+it, joined to the statement's transaction with `velox.TxFrom`, as an ent
+rule uses `ent.TxFromContext`. Inside `db.Tx` the DB alone fails with
+`ErrOutsideTx`. A schema cannot name the generated types, so it reads with
+`Rows` or package `untyped`. velox reads the policy from the schema's zero
+value, so the DB comes from a variable the application sets after
+`Connect`:
+
+```go
+var AppDB *velox.DB // set by the application after Connect
+
+func (Org) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+		rdb, ok := velox.TxFrom(ctx, AppDB)
+		if !ok {
+			rdb = AppDB
+		}
+		var orgs []any
+		for row, err := range rdb.Rows(ctx, "org subtree",
+			"SELECT id FROM orgs WHERE path LIKE ?", orgPath(ctx)+"%") {
+			if err != nil {
+				return velox.Predicate{}, err
+			}
+			var id int64
+			if err := row.Scan(&id); err != nil {
+				return velox.Predicate{}, err
+			}
+			orgs = append(orgs, id)
+		}
+		return velox.FieldIn("org_id", orgs...), nil
+	}}
+}
+```
+
+A statement made under a policy function's or an interceptor's ctx is not
+judged by that function, whatever DB it runs on, so a policy that reads
+its own entity ends; every other policy, interceptor and filter applies to
+it ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md)).
+
 A helper that builds a condition and may have none to add returns the zero
 `velox.Predicate{}` (or `Pred[E]{}`), and its caller tests it with
 `velox.IsZero(p)` before using it, since a statement holding the zero
@@ -1619,7 +1661,9 @@ An interceptor is a filter that applies to every statement on an entity,
 like a `Read` policy, but `WithoutPolicy` does not lift it. It is meant for
 application rules that even admin code should respect, such as hiding
 soft-deleted rows. Declare `Interceptors() []velox.Interceptor` on a schema
-or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`.
+or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`. A
+Filter that reads joins the transaction with `velox.TxFrom`, as a policy
+does.
 
 ### Hooks and filters for every entity
 

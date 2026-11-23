@@ -20,9 +20,9 @@ import (
 // path that forgot to return a condition never lets a caller through. Any
 // error they return denies the statement.
 //
-// A policy function decides from ctx and, for Insert, the row; it does not
-// query. A rule that must see other rows is a hook: it queries through
-// Mutation.DB and returns the error that refuses the write.
+// A policy function decides from ctx and, for Insert, the row. One that
+// reads joins the statement's transaction with TxFrom(ctx, db); a
+// statement made under its ctx is not judged by it.
 type Policy struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWith
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into
@@ -73,6 +73,7 @@ type Policy struct {
 // Filter returns Allow() for no restriction. Its zero Predicate fails the
 // statement, as a policy's does. An error fails the statement and is not a
 // denial. A nil Filter is refused when the metadata is built, by its index.
+// A statement made under a Filter's ctx is not narrowed by that Filter.
 //
 // A join entity of a many-to-many edge cannot have interceptors, as it
 // cannot have a Read policy: it is read through its two sides. On MySQL, an
@@ -84,17 +85,19 @@ type Interceptor struct {
 
 // PolicyFor is p as entity in keeps it.
 func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
-	pol := &EntityPolicy{Read: p.Read}
+	// Each function is called under a frame of its own (guardCond), so that
+	// a statement its reads make is not judged by it.
+	pol := &EntityPolicy{Read: guardCond(p.Read, kindPolicy)}
 	if w := p.Write; w != nil {
-		pol.Write = func(ctx context.Context, _ Op) (Predicate, error) { return w(ctx) }
+		pol.Write = guardWrite(func(ctx context.Context, _ Op) (Predicate, error) { return w(ctx) })
 	}
-	ins := p.Insert
+	ins := guardInsert(p.Insert)
 	if len(p.Query) > 0 {
-		pol.Query = queryCond(in, p.Query)
+		pol.Query = guardCond(queryCond(in, p.Query), kindPolicy)
 	}
 	if len(p.Mutation) > 0 {
-		pol.Write = andWriteConds([]func(context.Context, Op) (Predicate, error){pol.Write, mutationCond(in, p.Mutation)})
-		ins = andInserts(ins, mutationInsert(in, p.Mutation))
+		pol.Write = andWriteConds([]func(context.Context, Op) (Predicate, error){pol.Write, guardWrite(mutationCond(in, p.Mutation))})
+		ins = andInserts(ins, guardInsert(mutationInsert(in, p.Mutation)))
 	}
 	if ins != nil {
 		pol.Insert = func(ctx context.Context, x unsafe.Pointer) error {
@@ -139,7 +142,7 @@ func FiltersFor(is []Interceptor, base int) ([]FilterFn, string) {
 		if f == nil {
 			return nil, fmt.Sprintf("Interceptors()[%d] has a nil Filter", base+i)
 		}
-		fs[i] = f
+		fs[i] = guardCond(f, kindInterceptor)
 	}
 	return fs, ""
 }
