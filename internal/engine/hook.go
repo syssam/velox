@@ -19,6 +19,7 @@ type MutationState struct {
 	St       *Statement       // the update or delete; nil for an insert
 	Rows     []unsafe.Pointer // an insert's rows
 	Edges    []*EdgeSet       // the write's edge setters, for Mutation.Edges
+	Given    []int            // an insert's columns a hook's Set named: written as set (ADR 0136)
 	Affected int64            // the rows the write affected, for Mutation.Affected
 	Where    []Predicate      // st.Where when next was called, for Mutation.Conds
 	Own      bool             // the hook called SetAffected: it made the write itself

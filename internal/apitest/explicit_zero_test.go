@@ -1,12 +1,15 @@
 package apitest
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/untyped"
 )
 
 // zDef has NOT NULL columns whose declared database default is not the
@@ -186,5 +189,34 @@ func TestSetterZeroOtherDialects(t *testing.T) {
 	got, _, err = my.Insert(&x).Set(zeros()...).SQL(ctx)
 	if want := "INSERT INTO `zdefs` (`name`, `rate`, `active`, `plan`, `seats`, `quota`) VALUES (?, ?, ?, ?, ?, ?)"; err != nil || got != want {
 		t.Errorf("MySQL:\n got %s, %v\nwant %s", got, err, want)
+	}
+}
+
+// TestHookSetZeroIsStored: a hook's Set of an insert's column names it as
+// a setter does, so its zero is stored over the declared database default,
+// in Insert, InsertAll and the untyped insert (ADR 0136).
+func TestHookSetZeroIsStored(t *testing.T) {
+	zero := velox.Before(func(_ context.Context, m *velox.Mutation) error { return m.Set("seats", int64(0)) }, velox.OpInsert)
+	_, raw := zDB(t)
+	db := velox.Open(velox.SQLite, raw, velox.WithHooksAll(zero))
+	x := zDef{Name: "h1"}
+	q := db.Insert(&x)
+	if got, _, err := q.SQL(ctx); err != nil || !strings.Contains(got, `"seats"`) {
+		t.Errorf("SQL: %s, %v", got, err)
+	}
+	if err := q.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	xs := []zDef{{Name: "h2"}, {Name: "h3"}}
+	if err := db.InsertAll(xs).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := untyped.Insert(db, untyped.TableOf[zDef](), &zDef{Name: "h4"}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"h1", "h2", "h3", "h4"} {
+		if z := zStored(t, raw, name); z.Seats != 0 || z.Rate != 1.5 {
+			t.Errorf("%s: stored %+v; want seats 0 and the other defaults", name, z)
+		}
 	}
 }

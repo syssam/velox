@@ -28,7 +28,9 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 
 // Set adds setters: assignments, made by the column handles' Set, SetNull,
 // Add and Sub, and edge setters, made by the relation handles' Add, Remove
-// and Clear. An update of only edge setters sends no UPDATE. A SetPtr given
+// and Clear. An update of only edge setters runs its hooks and its
+// UpdateDefaults, as ent's does, and sends an UPDATE only when they assign
+// something (ADR 0136). A SetPtr given
 // a nil pointer is skipped. An update whose every setter was skipped, or
 // that was given a Set of nothing, is an empty patch: as in ent, its hooks
 // run and every UpdateDefault fires, so updated_at moves, and the UPDATE
@@ -197,7 +199,8 @@ func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 // renders as the caller's UPDATE alone, without the statements that re-point
 // the partners. So does an update with edge setters, without the read of the
 // rows it matches and the edges' statements; one of only edge setters
-// renders "". The edge setters are checked as Exec checks them.
+// renders what its hooks and UpdateDefaults assign, "" when nothing. The
+// edge setters are checked as Exec checks them.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()

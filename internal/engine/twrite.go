@@ -240,9 +240,11 @@ func (q TableInsert) send(ctx context.Context, mu *MutationState) error {
 	var res Result
 	var err error
 	if q.one != nil {
-		err = q.t.insertOne(ctx, q.e, q.one, q.conflict, &res)
+		err = q.t.insertOne(ctx, q.e, q.one, mu.Given, q.conflict, &res)
 	} else {
-		err = q.t.insertMany(ctx, q.e, q.many, q.conflict, &res)
+		many := q.many
+		many.explicit = GivenColumns(many.explicit, mu)
+		err = q.t.insertMany(ctx, q.e, many, q.conflict, &res)
 	}
 	if err == nil {
 		mu.Affected = res.Affected
@@ -254,12 +256,14 @@ func (q TableInsert) render(ctx context.Context, mu *MutationState) error {
 	var st Statement
 	if q.one != nil {
 		var err error
-		if st, _, err = q.t.oneStatement(ctx, q.e, q.one, q.conflict); err != nil {
+		if st, _, err = q.t.oneStatement(ctx, q.e, q.one, mu.Given, q.conflict); err != nil {
 			return err
 		}
 	} else {
 		var err error
-		if st, err = q.t.firstBatch(ctx, q.e, q.many, q.conflict); err != nil {
+		many := q.many
+		many.explicit = GivenColumns(many.explicit, mu)
+		if st, err = q.t.firstBatch(ctx, q.e, many, q.conflict); err != nil {
 			return err
 		}
 	}
@@ -314,19 +318,22 @@ func (t *table) rowValues(p unsafe.Pointer, cols []int) []any {
 	return vals
 }
 
-func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *ConflictClause) (Statement, int, error) {
+// oneStatement is the insert of the row at p, writing set, the columns a
+// hook's Set named, as the row holds them (SetExplicit).
+func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, set []int, cf *ConflictClause) (Statement, int, error) {
 	gen := t.generatedKey(p)
 	cols := InsertColumns(t.info, gen)
 	if len(cols) == 0 {
 		return Statement{}, -1, ErrNothingToInsert(t.info)
 	}
-	if err := ValidateInsert(t.info, db.D, p, cols, nil, cf); err != nil {
+	if err := ValidateInsert(t.info, db.D, p, cols, set, cf); err != nil {
 		return Statement{}, -1, err
 	}
 	if err := InsertAllowed(ctx, db, t.info, p); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: t.info, Columns: cols, Rows: [][]any{t.rowValues(p, cols)}, Conflict: cf, InTx: db.InTx}
+	SetExplicit(&st, set)
 	if InfoBidi(t.info) {
 		MirrorRows(&st)
 	}
@@ -337,8 +344,8 @@ func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *
 	return st, gen, nil
 }
 
-func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, cf *ConflictClause, out *Result) error {
-	st, gen, err := t.oneStatement(ctx, db, p, cf)
+func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, set []int, cf *ConflictClause, out *Result) error {
+	st, gen, err := t.oneStatement(ctx, db, p, set, cf)
 	if err != nil {
 		return err
 	}

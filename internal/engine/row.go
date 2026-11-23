@@ -470,6 +470,9 @@ func (mu *MutationState) set(call string, i int, v any) error {
 			return mu.fail(fmt.Errorf("%s, %v): %w", call, v, err))
 		}
 		storeAll(c, mu.Rows, cv)
+		if !slices.Contains(mu.Given, i) {
+			mu.Given = append(mu.Given, i)
+		}
 		return nil
 	case OpDelete:
 		return mu.fail(fmt.Errorf("%s) on a delete: a delete assigns no columns", call))

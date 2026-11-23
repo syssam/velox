@@ -443,9 +443,9 @@ func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, db *engine.DB, mu *
 	var res Result
 	var err error
 	if q.one != nil {
-		err = insertOne(ctx, db, q.meta, q.one, q.set.InsertSet(q.meta.Info), q.conflict, &res)
+		err = insertOne(ctx, db, q.meta, q.one, engine.InsertGiven(q.meta.Info, q.set, mu), q.conflict, &res)
 	} else {
-		err = insertMany(ctx, db, q.meta, q.many, q.set.InsertSet(q.meta.Info), q.conflict, &res)
+		err = insertMany(ctx, db, q.meta, q.many, engine.InsertGiven(q.meta.Info, q.set, mu), q.conflict, &res)
 	}
 	if err == nil {
 		mu.Affected = res.Affected
@@ -459,12 +459,12 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 	var st Statement
 	if q.one != nil {
 		var err error
-		if st, _, err = oneStatement(ctx, &q.db.e, q.meta, q.one, q.set.InsertSet(q.meta.Info), q.conflict); err != nil {
+		if st, _, err = oneStatement(ctx, &q.db.e, q.meta, q.one, engine.InsertGiven(q.meta.Info, q.set, mu), q.conflict); err != nil {
 			return err
 		}
 	} else {
 		var err error
-		if st, err = engine.InsertAllStatement(ctx, &q.db.e, q.meta.Info, unsafe.Pointer(unsafe.SliceData(q.many)), unsafe.Sizeof(q.many[0]), len(q.many), q.set.InsertSet(q.meta.Info), q.conflict); err != nil {
+		if st, err = engine.InsertAllStatement(ctx, &q.db.e, q.meta.Info, unsafe.Pointer(unsafe.SliceData(q.many)), unsafe.Sizeof(q.many[0]), len(q.many), engine.InsertGiven(q.meta.Info, q.set, mu), q.conflict); err != nil {
 			return err
 		}
 	}

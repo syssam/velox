@@ -141,7 +141,8 @@ default, and `Set(U.Plan.Set(""))` stores `""`.
 
 **An update with nothing set.** As in ent, an update whose setters were all
 skipped (`SetPtr(nil)`), or whose `SetInput` gives nothing, still runs its
-hooks and its `UpdateDefault`s, so `updated_at` moves. When they assign
+hooks and its `UpdateDefault`s, so `updated_at` moves; so does one of only
+edge setters, as when ent's `AddTagIDs` changes a relation. When they assign
 nothing either, nothing is sent: `Exec` returns 0 and `One` returns the row
 ([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)). An update
 never given a `Set` fails with "Update has no Set", where ent's would run.

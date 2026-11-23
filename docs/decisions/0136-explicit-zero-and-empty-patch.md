@@ -51,7 +51,11 @@ The maintainer ruled that velox follows ent in both.
   database default, is left out for the database to fill, and read back.
   So a struct passed to `db.Insert(&x)` with no setter behaves as before:
   the struct has no "set" bit, and a zero field is ent's field never set.
-  A zero a hook writes into the struct counts the same way.
+- A hook's `Mutation.Set(col, v)` on an insert names the column as a setter
+  does, as ent's `m.SetX` in a hook does: its zero is stored
+  (`MutationState.Given`, merged by `GivenColumns`), in the typed and the
+  untyped insert. A zero assigned straight into the struct, by a hook or
+  anyone, stays unset: velox cannot tell it from a field never set.
 - `SetPtr(nil)` still sets nothing (0099, 0124). An insert cannot take
   `SetExpr`, `Add` or `Sub`, as before.
 - The render cache keys an insert by its columns, so an insert of
@@ -78,10 +82,15 @@ The maintainer ruled that velox follows ent in both.
   and fails with `ErrNotFound` when there is none.
 - An update never given a `Set` still fails with "Update has no Set" (0099).
   That is a builder mistake, as a missing `Where` is.
-- An update of only edge setters runs no hook, as before.
+- An update of only edge setters runs its hooks and its `UpdateDefault`s
+  too, as ent's does when a relation changes: `updated_at` moves. Its
+  UPDATE is sent when they assign something; `Exec` still returns the rows
+  whose edges it wrote.
 - **Write policy (0008).** The UPDATE of an empty patch is scoped by the
   policy as any other: a row it hides is not written. With nothing to
-  send, no policy is asked.
+  send, no policy is asked, as nothing is written. `One` still reads its row
+  as `Writable`, so a row the Write policy hides is `ErrNotFound`
+  (`TestEmptyPatchOneHidden`).
 - **Version (0056).** The Version column gets its `+ 1` when an UPDATE is
   sent, so an empty patch that writes `updated_at` adds 1, and one that
   sends nothing adds nothing. ent has no Version field.

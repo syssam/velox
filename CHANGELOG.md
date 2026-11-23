@@ -747,7 +747,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   cannot be stored through Insert" (ADR 0136).
 - An update whose setters were all skipped, a `Set()` of none or an empty
   `SetInput`, runs its hooks and its `UpdateDefault`s, as ent's does, so
-  `updated_at` moves; so does `UpdateQuery.One` with no setter. Nothing is
+  `updated_at` moves; so do `UpdateQuery.One` with no setter and an update
+  of only edge setters. A hook's `Mutation.Set` on an insert names its
+  column, so its zero is stored. Nothing is
   sent only when they assign nothing: `Exec` returns 0, `SQL` "", `One`
   the row (ADR 0136).
 - `TxTimeout(d)` with `d <= 0` sets no bound of its own: it lifts a

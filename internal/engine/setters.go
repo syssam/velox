@@ -59,6 +59,31 @@ func (s Setters) InsertSet(in *EntityInfo) []int {
 	return cols
 }
 
+// GivenColumns returns set, an insert's columns its setters named
+// (InsertSet), with the columns a hook's Set named in mu (Given): each is
+// written as the rows hold it, its zero included, as a setter's is (ADR
+// 0136). A zero a hook writes into the struct itself is not given. It
+// returns set itself when mu adds none.
+func GivenColumns(set []int, mu *MutationState) []int {
+	if mu == nil || len(mu.Given) == 0 {
+		return set
+	}
+	out := slices.Clip(set)
+	for _, c := range mu.Given {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// InsertGiven is GivenColumns of s's InsertSet for an insert into in: the
+// columns its setters and its hooks' Set named. One non-generic call, so
+// that every entity's InsertQuery shares it.
+func InsertGiven(in *EntityInfo, s Setters, mu *MutationState) []int {
+	return GivenColumns(s.InsertSet(in), mu)
+}
+
 // UpdateSet adds the setters ss to st, an UPDATE, and edges, its edge
 // setters, as UpdateQuery.Set does, and returns the edge setters. A skipped
 // setter (AssignSkip) is dropped. It marks st as given a Set, even of
@@ -277,7 +302,8 @@ func Update(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (int64
 }
 
 // UpdateSQL is UpdateQuery.SQL's work for st with the edge setters edges:
-// the statement and arguments, "" for an update of only edge setters.
+// the statement and arguments. An update of only edge setters renders what
+// its hooks and UpdateDefaults assign, "" when they assign nothing.
 func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (string, []any, error) {
 	if err := checkKeep(st.Entity, st.keep); err != nil {
 		return "", nil, err
@@ -288,9 +314,6 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 			return "", nil, err
 		}
 		st.Set = append(st.Set, p.Set...)
-		if len(st.Set) == 0 {
-			return "", nil, db.guard(st)
-		}
 	}
 	_, q, args, err := writeWith(ctx, db, st, true, false, edges)
 	return q, args, err
@@ -314,8 +337,7 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 // the caller's view is returned too. An st with no assignment and no edge
 // still runs the hooks and the UpdateDefaults, as ent's UpdateOne does;
 // when they assign nothing either, no UPDATE is sent and the row is read
-// back under the policies (ADR 0136). One of only edge setters runs no
-// hook.
+// back under the policies (ADR 0136). So does one of only edge setters.
 func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
@@ -366,18 +388,19 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 			vals[i], _ = plain(in.kit.Value(row, k))
 		}
 		read, key := tx, keyPreds(t, vals)
-		if runsUpdate(st, len(edges)) {
-			st.InTx = true
-			st.Where = key // the row read, locked, matches st's conditions
-			n, _, _, err := writeWith(ctx, tx, st, false, false, p.sets)
-			if err != nil {
+		assigns := len(st.Set) > 0
+		st.InTx = true
+		st.Where = key // the row read, locked, matches st's conditions
+		n, _, _, err := writeWith(ctx, tx, st, false, false, p.sets)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			if key, err = writtenKey(t, st, vals); err != nil {
 				return err
 			}
-			if n > 0 {
-				if key, err = writtenKey(t, st, vals); err != nil {
-					return err
-				}
-			}
+		}
+		if n > 0 || assigns {
 			read = tx.WithoutPolicy("velox: the row UpdateQuery.One wrote")
 		}
 		if p.Writes() {
@@ -405,12 +428,6 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 	}
 	return out, nil
 }
-
-// runsUpdate reports whether UpdateOne sends st, with edges edge setters,
-// through the hooks: when it assigns something, or when it has no edge, an
-// empty patch, whose hooks and UpdateDefaults still run (ADR 0136). One of
-// only edge setters runs no hook.
-func runsUpdate(st *Statement, edges int) bool { return len(st.Set) > 0 || edges == 0 }
 
 // updateByKey is UpdateOne for an st whose conditions pin the row's key to
 // vals (pinnedWhere), that writes no edge. It sends st as it is, through

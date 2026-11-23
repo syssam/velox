@@ -1237,7 +1237,8 @@ _, err := db.Update[veloxgen.Invoice]().
 On a nullable column a nil `p` still writes nothing: `SetNull()` writes
 NULL. An update whose every setter was skipped, or whose `SetInput` gives
 nothing, is an empty patch: as in ent, its hooks run and its
-`UpdateDefault`s fire, so `updated_at` moves. When they assign nothing
+`UpdateDefault`s fire, so `updated_at` moves. An update of only edge
+setters does the same. When they assign nothing
 either, nothing is sent: `Exec` returns 0, `SQL` returns "" and `One`
 returns the row
 ([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)). An update

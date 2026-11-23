@@ -386,8 +386,11 @@ func InsertEdges(ctx context.Context, db *DB, p EdgePlan, owners []unsafe.Pointe
 // UpdateEdges runs st, an update, and writes the plan's edges for each row
 // it matches, in one transaction on db (a savepoint inside one). It first
 // reads the matched rows' keys, under st's conditions and the Read and Write
-// policies, locked where the dialect can; an st with no assignment is not
-// sent. It returns the UPDATE's count, or with no assignment the rows read.
+// policies, locked where the dialect can. st goes through the hooks with no
+// assignment too, so that they run and the UpdateDefaults fire, as ent's
+// do when a relation changes; it is sent when they assign something (ADR
+// 0136). It returns the UPDATE's count, or with no assignment of the
+// caller's the rows read.
 // The plan's Set keys are checked first, once, and its Set assignments are
 // st's; a plan of Set edge setters alone reads no keys and sends st.
 func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64, error) {
@@ -424,11 +427,14 @@ func UpdateEdges(ctx context.Context, db *DB, st *Statement, p EdgePlan) (int64,
 			owners[i] = rows.at(i)
 		}
 		n = int64(len(owners))
-		if len(st.Set) > 0 {
-			st.InTx = true
-			if n, _, _, err = writeWith(ctx, tx, st, false, false, p.sets); err != nil {
-				return err
-			}
+		assigns := len(st.Set) > 0
+		st.InTx = true
+		m, _, _, err := writeWith(ctx, tx, st, false, false, p.sets)
+		if err != nil {
+			return err
+		}
+		if assigns {
+			n = m
 		}
 		return p.write(ctx, tx, owners)
 	})
