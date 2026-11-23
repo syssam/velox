@@ -14,11 +14,13 @@ import (
 
 // Membership is the entity of schema Membership.
 type Membership struct {
-	ID       int64          `json:"id"`
-	Role     MembershipRole `json:"role"`
-	JoinedAt time.Time      `json:"joined_at"`
-	UserID   int64          `json:"user_id"`
-	GroupID  int64          `json:"group_id"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the default, MembershipRoleMember.
+	Role MembershipRole `json:"role"`
+	// An insert of the zero value stores the value of its default function.
+	JoinedAt time.Time `json:"joined_at"`
+	UserID   int64     `json:"user_id"`
+	GroupID  int64     `json:"group_id"`
 	// Edges holds Membership's relations, filled by With.
 	Edges MembershipEdges `json:"edges,omitzero"`
 }
@@ -51,16 +53,18 @@ type MembershipHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Membership, int64]
 	// Role is the column role.
+	// An insert of the zero value stores the default, MembershipRoleMember.
 	Role velox.Col[Membership, MembershipRole]
 	// JoinedAt is the column joined_at.
+	// An insert of the zero value stores the value of its default function.
 	JoinedAt velox.TimeCol[Membership, time.Time]
 	// UserID is the column user_id.
 	UserID velox.NumberCol[Membership, int64]
 	// GroupID is the column group_id.
 	GroupID velox.NumberCol[Membership, int64]
-	// User is the edge user, to User: With loads it, Has and HasWith test it.
+	// User is the edge user, to User: With loads it, Has and HasWith test it, and Set writes it.
 	User velox.Rel[Membership, User]
-	// Group is the edge group, to Group: With loads it, Has and HasWith test it.
+	// Group is the edge group, to Group: With loads it, Has and HasWith test it, and Set writes it.
 	Group velox.Rel[Membership, Group]
 }
 
@@ -82,7 +86,7 @@ func (*Membership) VeloxMeta() *velox.Meta[Membership] {
 	return membershipMeta.Load(membershipDescriptor)
 }
 
-// membershipDescriptor describes Membership to velox: its table, columns, edges and hooks.
+// membershipDescriptor describes Membership to velox: its table, columns, edges and checks.
 func membershipDescriptor() velox.Descriptor[Membership] {
 	fds := veloxschema.FieldDescriptors(&schema.Membership{}, "joined_at")
 	d0 := fds[0].Default.(func() time.Time)

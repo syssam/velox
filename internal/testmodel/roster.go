@@ -13,12 +13,15 @@ import (
 
 // Roster is the entity of schema Roster.
 type Roster struct {
-	ID       int64     `json:"id"`
-	Role     string    `json:"role"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the default, "member"; Rosters.Role.Set("") in the insert stores "".
+	Role string `json:"role"`
+	// An insert of the zero value stores the value of its default function.
 	JoinedAt time.Time `json:"joined_at"`
-	Code     string    `json:"code"`
-	PlayerID int64     `json:"player_id"`
-	TeamID   int64     `json:"team_id"`
+	// An insert of the zero value stores the value of its default function.
+	Code     string `json:"code"`
+	PlayerID int64  `json:"player_id"`
+	TeamID   int64  `json:"team_id"`
 	// Edges holds Roster's relations, filled by With.
 	Edges RosterEdges `json:"edges,omitzero"`
 }
@@ -52,18 +55,21 @@ type RosterHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Roster, int64]
 	// Role is the column role.
+	// An insert of the zero value stores the default, "member"; Rosters.Role.Set("") in the insert stores "".
 	Role velox.StringCol[Roster, string]
 	// JoinedAt is the column joined_at.
+	// An insert of the zero value stores the value of its default function.
 	JoinedAt velox.TimeCol[Roster, time.Time]
 	// Code is the column code.
+	// An insert of the zero value stores the value of its default function.
 	Code velox.StringCol[Roster, string]
 	// PlayerID is the column player_id.
 	PlayerID velox.NumberCol[Roster, int64]
 	// TeamID is the column team_id.
 	TeamID velox.NumberCol[Roster, int64]
-	// Player is the edge player, to Player: With loads it, Has and HasWith test it.
+	// Player is the edge player, to Player: With loads it, Has and HasWith test it, and Set writes it.
 	Player velox.Rel[Roster, Player]
-	// Team is the edge team, to Team: With loads it, Has and HasWith test it.
+	// Team is the edge team, to Team: With loads it, Has and HasWith test it, and Set writes it.
 	Team velox.Rel[Roster, Team]
 }
 
@@ -84,7 +90,7 @@ var rosterMeta velox.MetaOnce[Roster]
 // VeloxMeta is called by velox, not by applications.
 func (*Roster) VeloxMeta() *velox.Meta[Roster] { return rosterMeta.Load(rosterDescriptor) }
 
-// rosterDescriptor describes Roster to velox: its table, columns, edges and hooks.
+// rosterDescriptor describes Roster to velox: its table, columns, edges, checks and behaviour.
 func rosterDescriptor() velox.Descriptor[Roster] {
 	return velox.Descriptor[Roster]{
 		Table: "rosters",

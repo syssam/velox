@@ -47,9 +47,9 @@ type CategoryHandles struct {
 	Title velox.StringCol[Category, string]
 	// CategoryChildren is the column category_children.
 	CategoryChildren velox.NullNumberCol[Category, int64]
-	// Children is the edge children, to Category: With loads it, Has and HasWith test it.
+	// Children is the edge children, to Category: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Children velox.Rel[Category, Category]
-	// Parent is the edge parent, to Category: With loads it, Has and HasWith test it.
+	// Parent is the edge parent, to Category: With loads it, Has and HasWith test it, and Set writes it.
 	Parent velox.Rel[Category, Category]
 }
 
@@ -67,7 +67,7 @@ var categoryMeta velox.MetaOnce[Category]
 // VeloxMeta is called by velox, not by applications.
 func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(categoryDescriptor) }
 
-// categoryDescriptor describes Category to velox: its table, columns, edges and hooks.
+// categoryDescriptor describes Category to velox: its table, columns, edges and behaviour.
 func categoryDescriptor() velox.Descriptor[Category] {
 	return velox.Descriptor[Category]{
 		Table:       "categories",
@@ -110,7 +110,7 @@ func categoryDescriptor() velox.Descriptor[Category] {
 	}
 }
 
-// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
+// String returns the entity's fields except the foreign key velox added.
 func (c Category) String() string {
 	return fmt.Sprintf("Category(ID=%v, Title=%v)", c.ID, c.Title)
 }

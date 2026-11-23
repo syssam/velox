@@ -45,7 +45,7 @@ var taskMeta velox.MetaOnce[Task]
 // VeloxMeta is called by velox, not by applications.
 func (*Task) VeloxMeta() *velox.Meta[Task] { return taskMeta.Load(taskDescriptor) }
 
-// taskDescriptor describes Task to velox: its table, columns, edges and hooks.
+// taskDescriptor describes Task to velox: its table, columns and behaviour.
 func taskDescriptor() velox.Descriptor[Task] {
 	return velox.Descriptor[Task]{
 		Table: "tasks",

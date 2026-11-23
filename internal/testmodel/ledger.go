@@ -45,7 +45,7 @@ var ledgerMeta velox.MetaOnce[Ledger]
 // VeloxMeta is called by velox, not by applications.
 func (*Ledger) VeloxMeta() *velox.Meta[Ledger] { return ledgerMeta.Load(ledgerDescriptor) }
 
-// ledgerDescriptor describes Ledger to velox: its table, columns, edges and hooks.
+// ledgerDescriptor describes Ledger to velox: its table and columns.
 func ledgerDescriptor() velox.Descriptor[Ledger] {
 	return velox.Descriptor[Ledger]{
 		Table: "ledgers",

@@ -12,8 +12,10 @@ import (
 
 // Event is the entity of schema Event.
 type Event struct {
-	ID      int64        `json:"id"`
-	At      kind.Moment  `json:"at"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
+	At kind.Moment `json:"at"`
+	// An insert of nil stores the value of its default function.
 	MaybeAt *kind.Moment `json:"maybe_at,omitempty"`
 }
 
@@ -29,8 +31,10 @@ type EventHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Event, int64]
 	// At is the column at.
+	// An insert of the zero value stores the value of its default function.
 	At velox.TimeCol[Event, kind.Moment]
 	// MaybeAt is the column maybe_at.
+	// An insert of nil stores the value of its default function.
 	MaybeAt velox.NullTimeCol[Event, kind.Moment]
 }
 
@@ -46,7 +50,7 @@ var eventMeta velox.MetaOnce[Event]
 // VeloxMeta is called by velox, not by applications.
 func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescriptor) }
 
-// eventDescriptor describes Event to velox: its table, columns, edges and hooks.
+// eventDescriptor describes Event to velox: its table and columns.
 func eventDescriptor() velox.Descriptor[Event] {
 	return velox.Descriptor[Event]{
 		Table: "events",

@@ -279,8 +279,8 @@ func entityStruct(w *writer, e *OutEntity) {
 	}
 	w.p("type %s struct {", e.Name)
 	for _, f := range e.Fields {
-		if f.Comment != "" {
-			w.doc(f.Comment)
+		if doc := strings.TrimLeft(f.Comment+"\n"+f.DefaultDoc, "\n"); doc != "" {
+			w.doc(doc)
 		}
 		w.p("%s %s %s", f.GoName, f.GoType, f.Tag)
 	}
@@ -353,11 +353,18 @@ func entityHandles(w *writer, e *OutEntity) {
 	w.p("// %s is the type of %s, the typed handles of %s's %s.", typ, e.Handles, e.Name, what)
 	w.p("type %s struct {", typ)
 	for _, f := range e.Fields {
-		w.p("// %s is the column %s.", f.GoName, f.Column)
+		w.doc(handleDoc(f))
 		w.p("%s %s", f.GoName, f.Handle)
 	}
 	for _, r := range e.Rels {
-		w.p("// %s is the edge %s, to %s: With loads it, Has and HasWith test it.", r.GoName, r.Name, r.Target)
+		switch r.Writes {
+		case "Set":
+			w.p("// %s is the edge %s, to %s: With loads it, Has and HasWith test it, and Set writes it.", r.GoName, r.Name, r.Target)
+		case "Add":
+			w.p("// %s is the edge %s, to %s: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.", r.GoName, r.Name, r.Target)
+		default:
+			w.p("// %s is the edge %s, to %s: With loads it, Has and HasWith test it, and %s, set on the %[3]s, writes it.", r.GoName, r.Name, r.Target, r.Writes)
+		}
 		w.p("%s velox.Rel[%s, %s]", r.GoName, e.Name, r.Target)
 	}
 	w.p("}")
@@ -371,6 +378,38 @@ func entityHandles(w *writer, e *OutEntity) {
 		w.p("%s: velox.Rel[%s, %s]{I: %s},", r.GoName, e.Name, r.Target, edgeConst(e, i))
 	}
 	w.p("}")
+}
+
+// handleDoc is the doc comment of f's handle: the schema's comment on the
+// field, which names the column, or else the column's name; then what an
+// insert of the zero value stores, when a default replaces it.
+func handleDoc(f *OutField) string {
+	var doc string
+	switch c := f.Comment; {
+	case c == "":
+		doc = fmt.Sprintf("%s is the column %s.", f.GoName, f.Column)
+	case namesFirst(c, f.GoName):
+		doc = c
+	case !strings.Contains(c, "\n"):
+		doc = fmt.Sprintf("%s is the column %s: %s", f.GoName, f.Column, lowerProse(c))
+	default:
+		doc = fmt.Sprintf("%s is the column %s.\n\n%s", f.GoName, f.Column, c)
+	}
+	if f.DefaultDoc != "" {
+		doc += "\n" + f.DefaultDoc
+	}
+	return doc
+}
+
+// lowerProse is s with its first letter in lower case, unless the word it
+// starts is an acronym or a name with another capital, such as "URL" or
+// "GitHub".
+func lowerProse(s string) string {
+	word, _, _ := strings.Cut(s, " ")
+	if len(word) < 2 || word[0] < 'A' || word[0] > 'Z' || strings.ContainsAny(word[1:], "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") {
+		return s
+	}
+	return string(word[0]+'a'-'A') + s[1:]
 }
 
 // entityDescriptor writes the function that returns e's Descriptor.
@@ -414,7 +453,7 @@ func columnParts(f *OutField) []string {
 }
 
 func entityDescriptor(w *writer, o *Out, e *OutEntity) {
-	w.p("// %sDescriptor describes %s to velox: its table, columns, edges and hooks.", camel(e.Label), e.Name)
+	w.p("// %sDescriptor describes %s to velox: %s.", camel(e.Label), e.Name, descriptorWhat(e))
 	w.p("func %sDescriptor() velox.Descriptor[%s] {", camel(e.Label), e.Name)
 	if e.CheckSetup != "" {
 		w.p("%s", e.CheckSetup)
@@ -495,6 +534,29 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 	w.p("}")
 }
 
+// descriptorWhat is what e's Descriptor holds, as its doc comment lists it.
+func descriptorWhat(e *OutEntity) string {
+	parts := []string{"table", "columns"}
+	if len(e.Rels) > 0 {
+		parts = append(parts, "edges")
+	}
+	if e.CheckCode != "" {
+		parts = append(parts, "checks")
+	}
+	if e.Schema != "" {
+		parts = append(parts, "behaviour")
+	}
+	return "its " + andList(parts)
+}
+
+// andList joins xs as a list in prose: "a", "a and b", "a, b and c".
+func andList(xs []string) string {
+	if len(xs) < 2 {
+		return strings.Join(xs, "")
+	}
+	return strings.Join(xs[:len(xs)-1], ", ") + " and " + xs[len(xs)-1]
+}
+
 // cols is the []int literal of the positions of e's columns is.
 func cols(e *OutEntity, is []int) string {
 	s := make([]string, len(is))
@@ -511,9 +573,33 @@ func cols(e *OutEntity, is []int) string {
 // its sensitive fields under %v, %+v and %#v as well as a pointer.
 func entityString(w *writer, e *OutEntity) {
 	var verbs, args []string
-	hidden := slices.ContainsFunc(e.Fields, func(f *OutField) bool { return f.Sensitive || f.Implicit })
+	var sensitive, implicit int
+	for _, f := range e.Fields {
+		switch {
+		case f.Sensitive:
+			sensitive++
+		case f.Implicit:
+			implicit++
+		}
+	}
+	hidden := sensitive+implicit > 0
+	var left []string
+	switch sensitive {
+	case 0:
+	case 1:
+		left = append(left, "the sensitive one")
+	default:
+		left = append(left, "the sensitive ones")
+	}
+	switch implicit {
+	case 0:
+	case 1:
+		left = append(left, "the foreign key velox added")
+	default:
+		left = append(left, "the foreign keys velox added")
+	}
 	if hidden {
-		w.p("// String returns the entity's fields except the sensitive ones and the foreign keys velox added.")
+		w.p("// String returns the entity's fields except %s.", andList(left))
 	} else {
 		w.p("// String returns the entity's fields.")
 	}

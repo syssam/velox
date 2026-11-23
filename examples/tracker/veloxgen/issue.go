@@ -13,16 +13,19 @@ import (
 
 // Issue is the entity of schema Issue.
 type Issue struct {
-	ID         int64       `json:"id"`
-	CreatedAt  time.Time   `json:"created_at"`
-	UpdatedAt  time.Time   `json:"updated_at"`
-	OrgID      int64       `json:"org_id"`
-	ProjectID  int64       `json:"project_id"`
-	AuthorID   int64       `json:"author_id"`
-	AssigneeID *int64      `json:"assignee_id,omitempty"`
-	Title      string      `json:"title"`
-	Body       string      `json:"body"`
-	Status     IssueStatus `json:"status"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
+	CreatedAt time.Time `json:"created_at"`
+	// An insert of the zero value stores the value of its default function.
+	UpdatedAt  time.Time `json:"updated_at"`
+	OrgID      int64     `json:"org_id"`
+	ProjectID  int64     `json:"project_id"`
+	AuthorID   int64     `json:"author_id"`
+	AssigneeID *int64    `json:"assignee_id,omitempty"`
+	Title      string    `json:"title"`
+	Body       string    `json:"body"`
+	// An insert of the zero value stores the default, IssueStatusOpen.
+	Status IssueStatus `json:"status"`
 	// Edges holds Issue's relations, filled by With.
 	Edges IssueEdges `json:"edges,omitzero"`
 }
@@ -69,8 +72,10 @@ type IssueHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Issue, int64]
 	// CreatedAt is the column created_at.
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt velox.TimeCol[Issue, time.Time]
 	// UpdatedAt is the column updated_at.
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt velox.TimeCol[Issue, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Issue, int64]
@@ -85,16 +90,17 @@ type IssueHandles struct {
 	// Body is the column body.
 	Body velox.StringCol[Issue, string]
 	// Status is the column status.
+	// An insert of the zero value stores the default, IssueStatusOpen.
 	Status velox.Col[Issue, IssueStatus]
-	// Project is the edge project, to Project: With loads it, Has and HasWith test it.
+	// Project is the edge project, to Project: With loads it, Has and HasWith test it, and Set writes it.
 	Project velox.Rel[Issue, Project]
-	// Author is the edge author, to User: With loads it, Has and HasWith test it.
+	// Author is the edge author, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Issue, User]
-	// Assignee is the edge assignee, to User: With loads it, Has and HasWith test it.
+	// Assignee is the edge assignee, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Assignee velox.Rel[Issue, User]
-	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it, and Comment.IssueID, set on the Comment, writes it.
 	Comments velox.Rel[Issue, Comment]
-	// Labels is the edge labels, to Label: With loads it, Has and HasWith test it.
+	// Labels is the edge labels, to Label: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Labels velox.Rel[Issue, Label]
 }
 
@@ -122,7 +128,7 @@ var issueMeta velox.MetaOnce[Issue]
 // VeloxMeta is called by velox, not by applications.
 func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDescriptor) }
 
-// issueDescriptor describes Issue to velox: its table, columns, edges and hooks.
+// issueDescriptor describes Issue to velox: its table, columns, edges, checks and behaviour.
 func issueDescriptor() velox.Descriptor[Issue] {
 	return velox.Descriptor[Issue]{
 		Table: "issues",

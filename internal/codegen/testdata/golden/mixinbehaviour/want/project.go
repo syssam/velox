@@ -12,8 +12,10 @@ import (
 
 // Project is the entity of schema Project.
 type Project struct {
-	ID        int64      `json:"id"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
+	CreatedAt time.Time `json:"created_at"`
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt time.Time  `json:"updated_at"`
 	OrgID     int64      `json:"org_id"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
@@ -35,8 +37,10 @@ type ProjectHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Project, int64]
 	// CreatedAt is the column created_at.
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt velox.TimeCol[Project, time.Time]
 	// UpdatedAt is the column updated_at.
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt velox.TimeCol[Project, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Project, int64]
@@ -61,7 +65,7 @@ var projectMeta velox.MetaOnce[Project]
 // VeloxMeta is called by velox, not by applications.
 func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
-// projectDescriptor describes Project to velox: its table, columns, edges and hooks.
+// projectDescriptor describes Project to velox: its table, columns and behaviour.
 func projectDescriptor() velox.Descriptor[Project] {
 	return velox.Descriptor[Project]{
 		Table: "projects",

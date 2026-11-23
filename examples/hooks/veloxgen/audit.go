@@ -44,7 +44,7 @@ var auditMeta velox.MetaOnce[Audit]
 // VeloxMeta is called by velox, not by applications.
 func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDescriptor) }
 
-// auditDescriptor describes Audit to velox: its table, columns, edges and hooks.
+// auditDescriptor describes Audit to velox: its table and columns.
 func auditDescriptor() velox.Descriptor[Audit] {
 	return velox.Descriptor[Audit]{
 		Table: "audits",

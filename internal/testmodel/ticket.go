@@ -70,11 +70,11 @@ type TicketHandles struct {
 	InvoiceID velox.NumberCol[Ticket, int64]
 	// ParentID is the column parent_id.
 	ParentID velox.NullNumberCol[Ticket, int64]
-	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it, and Set writes it.
 	Invoice velox.Rel[Ticket, Invoice]
-	// Children is the edge children, to Ticket: With loads it, Has and HasWith test it.
+	// Children is the edge children, to Ticket: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Children velox.Rel[Ticket, Ticket]
-	// Parent is the edge parent, to Ticket: With loads it, Has and HasWith test it.
+	// Parent is the edge parent, to Ticket: With loads it, Has and HasWith test it, and Set writes it.
 	Parent velox.Rel[Ticket, Ticket]
 }
 
@@ -98,7 +98,7 @@ var ticketMeta velox.MetaOnce[Ticket]
 // VeloxMeta is called by velox, not by applications.
 func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDescriptor) }
 
-// ticketDescriptor describes Ticket to velox: its table, columns, edges and hooks.
+// ticketDescriptor describes Ticket to velox: its table, columns, edges and behaviour.
 func ticketDescriptor() velox.Descriptor[Ticket] {
 	return velox.Descriptor[Ticket]{
 		Table: "tickets",

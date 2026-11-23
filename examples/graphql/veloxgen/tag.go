@@ -43,11 +43,11 @@ const (
 type TagHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Tag, int64]
-	// Name is the column name.
+	// Name is the column name: the label's name, unique.
 	Name velox.StringCol[Tag, string]
-	// Rank is the column rank.
+	// Rank is the column rank: where the label sorts among labels.
 	Rank velox.NumberCol[Tag, int8]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Posts velox.Rel[Tag, Post]
 }
 
@@ -64,7 +64,7 @@ var tagMeta velox.MetaOnce[Tag]
 // VeloxMeta is called by velox, not by applications.
 func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
 
-// tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
+// tagDescriptor describes Tag to velox: its table, columns and edges.
 func tagDescriptor() velox.Descriptor[Tag] {
 	return velox.Descriptor[Tag]{
 		Table: "tags",

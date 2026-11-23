@@ -48,7 +48,7 @@ type DocHandles struct {
 	Title velox.StringCol[Doc, string]
 	// Shared is the column shared.
 	Shared velox.Col[Doc, bool]
-	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it, and Comment.DocID, set on the Comment, writes it.
 	Comments velox.Rel[Doc, Comment]
 }
 
@@ -66,7 +66,7 @@ var docMeta velox.MetaOnce[Doc]
 // VeloxMeta is called by velox, not by applications.
 func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDescriptor) }
 
-// docDescriptor describes Doc to velox: its table, columns, edges and hooks.
+// docDescriptor describes Doc to velox: its table, columns, edges and behaviour.
 func docDescriptor() velox.Descriptor[Doc] {
 	return velox.Descriptor[Doc]{
 		Table: "docs",

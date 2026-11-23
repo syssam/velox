@@ -91,11 +91,11 @@ type SampleHandles struct {
 	ParentID velox.NullNumberCol[Sample, int64]
 	// Score is the column score.
 	Score velox.NumberCol[Sample, kind.Score]
-	// Lines is the edge lines, to Line: With loads it, Has and HasWith test it.
+	// Lines is the edge lines, to Line: With loads it, Has and HasWith test it, and Line.SampleID, set on the Line, writes it.
 	Lines velox.Rel[Sample, Line]
-	// Children is the edge children, to Sample: With loads it, Has and HasWith test it.
+	// Children is the edge children, to Sample: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Children velox.Rel[Sample, Sample]
-	// Parent is the edge parent, to Sample: With loads it, Has and HasWith test it.
+	// Parent is the edge parent, to Sample: With loads it, Has and HasWith test it, and Set writes it.
 	Parent velox.Rel[Sample, Sample]
 }
 
@@ -124,7 +124,7 @@ var sampleMeta velox.MetaOnce[Sample]
 // VeloxMeta is called by velox, not by applications.
 func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDescriptor) }
 
-// sampleDescriptor describes Sample to velox: its table, columns, edges and hooks.
+// sampleDescriptor describes Sample to velox: its table, columns and edges.
 func sampleDescriptor() velox.Descriptor[Sample] {
 	return velox.Descriptor[Sample]{
 		Table: "samples",

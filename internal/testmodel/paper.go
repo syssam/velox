@@ -12,6 +12,7 @@ import (
 
 // Paper is the entity of schema Paper.
 type Paper struct {
+	// An insert of the zero value stores the value of its default function.
 	ID      bindtype.UUID `json:"id"`
 	Title   string        `json:"title"`
 	Version int64         `json:"version"`
@@ -43,14 +44,15 @@ const (
 // PaperHandles is the type of Papers, the typed handles of Paper's columns and relations.
 type PaperHandles struct {
 	// ID is the column id.
+	// An insert of the zero value stores the value of its default function.
 	ID velox.Col[Paper, bindtype.UUID]
 	// Title is the column title.
 	Title velox.StringCol[Paper, string]
 	// Version is the column version.
 	Version velox.NumberCol[Paper, int64]
-	// Remarks is the edge remarks, to Remark: With loads it, Has and HasWith test it.
+	// Remarks is the edge remarks, to Remark: With loads it, Has and HasWith test it, and Remark.PaperID, set on the Remark, writes it.
 	Remarks velox.Rel[Paper, Remark]
-	// Topics is the edge topics, to Topic: With loads it, Has and HasWith test it.
+	// Topics is the edge topics, to Topic: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Topics velox.Rel[Paper, Topic]
 }
 
@@ -68,7 +70,7 @@ var paperMeta velox.MetaOnce[Paper]
 // VeloxMeta is called by velox, not by applications.
 func (*Paper) VeloxMeta() *velox.Meta[Paper] { return paperMeta.Load(paperDescriptor) }
 
-// paperDescriptor describes Paper to velox: its table, columns, edges and hooks.
+// paperDescriptor describes Paper to velox: its table, columns and edges.
 func paperDescriptor() velox.Descriptor[Paper] {
 	return velox.Descriptor[Paper]{
 		Table: "papers",

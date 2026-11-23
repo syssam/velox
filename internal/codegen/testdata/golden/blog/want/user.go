@@ -15,21 +15,25 @@ import (
 
 // User is a person who writes posts.
 type User struct {
-	ID        int64     `json:"id"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt time.Time `json:"created_at"`
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt time.Time `json:"updated_at"`
 	CreatedBy string    `json:"created_by"`
 	OrgID     int64     `json:"org_id"`
 	// The display name.
-	Name         string   `json:"name"`
-	Email        string   `json:"email"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	// An insert of the zero value stores the default, UserRoleViewer.
 	Role         UserRole `json:"role"`
 	Nickname     string   `json:"nickname,omitempty"`
 	Bio          *string  `json:"bio,omitempty"`
 	Age          int      `json:"age,omitempty"`
 	PasswordHash string   `json:"-"`
-	Score        *float64 `json:"score,omitempty"`
-	UserSpouse   *int64   `json:"-"`
+	// An insert of nil stores the default, 1.5.
+	Score      *float64 `json:"score,omitempty"`
+	UserSpouse *int64   `json:"-"`
 	// Edges holds User's relations, filled by With.
 	Edges UserEdges `json:"edges,omitzero"`
 }
@@ -77,18 +81,21 @@ type UserHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
 	// CreatedAt is the column created_at.
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt velox.TimeCol[User, time.Time]
 	// UpdatedAt is the column updated_at.
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt velox.TimeCol[User, time.Time]
 	// CreatedBy is the column created_by.
 	CreatedBy velox.StringCol[User, string]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[User, int64]
-	// Name is the column name.
+	// Name is the column name: the display name.
 	Name velox.StringCol[User, string]
 	// Email is the column email.
 	Email velox.StringCol[User, string]
 	// Role is the column role.
+	// An insert of the zero value stores the default, UserRoleViewer.
 	Role velox.Col[User, UserRole]
 	// Nickname is the column nickname.
 	Nickname velox.StringCol[User, string]
@@ -99,16 +106,17 @@ type UserHandles struct {
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
 	// Score is the column score.
+	// An insert of nil stores the default, 1.5.
 	Score velox.NullNumberCol[User, float64]
 	// UserSpouse is the column user_spouse.
 	UserSpouse velox.NullNumberCol[User, int64]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it, and Post.AuthorID, set on the Post, writes it.
 	Posts velox.Rel[User, Post]
-	// Groups is the edge groups, to Group: With loads it, Has and HasWith test it.
+	// Groups is the edge groups, to Group: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Groups velox.Rel[User, Group]
-	// Friends is the edge friends, to User: With loads it, Has and HasWith test it.
+	// Friends is the edge friends, to User: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Friends velox.Rel[User, User]
-	// Spouse is the edge spouse, to User: With loads it, Has and HasWith test it.
+	// Spouse is the edge spouse, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Spouse velox.Rel[User, User]
 }
 
@@ -139,7 +147,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-// userDescriptor describes User to velox: its table, columns, edges and hooks.
+// userDescriptor describes User to velox: its table, columns, edges and checks.
 func userDescriptor() velox.Descriptor[User] {
 	fds := veloxschema.FieldDescriptors(&schema.User{}, "created_by")
 	d0 := fds[0].Validators[0].(func(string) error)
@@ -278,7 +286,7 @@ func userDescriptor() velox.Descriptor[User] {
 	}
 }
 
-// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
+// String returns the entity's fields except the sensitive one and the foreign key velox added.
 func (u User) String() string {
 	return fmt.Sprintf("User("+
 		"ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, "+

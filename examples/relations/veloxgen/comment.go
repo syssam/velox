@@ -43,7 +43,7 @@ type CommentHandles struct {
 	PostID velox.NumberCol[Comment, int64]
 	// Body is the column body.
 	Body velox.StringCol[Comment, string]
-	// Post is the edge post, to Post: With loads it, Has and HasWith test it.
+	// Post is the edge post, to Post: With loads it, Has and HasWith test it, and Set writes it.
 	Post velox.Rel[Comment, Post]
 }
 
@@ -60,7 +60,7 @@ var commentMeta velox.MetaOnce[Comment]
 // VeloxMeta is called by velox, not by applications.
 func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
-// commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
+// commentDescriptor describes Comment to velox: its table, columns and edges.
 func commentDescriptor() velox.Descriptor[Comment] {
 	return velox.Descriptor[Comment]{
 		Table: "comments",

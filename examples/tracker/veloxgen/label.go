@@ -45,7 +45,7 @@ type LabelHandles struct {
 	OrgID velox.NumberCol[Label, int64]
 	// Name is the column name.
 	Name velox.StringCol[Label, string]
-	// Issues is the edge issues, to Issue: With loads it, Has and HasWith test it.
+	// Issues is the edge issues, to Issue: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Issues velox.Rel[Label, Issue]
 }
 
@@ -62,7 +62,7 @@ var labelMeta velox.MetaOnce[Label]
 // VeloxMeta is called by velox, not by applications.
 func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescriptor) }
 
-// labelDescriptor describes Label to velox: its table, columns, edges and hooks.
+// labelDescriptor describes Label to velox: its table, columns, edges, checks and behaviour.
 func labelDescriptor() velox.Descriptor[Label] {
 	return velox.Descriptor[Label]{
 		Table: "labels",

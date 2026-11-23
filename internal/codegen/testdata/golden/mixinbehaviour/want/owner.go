@@ -11,8 +11,10 @@ import (
 
 // Owner is the entity of schema Owner.
 type Owner struct {
-	ID        int64     `json:"id"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt time.Time `json:"created_at"`
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt time.Time `json:"updated_at"`
 	Name      string    `json:"name"`
 }
@@ -30,8 +32,10 @@ type OwnerHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Owner, int64]
 	// CreatedAt is the column created_at.
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt velox.TimeCol[Owner, time.Time]
 	// UpdatedAt is the column updated_at.
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt velox.TimeCol[Owner, time.Time]
 	// Name is the column name.
 	Name velox.StringCol[Owner, string]
@@ -50,7 +54,7 @@ var ownerMeta velox.MetaOnce[Owner]
 // VeloxMeta is called by velox, not by applications.
 func (*Owner) VeloxMeta() *velox.Meta[Owner] { return ownerMeta.Load(ownerDescriptor) }
 
-// ownerDescriptor describes Owner to velox: its table, columns, edges and hooks.
+// ownerDescriptor describes Owner to velox: its table and columns.
 func ownerDescriptor() velox.Descriptor[Owner] {
 	return velox.Descriptor[Owner]{
 		Table: "owners",

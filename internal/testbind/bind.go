@@ -168,7 +168,7 @@ var bindMeta velox.MetaOnce[Bind]
 // VeloxMeta is called by velox, not by applications.
 func (*Bind) VeloxMeta() *velox.Meta[Bind] { return bindMeta.Load(bindDescriptor) }
 
-// bindDescriptor describes Bind to velox: its table, columns, edges and hooks.
+// bindDescriptor describes Bind to velox: its table, columns and checks.
 func bindDescriptor() velox.Descriptor[Bind] {
 	return velox.Descriptor[Bind]{
 		Table: "binds",

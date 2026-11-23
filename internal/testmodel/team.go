@@ -39,7 +39,7 @@ type TeamHandles struct {
 	ID velox.NumberCol[Team, int64]
 	// Name is the column name.
 	Name velox.StringCol[Team, string]
-	// Players is the edge players, to Player: With loads it, Has and HasWith test it.
+	// Players is the edge players, to Player: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Players velox.Rel[Team, Player]
 }
 
@@ -55,7 +55,7 @@ var teamMeta velox.MetaOnce[Team]
 // VeloxMeta is called by velox, not by applications.
 func (*Team) VeloxMeta() *velox.Meta[Team] { return teamMeta.Load(teamDescriptor) }
 
-// teamDescriptor describes Team to velox: its table, columns, edges and hooks.
+// teamDescriptor describes Team to velox: its table, columns and edges.
 func teamDescriptor() velox.Descriptor[Team] {
 	return velox.Descriptor[Team]{
 		Table: "teams",

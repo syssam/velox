@@ -22,12 +22,14 @@ type Post struct {
 	// The post's title, never empty.
 	Title string `json:"title"`
 	// Whether the post is a draft or published.
+	// An insert of the zero value stores the default, PostStatusDraft.
 	Status PostStatus `json:"status"`
 	// How many times the post was read.
 	Views int64 `json:"views,omitempty"`
 	// When the post was published; null for a draft.
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	// Words the post is found by.
+	// An insert of the zero value stores the default, []string{}.
 	Keywords []string `json:"keywords,omitempty"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
@@ -67,19 +69,21 @@ type PostHandles struct {
 	OrgID velox.NumberCol[Post, int64]
 	// AuthorID is the column author_id.
 	AuthorID velox.NumberCol[Post, int64]
-	// Title is the column title.
+	// Title is the column title: the post's title, never empty.
 	Title velox.StringCol[Post, string]
-	// Status is the column status.
+	// Status is the column status: whether the post is a draft or published.
+	// An insert of the zero value stores the default, PostStatusDraft.
 	Status velox.Col[Post, PostStatus]
-	// Views is the column views.
+	// Views is the column views: how many times the post was read.
 	Views velox.NumberCol[Post, int64]
-	// PublishedAt is the column published_at.
+	// PublishedAt is the column published_at: when the post was published; null for a draft.
 	PublishedAt velox.NullTimeCol[Post, time.Time]
-	// Keywords is the column keywords.
+	// Keywords is the column keywords: words the post is found by.
+	// An insert of the zero value stores the default, []string{}.
 	Keywords velox.JSONCol[Post, []string]
-	// Author is the edge author, to User: With loads it, Has and HasWith test it.
+	// Author is the edge author, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Post, User]
-	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it.
+	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Tags velox.Rel[Post, Tag]
 }
 
@@ -102,7 +106,7 @@ var postMeta velox.MetaOnce[Post]
 // VeloxMeta is called by velox, not by applications.
 func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
-// postDescriptor describes Post to velox: its table, columns, edges and hooks.
+// postDescriptor describes Post to velox: its table, columns, edges, checks and behaviour.
 func postDescriptor() velox.Descriptor[Post] {
 	return velox.Descriptor[Post]{
 		Table: "posts",

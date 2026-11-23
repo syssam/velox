@@ -52,7 +52,7 @@ type LineHandles struct {
 	Description velox.StringCol[Line, string]
 	// AmountCents is the column amount_cents.
 	AmountCents velox.NumberCol[Line, int64]
-	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it, and Set writes it.
 	Invoice velox.Rel[Line, Invoice]
 }
 
@@ -71,7 +71,7 @@ var lineMeta velox.MetaOnce[Line]
 // VeloxMeta is called by velox, not by applications.
 func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
-// lineDescriptor describes Line to velox: its table, columns, edges and hooks.
+// lineDescriptor describes Line to velox: its table, columns, edges and behaviour.
 func lineDescriptor() velox.Descriptor[Line] {
 	return velox.Descriptor[Line]{
 		Table: "lines",

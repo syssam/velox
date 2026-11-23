@@ -47,7 +47,7 @@ type ItemHandles struct {
 	SKU velox.StringCol[Item, string]
 	// Qty is the column qty.
 	Qty velox.NumberCol[Item, int64]
-	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it.
+	// Invoice is the edge invoice, to Invoice: With loads it, Has and HasWith test it, and Set writes it.
 	Invoice velox.Rel[Item, Invoice]
 }
 
@@ -65,7 +65,7 @@ var itemMeta velox.MetaOnce[Item]
 // VeloxMeta is called by velox, not by applications.
 func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
 
-// itemDescriptor describes Item to velox: its table, columns, edges and hooks.
+// itemDescriptor describes Item to velox: its table, columns and edges.
 func itemDescriptor() velox.Descriptor[Item] {
 	return velox.Descriptor[Item]{
 		Table: "items",

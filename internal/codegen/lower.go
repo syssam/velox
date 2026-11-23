@@ -434,8 +434,73 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitempty"`, f.Name))
 	}
 	s.defaults(e, f, o, at)
+	o.DefaultDoc = s.defaultDoc(f, o)
 	s.checks(e, f, o, at)
 	return o
+}
+
+// defaultDoc is the sentence that says what an insert of f's zero value
+// stores, when f has a default that replaces it, and "" otherwise. An
+// insert fills a default into a zero field before its setters and hooks
+// run, so a setter stores the zero over it (ADR 0082). A constant default
+// that is itself the zero value replaces nothing a value field can hold.
+func (s *entState) defaultDoc(f *Field, o *OutField) string {
+	if o.Implicit {
+		return ""
+	}
+	h := s.out.Handles + "." + o.GoName
+	var what, zero string // the default as said, and the zero a setter stores
+	switch {
+	case o.DefaultCode != "":
+		var lit string
+		lit, zero = constDefault(f, o)
+		if lit == "" && !o.Pointer {
+			return "" // the default is the zero value
+		}
+		what = "the default, " + cmp.Or(lit, o.DefaultCode)
+	case f.DefaultFunc:
+		what = "the value of its default function"
+	case o.DefaultFuncCode != "" && f.Type == "json" && sliceLiteral(f.Default, o.ElemType) != "":
+		what = "the default, " + sliceLiteral(f.Default, o.ElemType)
+	case o.DefaultFuncCode != "":
+		what = "the schema's default"
+	default:
+		return ""
+	}
+	if o.Pointer {
+		return fmt.Sprintf("An insert of nil stores %s.", what)
+	}
+	if zero == "" {
+		return fmt.Sprintf("An insert of the zero value stores %s.", what)
+	}
+	return fmt.Sprintf("An insert of the zero value stores %s; %s.Set(%s) in the insert stores %[3]s.", what, h, zero)
+}
+
+// constDefault is f's constant default as a doc comment says it, "" when it
+// is the zero value of f's type, and that zero as a setter's argument, ""
+// when the zero is no value of the field (an enum's).
+func constDefault(f *Field, o *OutField) (lit, zero string) {
+	raw := strings.TrimSpace(string(f.Default))
+	switch {
+	case f.Type == "bool":
+		if raw == "false" {
+			return "", "false"
+		}
+		return raw, "false"
+	case numeric[f.Type]:
+		if v, err := strconv.ParseFloat(raw, 64); err == nil && v == 0 {
+			return "", "0"
+		}
+		return raw, "0"
+	case f.Type == "string":
+		var v string
+		_ = json.Unmarshal(f.Default, &v)
+		if v == "" {
+			return "", `""`
+		}
+		return strconv.Quote(v), `""`
+	}
+	return o.DefaultCode, ""
 }
 
 // scalar reports whether f holds a bool, a number, a string or an enum: a
@@ -1162,7 +1227,7 @@ func (l *lowerer) relations() {
 				s.fail(at, "type %s is not a schema of this package", ed.Target)
 				continue
 			}
-			r := &OutRel{GoName: ed.GoName, Name: ed.Name, Target: ed.Target, Many: ed.Rel.Kind == "O2M" || ed.Rel.Kind == "M2M", Comment: ed.Comment}
+			r := &OutRel{GoName: ed.GoName, Name: ed.Name, Target: ed.Target, Many: ed.Rel.Kind == "O2M" || ed.Rel.Kind == "M2M", Writes: "Add", Comment: ed.Comment}
 			if ed.Rel.Kind == "M2M" {
 				r.Desc = l.through(s, e, t, ed)
 			} else {
@@ -1175,6 +1240,12 @@ func (l *lowerer) relations() {
 				if ownerCol < 0 || targetCol < 0 {
 					s.fail(at, "the foreign key field %q is not a field", ed.Field)
 					continue
+				}
+				switch tf := l.state[t.Name].out.Fields[targetCol]; {
+				case ownFK(ed):
+					r.Writes = "Set"
+				case !tf.Pointer && !tf.NilIsNull:
+					r.Writes = t.Name + "." + tf.GoName
 				}
 				owner, target := colConst(s.out, ownerCol), colConst(l.state[t.Name].out, targetCol)
 				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %s, %s)", t.Name, ed.Name, owner, target)

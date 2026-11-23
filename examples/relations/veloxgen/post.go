@@ -53,11 +53,11 @@ type PostHandles struct {
 	Title velox.StringCol[Post, string]
 	// Votes is the column votes.
 	Votes velox.NumberCol[Post, int64]
-	// Author is the edge author, to Author: With loads it, Has and HasWith test it.
+	// Author is the edge author, to Author: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Post, Author]
-	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it.
+	// Comments is the edge comments, to Comment: With loads it, Has and HasWith test it, and Comment.PostID, set on the Comment, writes it.
 	Comments velox.Rel[Post, Comment]
-	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it.
+	// Tags is the edge tags, to Tag: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Tags velox.Rel[Post, Tag]
 }
 
@@ -77,7 +77,7 @@ var postMeta velox.MetaOnce[Post]
 // VeloxMeta is called by velox, not by applications.
 func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
-// postDescriptor describes Post to velox: its table, columns, edges and hooks.
+// postDescriptor describes Post to velox: its table, columns and edges.
 func postDescriptor() velox.Descriptor[Post] {
 	return velox.Descriptor[Post]{
 		Table: "posts",

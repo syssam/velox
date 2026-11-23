@@ -61,7 +61,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-// userDescriptor describes User to velox: its table, columns, edges and hooks.
+// userDescriptor describes User to velox: its table, columns, checks and behaviour.
 func userDescriptor() velox.Descriptor[User] {
 	return velox.Descriptor[User]{
 		Table: "users",
@@ -125,7 +125,7 @@ func userDescriptor() velox.Descriptor[User] {
 	}
 }
 
-// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
+// String returns the entity's fields except the sensitive one.
 func (u User) String() string {
 	return fmt.Sprintf("User(ID=%v, OrgID=%v, Email=%v, Name=%v, Role=%v)", u.ID, u.OrgID, u.Email, u.Name, u.Role)
 }

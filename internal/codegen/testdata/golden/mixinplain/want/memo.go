@@ -45,7 +45,7 @@ var memoMeta velox.MetaOnce[Memo]
 // VeloxMeta is called by velox, not by applications.
 func (*Memo) VeloxMeta() *velox.Meta[Memo] { return memoMeta.Load(memoDescriptor) }
 
-// memoDescriptor describes Memo to velox: its table, columns, edges and hooks.
+// memoDescriptor describes Memo to velox: its table, columns and behaviour.
 func memoDescriptor() velox.Descriptor[Memo] {
 	return velox.Descriptor[Memo]{
 		Table: "memos",

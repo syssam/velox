@@ -49,7 +49,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-// userDescriptor describes User to velox: its table, columns, edges and hooks.
+// userDescriptor describes User to velox: its table and columns.
 func userDescriptor() velox.Descriptor[User] {
 	return velox.Descriptor[User]{
 		Table: "users",

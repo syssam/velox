@@ -39,7 +39,7 @@ type LineHandles struct {
 	ID velox.NumberCol[Line, int64]
 	// SampleID is the column sample_id.
 	SampleID velox.NumberCol[Line, int64]
-	// Sample is the edge sample, to Sample: With loads it, Has and HasWith test it.
+	// Sample is the edge sample, to Sample: With loads it, Has and HasWith test it, and Set writes it.
 	Sample velox.Rel[Line, Sample]
 }
 
@@ -55,7 +55,7 @@ var lineMeta velox.MetaOnce[Line]
 // VeloxMeta is called by velox, not by applications.
 func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
-// lineDescriptor describes Line to velox: its table, columns, edges and hooks.
+// lineDescriptor describes Line to velox: its table, columns and edges.
 func lineDescriptor() velox.Descriptor[Line] {
 	return velox.Descriptor[Line]{
 		Table: "line",

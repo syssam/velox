@@ -13,8 +13,10 @@ import (
 
 // Comment is the entity of schema Comment.
 type Comment struct {
-	ID        int64     `json:"id"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt time.Time `json:"created_at"`
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt time.Time `json:"updated_at"`
 	OrgID     int64     `json:"org_id"`
 	IssueID   int64     `json:"issue_id"`
@@ -54,8 +56,10 @@ type CommentHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Comment, int64]
 	// CreatedAt is the column created_at.
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt velox.TimeCol[Comment, time.Time]
 	// UpdatedAt is the column updated_at.
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt velox.TimeCol[Comment, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Comment, int64]
@@ -65,9 +69,9 @@ type CommentHandles struct {
 	AuthorID velox.NumberCol[Comment, int64]
 	// Body is the column body.
 	Body velox.StringCol[Comment, string]
-	// Issue is the edge issue, to Issue: With loads it, Has and HasWith test it.
+	// Issue is the edge issue, to Issue: With loads it, Has and HasWith test it, and Set writes it.
 	Issue velox.Rel[Comment, Issue]
-	// Author is the edge author, to User: With loads it, Has and HasWith test it.
+	// Author is the edge author, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Comment, User]
 }
 
@@ -89,7 +93,7 @@ var commentMeta velox.MetaOnce[Comment]
 // VeloxMeta is called by velox, not by applications.
 func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
-// commentDescriptor describes Comment to velox: its table, columns, edges and hooks.
+// commentDescriptor describes Comment to velox: its table, columns, edges, checks and behaviour.
 func commentDescriptor() velox.Descriptor[Comment] {
 	return velox.Descriptor[Comment]{
 		Table: "comments",

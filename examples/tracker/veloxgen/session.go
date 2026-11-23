@@ -55,7 +55,7 @@ var sessionMeta velox.MetaOnce[Session]
 // VeloxMeta is called by velox, not by applications.
 func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessionDescriptor) }
 
-// sessionDescriptor describes Session to velox: its table, columns, edges and hooks.
+// sessionDescriptor describes Session to velox: its table and columns.
 func sessionDescriptor() velox.Descriptor[Session] {
 	return velox.Descriptor[Session]{
 		Table: "sessions",
@@ -89,7 +89,7 @@ func sessionDescriptor() velox.Descriptor[Session] {
 	}
 }
 
-// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
+// String returns the entity's fields except the sensitive one.
 func (s Session) String() string {
 	return fmt.Sprintf("Session(ID=%v, OrgID=%v, UserID=%v, ExpiresAt=%v)", s.ID, s.OrgID, s.UserID, s.ExpiresAt)
 }

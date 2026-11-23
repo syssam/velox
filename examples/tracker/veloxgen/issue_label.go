@@ -41,7 +41,7 @@ func (*IssueLabel) VeloxMeta() *velox.Meta[IssueLabel] {
 	return issueLabelMeta.Load(issueLabelDescriptor)
 }
 
-// issueLabelDescriptor describes IssueLabel to velox: its table, columns, edges and hooks.
+// issueLabelDescriptor describes IssueLabel to velox: its table and columns.
 func issueLabelDescriptor() velox.Descriptor[IssueLabel] {
 	return velox.Descriptor[IssueLabel]{
 		Table: "issue_labels",

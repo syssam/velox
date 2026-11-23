@@ -15,14 +15,16 @@ import (
 
 // Post is the entity of schema Post.
 type Post struct {
-	ID          int64      `json:"id"`
-	AuthorID    int64      `json:"author_id"`
-	Title       string     `json:"title"`
-	Slug        string     `json:"slug"`
+	ID       int64  `json:"id"`
+	AuthorID int64  `json:"author_id"`
+	Title    string `json:"title"`
+	Slug     string `json:"slug"`
+	// An insert of the zero value stores the default, PostStatusDraft.
 	Status      PostStatus `json:"status"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
-	Tags        []string   `json:"tags,omitempty"`
-	Views       int        `json:"views"`
+	// An insert of the zero value stores the default, []string{"new"}.
+	Tags  []string `json:"tags,omitempty"`
+	Views int      `json:"views"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
 }
@@ -61,14 +63,16 @@ type PostHandles struct {
 	// Slug is the column slug.
 	Slug velox.StringCol[Post, string]
 	// Status is the column status.
+	// An insert of the zero value stores the default, PostStatusDraft.
 	Status velox.Col[Post, PostStatus]
 	// PublishedAt is the column published_at.
 	PublishedAt velox.NullTimeCol[Post, time.Time]
 	// Tags is the column tags.
+	// An insert of the zero value stores the default, []string{"new"}.
 	Tags velox.JSONCol[Post, []string]
 	// Views is the column views.
 	Views velox.NumberCol[Post, int]
-	// Author is the edge author, to User: With loads it, Has and HasWith test it.
+	// Author is the edge author, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Post, User]
 }
 
@@ -90,7 +94,7 @@ var postMeta velox.MetaOnce[Post]
 // VeloxMeta is called by velox, not by applications.
 func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
-// postDescriptor describes Post to velox: its table, columns, edges and hooks.
+// postDescriptor describes Post to velox: its table, columns, edges, checks and behaviour.
 func postDescriptor() velox.Descriptor[Post] {
 	fds := veloxschema.FieldDescriptors(&schema.Post{}, "slug")
 	d0 := fds[0].Validators[0].(func(string) error)

@@ -29,10 +29,15 @@ var versionGuard = regexp.MustCompile(`GeneratedCodeIsVersion\d+`)
 // blankLines matches the line breaks of one or more blank lines.
 var blankLines = regexp.MustCompile(`\n(?:[ \t]*\n)+`)
 
+// spaces matches a run of spaces and tabs.
+var spaces = regexp.MustCompile(`[ \t]+`)
+
 // shapeHash is the SHA-256 of the Go files of files (slash path → source),
 // in path order, each without its comments, printed by go/printer without
-// blank lines, with the version guard's number taken out: a change to a
-// comment or to the spacing does not change it, a change to the code does.
+// blank lines and with each run of spaces as one, with the version guard's
+// number taken out: a change to a comment or to the spacing does not change
+// it, nor does the alignment gofmt gives fields beside a comment; a change to
+// the code does.
 func shapeHash(files map[string][]byte) (string, error) {
 	h := sha256.New()
 	for _, name := range slices.Sorted(func(yield func(string) bool) {
@@ -52,7 +57,7 @@ func shapeHash(files map[string][]byte) (string, error) {
 			return "", err
 		}
 		// A comment's line, gone, leaves a blank line, which says nothing.
-		code := blankLines.ReplaceAll(b.Bytes(), []byte("\n"))
+		code := spaces.ReplaceAll(blankLines.ReplaceAll(b.Bytes(), []byte("\n")), []byte(" "))
 		_, _ = fmt.Fprintf(h, "%s\n%s\n", name, versionGuard.ReplaceAll(code, []byte("GeneratedCodeIsVersionN")))
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
@@ -142,6 +147,20 @@ func TestShapeHash(t *testing.T) {
 		if (h == h0) != c.same {
 			t.Errorf("%s: same hash %v, want %v", c.name, h == h0, c.same)
 		}
+	}
+	// gofmt aligns the fields on either side of a comment's line apart.
+	aligned := "package x\n\ntype T struct {\n\tA  int\n\tBB int\n}\n"
+	apart := "package x\n\ntype T struct {\n\tA int\n\t// BB is two.\n\tBB int\n}\n"
+	ha, err := shapeHash(map[string][]byte{"a/want/x.go": []byte(aligned)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hb, err := shapeHash(map[string][]byte{"a/want/x.go": []byte(apart)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ha != hb {
+		t.Error("alignment: the hash changed with the fields' alignment")
 	}
 }
 

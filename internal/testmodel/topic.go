@@ -40,7 +40,7 @@ type TopicHandles struct {
 	ID velox.StringCol[Topic, string]
 	// Name is the column name.
 	Name velox.StringCol[Topic, string]
-	// Papers is the edge papers, to Paper: With loads it, Has and HasWith test it.
+	// Papers is the edge papers, to Paper: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Papers velox.Rel[Topic, Paper]
 }
 
@@ -56,7 +56,7 @@ var topicMeta velox.MetaOnce[Topic]
 // VeloxMeta is called by velox, not by applications.
 func (*Topic) VeloxMeta() *velox.Meta[Topic] { return topicMeta.Load(topicDescriptor) }
 
-// topicDescriptor describes Topic to velox: its table, columns, edges and hooks.
+// topicDescriptor describes Topic to velox: its table, columns, edges and checks.
 func topicDescriptor() velox.Descriptor[Topic] {
 	return velox.Descriptor[Topic]{
 		Table: "topics",

@@ -42,9 +42,9 @@ type ClubHandles struct {
 	ID velox.NumberCol[Club, int64]
 	// Name is the column name.
 	Name velox.StringCol[Club, string]
-	// Members is the edge members, to Author: With loads it, Has and HasWith test it.
+	// Members is the edge members, to Author: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Members velox.Rel[Club, Author]
-	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it.
+	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it, and Membership.ClubID, set on the Membership, writes it.
 	Memberships velox.Rel[Club, Membership]
 }
 
@@ -61,7 +61,7 @@ var clubMeta velox.MetaOnce[Club]
 // VeloxMeta is called by velox, not by applications.
 func (*Club) VeloxMeta() *velox.Meta[Club] { return clubMeta.Load(clubDescriptor) }
 
-// clubDescriptor describes Club to velox: its table, columns, edges and hooks.
+// clubDescriptor describes Club to velox: its table, columns and edges.
 func clubDescriptor() velox.Descriptor[Club] {
 	return velox.Descriptor[Club]{
 		Table: "clubs",

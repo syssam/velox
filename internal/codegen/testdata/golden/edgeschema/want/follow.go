@@ -50,9 +50,9 @@ type FollowHandles struct {
 	UserID velox.NumberCol[Follow, int64]
 	// FollowerID is the column follower_id.
 	FollowerID velox.NumberCol[Follow, int64]
-	// User is the edge user, to User: With loads it, Has and HasWith test it.
+	// User is the edge user, to User: With loads it, Has and HasWith test it, and Set writes it.
 	User velox.Rel[Follow, User]
-	// Follower is the edge follower, to User: With loads it, Has and HasWith test it.
+	// Follower is the edge follower, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Follower velox.Rel[Follow, User]
 }
 
@@ -71,7 +71,7 @@ var followMeta velox.MetaOnce[Follow]
 // VeloxMeta is called by velox, not by applications.
 func (*Follow) VeloxMeta() *velox.Meta[Follow] { return followMeta.Load(followDescriptor) }
 
-// followDescriptor describes Follow to velox: its table, columns, edges and hooks.
+// followDescriptor describes Follow to velox: its table, columns and edges.
 func followDescriptor() velox.Descriptor[Follow] {
 	return velox.Descriptor[Follow]{
 		Table: "follows",

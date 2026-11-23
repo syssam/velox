@@ -12,8 +12,9 @@ import (
 
 // Group is the entity of schema Group.
 type Group struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	// An insert of the zero value stores the value of its default function.
 	Token string `json:"token"`
 	// Edges holds Group's relations, filled by With.
 	Edges GroupEdges `json:"edges,omitzero"`
@@ -44,8 +45,9 @@ type GroupHandles struct {
 	// Name is the column name.
 	Name velox.StringCol[Group, string]
 	// Token is the column token.
+	// An insert of the zero value stores the value of its default function.
 	Token velox.StringCol[Group, string]
-	// Users is the edge users, to User: With loads it, Has and HasWith test it.
+	// Users is the edge users, to User: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Users velox.Rel[Group, User]
 }
 
@@ -62,7 +64,7 @@ var groupMeta velox.MetaOnce[Group]
 // VeloxMeta is called by velox, not by applications.
 func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
 
-// groupDescriptor describes Group to velox: its table, columns, edges and hooks.
+// groupDescriptor describes Group to velox: its table, columns and edges.
 func groupDescriptor() velox.Descriptor[Group] {
 	fds := veloxschema.FieldDescriptors(&schema.Group{}, "token")
 	d0 := fds[0].DefaultFunc.(func() string)

@@ -39,7 +39,7 @@ var postTagMeta velox.MetaOnce[PostTag]
 // VeloxMeta is called by velox, not by applications.
 func (*PostTag) VeloxMeta() *velox.Meta[PostTag] { return postTagMeta.Load(postTagDescriptor) }
 
-// postTagDescriptor describes PostTag to velox: its table, columns, edges and hooks.
+// postTagDescriptor describes PostTag to velox: its table and columns.
 func postTagDescriptor() velox.Descriptor[PostTag] {
 	return velox.Descriptor[PostTag]{
 		Table: "post_tags",

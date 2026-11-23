@@ -44,7 +44,7 @@ type RemarkHandles struct {
 	PaperID velox.Col[Remark, bindtype.UUID]
 	// Body is the column body.
 	Body velox.StringCol[Remark, string]
-	// Paper is the edge paper, to Paper: With loads it, Has and HasWith test it.
+	// Paper is the edge paper, to Paper: With loads it, Has and HasWith test it, and Set writes it.
 	Paper velox.Rel[Remark, Paper]
 }
 
@@ -61,7 +61,7 @@ var remarkMeta velox.MetaOnce[Remark]
 // VeloxMeta is called by velox, not by applications.
 func (*Remark) VeloxMeta() *velox.Meta[Remark] { return remarkMeta.Load(remarkDescriptor) }
 
-// remarkDescriptor describes Remark to velox: its table, columns, edges and hooks.
+// remarkDescriptor describes Remark to velox: its table, columns and edges.
 func remarkDescriptor() velox.Descriptor[Remark] {
 	return velox.Descriptor[Remark]{
 		Table: "remarks",

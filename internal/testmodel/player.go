@@ -42,9 +42,9 @@ type PlayerHandles struct {
 	ID velox.NumberCol[Player, int64]
 	// Name is the column name.
 	Name velox.StringCol[Player, string]
-	// Teams is the edge teams, to Team: With loads it, Has and HasWith test it.
+	// Teams is the edge teams, to Team: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Teams velox.Rel[Player, Team]
-	// Rosters is the edge rosters, to Roster: With loads it, Has and HasWith test it.
+	// Rosters is the edge rosters, to Roster: With loads it, Has and HasWith test it, and Roster.PlayerID, set on the Roster, writes it.
 	Rosters velox.Rel[Player, Roster]
 }
 
@@ -61,7 +61,7 @@ var playerMeta velox.MetaOnce[Player]
 // VeloxMeta is called by velox, not by applications.
 func (*Player) VeloxMeta() *velox.Meta[Player] { return playerMeta.Load(playerDescriptor) }
 
-// playerDescriptor describes Player to velox: its table, columns, edges and hooks.
+// playerDescriptor describes Player to velox: its table, columns and edges.
 func playerDescriptor() velox.Descriptor[Player] {
 	return velox.Descriptor[Player]{
 		Table: "players",

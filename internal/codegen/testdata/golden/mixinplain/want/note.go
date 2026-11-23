@@ -46,7 +46,7 @@ var noteMeta velox.MetaOnce[Note]
 // VeloxMeta is called by velox, not by applications.
 func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor) }
 
-// noteDescriptor describes Note to velox: its table, columns, edges and hooks.
+// noteDescriptor describes Note to velox: its table, columns and behaviour.
 func noteDescriptor() velox.Descriptor[Note] {
 	return velox.Descriptor[Note]{
 		Table: "notes",

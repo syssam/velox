@@ -13,8 +13,10 @@ import (
 
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
-	ID         int64         `json:"id"`
-	CreatedAt  time.Time     `json:"created_at"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the value of its default function.
+	CreatedAt time.Time `json:"created_at"`
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt  time.Time     `json:"updated_at"`
 	OrgID      int64         `json:"org_id"`
 	DeletedAt  *time.Time    `json:"deleted_at,omitempty"`
@@ -55,8 +57,10 @@ type InvoiceHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Invoice, int64]
 	// CreatedAt is the column created_at.
+	// An insert of the zero value stores the value of its default function.
 	CreatedAt velox.TimeCol[Invoice, time.Time]
 	// UpdatedAt is the column updated_at.
+	// An insert of the zero value stores the value of its default function.
 	UpdatedAt velox.TimeCol[Invoice, time.Time]
 	// OrgID is the column org_id.
 	OrgID velox.NumberCol[Invoice, int64]
@@ -70,7 +74,7 @@ type InvoiceHandles struct {
 	Status velox.Col[Invoice, InvoiceStatus]
 	// TotalCents is the column total_cents.
 	TotalCents velox.NumberCol[Invoice, int64]
-	// Lines is the edge lines, to Line: With loads it, Has and HasWith test it.
+	// Lines is the edge lines, to Line: With loads it, Has and HasWith test it, and Line.InvoiceID, set on the Line, writes it.
 	Lines velox.Rel[Invoice, Line]
 }
 
@@ -93,7 +97,7 @@ var invoiceMeta velox.MetaOnce[Invoice]
 // VeloxMeta is called by velox, not by applications.
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
-// invoiceDescriptor describes Invoice to velox: its table, columns, edges and hooks.
+// invoiceDescriptor describes Invoice to velox: its table, columns, edges, checks and behaviour.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
 	return velox.Descriptor[Invoice]{
 		Table: "invoices",

@@ -46,7 +46,7 @@ var orgMeta velox.MetaOnce[Org]
 // VeloxMeta is called by velox, not by applications.
 func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
 
-// orgDescriptor describes Org to velox: its table, columns, edges and hooks.
+// orgDescriptor describes Org to velox: its table, columns and checks.
 func orgDescriptor() velox.Descriptor[Org] {
 	return velox.Descriptor[Org]{
 		Table: "orgs",

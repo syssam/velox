@@ -20,6 +20,7 @@ type User struct {
 	// The address the user signs in with; admins only.
 	Email string `json:"email"`
 	// What the user may do.
+	// An insert of the zero value stores the default, UserRoleMember.
 	Role UserRole `json:"role"`
 	// When the user joined.
 	JoinedAt     time.Time `json:"joined_at"`
@@ -53,17 +54,18 @@ const (
 type UserHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[User, int64]
-	// Name is the column name.
+	// Name is the column name: the name the user shows.
 	Name velox.StringCol[User, string]
-	// Email is the column email.
+	// Email is the column email: the address the user signs in with; admins only.
 	Email velox.StringCol[User, string]
-	// Role is the column role.
+	// Role is the column role: what the user may do.
+	// An insert of the zero value stores the default, UserRoleMember.
 	Role velox.Col[User, UserRole]
-	// JoinedAt is the column joined_at.
+	// JoinedAt is the column joined_at: when the user joined.
 	JoinedAt velox.TimeCol[User, time.Time]
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it, and Post.AuthorID, set on the Post, writes it.
 	Posts velox.Rel[User, Post]
 }
 
@@ -83,7 +85,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-// userDescriptor describes User to velox: its table, columns, edges and hooks.
+// userDescriptor describes User to velox: its table, columns, edges and checks.
 func userDescriptor() velox.Descriptor[User] {
 	return velox.Descriptor[User]{
 		Table: "users",
@@ -137,7 +139,7 @@ func userDescriptor() velox.Descriptor[User] {
 	}
 }
 
-// String returns the entity's fields except the sensitive ones and the foreign keys velox added.
+// String returns the entity's fields except the sensitive one.
 func (u User) String() string {
 	return fmt.Sprintf("User(ID=%v, Name=%v, Email=%v, Role=%v, JoinedAt=%v)", u.ID, u.Name, u.Email, u.Role, u.JoinedAt)
 }

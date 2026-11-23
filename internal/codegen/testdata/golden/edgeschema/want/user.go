@@ -51,15 +51,15 @@ type UserHandles struct {
 	ID velox.NumberCol[User, int64]
 	// Name is the column name.
 	Name velox.StringCol[User, string]
-	// Groups is the edge groups, to Group: With loads it, Has and HasWith test it.
+	// Groups is the edge groups, to Group: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Groups velox.Rel[User, Group]
-	// Following is the edge following, to User: With loads it, Has and HasWith test it.
+	// Following is the edge following, to User: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Following velox.Rel[User, User]
-	// Followers is the edge followers, to User: With loads it, Has and HasWith test it.
+	// Followers is the edge followers, to User: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Followers velox.Rel[User, User]
-	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it.
+	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it, and Membership.UserID, set on the Membership, writes it.
 	Memberships velox.Rel[User, Membership]
-	// Follows is the edge follows, to Follow: With loads it, Has and HasWith test it.
+	// Follows is the edge follows, to Follow: With loads it, Has and HasWith test it, and Follow.UserID, set on the Follow, writes it.
 	Follows velox.Rel[User, Follow]
 }
 
@@ -79,7 +79,7 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
-// userDescriptor describes User to velox: its table, columns, edges and hooks.
+// userDescriptor describes User to velox: its table, columns and edges.
 func userDescriptor() velox.Descriptor[User] {
 	return velox.Descriptor[User]{
 		Table: "users",

@@ -41,7 +41,7 @@ func (*UserFriend) VeloxMeta() *velox.Meta[UserFriend] {
 	return userFriendMeta.Load(userFriendDescriptor)
 }
 
-// userFriendDescriptor describes UserFriend to velox: its table, columns, edges and hooks.
+// userFriendDescriptor describes UserFriend to velox: its table and columns.
 func userFriendDescriptor() velox.Descriptor[UserFriend] {
 	return velox.Descriptor[UserFriend]{
 		Table: "user_friends",

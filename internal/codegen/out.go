@@ -114,6 +114,7 @@ type OutField struct {
 	RequiredEdge         string   // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDescriptor says RequiredEdge; "" when none
 	NilIsNull            bool     // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDescriptor says Nullable
 	DefaultCode          string   // "" or a Go expression for ColumnDescriptor.Default
+	DefaultDoc           string   // the sentence of the field's and handle's doc that says what an insert of the zero value stores; "" when no default replaces it
 	DefaultFuncCode      string   // "" or "func() any { … }"
 	ZeroFillCode         string   // "" or "func() any { … }": the value an unset Optional JSON slice, map or pointer is written as, ColumnDescriptor.DefaultFunc when DefaultFuncCode is ""
 	UpdateDefaultCode    string   // "" or "func() any { … }"
@@ -124,9 +125,15 @@ type OutField struct {
 // OutRel is a relation of an entity.
 type OutRel struct {
 	GoName, Name, Target string
-	Many                 bool   // Many[T] (O2M, M2M) or One[T] (O2O, M2O)
-	Desc                 string // the velox.EdgeTo or velox.EdgeThrough expression
-	Comment              string // the edge's documentation, from the schema
+	Many                 bool // Many[T] (O2M, M2M) or One[T] (O2O, M2O)
+	// Writes says what writes the edge, as its handle's doc comment says
+	// it: "Set" when its key is on the owner's row; "Add" when Add, Remove
+	// and Clear do (a many-to-many edge, or one whose nullable key the
+	// target holds); else the target's key field, such as "Post.AuthorID",
+	// which a target row always has set.
+	Writes  string
+	Desc    string // the velox.EdgeTo or velox.EdgeThrough expression
+	Comment string // the edge's documentation, from the schema
 }
 
 // OutIndex is an index, by the indexes of its columns in the entity's fields.

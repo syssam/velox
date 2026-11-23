@@ -50,7 +50,7 @@ var projectMeta velox.MetaOnce[Project]
 // VeloxMeta is called by velox, not by applications.
 func (*Project) VeloxMeta() *velox.Meta[Project] { return projectMeta.Load(projectDescriptor) }
 
-// projectDescriptor describes Project to velox: its table, columns, edges and hooks.
+// projectDescriptor describes Project to velox: its table, columns and behaviour.
 func projectDescriptor() velox.Descriptor[Project] {
 	return velox.Descriptor[Project]{
 		Table: "projects",

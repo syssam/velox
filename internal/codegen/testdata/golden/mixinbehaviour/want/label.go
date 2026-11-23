@@ -45,7 +45,7 @@ var labelMeta velox.MetaOnce[Label]
 // VeloxMeta is called by velox, not by applications.
 func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescriptor) }
 
-// labelDescriptor describes Label to velox: its table, columns, edges and hooks.
+// labelDescriptor describes Label to velox: its table, columns and behaviour.
 func labelDescriptor() velox.Descriptor[Label] {
 	return velox.Descriptor[Label]{
 		Table: "labels",

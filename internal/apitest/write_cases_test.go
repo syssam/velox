@@ -214,6 +214,44 @@ func TestDefaultUnderExplicitZero(t *testing.T) {
 	})
 }
 
+// wgScore has a nullable number whose Default is 1.5, as ent's
+// field.Float("score").Nillable().Default(1.5).
+type wgScore struct {
+	ID    int64
+	Score *float64
+}
+
+var wgScoreMeta velox.MetaOnce[wgScore]
+
+func (*wgScore) VeloxMeta() *velox.Meta[wgScore] {
+	return wgScoreMeta.Load(func() velox.Descriptor[wgScore] {
+		return velox.Descriptor[wgScore]{
+			Table:      "scores",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Score", Name: "score", Default: 1.5}},
+			PrimaryKey: []int{0},
+			FieldPtr: func(x *wgScore, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Score
+			},
+		}
+	})
+}
+
+// A nil pointer field with a Default takes it in an insert, as velox-gen's
+// doc comment of such a field says.
+func TestDefaultUnderNil(t *testing.T) {
+	x := wgScore{ID: 1}
+	_, args, err := openFake(velox.Postgres, &fakeconn.Exec{}).Insert(&x).SQL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 2 || fmt.Sprint(velox.Show(args[1].(*float64))) != "1.5" {
+		t.Errorf("args %v, want 1 and a pointer to 1.5", args)
+	}
+}
+
 // TestFakeScanErrors: a row value of the wrong kind is an error from the
 // fake, as database/sql's Scan returns one, not a panic.
 func TestFakeScanErrors(t *testing.T) {

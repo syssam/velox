@@ -42,7 +42,7 @@ func (*PaperTopic) VeloxMeta() *velox.Meta[PaperTopic] {
 	return paperTopicMeta.Load(paperTopicDescriptor)
 }
 
-// paperTopicDescriptor describes PaperTopic to velox: its table, columns, edges and hooks.
+// paperTopicDescriptor describes PaperTopic to velox: its table and columns.
 func paperTopicDescriptor() velox.Descriptor[PaperTopic] {
 	return velox.Descriptor[PaperTopic]{
 		Table: "paper_topics",

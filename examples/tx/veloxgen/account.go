@@ -44,7 +44,7 @@ var accountMeta velox.MetaOnce[Account]
 // VeloxMeta is called by velox, not by applications.
 func (*Account) VeloxMeta() *velox.Meta[Account] { return accountMeta.Load(accountDescriptor) }
 
-// accountDescriptor describes Account to velox: its table, columns, edges and hooks.
+// accountDescriptor describes Account to velox: its table and columns.
 func accountDescriptor() velox.Descriptor[Account] {
 	return velox.Descriptor[Account]{
 		Table: "accounts",

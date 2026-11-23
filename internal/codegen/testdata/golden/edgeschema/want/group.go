@@ -42,9 +42,9 @@ type GroupHandles struct {
 	ID velox.NumberCol[Group, int64]
 	// Name is the column name.
 	Name velox.StringCol[Group, string]
-	// Users is the edge users, to User: With loads it, Has and HasWith test it.
+	// Users is the edge users, to User: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Users velox.Rel[Group, User]
-	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it.
+	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it, and Membership.GroupID, set on the Membership, writes it.
 	Memberships velox.Rel[Group, Membership]
 }
 
@@ -61,7 +61,7 @@ var groupMeta velox.MetaOnce[Group]
 // VeloxMeta is called by velox, not by applications.
 func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
 
-// groupDescriptor describes Group to velox: its table, columns, edges and hooks.
+// groupDescriptor describes Group to velox: its table, columns and edges.
 func groupDescriptor() velox.Descriptor[Group] {
 	return velox.Descriptor[Group]{
 		Table: "groups",

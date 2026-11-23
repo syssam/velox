@@ -12,11 +12,13 @@ import (
 
 // Membership is the entity of schema Membership.
 type Membership struct {
-	ID       int64          `json:"id"`
-	Role     MembershipRole `json:"role"`
-	JoinedAt time.Time      `json:"joined_at"`
-	AuthorID int64          `json:"author_id"`
-	ClubID   int64          `json:"club_id"`
+	ID int64 `json:"id"`
+	// An insert of the zero value stores the default, MembershipRoleMember.
+	Role MembershipRole `json:"role"`
+	// An insert of the zero value stores the value of its default function.
+	JoinedAt time.Time `json:"joined_at"`
+	AuthorID int64     `json:"author_id"`
+	ClubID   int64     `json:"club_id"`
 	// Edges holds Membership's relations, filled by With.
 	Edges MembershipEdges `json:"edges,omitzero"`
 }
@@ -49,16 +51,18 @@ type MembershipHandles struct {
 	// ID is the column id.
 	ID velox.NumberCol[Membership, int64]
 	// Role is the column role.
+	// An insert of the zero value stores the default, MembershipRoleMember.
 	Role velox.Col[Membership, MembershipRole]
 	// JoinedAt is the column joined_at.
+	// An insert of the zero value stores the value of its default function.
 	JoinedAt velox.TimeCol[Membership, time.Time]
 	// AuthorID is the column author_id.
 	AuthorID velox.NumberCol[Membership, int64]
 	// ClubID is the column club_id.
 	ClubID velox.NumberCol[Membership, int64]
-	// Author is the edge author, to Author: With loads it, Has and HasWith test it.
+	// Author is the edge author, to Author: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Membership, Author]
-	// Club is the edge club, to Club: With loads it, Has and HasWith test it.
+	// Club is the edge club, to Club: With loads it, Has and HasWith test it, and Set writes it.
 	Club velox.Rel[Membership, Club]
 }
 
@@ -80,7 +84,7 @@ func (*Membership) VeloxMeta() *velox.Meta[Membership] {
 	return membershipMeta.Load(membershipDescriptor)
 }
 
-// membershipDescriptor describes Membership to velox: its table, columns, edges and hooks.
+// membershipDescriptor describes Membership to velox: its table, columns, edges and checks.
 func membershipDescriptor() velox.Descriptor[Membership] {
 	return velox.Descriptor[Membership]{
 		Table: "memberships",

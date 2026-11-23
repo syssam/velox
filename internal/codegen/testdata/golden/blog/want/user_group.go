@@ -39,7 +39,7 @@ var userGroupMeta velox.MetaOnce[UserGroup]
 // VeloxMeta is called by velox, not by applications.
 func (*UserGroup) VeloxMeta() *velox.Meta[UserGroup] { return userGroupMeta.Load(userGroupDescriptor) }
 
-// userGroupDescriptor describes UserGroup to velox: its table, columns, edges and hooks.
+// userGroupDescriptor describes UserGroup to velox: its table and columns.
 func userGroupDescriptor() velox.Descriptor[UserGroup] {
 	return velox.Descriptor[UserGroup]{
 		Table: "user_groups",

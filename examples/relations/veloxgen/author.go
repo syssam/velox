@@ -45,11 +45,11 @@ type AuthorHandles struct {
 	ID velox.NumberCol[Author, int64]
 	// Name is the column name.
 	Name velox.StringCol[Author, string]
-	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it.
+	// Posts is the edge posts, to Post: With loads it, Has and HasWith test it, and Post.AuthorID, set on the Post, writes it.
 	Posts velox.Rel[Author, Post]
-	// Clubs is the edge clubs, to Club: With loads it, Has and HasWith test it.
+	// Clubs is the edge clubs, to Club: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Clubs velox.Rel[Author, Club]
-	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it.
+	// Memberships is the edge memberships, to Membership: With loads it, Has and HasWith test it, and Membership.AuthorID, set on the Membership, writes it.
 	Memberships velox.Rel[Author, Membership]
 }
 
@@ -67,7 +67,7 @@ var authorMeta velox.MetaOnce[Author]
 // VeloxMeta is called by velox, not by applications.
 func (*Author) VeloxMeta() *velox.Meta[Author] { return authorMeta.Load(authorDescriptor) }
 
-// authorDescriptor describes Author to velox: its table, columns, edges and hooks.
+// authorDescriptor describes Author to velox: its table, columns and edges.
 func authorDescriptor() velox.Descriptor[Author] {
 	return velox.Descriptor[Author]{
 		Table: "authors",

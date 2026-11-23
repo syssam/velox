@@ -44,7 +44,7 @@ var itemMeta velox.MetaOnce[Item]
 // VeloxMeta is called by velox, not by applications.
 func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
 
-// itemDescriptor describes Item to velox: its table, columns, edges and hooks.
+// itemDescriptor describes Item to velox: its table and columns.
 func itemDescriptor() velox.Descriptor[Item] {
 	return velox.Descriptor[Item]{
 		Table: "items",

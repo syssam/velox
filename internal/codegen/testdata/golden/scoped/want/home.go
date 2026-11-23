@@ -40,7 +40,7 @@ var homeMeta velox.MetaOnce[Home]
 // VeloxMeta is called by velox, not by applications.
 func (*Home) VeloxMeta() *velox.Meta[Home] { return homeMeta.Load(homeDescriptor) }
 
-// homeDescriptor describes Home to velox: its table, columns, edges and hooks.
+// homeDescriptor describes Home to velox: its table, columns and behaviour.
 func homeDescriptor() velox.Descriptor[Home] {
 	return velox.Descriptor[Home]{
 		Table: "homes",

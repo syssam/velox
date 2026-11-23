@@ -39,7 +39,7 @@ var ownerMeta velox.MetaOnce[Owner]
 // VeloxMeta is called by velox, not by applications.
 func (*Owner) VeloxMeta() *velox.Meta[Owner] { return ownerMeta.Load(ownerDescriptor) }
 
-// ownerDescriptor describes Owner to velox: its table, columns, edges and hooks.
+// ownerDescriptor describes Owner to velox: its table and columns.
 func ownerDescriptor() velox.Descriptor[Owner] {
 	return velox.Descriptor[Owner]{
 		Table: "owners",

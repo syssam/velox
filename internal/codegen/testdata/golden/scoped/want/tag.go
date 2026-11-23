@@ -40,7 +40,7 @@ var tagMeta velox.MetaOnce[Tag]
 // VeloxMeta is called by velox, not by applications.
 func (*Tag) VeloxMeta() *velox.Meta[Tag] { return tagMeta.Load(tagDescriptor) }
 
-// tagDescriptor describes Tag to velox: its table, columns, edges and hooks.
+// tagDescriptor describes Tag to velox: its table, columns and behaviour.
 func tagDescriptor() velox.Descriptor[Tag] {
 	return velox.Descriptor[Tag]{
 		Table: "tags",
