@@ -161,6 +161,8 @@ func (s *ScanPlan) termType(t Term) (typ reflect.Type, numeric bool) {
 			return reflect.TypeFor[bool](), false
 		}
 		return reflect.TypeFor[float64](), false
+	case termDate:
+		return timeType, false
 	case termAgg:
 		switch t.fn {
 		case TermCount, TermCountDistinct, TermCountAll:

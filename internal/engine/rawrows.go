@@ -20,6 +20,12 @@ func NewRawRow(r Rows) RawRow { return RawRow{r} }
 // dst, as the driver's Rows.Scan does. No codec decodes them.
 func (r RawRow) Scan(dst ...any) error { return r.r.Scan(dst...) }
 
+// Columns returns the names of the row's columns, in the order the SQL
+// returns them: a term named with As by its name, a column by its own, and
+// any other term by the name the database gives it, which differs by
+// dialect.
+func (r RawRow) Columns() ([]string, error) { return resultColumns(r.r) }
+
 // rowsRun is the state of one run of ProjectRows.
 type rowsRun struct {
 	st      Statement

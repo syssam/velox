@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -33,6 +34,8 @@ func termOf[E any](s Selectable[E]) engine.Term {
 		return h.t
 	case Column[E]:
 		return engine.ColumnTerm(h.column(nil))
+	case GroupingSet[E]:
+		return engine.InvalidTerm(errors.New("velox: a Rollup or Cube is a key of GroupBy, and nothing else: select or order by its keys"))
 	}
 	if foreignHandle(s) {
 		return engine.InvalidTerm(fmt.Errorf("velox: %T is a column or term of another entity than the query's", s))
@@ -94,12 +97,22 @@ func (t Term[E]) As[_ Lazy[E]](name string) Term[E] { return Term[E]{engine.Name
 
 // Asc orders by t, ascending, NULL last as every ordering puts it. An entity
 // query ordered by an expression cannot be read After a row or by a cursor,
-// except by a relation's aggregate, Rel's Count, Sum, Avg, Min or Max.
-func (t Term[E]) Asc[_ Lazy[E]]() Order[E] { return Order[E]{OrderTerm{Expr: t.t}} }
+// except by a relation's aggregate, Rel's Count, Sum, Avg, Min or Max. A
+// term that is a column (ColumnByName's) orders as the column's handle
+// does, and After and a cursor follow it.
+func (t Term[E]) Asc[_ Lazy[E]]() Order[E] { return t.order(false) }
 
 // Desc orders by t, descending, NULL first as every descending ordering
 // puts it.
-func (t Term[E]) Desc[_ Lazy[E]]() Order[E] { return Order[E]{OrderTerm{Expr: t.t, Desc: true}} }
+func (t Term[E]) Desc[_ Lazy[E]]() Order[E] { return t.order(true) }
+
+// order is Asc's and Desc's work.
+func (t Term[E]) order[_ Lazy[E]](desc bool) Order[E] {
+	if c, ok := engine.TermColumn(t.t); ok {
+		return Order[E]{OrderTerm{Column: int(c), Desc: desc}}
+	}
+	return Order[E]{OrderTerm{Expr: t.t, Desc: desc}}
+}
 
 // slotsOf classifies the arguments of an Expr or a Calc of E: a column
 // handle of E fills its ? as the column, a Term of E as the term, and any
@@ -114,6 +127,8 @@ func slotsOf[E any](text string, args []any) ([]engine.ExprSlot, []any, error) {
 		case Term[E]:
 			t := h.t
 			slots[i] = engine.ExprSlot{Col: -1, Term: &t}
+		case GroupingSet[E]:
+			return nil, nil, fmt.Errorf("velox: Expr %q: argument %d is a Rollup or Cube, which is a key of GroupBy, and nothing else", text, i+1)
 		default:
 			if foreignHandle(a) {
 				return nil, nil, fmt.Errorf("velox: Expr %q: argument %d is %T, a column or term of another entity than the query's", text, i+1, a)

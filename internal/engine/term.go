@@ -30,7 +30,9 @@ const (
 	termInvalid
 	termExcluded
 	termJSON
-	termRel // an aggregate of a relation's rows: a correlated subquery (RelTerm)
+	termRel      // an aggregate of a relation's rows: a correlated subquery (RelTerm)
+	termDate     // a time truncated to a unit (DateTruncTerm)
+	termGrouping // ROLLUP or CUBE of keys, a key of GROUP BY (GroupingTerm)
 )
 
 // TermFn is an aggregate function of a term.
@@ -62,8 +64,9 @@ type Term struct {
 	path  *JSONPath // a termJSON's
 	name  string    // the result column's name, NamedTerm's; "" for none
 	err   error
-	r     *relAgg // a termRel's relation
-	shape string  // what shapes it in the render cache's key: see seal
+	r     *relAgg  // a termRel's relation
+	ext   *termExt // a termDate's or a termGrouping's
+	shape string   // what shapes it in the render cache's key: see seal
 }
 
 // relAgg is the relation of a termRel: the EXISTS HasWith would make, whose
@@ -101,6 +104,11 @@ func (t Term) seal() Term {
 		b = append(b, bit(t.r.bound))
 		b = nodeKey(b, 0, t.r.n) // no dialect yet: the key holds for each
 		b = append(b, t.of.shape...)
+	case termDate:
+		b = extKey(b, t.ext)
+		b = append(b, t.of.shape...)
+	case termGrouping:
+		b = extKey(b, t.ext)
 	}
 	b = binary.AppendUvarint(b, uint64(len(t.name)))
 	b = append(b, t.name...)
@@ -293,9 +301,15 @@ func (t Term) problem() error {
 		return errors.New("velox: the zero Term; make terms with Pick, Calc and CountAll")
 	case termInvalid:
 		return t.err
-	case termAgg, termRel:
+	case termAgg, termRel, termDate:
 		if t.of != nil {
 			return t.of.problem()
+		}
+	case termGrouping:
+		for _, k := range t.ext.set {
+			if err := k.problem(); err != nil {
+				return err
+			}
 		}
 	case termExpr:
 		for _, s := range t.x.slots {
@@ -349,6 +363,10 @@ func (w *writer) term(t Term) {
 		w.str(")")
 	case termRel:
 		w.relTerm(t)
+	case termDate:
+		w.dateTrunc(t)
+	case termGrouping:
+		w.fail(errGroupingPlace)
 	default:
 		w.fail(t.problem())
 	}
@@ -464,8 +482,7 @@ func (w *writer) projectStmt(st *Statement) {
 	w.table()
 	w.where(st.Where)
 	if len(p.GroupBy) > 0 {
-		w.str(" GROUP BY ")
-		w.terms(p.GroupBy)
+		w.groupBy(p.GroupBy)
 	}
 	for i, h := range p.Having {
 		if i == 0 {
@@ -555,9 +572,15 @@ func checkTermCols(t Term, bad func(int) error) error {
 		return bad(int(t.col))
 	case termExpr:
 		return checkExprCols(t.x, bad)
-	case termAgg:
+	case termAgg, termDate:
 		if t.of != nil {
 			return checkTermCols(*t.of, bad)
+		}
+	case termGrouping:
+		for _, k := range t.ext.set {
+			if err := checkTermCols(k, bad); err != nil {
+				return err
+			}
 		}
 	case termRel:
 		l, err := existsLink(t.r.n)
@@ -590,7 +613,7 @@ func excludedCols(cols []int, t Term) []int {
 				cols = excludedCols(cols, *s.Term)
 			}
 		}
-	case termAgg:
+	case termAgg, termDate:
 		if t.of != nil {
 			cols = excludedCols(cols, *t.of)
 		}
@@ -623,11 +646,18 @@ func swapTerm(t Term) Term {
 		t.col = swapCol(t.col)
 	case termExpr:
 		t.x = swapExprData(t.x)
-	case termAgg:
+	case termAgg, termDate:
 		if t.of != nil {
 			o := swapTerm(*t.of)
 			t.of = &o
 		}
+	case termGrouping:
+		x := *t.ext
+		x.set = make([]Term, len(t.ext.set))
+		for i, k := range t.ext.set {
+			x.set[i] = swapTerm(k)
+		}
+		t.ext = &x
 	}
 	return t.seal()
 }

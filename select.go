@@ -90,13 +90,18 @@ func (q Query[E]) Distinct[_ Lazy[E]]() Query[E] {
 
 // GroupBy returns the query grouped by terms: the rows that agree on all of
 // them are one result row. It needs Select, and each plain term Select
-// reads must be among them, or the database refuses the statement.
+// reads must be among them, or the database refuses the statement. A Rollup
+// or Cube among them adds subtotal rows.
 func (q Query[E]) GroupBy[_ Lazy[E]](ts ...Selectable[E]) Query[E] {
 	if q = q.needProject("GroupBy"); q.s.St.Project == nil {
 		return q
 	}
 	p := q.projection()
 	for _, t := range ts {
+		if g, ok := t.(GroupingSet[E]); ok {
+			p.GroupBy = append(p.GroupBy, g.t)
+			continue
+		}
 		p.GroupBy = append(p.GroupBy, termOf[E](t))
 	}
 	q.s.St.Project = p

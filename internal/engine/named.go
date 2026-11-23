@@ -132,6 +132,13 @@ func nameIndex(cols []ColumnInfo) map[string]int32 {
 	return m
 }
 
+// ColumnNamed returns the index of in's column of the given name, as a
+// condition by name finds it.
+func ColumnNamed(in *EntityInfo, name string) (int32, bool) {
+	i, ok := in.names[name]
+	return i, ok
+}
+
 // valType is the Go type a condition or a mutation by name gives a column
 // whose field is of type ft: ft, without the pointer of a nullable field.
 func valType(ft reflect.Type) any {

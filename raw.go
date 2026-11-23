@@ -38,6 +38,11 @@ type RawRows = engine.RawRows
 //	// Scan copies the row's columns, in the order the SQL returns them, into
 //	// dst, as the driver's Rows.Scan does. No codec decodes them.
 //	Scan(dst ...any) error
+//	// Columns returns the names of the row's columns, in the order the SQL
+//	// returns them: a term named with As by its name, a column by its own,
+//	// and any other term by the name the database gives it, which differs
+//	// by dialect.
+//	Columns() ([]string, error)
 type RawRow = engine.RawRow
 
 // Rows runs query, raw SQL that returns rows, with args, and yields its rows

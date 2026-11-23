@@ -71,6 +71,8 @@ func hasAgg(t Term) bool {
 	switch t.kind {
 	case termAgg:
 		return true
+	case termDate:
+		return hasAgg(*t.of)
 	case termExpr:
 		for _, s := range t.x.slots {
 			if s.Term != nil && hasAgg(*s.Term) {
