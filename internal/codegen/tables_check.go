@@ -181,7 +181,7 @@ func (t *tabler) checkKey(tb *migrate.Table, cols []string, at place) {
 func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 	at := place{e, rankField, i, fieldLoc(f)}
 	st := f.SchemaType[t.d.String()]
-	if f.Type == "other" && st == "" && t.d != velox.SQLite {
+	if f.Type == "other" && st == "" && !t.sqliteDecimal(f) {
 		t.fail(at, "an Other field needs a SchemaType for %s", dialectName(t.d))
 	}
 	if i == 0 && integer(f.Type) && st != "" && !integerType(t.d, ddl.NormalizeType(t.d, st)) {
@@ -351,6 +351,14 @@ func decimalField(f *Field) bool {
 		n++
 	}
 	return n > 0
+}
+
+// sqliteDecimal reports whether f is a decimal Other field that names no
+// SchemaType for SQLite, which is a numeric column there (decision 0148): the
+// dialect is SQLite, and every SchemaType f names, for MySQL and PostgreSQL,
+// is an exact-number type, as decimalField reads them.
+func (t *tabler) sqliteDecimal(f *Field) bool {
+	return t.d == velox.SQLite && f.Type == "other" && f.SchemaType[velox.SQLite.String()] == "" && decimalField(f)
 }
 
 // mysqlDecimal is the precision and scale of the decimal field f's column on

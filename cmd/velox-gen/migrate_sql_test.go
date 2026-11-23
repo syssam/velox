@@ -115,8 +115,8 @@ func TestMigrateSQL(t *testing.T) {
 }
 
 // TestMigrateSQLOtherWithoutSQLiteType: a decimal field whose SchemaType
-// names MySQL and PostgreSQL gets a typeless column on SQLite (decision
-// 0145), as migrate sql prints it.
+// names MySQL and PostgreSQL gets a numeric column on SQLite (decision
+// 0148), as migrate sql prints it.
 func TestMigrateSQLOtherWithoutSQLiteType(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
@@ -153,8 +153,8 @@ func (Price) Fields() []schema.Field {
 	if code != 0 || errs != "" {
 		t.Fatalf("sqlite: exit %d\nstderr:\n%s", code, errs)
 	}
-	if !strings.Contains(out, "\n  \"amount\" NOT NULL\n)") {
-		t.Errorf("sqlite: no typeless amount column:\n%s", out)
+	if !strings.Contains(out, "\n  \"amount\" numeric NOT NULL\n)") {
+		t.Errorf("sqlite: no numeric amount column:\n%s", out)
 	}
 	code, out, errs = runCLI(t, dir, "migrate", "sql", "-dialect", "postgres")
 	if code != 0 || errs != "" || !strings.Contains(out, "numeric(19,4)") {

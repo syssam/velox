@@ -1186,7 +1186,7 @@ func TestTablesRefusals(t *testing.T) {
 }
 
 // tbOtherNoSQLite is a decimal field whose SchemaType names MySQL and
-// PostgreSQL only, as a nextapp schema writes it (decision 0145).
+// PostgreSQL only, as a nextapp schema writes it (decision 0148).
 type tbOtherNoSQLite struct{ schema.Schema }
 
 func (tbOtherNoSQLite) Annotations() []schema.Annotation {
@@ -1203,9 +1203,10 @@ func (tbOtherNoSQLite) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("price")}
 }
 
-// TestTablesOtherWithoutSQLiteType: on SQLite an Other field with no
-// SchemaType for it is a typeless column, as veloxe made it; MySQL and
-// PostgreSQL still refuse, naming the dialect.
+// TestTablesOtherWithoutSQLiteType: on SQLite a decimal Other field with no
+// SchemaType for it is a numeric column (decision 0148); an Other field that
+// is no decimal is refused on every dialect it names no SchemaType for, and
+// MySQL and PostgreSQL refuse a field that names none for them.
 func TestTablesOtherWithoutSQLiteType(t *testing.T) {
 	g := mustBuild(t, tbOtherNoSQLite{})
 	s, err := Tables(g, velox.SQLite)
@@ -1214,9 +1215,8 @@ func TestTablesOtherWithoutSQLiteType(t *testing.T) {
 	}
 	tb := table(t, s, "tb_other_no_sqlite")
 	for _, name := range []string{"price", "fee"} {
-		c := column(t, tb, name)
-		if c.Type != "" {
-			t.Errorf("%s: type %q, want none", name, c.Type)
+		if c := column(t, tb, name); c.Type != "numeric" {
+			t.Errorf("%s: type %q, want numeric", name, c.Type)
 		}
 	}
 	if c := column(t, tb, "price"); c.Nullable {
@@ -1230,7 +1230,8 @@ func TestTablesOtherWithoutSQLiteType(t *testing.T) {
 			t.Errorf("%v: %v", d, err)
 		}
 	}
-	// A field with a MySQL type only still fails on PostgreSQL.
+	// A decimal for MySQL only is a decimal on SQLite too; on PostgreSQL it
+	// has no SchemaType and is refused.
 	g = mustBuild(t, tbOtherMySQLOnly{})
 	_, err = Tables(g, velox.Postgres)
 	if e := refusal(t, err); !strings.Contains(e.Reason, "an Other field needs a SchemaType for PostgreSQL") {
@@ -1241,6 +1242,21 @@ func TestTablesOtherWithoutSQLiteType(t *testing.T) {
 			t.Errorf("%v: %v", d, err)
 		}
 	}
+	// A field that is no decimal is refused on SQLite, as before decision
+	// 0145.
+	_, err = Tables(mustBuild(t, tbOtherNotDecimal{}), velox.SQLite)
+	if e := refusal(t, err); !strings.Contains(e.Reason, "an Other field needs a SchemaType for SQLite") {
+		t.Errorf("a text field on SQLite: %v", err)
+	}
+}
+
+// tbOtherNotDecimal names a text type for MySQL and PostgreSQL, so it is no
+// decimal and SQLite has no type for it.
+type tbOtherNotDecimal struct{ schema.Schema }
+
+func (tbOtherNotDecimal) Fields() []schema.Field {
+	st := map[string]string{dialect.Postgres: "text", dialect.MySQL: "varchar(40)"}
+	return []schema.Field{field.Other("o", TbMoney{}).SchemaType(st)}
 }
 
 type tbOtherMySQLOnly struct{ schema.Schema }

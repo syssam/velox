@@ -387,11 +387,14 @@ func (t *tabler) zeroDefault(f *Field, typ string) string {
 
 // plainType is the type of a field that is not an enum: its SchemaType for
 // the dialect, normalised, else the type of its field type and Size. An Other
-// field with no SchemaType has none, "": checkColumn refuses it on MySQL and
-// PostgreSQL, and on SQLite it is a typeless column (decision 0145).
+// field with no SchemaType has none, "", and checkColumn refuses it, except a
+// decimal on SQLite, which is numeric there (decision 0148).
 func (t *tabler) plainType(f *Field) string {
 	if st := f.SchemaType[t.d.String()]; st != "" {
 		return ddl.NormalizeType(t.d, st)
+	}
+	if t.sqliteDecimal(f) {
+		return "numeric"
 	}
 	return baseType(t.d, f.Type, f.Size)
 }

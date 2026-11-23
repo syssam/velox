@@ -340,14 +340,10 @@ func autoIncrement(t *Table) bool {
 	return c != nil && c.Identity
 }
 
-// sqliteColumn is c's definition: "c" [<type>] [NOT NULL] [PRIMARY KEY
+// sqliteColumn is c's definition: "c" <type> [NOT NULL] [PRIMARY KEY
 // AUTOINCREMENT] [DEFAULT x]; key says c is the table's AUTOINCREMENT key.
-// A column of type "" is typeless, which SQLite gives BLOB affinity.
 func (r *renderer) sqliteColumn(c Column, key bool) string {
-	s := r.ident(c.Name)
-	if c.Type != "" {
-		s += " " + c.Type
-	}
+	s := r.ident(c.Name) + " " + c.Type
 	if !c.Nullable {
 		s += " NOT NULL"
 	}

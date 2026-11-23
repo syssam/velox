@@ -370,13 +370,13 @@ these:
 - An error from velox carries a code, such as `BAD_USER_INPUT`, in
   `extensions.code`.
 
-**An Other field with no SQLite `SchemaType` is a typeless column.** veloxe
-made the column with no type name on SQLite, and velox-gen once refused it.
-It now makes it as veloxe did, so a `decimal.Decimal` field whose
-`SchemaType` names MySQL and PostgreSQL only opens on SQLite. The value is
-kept as bound, so `"1.10"` stays `"1.10"`, and `ORDER BY` and `>` compare it
-as text. Name `numeric` for SQLite to compare as numbers. MySQL and
-PostgreSQL still need a `SchemaType` (ADR 0145).
+**A decimal Other field with no SQLite `SchemaType` is a `numeric` column.**
+veloxe made the column with no type name on SQLite, so a decimal's text was
+stored and compared as text, and `ORDER BY` and `>` were wrong. velox makes
+it `numeric`, so a `decimal.Decimal` field whose `SchemaType` names MySQL
+and PostgreSQL only opens on SQLite and compares as a number. The text
+`"1.10"` is stored as 1.1. Any other Other field still needs a `SchemaType`
+for SQLite (ADR 0148).
 
 ## What stays the same under compat=veloxe
 

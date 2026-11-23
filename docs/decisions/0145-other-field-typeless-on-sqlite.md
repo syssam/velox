@@ -1,6 +1,6 @@
 # 145. An Other field with no SQLite SchemaType is a typeless column
 
-- Status: accepted, 2026-11-23.
+- Status: superseded by 0148, 2026-11-24. Typeless text ordered and compared as text, which gave wrong ranges.
 
 ## Context
 

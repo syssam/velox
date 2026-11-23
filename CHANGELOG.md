@@ -24,11 +24,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - veloxtest: `RolledBack(t, ctx, db, fn)` runs fn in a transaction that
   always rolls back, a `t.Fatal` in fn included, for a test whose writes
   must not last (veloxe's `tx, _ := c.Tx(ctx); defer tx.Rollback()`).
-- On SQLite an Other field with no SQLite `SchemaType`, such as a
+- On SQLite a decimal Other field with no SQLite `SchemaType`, such as a
   `decimal.Decimal` whose `SchemaType` names MySQL and PostgreSQL only, is a
-  typeless column, as veloxe made it, instead of velox-gen refusing it. The
-  text of a decimal stays as written (`"1.10"` is not stored as 1.1).
-  MySQL and PostgreSQL still refuse it (ADR 0145).
+  `numeric` column, so it orders and compares as a number. Any other Other
+  field with no SQLite `SchemaType` is refused by velox-gen (ADR 0148,
+  which supersedes 0145).
 - `veloxgql.DecodeWhere(v, &w)` reads a kept filter, a JSON document of a
   generated where input by its GraphQL names, as veloxe's generated
   `UnmarshalGQL` did: an ID from a string or a number, enums, times,

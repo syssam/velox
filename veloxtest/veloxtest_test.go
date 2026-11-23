@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -184,6 +185,10 @@ func (d *decimal) Scan(v any) error {
 		*d = decimal(v)
 	case []byte:
 		*d = decimal(v)
+	case int64:
+		*d = decimal(strconv.FormatInt(v, 10))
+	case float64:
+		*d = decimal(strconv.FormatFloat(v, 'f', -1, 64))
 	default:
 		return fmt.Errorf("decimal: scanned %T", v)
 	}
@@ -202,52 +207,54 @@ func (price) Fields() []schema.Field {
 	}
 }
 
-// TestOpenOtherWithoutSQLiteType: on SQLite an Other field with no SQLite
-// SchemaType is a typeless column (decision 0145), so Open builds it and a
-// decimal's text comes back as written: "1.10" stays "1.10", where NUMERIC
-// affinity would have stored 1.1.
+// TestOpenOtherWithoutSQLiteType: on SQLite a decimal Other field with no
+// SQLite SchemaType is a numeric column (decision 0148), so Open builds it
+// and a decimal, a Valuer of text, orders and compares as a number: ORDER BY
+// puts 9.5 before 10.25 and 100, and a > with a decimal argument matches 100
+// only. A typeless column stored the text and ordered it as text.
 func TestOpenOtherWithoutSQLiteType(t *testing.T) {
 	db := veloxtest.Open(t, "sqlite", "", []schema.Interface{price{}})
 	pool := velox.Pool(db)
 	var typ string
-	if err := pool.QueryRow(`SELECT type FROM pragma_table_info('prices') WHERE name = 'amount'`).Scan(&typ); err != nil || typ != "" {
-		t.Fatalf("amount's type %q, %v; want none", typ, err)
+	if err := pool.QueryRow(`SELECT type FROM pragma_table_info('prices') WHERE name = 'amount'`).Scan(&typ); err != nil || typ != "numeric" {
+		t.Fatalf("amount's type %q, %v; want numeric", typ, err)
 	}
-	for _, v := range []decimal{"1.10", "0.1000", "12345678901234567.8900", "-0.00"} {
+	for _, v := range []decimal{"10.25", "100", "9.5"} {
 		if _, err := pool.Exec(`INSERT INTO prices (amount, fee) VALUES (?, ?)`, v, v); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := pool.Exec(`INSERT INTO prices (amount, fee) VALUES (?, NULL)`, decimal("2.50")); err != nil {
+	if _, err := pool.Exec(`INSERT INTO prices (amount, fee) VALUES (?, NULL)`, decimal("0.5")); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := pool.Query(`SELECT amount, fee FROM prices ORDER BY id`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = rows.Close() }()
-	var got []string
-	for rows.Next() {
-		var amount decimal
-		var fee *decimal
-		if err := rows.Scan(&amount, &fee); err != nil {
+	read := func(query string, args ...any) string {
+		t.Helper()
+		rows, err := pool.Query(query, args...)
+		if err != nil {
 			t.Fatal(err)
 		}
-		if fee == nil {
-			got = append(got, string(amount)+"|NULL")
-			continue
+		defer func() { _ = rows.Close() }()
+		var got []string
+		for rows.Next() {
+			var amount decimal
+			if err := rows.Scan(&amount); err != nil {
+				t.Fatal(err)
+			}
+			got = append(got, string(amount))
 		}
-		if *fee != amount {
-			t.Errorf("fee %q differs from amount %q", *fee, amount)
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
 		}
-		got = append(got, string(amount))
+		return strings.Join(got, ",")
 	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
+	if got, want := read(`SELECT amount FROM prices WHERE fee IS NOT NULL ORDER BY amount`), "9.5,10.25,100"; got != want {
+		t.Errorf("ORDER BY amount: %q, want %q", got, want)
 	}
-	want := []string{"1.10", "0.1000", "12345678901234567.8900", "-0.00", "2.50|NULL"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("read %q, want %q", got, want)
+	if got, want := read(`SELECT amount FROM prices WHERE amount > ?`, decimal("20")), "100"; got != want {
+		t.Errorf("amount > 20: %q, want %q", got, want)
+	}
+	if got, want := read(`SELECT amount FROM prices WHERE fee > ? ORDER BY amount`, decimal("9.75")), "10.25,100"; got != want {
+		t.Errorf("fee > 9.75: %q, want %q", got, want)
 	}
 }
 

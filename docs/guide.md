@@ -589,12 +589,10 @@ adds `IsNull`, `NotNull` and `SetNull`. An Other field is a number when its
 `SchemaType` names `numeric` or `decimal` (MySQL also `dec` and `fixed`) for
 every dialect it lists.
 
-An Other field needs a `SchemaType` for MySQL and for PostgreSQL. On SQLite
-it may name none: the column then has no type name, as veloxe made it, and
-SQLite keeps the value as bound. A decimal's text stays as written (`"1.10"`
-stays `"1.10"`), but `ORDER BY` and `>` on that column compare text, and
-`SUM` and `AVG` convert it. Name `numeric` for SQLite to order and compare
-as numbers (ADR 0145).
+An Other field needs a `SchemaType` for every dialect. A decimal, one whose
+`SchemaType` names `numeric` or `decimal` for MySQL and PostgreSQL, may name
+none for SQLite: its column is `numeric` there, so it orders and compares as
+a number (ADR 0148).
 
 SQLite has no decimal type. Its NUMERIC column stores a whole number as an
 INTEGER and any other decimal as the nearest double, which keeps 15
