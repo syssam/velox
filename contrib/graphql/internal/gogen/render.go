@@ -54,28 +54,44 @@ func RenderSurface(m *plugin.Model, s *sdl.Surface, outPath, outPkg string, cfg 
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t
 	}
-	files := make([]plugin.File, 0, len(s.Types))
+	files, err := r.surfaceFiles(s)
+	// A file before the one that failed may not parse: its error comes
+	// first, as it would in a run that formats each file as it writes it.
+	if ferr := formatFiles(files); ferr != nil {
+		return nil, ferr
+	}
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
+	return files, nil
+}
+
+// surfaceFiles writes, unformatted, the file of each of s's types, and
+// under veloxe the Noder file, and stops at the first that fails: it
+// returns the files before it with its error.
+func (r *renderer) surfaceFiles(s *sdl.Surface) ([]plugin.File, error) {
+	files := make([]plugin.File, 0, len(s.Types)+1)
 	for _, t := range s.Types {
 		e := t.Entity
 		if e.Label == "" || e.Handles == "" {
-			return nil, fmt.Errorf("schema %s: the model gives it no label or no handles, which velox-gen names its Go after", e.Name)
+			return files, fmt.Errorf("schema %s: the model gives it no label or no handles, which velox-gen names its Go after", e.Name)
 		}
 		f, err := r.typeFile(t)
 		if err != nil {
-			return nil, err
+			return files, err
 		}
 		files = append(files, f)
 	}
 	if r.veloxe {
 		f, ok, err := r.nodeFile(s.Types)
 		if err != nil {
-			return nil, err
+			return files, err
 		}
 		if ok {
 			files = append(files, f)
 		}
 	}
-	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
 	return files, nil
 }
 
@@ -109,7 +125,12 @@ func RenderEnums(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error)
 		if err != nil {
 			return nil, err
 		}
-		files = append(files, file)
+		// Few entities have enums: each file is formatted as it is written.
+		one := []plugin.File{file}
+		if err := formatFiles(one); err != nil {
+			return nil, err
+		}
+		files = append(files, one[0])
 	}
 	slices.SortFunc(files, func(a, b plugin.File) int { return cmp.Compare(a.Path, b.Path) })
 	return files, nil

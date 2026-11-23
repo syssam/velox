@@ -6,9 +6,12 @@ import (
 	"go/format"
 	"maps"
 	"path"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/syssam/velox/plugin"
 )
@@ -60,9 +63,9 @@ func (f *file) gqlgraph() string { return f.use(gqlgraphPath, "gqlgraph") }
 
 func (f *file) untyped() string { return f.use(untypedPath, "untyped") }
 
-// finish is the file's Go source, gofmt'd: the package clause, the imports
-// in two groups (the standard library, then the rest), the version guard
-// and the body.
+// finish is the file's Go source, not yet gofmt'd (formatFiles): the
+// package clause, the imports in two groups (the standard library, then the
+// rest), the version guard and the body.
 func (f *file) finish(name, pkg string) (plugin.File, error) {
 	guard := f.veloxgql() // the guard imports it, whatever the body uses
 	var src bytes.Buffer
@@ -101,11 +104,35 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	// disagree on the version, as the core's files do.
 	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion27\n\n", guard)
 	src.Write(f.Bytes())
-	out, err := format.Source(src.Bytes())
-	if err != nil {
-		return plugin.File{}, fmt.Errorf("velox-graphql wrote Go that does not parse, which is a bug: %s: %w\n%s", name, err, src.Bytes())
+	return plugin.File{Path: name, Content: src.String()}, nil
+}
+
+// formatFiles gofmts the content of each of files, which finish wrote, on up
+// to GOMAXPROCS goroutines. Its error is that of the first file in files
+// that does not parse: the error formatting them in order returns.
+func formatFiles(files []plugin.File) error {
+	errs := make([]error, len(files))
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for range min(len(files), runtime.GOMAXPROCS(0)) {
+		wg.Go(func() {
+			for i := int(next.Add(1) - 1); i < len(files); i = int(next.Add(1) - 1) {
+				out, err := format.Source([]byte(files[i].Content))
+				if err != nil {
+					errs[i] = fmt.Errorf("velox-graphql wrote Go that does not parse, which is a bug: %s: %w\n%s", files[i].Path, err, files[i].Content)
+					continue
+				}
+				files[i].Content = string(out)
+			}
+		})
 	}
-	return plugin.File{Path: name, Content: string(out)}, nil
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // fitItems is the longest list items keeps on one line, and fitLine the
