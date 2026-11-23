@@ -78,7 +78,8 @@ func rendered(t *testing.T, ss ...schema.Interface) map[string]string {
 
 // A field whose default replaces its zero value in an insert says so, in
 // the struct and on its handle, with the setter that stores the zero; a
-// default that is the zero value replaces nothing a value field holds.
+// default that is the zero value replaces nothing a value field holds. A
+// Nillable field names SetNull, which stores NULL (ADR 0124).
 func TestDefaultDoc(t *testing.T) {
 	o := mustLower(t, Config{}, DcFlag{})
 	want := map[string]string{
@@ -88,7 +89,7 @@ func TestDefaultDoc(t *testing.T) {
 		"Plan":  `An insert of the zero value stores the default, "free"; DcFlags.Plan.Set("") in the insert stores "".`,
 		"Empty": "",
 		"Tier":  "An insert of the zero value stores the default, DcFlagTierBasic.",
-		"Score": "An insert of nil stores the default, 1.5.",
+		"Score": "An insert of nil stores the default, 1.5; DcFlags.Score.SetNull() in the insert stores NULL.",
 		"At":    "An insert of the zero value stores the value of its default function.",
 		"Tags":  `An insert of the zero value stores the default, []string{"new"}.`,
 		"Plain": "",

@@ -42,6 +42,49 @@ func (s Setters) Add(ss []Assignment) Setters {
 	return s
 }
 
+// AddInsert is Add for an insert into in: a skipped setter (SetPtr of
+// nil) of a nullable column also stores NULL, as SetNull does, at its place
+// among the setters, so a later setter of the column wins (ADR 0124). It
+// stays a skipped setter too: an upsert's update branch does not update
+// the column for it (Upsert).
+func (s Setters) AddInsert(in *EntityInfo, ss []Assignment) Setters {
+	if in == nil || !slices.ContainsFunc(ss, isSkip) {
+		return s.Add(ss)
+	}
+	out := make([]Assignment, 0, len(ss)+1)
+	for _, a := range ss {
+		out = append(out, a)
+		if isSkip(a) && a.Column >= 0 && a.Column < len(in.Columns) && in.Columns[a.Column].Nullable {
+			out = append(out, Assignment{Column: a.Column, Op: AssignSet})
+		}
+	}
+	return s.Add(out)
+}
+
+// InsertNulls returns the columns of in that s's column setters leave
+// NULL: a nullable column whose last setter is a Set of nil (SetNull, or
+// SetPtr of nil through AddInsert). An insert writes such a column as
+// NULL, not leaving it to its DEFAULT (ADR 0124). It is nil when there is
+// none.
+func (s Setters) InsertNulls(in *EntityInfo) []int {
+	var cols []int
+	for i, a := range s.Set {
+		if a.Op != AssignSet || a.Column < 0 || a.Column >= len(in.Columns) || !in.Columns[a.Column].Nullable || slices.Contains(cols, a.Column) {
+			continue
+		}
+		last := a
+		for _, b := range s.Set[i+1:] {
+			if b.Column == a.Column {
+				last = b
+			}
+		}
+		if last.Op == AssignSet && last.Value == nil {
+			cols = append(cols, a.Column)
+		}
+	}
+	return cols
+}
+
 // UpdateSet adds the setters ss to st, an UPDATE, and edges, its edge
 // setters, as UpdateQuery.Set does, and returns the edge setters. A skipped
 // setter (AssignSkip) is dropped, and marks st as given one.
@@ -91,7 +134,8 @@ func isSkip(a Assignment) bool { return a.Op == AssignSkip }
 
 // Upsert returns cf without the columns of its update branch whose setters
 // were all skipped: a column a skipped setter names, and no other setter
-// sets, is not updated. With none left the update branch assigns the first
+// sets to a value, is not updated: the NULL AddInsert stores for a skipped
+// setter counts as none. With none left the update branch assigns the first
 // conflict column its own value (ConflictClause.Ignore), as ent's Ignore
 // does, so the conflicting row's key is read back as after an update. It
 // returns cf itself when nothing changes.
@@ -100,7 +144,7 @@ func (s Setters) Upsert(cf *ConflictClause) *ConflictClause {
 		return cf
 	}
 	drop := func(c int) bool {
-		return slices.Contains(s.Skipped, c) && !slices.ContainsFunc(s.Set, func(a Assignment) bool { return a.Column == c })
+		return slices.Contains(s.Skipped, c) && !slices.ContainsFunc(s.Set, func(a Assignment) bool { return a.Column == c && (a.Op != AssignSet || a.Value != nil) })
 	}
 	if !slices.ContainsFunc(cf.Update, drop) {
 		return cf

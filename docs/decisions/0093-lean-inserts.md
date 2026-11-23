@@ -1,6 +1,8 @@
 # 0093. An INSERT leaves out what the database fills, and reads it back
 
 - Status: accepted, 2026-11-20. Supersedes [0064](0064-insert-null-literal.md).
+  Amended by [0124](0124-explicit-null-in-inserts.md): a nil column a setter
+  stored (`SetNull`) is written as NULL, not left out.
 
 ## Context
 

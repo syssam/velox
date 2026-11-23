@@ -31,7 +31,7 @@ type User struct {
 	Bio          *string  `json:"bio,omitempty"`
 	Age          int      `json:"age,omitempty"`
 	PasswordHash string   `json:"-"`
-	// An insert of nil stores the default, 1.5.
+	// An insert of nil stores the default, 1.5; Users.Score.SetNull() in the insert stores NULL.
 	Score      *float64 `json:"score,omitempty"`
 	UserSpouse *int64   `json:"-"`
 	// Edges holds User's relations, filled by With.
@@ -106,7 +106,7 @@ type UserHandles struct {
 	// PasswordHash is the column password_hash.
 	PasswordHash velox.StringCol[User, string]
 	// Score is the column score.
-	// An insert of nil stores the default, 1.5.
+	// An insert of nil stores the default, 1.5; Users.Score.SetNull() in the insert stores NULL.
 	Score velox.NullNumberCol[User, float64]
 	// UserSpouse is the column user_spouse.
 	UserSpouse velox.NullNumberCol[User, int64]

@@ -137,10 +137,16 @@ db.Insert(&g).Set(veloxgen.Groups.Open.Set(false)).Exec(ctx) // open = false
 | --- | --- | --- |
 | `field.Bool("active")` | `false` | the struct |
 | `field.Bool("active").Default(true)` | `true` | a setter: `Set(Xs.Active.Set(false))` |
-| `field.Bool("active").Nillable().Default(true)` | `true`, when the `*bool` is nil | the struct: `new(false)`; the column is NULL-able |
+| `field.Bool("active").Nillable().Default(true)` | `true`, when the `*bool` is nil | the struct: `new(false)`; NULL: a setter, `Set(Xs.Active.SetNull())` |
 | `field.Int("seats").Default(100)` | `100` | a setter: `Set(Xs.Seats.Set(0))` |
 | `field.String("plan").Default("free")` | `"free"` | a setter: `Set(Xs.Plan.Set(""))` |
 | `field.String("plan").Optional().Nillable()` | `NULL` | the struct |
+
+A nil pointer field is unset, as in ent, where a create builder fills a
+default unless `SetX` was called. `SetNull()` in the insert, or `SetPtr(nil)`
+on a nullable column, is an explicit NULL: the column is written as `NULL`,
+so neither the `Default`, a default function nor the column's `DEFAULT`
+replaces it ([ADR 0124](decisions/0124-explicit-null-in-inserts.md)).
 
 A GraphQL create input leaves such a field optional (`active: Boolean`): left
 out it takes the `Default`, and `false` is stored. A constant `Default` is
@@ -1152,15 +1158,18 @@ _, err := db.Update[veloxgen.Invoice]().
 	Exec(ctx)
 ```
 
-On a nullable column a nil `p` still writes nothing: `SetNull()` writes
-NULL. An update whose every setter was skipped sends nothing and returns
-0: no hook runs and `updated_at` does not move, unlike ent. An update given
-no setter at all still fails. In an insert, a skipped setter leaves the
-field as it is, so a zero field still gets its declared database default.
-In an upsert, a column `Update` names is not updated when its only setter
-was skipped. With no column left, the update branch assigns the first
-conflict column its own value (`ConflictClause.Ignore`, ent's `Ignore()`),
-so the existing row is kept and its key still read back.
+On a nullable column a nil `p` in an update still writes nothing:
+`SetNull()` writes NULL. In an insert it is `SetNull()`: the row stores NULL,
+not the column's default, unlike ent's `SetNillableX(nil)` (ADR 0124). An
+update whose every setter was skipped sends nothing and returns 0: no hook
+runs and `updated_at` does not move, unlike ent. An update given no setter
+at all still fails. In an insert, a skipped setter of a NOT NULL column
+leaves the field as it is, so a zero field still gets its declared database
+default. In an upsert, a column `Update` names is not updated when its only
+setter was a nil `SetPtr`, the nullable column's included. With no column
+left, the update branch assigns the first conflict column its own value
+(`ConflictClause.Ignore`, ent's `Ignore()`), so the existing row is kept
+and its key still read back.
 
 `KeepDefaults(cols...)`, on an update and on `Save`, stops the named
 columns' `UpdateDefault` from firing, as veloxe's `SkipDefault` does: a

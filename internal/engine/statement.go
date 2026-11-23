@@ -195,7 +195,9 @@ type Statement struct {
 	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
 	bidi *bidiStep
 	// keep holds the columns of an UPDATE whose UpdateDefault does not fire
-	// (KeepDefaults).
+	// (KeepDefaults), and of an INSERT those its setters left NULL
+	// (SetExplicitNulls, nulls). One field serves both, as no statement is
+	// both and a Statement fits its size class (TestStatementSize).
 	keep []int
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
@@ -223,6 +225,16 @@ type Statement struct {
 // A column without an UpdateDefault fails the update when it runs.
 func KeepDefaults(st *Statement, cols []int) {
 	st.keep = append(slices.Clip(st.keep), cols...)
+}
+
+// nulls is st's columns its setters left NULL, for an INSERT: a nil cell in
+// one is written as NULL, neither left out to the column's DEFAULT nor
+// written as DEFAULT (LeanInsert, defaultCell, ADR 0124).
+func (st *Statement) nulls() []int {
+	if st.Op != OpInsert {
+		return nil
+	}
+	return st.keep
 }
 
 // recordState is the part of a Statement that says how velox reads back

@@ -221,6 +221,9 @@ type TableRows struct {
 	size uintptr        // a row's size
 	n    int
 	info *EntityInfo // the rows' entity
+	// nulls is, for an insert of the rows, the columns its setters left
+	// NULL (SetExplicitNulls).
+	nulls []int
 }
 
 // Len returns the number of rows.

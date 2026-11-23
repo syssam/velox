@@ -132,6 +132,68 @@ func TestInsertDatabaseDefaults(t *testing.T) {
 	}
 }
 
+// TestInsertExplicitNullOverDatabaseDefault: SetNull, or SetPtr of nil, of
+// a nullable column with a declared database default writes NULL, which is
+// stored and kept in the entity; a nil field with no setter leaves the
+// column out, so its default is stored. The render cache keeps the two
+// apart, in either order (ADR 0124).
+func TestInsertExplicitNullOverDatabaseDefault(t *testing.T) {
+	db, raw := defDB(t)
+	note := velox.NullStringCol[dDef, string]{I: 4}
+	const null = `INSERT INTO "ddefs" ("name", "note") VALUES (?, NULL) RETURNING "id", "status", "score"`
+	const left = `INSERT INTO "ddefs" ("name") VALUES (?) RETURNING "id", "status", "score", "note"`
+	type step struct {
+		name string
+		q    velox.InsertQuery[dDef]
+		x    *dDef
+		sql  string
+		null bool
+	}
+	var steps []step
+	add := func(name string, set []velox.Setter[dDef], sql string, null bool) {
+		x := &dDef{Name: name}
+		steps = append(steps, step{name, db.Insert(x).Set(set...), x, sql, null})
+	}
+	add("unset", nil, left, false)
+	add("setnull", []velox.Setter[dDef]{note.SetNull()}, null, true)
+	add("unset2", nil, left, false)
+	add("setptr", []velox.Setter[dDef]{note.SetPtr(nil)}, null, true)
+	for _, s := range steps {
+		if got, _, err := s.q.SQL(ctx); err != nil || got != s.sql {
+			t.Errorf("%s: SQL\n got %s, %v\nwant %s", s.name, got, err, s.sql)
+		}
+		if err := s.q.Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var stored sql.NullString
+		if err := raw.QueryRow("SELECT note FROM ddefs WHERE id = ?", s.x.ID).Scan(&stored); err != nil {
+			t.Fatal(err)
+		}
+		if s.null && (stored.Valid || s.x.Note != nil) {
+			t.Errorf("%s: stored %v, entity %v; want NULL", s.name, stored, s.x.Note)
+		}
+		if !s.null && (stored.String != "n" || s.x.Note == nil || *s.x.Note != "n") {
+			t.Errorf("%s: stored %v; want the default", s.name, stored)
+		}
+	}
+
+	// InsertAll: every row writes NULL, in one statement, though each row
+	// would otherwise leave the column to its default.
+	xs := []dDef{{Name: "m1"}, {Name: "m2"}}
+	q := db.InsertAll(xs).Set(note.SetNull())
+	const many = `INSERT INTO "ddefs" ("name", "note") VALUES (?, NULL), (?, NULL) RETURNING "id", "status", "score"`
+	if got, _, err := q.SQL(ctx); err != nil || got != many {
+		t.Errorf("InsertAll SQL\n got %s, %v\nwant %s", got, err, many)
+	}
+	if err := q.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := raw.QueryRow("SELECT count(*) FROM ddefs WHERE name IN ('m1', 'm2') AND note IS NULL").Scan(&n); err != nil || n != 2 {
+		t.Errorf("InsertAll stored %d NULL notes, %v; want 2", n, err)
+	}
+}
+
 // TestZeroOverDatabaseDefault is the guide's account of storing a zero in a
 // NOT NULL column whose declared database default is not zero: a setter's
 // zero is left to the database, like the struct's, and the row takes the

@@ -44,6 +44,7 @@ A review of velox-gen's output on a 496-entity schema found three costs.
   package has them, and `velox.go` holds only what is shared.
 - At 496 entities the 132 copies of the 84-value switch, about 77 KB, are
   one function; each Check's case is three lines, not five.
-- A Nillable field's sentence makes no claim about `SetNull` in an insert.
-  The insert leaves a nil column out (0093), so the column's `DEFAULT`,
-  which a constant `Default` declares, applies, not NULL.
+- A Nillable field's sentence made no claim about `SetNull` in an insert:
+  the insert left a nil column out (0093), so the column's `DEFAULT`,
+  which a constant `Default` declares, applied, not NULL. [0124](0124-explicit-null-in-inserts.md)
+  stores an explicit NULL, and the sentence now names `SetNull`.

@@ -1,6 +1,8 @@
 # 99. KeepDefaults, SetPtr and ent's error helpers
 
-Status: accepted, 2026-11-21.
+Status: accepted, 2026-11-21. Amended by
+[0124](0124-explicit-null-in-inserts.md): in an insert, `SetPtr(nil)` on a
+nullable column stores NULL.
 
 ## Context
 

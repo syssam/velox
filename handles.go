@@ -713,7 +713,7 @@ func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. A nil p does not write NULL: SetNull does.
+// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does.
 func (c NullCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	if p == nil {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}
@@ -878,7 +878,7 @@ func (c NullTimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. A nil p does not write NULL: SetNull does.
+// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does.
 func (c NullTimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	if p == nil {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}
@@ -1049,7 +1049,7 @@ func (c NullOtherCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. A nil p does not write NULL: SetNull does.
+// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does.
 func (c NullOtherCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	if p == nil {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}
@@ -1234,7 +1234,7 @@ func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. A nil p does not write NULL: SetNull does.
+// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does.
 func (c NullNumberCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	if p == nil {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}
@@ -1451,7 +1451,7 @@ func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. A nil p does not write NULL: SetNull does.
+// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does.
 func (c NullStringCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	if p == nil {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}
@@ -1620,7 +1620,7 @@ func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
 }
 
-// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. A nil p does not write NULL: SetNull does.
+// SetPtr sets the column to *p, read when SetPtr is called, as ent's SetNillable does: a nil p gives a setter that Set and SetInput skip, so the column is not written. An update whose every setter is skipped has no Set; an insert leaves the field as it is, so a zero field whose column has a declared database default gets that default; a column an upsert's Update names is not updated unless another setter sets it. On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does.
 func (c NullJSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E] {
 	if p == nil {
 		return Setter[E]{Assignment{Column: int(c.I), Op: engine.AssignSkip}}

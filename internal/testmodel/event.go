@@ -15,7 +15,7 @@ type Event struct {
 	ID int64 `json:"id"`
 	// An insert of the zero value stores the value of its default function.
 	At kind.Moment `json:"at"`
-	// An insert of nil stores the value of its default function.
+	// An insert of nil stores the value of its default function; Events.MaybeAt.SetNull() in the insert stores NULL.
 	MaybeAt *kind.Moment `json:"maybe_at,omitempty"`
 }
 
@@ -34,7 +34,7 @@ type EventHandles struct {
 	// An insert of the zero value stores the value of its default function.
 	At velox.TimeCol[Event, kind.Moment]
 	// MaybeAt is the column maybe_at.
-	// An insert of nil stores the value of its default function.
+	// An insert of nil stores the value of its default function; Events.MaybeAt.SetNull() in the insert stores NULL.
 	MaybeAt velox.NullTimeCol[Event, kind.Moment]
 }
 

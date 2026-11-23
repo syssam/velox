@@ -460,6 +460,8 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 // insert fills a default into a zero field before its setters and hooks
 // run, so a setter stores the zero over it (ADR 0082). A constant default
 // that is itself the zero value replaces nothing a value field can hold.
+// A Nillable field's sentence names SetNull, whose NULL an insert stores
+// over the default (ADR 0124).
 func (s *entState) defaultDoc(f *Field, o *OutField) string {
 	if o.Implicit {
 		return ""
@@ -484,7 +486,10 @@ func (s *entState) defaultDoc(f *Field, o *OutField) string {
 		return ""
 	}
 	if o.Pointer {
-		return fmt.Sprintf("An insert of nil stores %s.", what)
+		return fmt.Sprintf("An insert of nil stores %s; %s.SetNull() in the insert stores NULL.", what, h)
+	}
+	if f.Nillable {
+		return fmt.Sprintf("An insert of the zero value stores %s; %s.SetNull() in the insert stores NULL.", what, h)
 	}
 	if zero == "" {
 		return fmt.Sprintf("An insert of the zero value stores %s.", what)
