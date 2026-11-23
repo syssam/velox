@@ -201,8 +201,12 @@ func Elem(p any) any { return reflect.ValueOf(p).Elem().Interface() }
 // velox's generic API.
 func infoKit(in *EntityInfo) *Kit { return in.kit }
 
-// SetInfoKit sets in's kit.
-func SetInfoKit(in *EntityInfo, k *Kit) { in.kit = k }
+// SetInfoKit sets in's kit, once its metadata is built, and records in
+// for HasColumn.
+func SetInfoKit(in *EntityInfo, k *Kit) {
+	in.kit = k
+	registerInfo(in)
+}
 
 // SetInfoCheck sets the function that checks a column's value, Descriptor.Check.
 func SetInfoCheck(in *EntityInfo, f func(col int, v any) error) { in.check = f }

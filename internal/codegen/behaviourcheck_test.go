@@ -322,11 +322,14 @@ func TestCheckColumnsHasWithTarget(t *testing.T) {
 	c.accepts(t, map[string]string{"target": read("Comment", `velox.HasEdgeWith("doc", velox.FieldEQ("title", "x"))`)})
 }
 
-// A column named by a value velox-gen cannot read is a warning, at its
-// line, once; the statement checks it.
+// A column named by a value velox-gen cannot read, such as a function's
+// result or a configuration's field, is a warning, at its line, once; the
+// statement checks it (ADR 0137).
 func TestCheckColumnsWarnsNonConstant(t *testing.T) {
 	c := newCheckEnv(t)
-	decls := "func col() string { return \"title\" }\n\n" + read("Doc", `velox.FieldEQ(col(), "x")`) +
+	decls := "func col() string { return \"title\" }\n\nvar cfg = struct{ Title string }{Title: \"title\"}\n\n" +
+		read("Doc", `velox.And(velox.FieldEQ(col(), "x"),
+		velox.FieldIn(cfg.Title, "a", "b"))`) +
 		hook("Doc", "name := col()\n\t\treturn m.Set(name, \"x\")")
 	warnings, err := c.run(t, decls)
 	if err != nil {
@@ -334,6 +337,7 @@ func TestCheckColumnsWarnsNonConstant(t *testing.T) {
 	}
 	want := []string{
 		"behaviour.go:" + strconv.Itoa(lineOf(t, decls, "velox.FieldEQ(col()")) + `: velox.FieldEQ(col(), "x") names its column with a value velox-gen cannot read; velox checks it when the statement runs`,
+		"behaviour.go:" + strconv.Itoa(lineOf(t, decls, "velox.FieldIn(cfg.Title")) + `: velox.FieldIn(cfg.Title, "a", "b") names its column with a value velox-gen cannot read; velox checks it when the statement runs`,
 		"behaviour.go:" + strconv.Itoa(lineOf(t, decls, "m.Set(name")) + `: m.Set(name, "x") names its column with a value velox-gen cannot read; velox checks it when the statement runs`,
 	}
 	if len(warnings) != len(want) {

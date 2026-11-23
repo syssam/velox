@@ -46,7 +46,8 @@
 //
 // Assign sets more columns in the soft delete's UPDATE, read from the
 // delete's context, such as who deleted the rows; its error fails the
-// delete. Reads: Unfiltered installs no interceptor, so reads and updates
+// delete. By makes an Assign of a scope.Key's value, and Assigns joins
+// several. Reads: Unfiltered installs no interceptor, so reads and updates
 // see deleted rows, while a delete stays soft and marks live rows only:
 //
 //	softdelete.Mixin{
@@ -95,6 +96,7 @@ import (
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/mixin"
+	"github.com/syssam/velox/scope"
 	"github.com/syssam/velox/untyped"
 )
 
@@ -130,6 +132,48 @@ type Mixin struct {
 type Set struct {
 	Column string
 	Value  any
+}
+
+// By returns an Assign that sets column to k's value in the delete's
+// context, such as the user who deletes, and sets nothing when the context
+// has none (scope.Key.From), so the column keeps its value, NULL for a live
+// row:
+//
+//	var User = scope.NewKey[int64]("user")
+//
+//	softdelete.Mixin{Assign: softdelete.By("deleted_by_id", User)}
+//
+// Assigns joins several, as for a row that records one of several kinds of
+// actor.
+func By[V comparable](column string, k *scope.Key[V]) func(context.Context) ([]Set, error) {
+	return func(ctx context.Context) ([]Set, error) {
+		v, ok := k.From(ctx)
+		if !ok {
+			return nil, nil
+		}
+		return []Set{{Column: column, Value: v}}, nil
+	}
+}
+
+// Assigns returns an Assign that runs each of fs in order and sets every
+// column they return; the first error fails the delete:
+//
+//	softdelete.Mixin{Assign: softdelete.Assigns(
+//		softdelete.By("deleted_by_user_id", User),
+//		softdelete.By("deleted_by_member_id", Member),
+//	)}
+func Assigns(fs ...func(context.Context) ([]Set, error)) func(context.Context) ([]Set, error) {
+	return func(ctx context.Context) ([]Set, error) {
+		var all []Set
+		for _, f := range fs {
+			s, err := f(ctx)
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, s...)
+		}
+		return all, nil
+	}
 }
 
 // ReadMode says whether the mixin hides deleted rows.

@@ -114,6 +114,28 @@ func ExampleQuery_SQL() {
 	// [100 7] <nil>
 }
 
+// A condition helper's SQL is asserted without a database: a DB opened on
+// no connection renders a query that holds the condition, and SQL sends
+// nothing. WithoutPolicy keeps the entity's Read policy out of the text; an
+// interceptor's condition would still be in it. An untyped Predicate is
+// converted to the entity's Pred.
+func ExamplePredicate_sql() {
+	db := velox.Open(velox.Postgres, nil).WithoutPolicy("render a condition")
+	unpaid := func(numbers ...any) velox.Predicate {
+		return velox.And(velox.FieldEQ("paid", false), velox.FieldIn("number", numbers...))
+	}
+	text, args, err := db.Query[testmodel.Invoice]().
+		Columns(testmodel.Invoices.ID).
+		Where(velox.Pred[testmodel.Invoice](unpaid("A-1", "A-2"))).
+		Limit(1).
+		SQL(context.Background())
+	fmt.Println(text)
+	fmt.Println(args, err)
+	// Output:
+	// SELECT "id" FROM "invoices" WHERE (NOT "paid" AND "number" = ANY($1)) LIMIT 1
+	// [{"A-1","A-2"}] <nil>
+}
+
 // Select makes a subquery of one column, and InSelect tests another column
 // of the same type against it. The subquery's entity gets its own Read
 // policy and interceptors, as a query on it would.

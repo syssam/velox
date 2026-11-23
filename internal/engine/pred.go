@@ -316,3 +316,6 @@ func NewPredicate(n Node) Predicate { return Predicate{n} }
 type Pred[E any] struct {
 	n Node
 }
+
+// IsZero reports whether p is the zero Predicate: no condition was given.
+func IsZero(p Predicate) bool { return p.n.Op == opZero }

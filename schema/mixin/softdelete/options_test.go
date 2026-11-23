@@ -13,6 +13,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/mixin/softdelete"
+	"github.com/syssam/velox/scope"
 )
 
 // adoc lists softdelete.Mixin with Assign, which sets deleted_by from the
@@ -272,5 +273,45 @@ func TestRecordAssign(t *testing.T) {
 	slices.Sort(names)
 	if !slices.Equal(names, []string{"deleted_at", "deleted_by"}) {
 		t.Errorf("changed fields %v, want deleted_at and deleted_by", names)
+	}
+}
+
+// TestByAndAssigns: By sets its column to the key's value in the context and
+// nothing without one; Assigns runs each in order, joins their columns and
+// stops at the first error. A By's column goes into the soft delete's UPDATE.
+func TestByAndAssigns(t *testing.T) {
+	user := scope.NewKey[int64]("user")
+	member := scope.NewKey[string]("member")
+	ctx := member.With(user.With(context.Background(), 7), "m1")
+	both := softdelete.Assigns(softdelete.By("deleted_by", user), softdelete.By("deleted_by_member", member))
+	got, err := both(ctx)
+	want := []softdelete.Set{{Column: "deleted_by", Value: int64(7)}, {Column: "deleted_by_member", Value: "m1"}}
+	if err != nil || !slices.Equal(got, want) {
+		t.Errorf("Assigns: %v, %v; want %v", got, err, want)
+	}
+	if got, err := both(context.Background()); err != nil || len(got) != 0 {
+		t.Errorf("no keys: %v, %v; want none", got, err)
+	}
+	boom := errors.New("boom")
+	ran := false
+	failing := softdelete.Assigns(
+		func(context.Context) ([]softdelete.Set, error) { return nil, boom },
+		func(context.Context) ([]softdelete.Set, error) { ran = true; return nil, nil },
+	)
+	if _, err := failing(ctx); !errors.Is(err, boom) || ran {
+		t.Errorf("first error: %v, later ran %v", err, ran)
+	}
+
+	db, raw, _ := openDocs(t)
+	override, err = softdelete.By("deleted_by", user)(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { override = nil }()
+	if n, err := db.Delete[adoc]().Where(aID.EQ(1)).Exec(ctx); err != nil || n != 1 {
+		t.Fatalf("Delete: %d, %v", n, err)
+	}
+	if u, del := by(t, raw, "a_docs", 1); !del || u.Int64 != 7 {
+		t.Errorf("row 1: deleted_by %v, deleted %v; want 7, true", u, del)
 	}
 }

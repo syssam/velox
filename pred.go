@@ -107,3 +107,11 @@ func list[V any](vs []V) []any {
 	}
 	return out
 }
+
+// IsZero reports whether p is the zero Pred, Pred[E]{}: no condition was
+// given. A helper that has no condition to add can return the zero Pred, and
+// its caller test it with IsZero before passing it on, since a statement
+// that holds the zero Pred fails. It holds for the zero Predicate too. Allow
+// is not zero. IsZero is a function, not a method of Pred, so that only a
+// package that calls it compiles it (ADR 0137).
+func IsZero[E any](p Pred[E]) bool { return engine.IsZero(Predicate(p)) }
