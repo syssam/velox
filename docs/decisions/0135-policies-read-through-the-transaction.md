@@ -6,7 +6,7 @@
   [0148](0148-explicit-aggregates-filter-entity-policy-db.md): a policy
   function gets the statement's DB as a parameter and a privacy rule's
   Query and Mutation have `DB()`; the recursion guard stays, and an
-  interceptor still uses `TxFrom`.
+  interceptor's Filter gets the statement's DB too.
 
 ## Context
 

@@ -109,7 +109,7 @@ func (*INote) VeloxMeta() *velox.Meta[INote] { return iNoteMeta.Load(iNoteDescri
 // Interceptors hides the rows whose hidden is true, as the context's mode
 // says.
 func (*INote) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		FilterCalls++
 		m, _ := ctx.Value(filterModeKey{}).(FilterMode)
 		switch m {

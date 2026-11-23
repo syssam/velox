@@ -127,10 +127,14 @@ bytes. With `StmtDB` the compile-cost bounds are those before this
 record: `entityDescriptor` 145480, `entityDescUse` 795980,
 `entityDescHooks` 881746, `entityDescMixin` 927220 bytes.
 
-An `Interceptor`'s `Filter` stays `func(ctx)`, ent's shape; one that reads
-still joins the transaction with `TxFrom` on a DB the application gave
-it. `TxFrom` stays for that and for helpers handed a DB and a ctx.
-velox-gen checks policy keys, not function types, so it is unchanged, and
+An `Interceptor`'s `Filter` gets the statement's DB too, so a schema's
+behaviour reads one way: `Filter func(ctx context.Context, db *DB)
+(Predicate, error)`. `Interceptor` is declared in the root, as `Policy`
+is, and the engine keeps each Filter as a `FilterFn` taking a `StmtDB`.
+0135's guard stays for it: a statement made under a Filter's ctx is not
+narrowed by that Filter. `TxFrom` stays for helpers handed a DB and a
+ctx, such as a `WithTx` that joins the caller's transaction; no behaviour
+function needs it. velox-gen checks policy keys, not function types, so it is unchanged, and
 the generated code is unchanged: no version change.
 
 ## Consequences
@@ -139,6 +143,8 @@ the generated code is unchanged: no version change.
   `ANY_VALUE(SUM(x))` in a grouped ordering, which MySQL refuses: a loud
   failure, not a wrong answer.
 - A Filter compares `e.Name()` where it compared `entity`.
+- An Interceptor's Filter gains a `db *velox.DB` parameter, `_` where it
+  reads nothing.
 - Every Policy function gains a `db *velox.DB` parameter, `_` where it
   reads nothing. A veloxe or ent port's privacy rules compile unchanged
   unless they implement `privacy.Query` or `privacy.Mutation` themselves.

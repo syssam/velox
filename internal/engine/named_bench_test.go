@@ -64,7 +64,7 @@ func (*bnName) Policy() velox.Policy {
 }
 
 func (*bnName) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if bnBadOf(ctx) == "interceptor" {
 			return velox.FieldNEQ("titel", ""), nil
 		}

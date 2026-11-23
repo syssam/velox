@@ -21,7 +21,7 @@ func (Mixin) Fields() []schema.Field {
 }
 
 func (Mixin) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldIsNull("deleted_at"), nil
 	}}}
 }

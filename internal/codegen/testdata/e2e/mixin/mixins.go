@@ -47,7 +47,7 @@ type Hidden struct{ mixin.Schema }
 func (Hidden) Fields() []schema.Field { return []schema.Field{field.Bool("hidden").Default(false)} }
 
 func (Hidden) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("hidden", false), nil }}}
+	return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("hidden", false), nil }}}
 }
 
 // Stamp records its Prefix: a configured mixin, which the generated code

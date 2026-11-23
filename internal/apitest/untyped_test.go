@@ -104,7 +104,7 @@ func (*ubDoc) Policy() velox.Policy {
 }
 
 func (*ubDoc) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) { return ubAllow(ubFilter)(ctx) }}}
+	return []velox.Interceptor{{Filter: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) { return ubAllow(ubFilter)(ctx) }}}
 }
 
 // ubMixinHooks is a tenancy mixin's Hooks: it fills org_id from the

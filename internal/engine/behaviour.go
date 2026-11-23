@@ -60,31 +60,6 @@ type Policy struct {
 	Mutation MutationEval
 }
 
-// Interceptor filters an entity's rows for the application. Filter's
-// condition is ANDed into every statement that reads or changes the rows:
-// SELECT, Count, the aggregates, Each and Iter, a With load, an EXISTS on
-// the entity (Has, HasWith), a join, UPDATE, DELETE, Save and an upsert's
-// update branch. Raw SQL is not filtered.
-//
-// The interceptors' conditions come before the Read policy's in the WHERE.
-// WithoutPolicy does not lift them: an interceptor offers its own way to be
-// skipped, such as a context value its Filter reads. A Filter that reads a
-// context value records it with WithScopeValue, so that the GraphQL batcher
-// keeps callers apart.
-//
-// Filter returns Allow() for no restriction. Its zero Predicate fails the
-// statement, as a policy's does. An error fails the statement and is not a
-// denial. A nil Filter is refused when the metadata is built, by its index.
-// A statement made under a Filter's ctx is not narrowed by that Filter.
-//
-// A join entity of a many-to-many edge cannot have interceptors, as it
-// cannot have a Read policy: it is read through its two sides. On MySQL, an
-// upsert that updates an entity with interceptors is refused with
-// ErrPolicyUpsert.
-type Interceptor struct {
-	Filter func(ctx context.Context) (Predicate, error)
-}
-
 // PolicyFor is p as entity in keeps it.
 func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
 	// Each function is called under a frame of its own (guardPolicy), so
@@ -140,13 +115,14 @@ type rowMisuseError struct{ err error }
 func (e *rowMisuseError) Error() string { return e.err.Error() }
 func (e *rowMisuseError) Unwrap() error { return e.err }
 
-// FiltersFor is the filters of is, the interceptors one function of the
-// Descriptor returned, and the reason a nil Filter is refused when one is:
-// base is the index of is's first in the entity's list.
-func FiltersFor(is []Interceptor, base int) ([]FilterFn, string) {
+// FiltersFor is the filters of is, the Filters of the interceptors one
+// function of the Descriptor returned, and the reason a nil Filter is
+// refused when one is: base is the index of is's first in the entity's
+// list. Each is given the DB the statement runs on, the transaction's
+// inside Tx, and a statement made under its ctx is not narrowed by it.
+func FiltersFor(is []func(ctx context.Context, db *DB) (Predicate, error), base int) ([]FilterFn, string) {
 	fs := make([]FilterFn, len(is))
-	for i, x := range is {
-		f := x.Filter
+	for i, f := range is {
 		if f == nil {
 			return nil, fmt.Sprintf("Interceptors()[%d] has a nil Filter", base+i)
 		}

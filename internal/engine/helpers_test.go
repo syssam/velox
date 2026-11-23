@@ -269,6 +269,18 @@ func engineOf(db *velox.DB) *engine.DB { return (*engine.DB)(unsafe.Pointer(db))
 // rootOf is db as the root's DB, which holds an engine.DB as its only field.
 func rootOf(db *engine.DB) *velox.DB { return (*velox.DB)(unsafe.Pointer(db)) }
 
+// eraseFilters is the Filters of is as the engine runs them, as the root
+// erases them. A nil Filter stays nil.
+func eraseFilters(is []velox.Interceptor) []func(context.Context, *engine.DB) (engine.Predicate, error) {
+	fs := make([]func(context.Context, *engine.DB) (engine.Predicate, error), len(is))
+	for i, x := range is {
+		if f := x.Filter; f != nil {
+			fs[i] = func(ctx context.Context, db *engine.DB) (engine.Predicate, error) { return f(ctx, rootOf(db)) }
+		}
+	}
+	return fs
+}
+
 // erasePolicy is p's Read, Write and Insert as the engine keeps them, as
 // the root erases a Policy. These tests declare no privacy rule lists.
 func erasePolicy(p velox.Policy) engine.Policy {
@@ -406,7 +418,7 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		err = engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 			var fs []engine.FilterFn
 			for _, f := range is {
-				own, reason := engine.FiltersFor(f.Interceptors(), len(fs))
+				own, reason := engine.FiltersFor(eraseFilters(f.Interceptors()), len(fs))
 				if reason != "" {
 					return nil, reason
 				}

@@ -16,12 +16,12 @@ func TestGuards(t *testing.T) {
 	}
 	ctx := context.Background()
 	refused := errors.New("refused")
-	var cond func(context.Context) (Predicate, error)
-	cond = guardCond(func(c context.Context) (Predicate, error) {
+	var cond FilterFn
+	cond = guardCond(func(c context.Context, _ *DB) (Predicate, error) {
 		if !strings.HasSuffix(frameOf(c).String(), ".Interceptor") {
 			t.Errorf("the frame: %s", frameOf(c))
 		}
-		if p, err := cond(c); err != nil || p.n.Op != OpAllow {
+		if p, err := cond(c, nil); err != nil || p.n.Op != OpAllow {
 			t.Errorf("cond under itself: %+v, %v; want Allow", p.n, err)
 		}
 		return Predicate{Node{Op: OpEQ, Col: 1, V: int64(1)}}, nil
@@ -53,7 +53,7 @@ func TestGuards(t *testing.T) {
 		}
 		return refused
 	})
-	if p, err := cond(ctx); err != nil || p.n.Col != 1 {
+	if p, err := cond(ctx, nil); err != nil || p.n.Col != 1 {
 		t.Errorf("cond: %+v, %v", p.n, err)
 	}
 	if p, err := read(ctx, nil); err != nil || p.n.Col != 3 {

@@ -24,7 +24,7 @@ var (
 	PNoteWrite  func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
 	PNoteInsert func(ctx context.Context, db *velox.DB, r velox.Row) error
 	PNoteQuery  func(ctx context.Context, q privacy.Query) error
-	PNoteFilter func(ctx context.Context) (velox.Predicate, error)
+	PNoteFilter func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
 )
 
 // PNotes are PNote's handles.
@@ -71,11 +71,11 @@ func (*PNote) Policy() velox.Policy {
 
 // Interceptors calls PNoteFilter.
 func (*PNote) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
 		if PNoteFilter == nil {
 			return velox.Allow(), nil
 		}
-		return PNoteFilter(ctx)
+		return PNoteFilter(ctx, db)
 	}}}
 }
 

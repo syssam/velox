@@ -72,7 +72,7 @@ func (*lAnd) VeloxMeta() *velox.Meta[lAnd] {
 		}
 		filter := func(label string) func() []velox.Interceptor {
 			return func() []velox.Interceptor {
-				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) {
+				return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) {
 					return velox.FieldNEQ("name", label), nil
 				}}}
 			}
@@ -205,7 +205,7 @@ func lBadErr(f func(d *velox.Descriptor[lBad])) error {
 // across the lists, and a nil function in a Descriptor's list are refused
 // when the metadata is built, with a *SchemaError.
 func TestNilInterceptorRefused(t *testing.T) {
-	allow := velox.Interceptor{Filter: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
+	allow := velox.Interceptor{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil }}
 	bind := func(is ...velox.Interceptor) func() []velox.Interceptor {
 		return func() []velox.Interceptor { return is }
 	}
@@ -276,7 +276,7 @@ func (*lJoin) VeloxMeta() *velox.Meta[lJoin] {
 		return velox.Descriptor[lJoin]{
 			Table: "joins", Columns: []velox.ColumnDescriptor{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}}, PrimaryKey: []int{0, 1},
 			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
-				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) {
+				return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) {
 					return velox.Allow(), nil
 				}}}
 			}}},
@@ -364,7 +364,7 @@ func (*lCycA) VeloxMeta() *velox.Meta[lCycA] {
 			Entities: fixture.Entities(velox.LinkEntity[lCycB]("lCycB", "")),
 			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[lCycB]("b", 1, 0)},
 			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
-				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("b"), nil }}}
+				return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("b"), nil }}}
 			}}},
 			FieldPtr:     func(x *lCycA, i int) any { return [...]any{&x.ID, &x.BID}[i] },
 			EdgeFieldPtr: func(x *lCycA, i int) any { return &x.B },
@@ -379,7 +379,7 @@ func (*lCycB) VeloxMeta() *velox.Meta[lCycB] {
 			Entities: fixture.Entities(velox.LinkEntity[lCycA]("lCycA", "")),
 			Edges:    []velox.EdgeDescriptor{velox.EdgeTo[lCycA]("a", 1, 0)},
 			Schema: fixture.Fns{Interceptors: []func() []velox.Interceptor{func() []velox.Interceptor {
-				return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("a"), nil }}}
+				return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("a"), nil }}}
 			}}},
 			FieldPtr:     func(x *lCycB, i int) any { return [...]any{&x.ID, &x.AID}[i] },
 			EdgeFieldPtr: func(x *lCycB, i int) any { return &x.A },

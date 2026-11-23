@@ -71,8 +71,9 @@ var (
 	errOwnAndNext = errors.New("SetAffected is for a hook that makes the write itself; it called next too")
 )
 
-// FilterFn is an Interceptor's Filter as the engine runs it.
-type FilterFn func(ctx context.Context) (Predicate, error)
+// FilterFn is an Interceptor's Filter as the engine runs it, given the DB
+// the statement runs on as a StmtDB.
+type FilterFn func(ctx context.Context, db StmtDB) (Predicate, error)
 
 // EraseFilters calls f, which composes the Descriptor's Interceptors with E
 // erased, and keeps its filters in info. A panic in f is the entity's

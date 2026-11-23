@@ -220,7 +220,7 @@ func (sd Mixin) Interceptors() []velox.Interceptor {
 	if sd.Reads == Unfiltered {
 		return nil
 	}
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if Skipped(ctx) {
 			return velox.Allow(), nil
 		}

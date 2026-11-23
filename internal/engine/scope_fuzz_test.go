@@ -71,7 +71,7 @@ func (g *scopeGen) preds(depth int) []velox.Pred[testmodel.Ticket] {
 // condition holds an EXISTS: Title <> "gone" and Has(Invoice).
 var filteredTicket = func() *velox.EntityInfo {
 	cp := *infoOf[testmodel.Ticket]()
-	engine.SetInfoFilters(&cp, []engine.FilterFn{func(context.Context) (velox.Predicate, error) {
+	engine.SetInfoFilters(&cp, []engine.FilterFn{func(context.Context, engine.StmtDB) (velox.Predicate, error) {
 		return velox.Predicate(velox.And(Tk.Title.NEQ("gone"), Tk.Invoice.Has())), nil
 	}})
 	return &cp

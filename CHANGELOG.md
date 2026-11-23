@@ -808,6 +808,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   process-wide registry are removed: it was false before an entity's first
   use, could not tell two packages' entities of one name apart, and took a
   lock per call (ADR 0148).
+- An `Interceptor`'s `Filter` is `func(ctx, db *velox.DB)`: `db` is the
+  statement's DB, the transaction's inside `Tx`, as a `Policy` function's
+  and a `WithFilter` filter's are. A Filter that read joined with
+  `velox.TxFrom` reads through `db` (ADR 0148).
 - A `Calc` that aggregates is marked with `velox.Agg` (`untyped.Agg`):
   velox no longer scans the text for SUM, MAX and the rest, which took
   SQLite's two-argument `MAX(a, b)` for an aggregate and missed

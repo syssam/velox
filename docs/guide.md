@@ -1751,9 +1751,10 @@ An interceptor is a filter that applies to every statement on an entity,
 like a `Read` policy, but `WithoutPolicy` does not lift it. It is meant for
 application rules that even admin code should respect, such as hiding
 soft-deleted rows. Declare `Interceptors() []velox.Interceptor` on a schema
-or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`. It is
-given no DB: a Filter that reads joins the statement's transaction with
-`velox.TxFrom(ctx, db)` on a DB the application gave it.
+or mixin; each has a `Filter func(ctx, db) (velox.Predicate, error)`.
+`db` is the DB the statement runs on, the transaction's inside `Tx`, as a
+policy function's is: a Filter that reads, reads through it. A statement
+made under the Filter's ctx is not narrowed by that Filter.
 
 ### Hooks and filters for every entity
 

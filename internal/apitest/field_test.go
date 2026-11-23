@@ -29,7 +29,7 @@ func (orgMixin) Hooks() []velox.Hook {
 }
 
 func (orgMixin) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) { return velox.FieldIsNull("deleted_at"), nil }}}
+	return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldIsNull("deleted_at"), nil }}}
 }
 
 // fNote is an entity whose behaviour is orgMixin's.

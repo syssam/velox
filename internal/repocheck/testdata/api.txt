@@ -50,7 +50,6 @@ EntityLink.Name string
 EntityLink.Table string
 EntityLink.Type string
 EntityTable.Load(build func() []EntityLink) *EntityTable
-Interceptor.Filter func(ctx context.Context) (Predicate, error)
 JoinClause.Left bool
 JoinClause.Link Link
 JoinClause.On []Predicate
@@ -901,7 +900,7 @@ type Index = schema.Index
 type IndexInfo = veloxtype.IndexInfo
 type Input[E any] interface { Setters() ([]Setter[E], error) }
 type InsertQuery[E any] struct { }
-type Interceptor = engine.Interceptor
+type Interceptor struct { Filter func(ctx context.Context, db *DB) (Predicate, error) }
 type JSONArray[E any] struct { }
 type JSONBool[E any] struct { }
 type JSONCol[E, V any] struct { I int32 }

@@ -28,7 +28,7 @@ func WithArchived(ctx context.Context) context.Context {
 // Interceptors hides the post titled "archived", unless the context is
 // WithArchived's.
 func (Post) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(ctx context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if v, _ := ctx.Value(archiveKey{}).(bool); v {
 			return velox.Allow(), nil
 		}

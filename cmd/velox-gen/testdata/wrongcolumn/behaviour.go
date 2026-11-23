@@ -38,7 +38,7 @@ func (Project) Hooks() []velox.Hook {
 }
 
 func (Label) Interceptors() []velox.Interceptor {
-	return []velox.Interceptor{{Filter: func(context.Context) (velox.Predicate, error) {
+	return []velox.Interceptor{{Filter: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.And(velox.FieldNotNull(column()), velox.HasEdge("owner"), velox.FieldIsNull("text")), nil
 	}}}
 }

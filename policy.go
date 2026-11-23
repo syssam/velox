@@ -343,9 +343,10 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // statement, as a policy's does. An error fails the statement and is not a
 // denial: errors.Is(err, ErrDenied) holds only when the error is a Deny.
 //
-// A Filter is given no DB: one that reads joins the statement's
-// transaction with TxFrom on a DB the application gave it. A statement
-// made under its ctx is not narrowed by it.
+// Filter is given the statement's ctx and db, the DB the statement runs
+// on, never nil: inside Tx the transaction's, as a Policy function's db
+// is. One that reads, reads through db. A statement made under its ctx is
+// not narrowed by it.
 //
 // A generated entity's interceptors are declared in the schema package, on
 // the entity's schema or a mixin, and bound by velox-gen. An entity written
@@ -359,7 +360,22 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // cannot have a Read policy: it is read through its two sides. On MySQL, an
 // upsert that updates an entity with interceptors is refused with
 // ErrPolicyUpsert.
-type Interceptor = engine.Interceptor
+type Interceptor struct {
+	Filter func(ctx context.Context, db *DB) (Predicate, error)
+}
+
+// eraseFilters is the Filters of is as the engine runs them, given the
+// engine's DB, which a *DB is cast from (see DB). A nil Filter stays nil,
+// for FiltersFor to refuse by its index.
+func eraseFilters(is []Interceptor) []func(context.Context, *engine.DB) (Predicate, error) {
+	fs := make([]func(context.Context, *engine.DB) (Predicate, error), len(is))
+	for i, x := range is {
+		if f := x.Filter; f != nil {
+			fs[i] = func(ctx context.Context, db *engine.DB) (Predicate, error) { return f(ctx, dbOf(db)) }
+		}
+	}
+	return fs
+}
 
 // mutValue is a handle's Value: the value the update m assigns to column
 // col of entity E, with Mutation.Value's rules; the zero V for NULL.

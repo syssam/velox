@@ -110,17 +110,17 @@ func allowed() (Predicate, error) { return NewPredicate(Node{Op: OpAllow}), nil 
 
 // guardCond is f, an interceptor's Filter, called under a frame of its
 // own, and skipped, with no restriction, under a call of itself (enter).
-func guardCond(f func(ctx context.Context) (Predicate, error)) func(ctx context.Context) (Predicate, error) {
+func guardCond(f func(ctx context.Context, db *DB) (Predicate, error)) FilterFn {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
-	return func(ctx context.Context) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB) (Predicate, error) {
 		c, skip := enter(ctx, key, kindInterceptor)
 		if skip {
 			return allowed()
 		}
-		return f(c)
+		return f(c, dbOf(db))
 	}
 }
 

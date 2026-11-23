@@ -189,7 +189,7 @@ func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 		}
 	}
 	for i, f := range t.filters {
-		p, err := f(sc.Ctx)
+		p, err := f(sc.Ctx, sc.db)
 		c, err := sc.filterCond(t, "interceptor", i, p, err)
 		if err != nil {
 			return Predicate{}, err

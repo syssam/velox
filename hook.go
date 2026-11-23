@@ -329,7 +329,7 @@ func bindInterceptors(info *EntityInfo, is []interface{ Interceptors() []Interce
 	return engine.EraseFilters(info, func() ([]engine.FilterFn, string) {
 		var fs []engine.FilterFn
 		for _, x := range is {
-			own, reason := engine.FiltersFor(x.Interceptors(), len(fs))
+			own, reason := engine.FiltersFor(eraseFilters(x.Interceptors()), len(fs))
 			if reason != "" {
 				return nil, reason
 			}
