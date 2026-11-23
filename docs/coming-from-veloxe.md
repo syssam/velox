@@ -363,6 +363,14 @@ these:
 - An error from velox carries a code, such as `BAD_USER_INPUT`, in
   `extensions.code`.
 
+**An Other field with no SQLite `SchemaType` is a typeless column.** veloxe
+made the column with no type name on SQLite, and velox-gen once refused it.
+It now makes it as veloxe did, so a `decimal.Decimal` field whose
+`SchemaType` names MySQL and PostgreSQL only opens on SQLite. The value is
+kept as bound, so `"1.10"` stays `"1.10"`, and `ORDER BY` and `>` compare it
+as text. Name `numeric` for SQLite to compare as numbers. MySQL and
+PostgreSQL still need a `SchemaType` (ADR 0145).
+
 ## What stays the same under compat=veloxe
 
 A client written against veloxe's API sees these as it did:

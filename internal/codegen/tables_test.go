@@ -1185,6 +1185,70 @@ func TestTablesRefusals(t *testing.T) {
 	}
 }
 
+// tbOtherNoSQLite is a decimal field whose SchemaType names MySQL and
+// PostgreSQL only, as a nextapp schema writes it (decision 0145).
+type tbOtherNoSQLite struct{ schema.Schema }
+
+func (tbOtherNoSQLite) Annotations() []schema.Annotation {
+	return []schema.Annotation{sqlschema.Table("tb_other_no_sqlite")}
+}
+func (tbOtherNoSQLite) Fields() []schema.Field {
+	st := map[string]string{dialect.Postgres: "numeric(19,4)", dialect.MySQL: "decimal(19,4)"}
+	return []schema.Field{
+		field.Other("price", TbMoney{}).SchemaType(st),
+		field.Other("fee", TbMoney{}).SchemaType(st).Optional().Nillable(),
+	}
+}
+func (tbOtherNoSQLite) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("price")}
+}
+
+// TestTablesOtherWithoutSQLiteType: on SQLite an Other field with no
+// SchemaType for it is a typeless column, as veloxe made it; MySQL and
+// PostgreSQL still refuse, naming the dialect.
+func TestTablesOtherWithoutSQLiteType(t *testing.T) {
+	g := mustBuild(t, tbOtherNoSQLite{})
+	s, err := Tables(g, velox.SQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tb := table(t, s, "tb_other_no_sqlite")
+	for _, name := range []string{"price", "fee"} {
+		c := column(t, tb, name)
+		if c.Type != "" {
+			t.Errorf("%s: type %q, want none", name, c.Type)
+		}
+	}
+	if c := column(t, tb, "price"); c.Nullable {
+		t.Error("price is nullable")
+	}
+	if c := column(t, tb, "fee"); !c.Nullable {
+		t.Error("fee is NOT NULL")
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
+		if _, err := Tables(g, d); err != nil {
+			t.Errorf("%v: %v", d, err)
+		}
+	}
+	// A field with a MySQL type only still fails on PostgreSQL.
+	g = mustBuild(t, tbOtherMySQLOnly{})
+	_, err = Tables(g, velox.Postgres)
+	if e := refusal(t, err); !strings.Contains(e.Reason, "an Other field needs a SchemaType for PostgreSQL") {
+		t.Errorf("PostgreSQL: %v", err)
+	}
+	for _, d := range []velox.Dialect{velox.MySQL, velox.SQLite} {
+		if _, err := Tables(g, d); err != nil {
+			t.Errorf("%v: %v", d, err)
+		}
+	}
+}
+
+type tbOtherMySQLOnly struct{ schema.Schema }
+
+func (tbOtherMySQLOnly) Fields() []schema.Field {
+	return []schema.Field{field.Other("o", TbMoney{}).SchemaType(map[string]string{dialect.MySQL: "decimal(19,4)"})}
+}
+
 // Errors are ordered by schema name, then by the order of the elements.
 type tbRfOrderA struct{ schema.Schema }
 

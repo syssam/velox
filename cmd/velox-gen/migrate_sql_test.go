@@ -114,6 +114,54 @@ func TestMigrateSQL(t *testing.T) {
 
 }
 
+// TestMigrateSQLOtherWithoutSQLiteType: a decimal field whose SchemaType
+// names MySQL and PostgreSQL gets a typeless column on SQLite (decision
+// 0145), as migrate sql prints it.
+func TestMigrateSQLOtherWithoutSQLiteType(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"veloxschema/price.go": `package veloxschema
+
+import (
+	"database/sql/driver"
+
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+)
+
+type Dec string
+
+func (d Dec) Value() (driver.Value, error) { return string(d), nil }
+
+func (d *Dec) Scan(v any) error {
+	s, _ := v.(string)
+	*d = Dec(s)
+	return nil
+}
+
+type Price struct{ schema.Schema }
+
+func (Price) Fields() []schema.Field {
+	return []schema.Field{
+		field.Other("amount", Dec("")).SchemaType(map[string]string{dialect.Postgres: "numeric(19,4)", dialect.MySQL: "decimal(19,4)"}),
+	}
+}
+`})
+	code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "sqlite")
+	if code != 0 || errs != "" {
+		t.Fatalf("sqlite: exit %d\nstderr:\n%s", code, errs)
+	}
+	if !strings.Contains(out, "\n  \"amount\" NOT NULL\n)") {
+		t.Errorf("sqlite: no typeless amount column:\n%s", out)
+	}
+	code, out, errs = runCLI(t, dir, "migrate", "sql", "-dialect", "postgres")
+	if code != 0 || errs != "" || !strings.Contains(out, "numeric(19,4)") {
+		t.Errorf("postgres: exit %d\n%s\nstderr:\n%s", code, out, errs)
+	}
+}
+
 // Review Focus 5: a refusal prints nothing on stdout.
 func TestMigrateSQLRefusals(t *testing.T) {
 	if testing.Short() {

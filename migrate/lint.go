@@ -616,7 +616,16 @@ func (l *linter) alterType(i int, c alterColumn, target string) {
 		l.add(i, "widen-type", class, target, c.To.Pos, "widens column %s from %s to %s%s", target, from, to, more)
 		return
 	}
-	l.add(i, "alter-type", Destructive, target, c.To.Pos, "changes column %s from %s to %s, which can fail or change values%s", target, from, to, l.castWarning(from, to))
+	l.add(i, "alter-type", Destructive, target, c.To.Pos, "changes column %s from %s to %s, which can fail or change values%s", target, typeText(from), typeText(to), l.castWarning(from, to))
+}
+
+// typeText is a column type as a finding names it: "no type" for the
+// typeless column of SQLite.
+func typeText(typ string) string {
+	if typ == "" {
+		return "no type"
+	}
+	return typ
 }
 
 // castWarning is what a finding adds about the cast of a PostgreSQL type change

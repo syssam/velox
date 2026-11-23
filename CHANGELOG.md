@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- On SQLite an Other field with no SQLite `SchemaType`, such as a
+  `decimal.Decimal` whose `SchemaType` names MySQL and PostgreSQL only, is a
+  typeless column, as veloxe made it, instead of velox-gen refusing it. The
+  text of a decimal stays as written (`"1.10"` is not stored as 1.1).
+  MySQL and PostgreSQL still refuse it (ADR 0145).
 - `velox.ValidationError.Name` is the schema field's name, such as
   `"address_city"`, as ent's `ValidationError.Name` is; for a Required
   edge, the name of its key field. A field with a `StorageKey` gets

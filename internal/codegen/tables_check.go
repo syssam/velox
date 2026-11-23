@@ -181,7 +181,7 @@ func (t *tabler) checkKey(tb *migrate.Table, cols []string, at place) {
 func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 	at := place{e, rankField, i, fieldLoc(f)}
 	st := f.SchemaType[t.d.String()]
-	if f.Type == "other" && st == "" {
+	if f.Type == "other" && st == "" && t.d != velox.SQLite {
 		t.fail(at, "an Other field needs a SchemaType for %s", dialectName(t.d))
 	}
 	if i == 0 && integer(f.Type) && st != "" && !integerType(t.d, ddl.NormalizeType(t.d, st)) {

@@ -2,6 +2,7 @@ package veloxtest_test
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,11 +13,13 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect"
 	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/internal/testmodel"
 	ts "github.com/syssam/velox/internal/testmodel/schema"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/veloxtest"
 )
 
@@ -130,6 +133,85 @@ func TestSchemaIsVeloxGens(t *testing.T) {
 		if len(changes) != 0 || len(got.Tables) != len(want.Tables) {
 			t.Errorf("%s: Schema differs from velox-gen's: %v", d, changes)
 		}
+	}
+}
+
+// decimal is a decimal's text, as shopspring's decimal.Decimal holds one: a
+// Valuer that gives its text and a Scanner that reads it back.
+type decimal string
+
+func (d decimal) Value() (driver.Value, error) { return string(d), nil }
+
+func (d *decimal) Scan(v any) error {
+	switch v := v.(type) {
+	case string:
+		*d = decimal(v)
+	case []byte:
+		*d = decimal(v)
+	default:
+		return fmt.Errorf("decimal: scanned %T", v)
+	}
+	return nil
+}
+
+// price has decimal fields whose SchemaType names MySQL and PostgreSQL
+// only, as the nextapp schemas write them.
+type price struct{ schema.Schema }
+
+func (price) Fields() []schema.Field {
+	st := map[string]string{dialect.Postgres: "numeric(19,4)", dialect.MySQL: "decimal(19,4)"}
+	return []schema.Field{
+		field.Other("amount", decimal("")).SchemaType(st),
+		field.Other("fee", decimal("")).SchemaType(st).Optional().Nillable(),
+	}
+}
+
+// TestOpenOtherWithoutSQLiteType: on SQLite an Other field with no SQLite
+// SchemaType is a typeless column (decision 0145), so Open builds it and a
+// decimal's text comes back as written: "1.10" stays "1.10", where NUMERIC
+// affinity would have stored 1.1.
+func TestOpenOtherWithoutSQLiteType(t *testing.T) {
+	db := veloxtest.Open(t, "sqlite", "", []schema.Interface{price{}})
+	pool := velox.Pool(db)
+	var typ string
+	if err := pool.QueryRow(`SELECT type FROM pragma_table_info('prices') WHERE name = 'amount'`).Scan(&typ); err != nil || typ != "" {
+		t.Fatalf("amount's type %q, %v; want none", typ, err)
+	}
+	for _, v := range []decimal{"1.10", "0.1000", "12345678901234567.8900", "-0.00"} {
+		if _, err := pool.Exec(`INSERT INTO prices (amount, fee) VALUES (?, ?)`, v, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(`INSERT INTO prices (amount, fee) VALUES (?, NULL)`, decimal("2.50")); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(`SELECT amount, fee FROM prices ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var got []string
+	for rows.Next() {
+		var amount decimal
+		var fee *decimal
+		if err := rows.Scan(&amount, &fee); err != nil {
+			t.Fatal(err)
+		}
+		if fee == nil {
+			got = append(got, string(amount)+"|NULL")
+			continue
+		}
+		if *fee != amount {
+			t.Errorf("fee %q differs from amount %q", *fee, amount)
+		}
+		got = append(got, string(amount))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"1.10", "0.1000", "12345678901234567.8900", "-0.00", "2.50|NULL"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("read %q, want %q", got, want)
 	}
 }
 
