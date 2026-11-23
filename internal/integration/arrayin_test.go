@@ -95,8 +95,14 @@ func TestInArrayMatchesAnInList(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		specials := []string{`a"b`, `c\d`, "e,f", "{g}", " h ", "NULL", "null", "", "x y", "'q'", `\"`, "é"}
 		for i, n := range specials {
+			// "null" is in org 5: MySQL's collation ignores case, so it
+			// would be the same number as "NULL" in org 3.
+			org := int64(3)
+			if n == "null" {
+				org = 5
+			}
 			tg.exec(t, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, note, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-				t0, t0, int64(100+i), int64(3), n, 0.0, false, "", []byte("d"))
+				t0, t0, int64(100+i), org, n, 0.0, false, "", []byte("d"))
 		}
 		for i, id := range []int64{math.MaxInt64, math.MinInt64} {
 			tg.exec(t, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, note, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -117,7 +123,7 @@ func TestInArrayMatchesAnInList(t *testing.T) {
 			want []int64
 		}{
 			{"in strings", invoices(org3, I.Number.In(`a"b`, `c\d`, "e,f", "{g}", " h ", "NULL", "", `\"`)), []int64{100, 101, 102, 103, 104, 105, 107, 110}},
-			{"not in strings", invoices(org3, I.Number.NotIn(`a"b`, `c\d`, "e,f", "{g}", " h ", "NULL", "", `\"`)), []int64{106, 108, 109, 111}},
+			{"not in strings", invoices(org3, I.Number.NotIn(`a"b`, `c\d`, "e,f", "{g}", " h ", "NULL", "", `\"`)), []int64{108, 109, 111}},
 			{"in no match", invoices(org3, I.Number.In("a", "NULL ", "{}")), []int64{}},
 			{"in int64 bounds", invoices(I.ID.In(math.MaxInt64, math.MinInt64, 2)), []int64{math.MinInt64, 2, math.MaxInt64}},
 			{"not in int64 bounds", invoices(I.OrgID.EQ(4), I.ID.NotIn(math.MaxInt64)), []int64{math.MinInt64}},
@@ -125,6 +131,15 @@ func TestInArrayMatchesAnInList(t *testing.T) {
 			if !slices.Equal(c.got, c.want) {
 				t.Errorf("%s: %v, want %v", c.name, c.got, c.want)
 			}
+		}
+		// The quoted "NULL" is a string, not NULL, and keeps its case where
+		// the dialect compares with case (MySQL's collation does not).
+		want := []int64{}
+		if tg.d == velox.MySQL {
+			want = []int64{106}
+		}
+		if got := invoices(I.OrgID.EQ(5), I.Number.In("NULL")); !slices.Equal(got, want) {
+			t.Errorf("in NULL, org 5: %v, want %v", got, want)
 		}
 
 		// Tickets' parent_id: 1 and 3 and 6 are NULL, 2 is 1, 4 and 5 are 3,
