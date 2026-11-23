@@ -31,3 +31,16 @@ func TestConfig(t *testing.T) {
 	}()
 	newConfig(Option{})
 }
+
+// TestRunOptionsEndWithoutRetry: a mutation's transaction gets the options
+// WithTxOptions gave, then TxRetrySerializable(0), which overrides a retry
+// in the DB's velox.WithTxDefaults: gqlgen makes the response once.
+func TestRunOptionsEndWithoutRetry(t *testing.T) {
+	e := NewExtension(nil, WithTxOptions(velox.TxReadOnly()))
+	if len(e.runOpts) != 2 || velox.TxRetries(e.runOpts...) != 0 {
+		t.Errorf("run options %d, retries %d", len(e.runOpts), velox.TxRetries(e.runOpts...))
+	}
+	if len(e.txOpts) != 1 {
+		t.Errorf("WithTxOptions' options changed: %d", len(e.txOpts))
+	}
+}

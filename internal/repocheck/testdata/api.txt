@@ -757,6 +757,7 @@ func FieldLTE(name string, v any) Predicate
 func FieldNEQ(name string, v any) Predicate
 func FieldNotIn(name string, vs ...any) Predicate
 func FieldNotNull(name string) Predicate
+func FilterDB(ctx context.Context) *DB
 func FiscalYear(start time.Month) DateOption
 func GoType(c ColumnInfo) reflect.Type
 func HasCleared(names ...string) Condition
@@ -783,6 +784,7 @@ func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K],
 func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func None() Predicate
 func Not[E any](p Pred[E]) Pred[E]
 func On(h Hook, ops ...Op) Hook
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB
@@ -841,6 +843,7 @@ func WithShardFor(f func(ctx context.Context) (string, error)) Option
 func WithStatementCounting() Option
 func WithTags(ctx context.Context, kv ...string) context.Context
 func WithTxAround(h TxAround) Option
+func WithTxDefaults(opts ...TxOption) Option
 func WithoutTx(ctx context.Context) context.Context
 type Aggregate = veloxtype.Aggregate
 type Annotation = schema.Annotation

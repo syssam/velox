@@ -18,6 +18,9 @@ type config struct {
 	Callers   *callers   // WithCallers; nil: off
 	Comment   *commenter // WithSQLComment; nil: off
 	TxArounds []TxAround
+	// TxDefaults are WithTxDefaults's: the options every outermost Tx
+	// applies before its own.
+	TxDefaults []TxOption
 	// SQLiteLocks is WithSQLiteLockingReads': a locking read on SQLite runs,
 	// without its lock clause, where it is refused otherwise.
 	SQLiteLocks bool

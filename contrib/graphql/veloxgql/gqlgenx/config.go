@@ -53,7 +53,10 @@ func WithLimits(l veloxgql.Limits) Option {
 
 // WithTxOptions sets the options of a mutation's transaction, such as
 // velox.TxIsolation. Validate refuses TxRetrySerializable: gqlgen makes the response once, so the
-// operation cannot run again. Given twice, the last wins.
+// operation cannot run again. For the same reason the transaction does not
+// retry under a TxRetrySerializable in the DB's velox.WithTxDefaults: the
+// extension ends its options with TxRetrySerializable(0). Given twice, the
+// last wins.
 func WithTxOptions(opts ...velox.TxOption) Option {
 	opts = slices.Clone(opts)
 	return Option{func(c *config) { c.txOptions = opts }}

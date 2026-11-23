@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/syssam/velox/internal/dberr"
 	"math/rand/v2"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -180,6 +181,19 @@ type txKey struct{}
 
 func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 
+// WithTxDefaults sets the options every Tx of the DB, and of its shards,
+// applies before the call's own, so that the call's override them. A nested
+// Tx, a savepoint, applies none. A zero TxOption panics.
+func WithTxDefaults(opts []TxOption) Option {
+	for _, opt := range opts {
+		if opt.apply == nil {
+			panic("velox: WithTxDefaults: the zero TxOption")
+		}
+	}
+	opts = slices.Clone(opts)
+	return Option{func(c *config) { c.TxDefaults = append(c.TxDefaults, opts...) }}
+}
+
 // Tx runs fn in a transaction. fn's error rolls it back and is returned; nil
 // commits it; a panic in fn rolls it back and then panics again with the same
 // value, and runtime.Goexit rolls it back and carries on. tx is a *DB like any
@@ -297,6 +311,9 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		return fmt.Errorf("velox: transaction: %w", err)
 	}
 	o := txOptions{caller: ctx}
+	for _, opt := range db.Cfg.TxDefaults {
+		applyTxOption(opt, &o)
+	}
 	for _, opt := range opts {
 		applyTxOption(opt, &o)
 	}

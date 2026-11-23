@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
 	"github.com/syssam/velox/veloxtype"
@@ -84,6 +85,11 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // schemas included: Has, Of, a With load, LoadEach and CountEach through one
 // fail when a filter restricts it, as they read its rows through the
 // relation's two sides.
+//
+// A filter that reads the database to make its condition, such as a team's
+// members or an organization's subtree, reads through FilterDB(ctx), the
+// statement's own DB, with the ctx it is given: inside Tx that is the
+// transaction, where db would fail with ErrOutsideTx.
 type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
@@ -122,6 +128,46 @@ func WithFilter(f Filter) Option {
 		panic("velox: WithFilter(nil)")
 	}
 	return engine.WithFilter(engine.EntityFilterFn(f))
+}
+
+// FilterDB returns, to a Filter given ctx, the DB of the statement it is
+// called for: the DB the statement runs on, which inside Tx is the
+// transaction. A filter that reads the database reads through it, so that a
+// statement gets the same condition inside a transaction and outside:
+//
+//	velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+//		if entity != "Order" || op != velox.OpSelect {
+//			return velox.Allow(), nil
+//		}
+//		n, err := velox.FilterDB(ctx).Query[veloxgen.Grant]().Where(veloxgen.Grants.UserID.EQ(userID(ctx))).Count(ctx)
+//		if err != nil {
+//			return velox.Predicate{}, err
+//		}
+//		if n == 0 {
+//			return velox.None(), nil
+//		}
+//		return velox.Allow(), nil
+//	})
+//
+// The filter's reads, under ctx or a context derived from it, are
+// statements like any other: the DB's other filters, the entities'
+// interceptors and their policies apply. The filter itself does not: a
+// statement made under a call of filter f, directly or through another
+// filter's reads, is not narrowed by f, so a filter that reads its own
+// entity does not call itself without end. velox keeps nothing between
+// statements: a filter that reads runs its reads once per statement for
+// each entity and op it is asked about. One that should read once per
+// request keeps its answer in the request's context.
+//
+// FilterDB returns nil under a context no filter was given. A read on
+// SQLite's pool of one connection outside a transaction runs before the
+// statement takes the connection, so it does not wait for it.
+func FilterDB(ctx context.Context) *DB {
+	e := engine.FilterDB(ctx)
+	if e == nil {
+		return nil
+	}
+	return (*DB)(unsafe.Pointer(e)) // DB is its engine.DB (see DB)
 }
 
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.

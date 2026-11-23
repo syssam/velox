@@ -46,13 +46,15 @@ type connHold struct {
 }
 
 // owns reports whether ctx is the holder's own: the context it was given, or
-// WithoutTx of its fn's.
+// WithoutTx of its fn's, either as a WithFilter filter is given it
+// (unfiltered).
 func (h *connHold) owns(ctx context.Context) bool {
+	ctx = unfiltered(ctx)
 	if sameCtx(ctx, h.caller) {
 		return true
 	}
 	if n, ok := ctx.(noTxCtx); ok && h.tx != nil {
-		return sameCtx(n.Context, &h.tx.ctx)
+		return sameCtx(unfiltered(n.Context), &h.tx.ctx)
 	}
 	return false
 }

@@ -21,7 +21,8 @@ func WithDeadlines(d Deadlines) Option { return Option{func(c *config) { c.Deadl
 
 // TxTimeout bounds the transaction to d, retries and commit included, in place
 // of the DB's Tx default and within its MaxTx. An earlier deadline on the
-// context still applies. TxTimeout(d) with d <= 0 is ignored. A nested Tx
+// context still applies. TxTimeout(d) with d <= 0 sets no bound of its own:
+// the DB's Tx default applies, in place of a TxTimeout in WithTxDefaults. A nested Tx
 // refuses it, as it refuses every option: a savepoint runs within the
 // enclosing transaction's deadline.
 func TxTimeout(d time.Duration) TxOption { return TxOption{func(o *txOptions) { o.Timeout = d }} }

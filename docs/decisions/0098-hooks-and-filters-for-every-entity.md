@@ -1,7 +1,9 @@
 # 98. Hooks and row filters for every entity
 
 Status: accepted, 2026-11-21. Amended 2026-11-22: a filter that restricts
-a join entity fails the statements that read through it.
+a join entity fails the statements that read through it. Amended by
+[0132](0132-filter-reads-through-the-statements-db.md): a filter reads
+through `FilterDB(ctx)`, and is not applied to its own reads.
 
 ## Context
 

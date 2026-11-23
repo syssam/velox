@@ -28,6 +28,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   its `Sum()` and `Avg()` are rounded to 15 significant digits as a
   decimal column's are, so `Calc("? * ?", X.Qty, X.Price).Decimal().Sum()`
   is exact there (ADR 0131).
+- `velox.FilterDB(ctx)` gives a `WithFilter` filter the DB its statement
+  runs on, the transaction's inside `Tx`, so a filter that reads gets the
+  same answer inside a transaction and outside. A filter is not applied to
+  its own reads, which ends the recursion
+  ([ADR 0132](docs/decisions/0132-filter-reads-through-the-statements-db.md)).
+- `velox.WithTxDefaults(opts...)` gives every outermost `Tx` on the DB
+  options that the call's own override, such as a retry and a timeout. A
+  savepoint applies none, and gqlgenx's mutation transaction never retries
+  ([ADR 0133](docs/decisions/0133-tx-defaults-and-none.md)).
+- `velox.None()`, the condition that matches no row, `1 = 0` on every
+  dialect, beside `velox.Allow()`.
+
 - velox-graphql: `sdlfiles=entity` writes the SDL as `velox.graphql`, with
   Query and the vocabulary, and one `velox_<label>.graphql` per entity.
   gqlc makes a package of each file, so `Query.salesOrderItems` and
@@ -700,6 +712,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   gqlimpl's where filters and update inputs report it as `BAD_USER_INPUT` naming the field.
 
 ### Changed
+
+- `TxTimeout(d)` with `d <= 0` sets no bound of its own: it lifts a
+  `WithTxDefaults` timeout, leaving `WithDeadlines`' limits.
 
 - velox-gen is faster, and writes the same bytes. One run lists the schema
   package once and reads and parses each of its files once, where each pass

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -122,8 +123,12 @@ type Extension struct {
 	schema *ast.Schema
 	// bounds is what the check of a request reads, of the limits and the schema.
 	bounds request.Bounds
-	// txOpts are the options of a mutation's transaction.
+	// txOpts are the options of a mutation's transaction, as WithTxOptions
+	// gave them.
 	txOpts []velox.TxOption
+	// runOpts are txOpts and TxRetrySerializable(0), last, which overrides
+	// a retry in the DB's velox.WithTxDefaults.
+	runOpts []velox.TxOption
 	// txFilter decides whether a mutation runs in a transaction; nil means
 	// every one does.
 	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
@@ -145,7 +150,8 @@ type Extension struct {
 // driver's, which name entities, tables, constraints and scope values.
 func NewExtension(db *velox.DB, opts ...Option) *Extension {
 	c := newConfig(opts...)
-	return &Extension{db: db, limits: c.limits, txOpts: c.txOptions, txFilter: c.txFilter, batchScope: c.batchScope}
+	run := append(slices.Clone(c.txOptions), velox.TxRetrySerializable(0))
+	return &Extension{db: db, limits: c.limits, txOpts: c.txOptions, runOpts: run, txFilter: c.txFilter, batchScope: c.batchScope}
 }
 
 // NewContext returns ctx with the extension's DB and limits, as a query
@@ -319,7 +325,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 			return errRollback
 		}
 		return nil
-	}, e.txOpts...)
+	}, e.runOpts...)
 	r.expired()
 	done(resp)
 	if err == nil {

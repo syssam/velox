@@ -68,6 +68,9 @@ type Scoper struct {
 	// Filters are the DB's WithFilter filters, which every entity's row
 	// condition gets before its interceptors', given the op (RowCond).
 	Filters []EntityFilterFn
+	// db is the DB the statement runs on, which FilterDB gives the filters;
+	// nil in a test that has none.
+	db *DB
 	// Reads is set for a statement that reads only (a SELECT that is not
 	// Writable): the policies' Query conditions apply to it, and to every
 	// EXISTS and join in it.
@@ -172,8 +175,11 @@ func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 	var kids []Node
 	if len(sc.Filters) > 0 {
 		name := EntityName(t)
-		for i, f := range sc.Filters {
-			p, err := f(sc.Ctx, name, fop)
+		for i := range sc.Filters {
+			p, skip, err := callFilter(sc.Ctx, sc.db, sc.Filters, i, name, fop)
+			if skip {
+				continue
+			}
 			c, err := sc.filterCond(t, "filter", i, p, err)
 			if err != nil {
 				return Predicate{}, err
@@ -431,7 +437,7 @@ func (sc *Scoper) joinFree(j *EntityInfo) error {
 	if len(sc.Filters) == 0 || slices.Contains(sc.joins, j) {
 		return nil
 	}
-	if err := joinUnfiltered(sc.Ctx, sc.Filters, j); err != nil {
+	if err := joinUnfiltered(sc.Ctx, sc.db, sc.Filters, j); err != nil {
 		return err
 	}
 	sc.joins = append(sc.joins, j)
@@ -443,11 +449,12 @@ func (sc *Scoper) joinFree(j *EntityInfo) error {
 // OpSelect, it returns anything but Allow(), or an error. Has and With
 // read j's rows through the relation's two sides, so a condition on j
 // would make them disagree with a query of j's own.
-func joinUnfiltered(ctx context.Context, filters []EntityFilterFn, j *EntityInfo) error {
+func joinUnfiltered(ctx context.Context, db *DB, filters []EntityFilterFn, j *EntityInfo) error {
 	name := EntityName(j)
-	for i, f := range filters {
-		p, err := f(ctx, name, OpSelect)
+	for i := range filters {
+		p, skip, err := callFilter(ctx, db, filters, i, name, OpSelect)
 		switch {
+		case skip:
 		case err != nil:
 			return fmt.Errorf("velox: %s: filter [%d]: %w", j.Name, i, err)
 		case p.n.Op != OpAllow:
@@ -574,7 +581,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		return nil
 	}
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters, Reads: st.Op == OpSelect && !st.Writable}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters, db: db, Reads: st.Op == OpSelect && !st.Writable}
 	// LimitEach, LoadEach and CountEach join a many-to-many relation's join
 	// entity, which reads it through its two sides as Has does.
 	if st.Each != nil && st.Each.Join != nil {
@@ -764,7 +771,7 @@ func (sc *Scoper) scopeJoins(st *Statement) error {
 // the existing row (DoNothing) changes nothing, so it is exempt.
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, Skip: db.bypass, Filters: db.Cfg.Filters, db: db}
 	pol := InfoPolicy(in)
 	if pol != nil && pol.Insert != nil {
 		sc.PolicyOn() // records a WithoutPolicy that InsertAllowed obeyed

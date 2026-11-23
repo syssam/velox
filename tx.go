@@ -11,7 +11,8 @@ import (
 
 // TxTimeout bounds the transaction to d, retries and commit included, in place
 // of the DB's Tx default and within its MaxTx. An earlier deadline on the
-// context still applies. TxTimeout(d) with d <= 0 is ignored. A nested Tx
+// context still applies. TxTimeout(d) with d <= 0 sets no bound of its own:
+// the DB's Tx default applies, in place of a TxTimeout in WithTxDefaults. A nested Tx
 // refuses it, as it refuses every option: a savepoint runs within the
 // enclosing transaction's deadline.
 func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
@@ -80,3 +81,19 @@ const (
 // WithTxAround adds a transaction hook. The first one given is the
 // outermost. A nil hook panics.
 func WithTxAround(h TxAround) Option { return engine.WithTxAround(h) }
+
+// WithTxDefaults sets options that every Tx on the DB applies before its
+// own, as if each call began with them: every Tx on the DB, its shards and
+// the DBs derived from it (WithoutPolicy, Record), and the transactions
+// velox begins itself for a write that needs one. A call's own options come
+// after, so they override: TxRetrySerializable(0) runs a call once under a
+// default of 3, TxTimeout(d) replaces a default timeout, and TxTimeout(0)
+// lifts it, leaving WithDeadlines' Tx and MaxTx. A nested Tx, a savepoint, applies none: it runs within the outermost
+// transaction, whose retry runs it again with the rest. UseTx applies none
+// either: the transaction is the caller's. Several WithTxDefaults add up, in
+// the order given; TxRetries reads a call's options, not these. A zero
+// TxOption panics.
+//
+//	db, err := velox.Connect("postgres", dsn, velox.WithTxDefaults(
+//		velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second)))
+func WithTxDefaults(opts ...TxOption) Option { return engine.WithTxDefaults(opts) }

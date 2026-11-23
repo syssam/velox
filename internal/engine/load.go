@@ -576,7 +576,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 // a chunk holds one key.
 func fetchThrough(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r *relation, l Link, sp LoadSpec, keys []any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
 	j := l.Join
-	if err := joinUnfiltered(ctx, db.Cfg.Filters, j); err != nil {
+	if err := joinUnfiltered(ctx, db, db.Cfg.Filters, j); err != nil {
 		return nil, nil, &loadError{Owner: owner.Name, Rel: r.Name, Err: err}
 	}
 	_, rows, err := fetch(ctx, db, pin, j, []int{l.JoinOwner, l.JoinTarget}, LoadSpec{}, keys, maxRows, nil)

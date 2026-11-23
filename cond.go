@@ -164,3 +164,13 @@ func HasEdgeWith(name string, ps ...Predicate) Predicate { return engine.HasEdge
 // row. Typed code that wants a condition that matches every row writes
 // And[E]().
 func Allow() Predicate { return engine.NewPredicate(engine.Node{Op: engine.OpAllow}) }
+
+// None is the condition that matches no row: what a policy's Read or Write,
+// an interceptor's Filter or a WithFilter filter returns to hide every row
+// of an entity, as ent's sql.False() does. It renders as 1 = 0 on every
+// dialect, as an Or of nothing does; Not(Allow()) means the same and
+// renders as NOT (1 = 1). A read under it returns no row, and an update or
+// delete changes none and reports 0, as for any row a filter or a policy
+// hides. Typed code that wants a condition that matches no row writes
+// Or[E]().
+func None() Predicate { return engine.NewPredicate(engine.Group(engine.OpOr, nil)) }
