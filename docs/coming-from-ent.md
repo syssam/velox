@@ -265,6 +265,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `hook.If`, `hook.Unless`, `hook.HasOp`, `hook.HasFields`, `hook.HasClearedFields`, `hook.Reject` | `velox.If`, `velox.Unless`, `velox.HasOp`, `velox.HasColumns`, `velox.HasCleared`, `velox.Reject` |
 | `client.Debug()` | the option `velox.WithLog(logger)`; `velox.LogArgs()` logs arguments too |
 | `ent.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular` |
+| `ValidationError.Name`, the schema field's name (`"address_city"`) | `velox.ValidationError.Name`, the same; `Field` is the Go name, which `Error()` prints ([ADR 0144](decisions/0144-validation-error-name.md)) |
 
 `Count` returns an `int64`, where ent's returns an `int`.
 

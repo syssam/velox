@@ -199,6 +199,7 @@ veloxe's own, or differ in a veloxe port:
 | `SkipDefault(user.FieldUpdatedAt)` | `KeepDefaults(U.UpdatedAt)` |
 | `SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))` |
 | the generated package's `IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` |
+| `ValidationError.Name`, the schema field's name, from which an error presenter derives the GraphQL input key | `velox.ValidationError.Name`, the same; `Field` is the Go name ([ADR 0144](decisions/0144-validation-error-name.md)) |
 | `OpCreate` | `OpInsert` |
 | `OpUpdate \| OpUpdateOne` | `OpUpdate` |
 | `OpDelete \| OpDeleteOne` | `OpDelete` |

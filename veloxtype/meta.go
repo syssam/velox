@@ -3,8 +3,12 @@ package veloxtype
 // ColumnDescriptor describes one column of a velox.Descriptor. For generated code.
 // velox.ColumnInfo is its runtime view.
 type ColumnDescriptor struct {
-	Field         string     // the Go field name
-	Name          string     // the column name
+	Field string // the Go field name
+	Name  string // the column name
+	// SchemaName is the schema field's name when it is not the column name:
+	// velox-gen sets it on a field with a StorageKey. "" means Name. It is
+	// the Name of the column's *ValidationError.
+	SchemaName    string
 	Default       any        // a value of the field's type (or of its element type, for a pointer field), not cyclic; nil when none
 	DefaultFunc   func() any // returns a value of the field's type (or of its element type, for a pointer field)
 	UpdateDefault func() any // its result is what every update writes to the column; an insert does not call it

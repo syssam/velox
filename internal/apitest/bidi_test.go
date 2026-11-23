@@ -744,7 +744,7 @@ func TestBidiOne(t *testing.T) {
 		} {
 			// The value of one field is refused: GraphQL maps it to the
 			// input field, as BAD_USER_INPUT.
-			if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Entity != "apitest.bspouse" || ve.Field != "SpouseID" {
+			if ve, ok := errors.AsType[*velox.ValidationError](err); !ok || ve.Entity != "apitest.bspouse" || ve.Field != "SpouseID" || ve.Name != "spouse_id" {
 				t.Errorf("%s: %v, want a ValidationError on SpouseID", name, err)
 			}
 		}

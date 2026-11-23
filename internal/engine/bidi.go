@@ -131,7 +131,7 @@ func checkBidiUpdate(st *Statement, keys []bidiKey, vs []any) (any, error) {
 // errSelfLink is the error of a write that makes a row its own partner: a
 // *ValidationError on the key's field, as the value of one field is refused.
 func errSelfLink(in *EntityInfo, bk bidiKey) error {
-	return &ValidationError{Entity: in.Name, Field: in.Columns[bk.Col].Field, Err: fmt.Errorf("a row cannot be its own %s", bk.Edge)}
+	return &ValidationError{Entity: in.Name, Field: in.Columns[bk.Col].Field, Name: in.Columns[bk.Col].SchemaName, Err: fmt.Errorf("a row cannot be its own %s", bk.Edge)}
 }
 
 // errLinkCount is the error of a bidirectional write whose driver did not

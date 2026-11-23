@@ -406,7 +406,7 @@ A `//go:generate go run generate.go` line in another file of the package
 runs it.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion29`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion30`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -2306,7 +2306,7 @@ The ones you will meet most:
 | `ErrOutsideTx` | a statement on `db` instead of `tx` inside `Tx` |
 | `ErrTimeout` | a deadline passed |
 | `*ConstraintError` | a unique, foreign-key, not-null or check constraint failed |
-| `*ValidationError` | a value failed a field's validator |
+| `*ValidationError` | a value failed a field's validator; `Name` is the schema field's name, `Field` its Go name |
 | `scope.ErrNoScope` | a scoped entity with no scope value in the context |
 
 `velox.DriverCode(err)` gives the database's own code (such as a PostgreSQL

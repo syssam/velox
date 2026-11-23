@@ -508,6 +508,9 @@ func lowerProse(s string) string {
 // columnParts is the fields of f's ColumnDescriptor literal, in order.
 func columnParts(f *OutField) []string {
 	parts := []string{"Field: " + strconv.Quote(f.GoName), "Name: " + strconv.Quote(f.Column)}
+	if f.Name != f.Column {
+		parts = append(parts, "SchemaName: "+strconv.Quote(f.Name))
+	}
 	if f.DefaultCode != "" {
 		parts = append(parts, "Default: "+f.DefaultCode)
 	}

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
 	"reflect"
 	"slices"
@@ -122,7 +123,7 @@ func columnInfo(t reflect.Type, base unsafe.Pointer, ptr any, i int, c ColumnDes
 		// every scan writes through it: anything else is no column.
 		return fail("FieldPtr does not return a pointer into the entity for column %d", i)
 	}
-	ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
+	ci := ColumnInfo{Field: c.Field, Name: c.Name, SchemaName: cmp.Or(c.SchemaName, c.Name), Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 		HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 		Immutable: c.Immutable, Version: c.Version, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, decimal: c.Decimal, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 	ci.val, ci.fast = valType(ft), fastOf(ft)

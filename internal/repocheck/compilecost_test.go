@@ -393,8 +393,11 @@ var genericObjects = []struct {
 	// Term.Equal and Term.Decimal (ADR 0127, 0131) took it to 795500,
 	// about 0.5 KB a method; entityDescHooks measured 880874 and
 	// entityDescMixin 926264, within their bounds.
-	{"entityDescUse", "", entityDescUseSrc, 796160},       // measured 795500
-	{"entityDescHooks", "", entityDescHooksBound, 881152}, // measured 871182
+	{"entityDescUse", "", entityDescUseSrc, 796160}, // measured 795500
+	//
+	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
+	// entityDescHooks to 881170 bytes, in the engine types it reaches.
+	{"entityDescHooks", "", entityDescHooksBound, 882176}, // measured 881170
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own

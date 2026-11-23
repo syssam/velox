@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.ValidationError.Name` is the schema field's name, such as
+  `"address_city"`, as ent's `ValidationError.Name` is; for a Required
+  edge, the name of its key field. A field with a `StorageKey` gets
+  `ColumnDescriptor.SchemaName`, and `ColumnInfo.SchemaName` holds the
+  name for every column. `Error()` is unchanged (ADR 0144).
+  Regenerate: `velox.GeneratedCodeIsVersion30` replaces Version29.
 - velox-gen: the generated package names each entity in a constant,
   `TypeUser = "User"`, as ent's does. The value is the entity a
   `velox.Filter` receives and `velox.HasColumn` takes. A `TypeX` that

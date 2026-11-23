@@ -70,6 +70,7 @@ func (in *EntityInfo) Column(name string) (int, bool) {
 type ColumnInfo struct {
 	Field       string // the Go field name
 	Name        string // the column name
+	SchemaName  string // the schema field's name: ColumnDescriptor.SchemaName, or Name when that is ""
 	Type        any    // the field's Go type, a reflect.Type: read it with GoType
 	Nullable    bool   // the column holds NULL: the field is a pointer, or its ColumnDescriptor says Nullable
 	Default     any

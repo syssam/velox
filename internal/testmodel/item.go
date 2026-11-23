@@ -72,7 +72,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 		Columns: []velox.ColumnDescriptor{
 			{Field: "ID", Name: "id"},
 			{Field: "InvoiceID", Name: "invoice_id"},
-			{Field: "SKU", Name: "sku"},
+			{Field: "SKU", Name: "sku", SchemaName: "SKU"},
 			{Field: "Qty", Name: "qty"},
 		},
 		PrimaryKey: []int{itemColID},

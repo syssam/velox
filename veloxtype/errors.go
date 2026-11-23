@@ -129,6 +129,7 @@ func (e *PolicyError) Is(target error) bool { return target == ErrDenied }
 type ValidationError struct {
 	Entity string // the Go type, e.g. "gen.User"
 	Field  string // the Go field name
+	Name   string // the schema field's name, e.g. "address_city"
 	Err    error  // the validator's error
 }
 

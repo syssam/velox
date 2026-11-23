@@ -4,7 +4,7 @@ package testbind
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion29
+const _ = velox.GeneratedCodeIsVersion30
 
 // The names of the entities, which a velox.Filter receives as entity.
 const (

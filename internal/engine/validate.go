@@ -103,7 +103,7 @@ func ValidateSetters(in *EntityInfo, set []Assignment) error {
 func missingEdge(in *EntityInfo, col int) error {
 	c := &in.Columns[col]
 	typ := in.Name[strings.LastIndexByte(in.Name, '.')+1:]
-	return &ValidationError{Entity: in.Name, Field: c.Field, Err: fmt.Errorf("missing required edge %q", typ+"."+c.RequiredEdge)}
+	return &ValidationError{Entity: in.Name, Field: c.Field, Name: c.SchemaName, Err: fmt.Errorf("missing required edge %q", typ+"."+c.RequiredEdge)}
 }
 
 // isNil reports whether v is nil or a nil pointer.
@@ -128,7 +128,7 @@ func (in *EntityInfo) checkValue(col int, v any) error {
 		v = rv.Elem().Interface()
 	}
 	if err := in.check(col, v); err != nil {
-		return &ValidationError{Entity: in.Name, Field: in.Columns[col].Field, Err: err}
+		return &ValidationError{Entity: in.Name, Field: in.Columns[col].Field, Name: in.Columns[col].SchemaName, Err: err}
 	}
 	return nil
 }
