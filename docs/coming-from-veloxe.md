@@ -183,7 +183,7 @@ veloxe's own, or differ in a veloxe port:
 | a date bucket in a `Modify`: `TO_CHAR(? AT TIME ZONE 'z', 'YYYY-MM')`, `date_trunc` | `velox.DateTrunc[T](velox.UnitMonth, col, velox.InZone(z))`, the bucket's first instant on every dialect; `FiscalYear(m)` for fiscal years and quarters; a date part (`EXTRACT`) stays a `Calc` |
 | `GROUP BY ROLLUP(…)`, `CUBE(…)` in a `Modify` | `GroupBy(velox.Rollup[T](keys...))`, `velox.Cube`; MySQL `WITH ROLLUP` as the only key, SQLite refuses |
 | field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
-| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
+| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
 | `client.User.Get(ctx, id)`, `UpdateOneID(id)…Save(ctx)`, `DeleteOneID(id).Exec(ctx)` | `Where(U.ID.EQ(id))` and `One(ctx)` on `db.Query`, `db.Update` and `db.Delete`, or `db.Save(&u, cols...)` for an entity in hand ([guide](guide.md#one-row-by-key), [ADR 0121](decisions/0122-one-row-by-key.md)) |
@@ -198,7 +198,7 @@ veloxe's own, or differ in a veloxe port:
 | `tx.OnCommit(func(next velox.Committer) velox.Committer {…})` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed |
 | `IDs(ctx)` | `velox.IDs[int64](ctx, q.AllowUnbounded())`, or with a `Limit` |
 | `Each(ctx, fn)` | `for x, err := range q.Iter(ctx)` |
-| a filter's lookup on the client inside `WithTx` | a read through `velox.FilterDB(ctx)`, the statement's DB ([guide](guide.md#hooks-and-filters-for-every-entity), [ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)) |
+| a filter's lookup on the client inside `WithTx` | a read through the filter's `db` parameter, the statement's DB ([guide](guide.md#hooks-and-filters-for-every-entity), [ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)) |
 | a client read inside `WithTx` that must not join it | a read on `db` under `velox.WithoutTx(ctx)`; under fn's `ctx` it fails with `ErrOutsideTx` |
 | a retry and a timeout in every `WithTx` | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
 | `Select(f).Strings(ctx)`, `Ints(ctx)` | `velox.Values(ctx, q, T.F.Key())` |
@@ -247,7 +247,7 @@ veloxe ran it outside the transaction. Run it on `tx`, or on `db` under
 `velox.WithoutTx(ctx)` when it must not join the transaction; on SQLite's
 pool of one connection that fails too, rather than wait for the
 transaction. A row-scope filter that looks up teams or an organization
-tree reads through `velox.FilterDB(ctx)`, which is `tx` inside the
+tree reads through the filter's `db` parameter, which is `tx` inside the
 transaction. A lookup on `db` that swallows its error narrows the
 statement inside a transaction and not outside.
 

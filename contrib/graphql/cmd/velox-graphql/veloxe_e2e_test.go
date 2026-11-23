@@ -325,7 +325,7 @@ func TestVeloxeNames(t *testing.T) {
 	// A WithFilter filter hides bob, as soft delete would. A foreign key's
 	// predicates are the column's, as veloxe's were (ADR 0108): bob's orders
 	// still match customerId 2 and customerIdIn [2].
-	hideBob := func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	hideBob := func(_ context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "Customer" || op != velox.OpSelect {
 			return velox.Allow(), nil
 		}

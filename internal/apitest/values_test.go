@@ -17,7 +17,7 @@ import (
 // WithFilter filter, and scan it into the handle's value type.
 func TestValuesUnderPolicyAndFilter(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{"a"}, {"b"}}}
-	db := openPolicied(velox.Postgres, e, velox.WithFilter(func(_ context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
+	db := openPolicied(velox.Postgres, e, velox.WithFilter(func(_ context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
 		if strings.HasSuffix(entity, "Ticket") {
 			return velox.FieldEQ("done", false), nil
 		}

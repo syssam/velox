@@ -10,7 +10,7 @@ The port of nextapp's row scoping onto velox
 `access/filter_in_tx_test.go`) makes a `WithFilter` filter that reads the
 database: a sales order's scope is the caller's organization subtree and
 teammates, which the filter looks up before it returns `FieldIn`. A
-`Filter` is given `(ctx, entity, op)` and no DB. The filter read on the DB
+`Filter` was given `(ctx, entity, op)` and no DB. The filter read on the DB
 it captured at `Connect`. Inside `db.Tx` the statement's context carries the
 transaction's mark, so that read failed with `ErrOutsideTx`; under
 `WithoutTx(ctx)` it needed a second connection, which SQLite's pool of one
@@ -19,17 +19,27 @@ narrow, so a statement saw 3 orders outside a transaction and 2 inside.
 
 ## Decision
 
-- `velox.FilterDB(ctx context.Context) *DB` returns, to a filter given ctx,
-  the DB the statement runs on: the transaction's inside `Tx` (a
+- `Filter` takes the DB as a parameter:
+  `func(ctx context.Context, db *DB, entity string, op Op) (Predicate, error)`.
+  `db` is the DB the statement runs on: the transaction's inside `Tx` (a
   savepoint's inside a nested one), and the `WithoutPolicy` or `Record` DB
-  the statement was made on. It is nil under a context no filter was given.
-  The `Filter` type is unchanged, so no filter needs rewriting.
+  the statement was made on. It is never nil. A filter that does not read
+  names it `_`.
+- Why a parameter, not an accessor on the context (`FilterDB(ctx)`, the
+  first form of this record): a hook reaches its DB through `m.DB()` on
+  its `Mutation`, so a filter reaches its DB through the argument it is
+  given, one rule for both. A context accessor returns nil under a context
+  no filter was given, so every caller checks or trusts; a parameter
+  cannot be nil, and the compiler checks that a filter that reads has the
+  DB in scope. The cost is that `Filter`'s type changed, which is free
+  before 1.0.
 - The engine calls each filter with its own context type, `filterCtx`: the
-  statement's context, the DB, the filter (its place in the shared config)
-  and the frame of the filter whose read made the statement. One
-  allocation per call, made only on a DB with filters; a filter runs at
-  most once per statement for each entity and op (0098), so a DB without
-  filters pays nothing.
+  statement's context, the filter (its place in the shared config) and the
+  frame of the filter whose read made the statement; the DB is passed
+  beside it. One allocation per call, made only on a DB with filters; a
+  filter runs at most once per statement for each entity and op (0098), so
+  a DB without filters pays nothing. The root wraps the filter once, at
+  `WithFilter`, to hand it the root `*DB`.
 - Recursion: a statement made under a call of filter f, directly or
   through another filter's reads, is not narrowed by f. The scope walks the
   frames of the statement's context and skips each filter it finds there,
@@ -64,15 +74,16 @@ narrow, so a statement saw 3 orders outside a transaction and 2 inside.
 A row scope that reads gets the same condition inside a transaction and
 outside. A filter's reads are statements like any other, sent before the
 statement they were made for. `Interceptor` and `Policy` functions
-get no `FilterDB`; their conditions are the schema's, and a read there
-would need the same rule.
+get no DB; their conditions are the schema's, and a read there would need
+the same rule.
 
 ## Evidence
 
 - `internal/apitest/filterdb_test.go`: `TestFilterReadsThroughTheStatementsDB`
   (the bed's shape on SQLite's pool of one: one note inside and outside a
-  Tx through `FilterDB`; a captured DB gives `ErrOutsideTx`, and
+  Tx through the `db` parameter; a captured DB gives `ErrOutsideTx`, and
   `WithoutTx` is refused, not left waiting, which hung before
-  `unfiltered`), `TestFilterDBIsTheStatementsDB`,
+  `unfiltered`), `TestFilterGetsTheStatementsDB`, `TestGuideFilterExample`
+  (`internal/apitest/filter_guide_test.go`, the guide's example),
   `TestFilterReadsWithoutItself` (two filters reading each other's entity,
   through a many-to-many `Has`).

@@ -64,7 +64,7 @@ type Option = engine.Option
 func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)) }
 
 // Filter is a row filter for every entity, which WithFilter adds. Given
-// the statement's context, an entity's name (as Mutation.Entity gives it,
+// the statement's context, the DB the statement runs on, an entity's name (as Mutation.Entity gives it,
 // "Invoice") and the op the entity is read for, it returns that entity's
 // row condition, by column name as an Interceptor's Filter does: FieldEQ
 // and the like. It returns Allow() for an entity it does not restrict.
@@ -86,11 +86,39 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // fail when a filter restricts it, as they read its rows through the
 // relation's two sides.
 //
-// A filter that reads the database to make its condition, such as a team's
-// members or an organization's subtree, reads through FilterDB(ctx), the
-// statement's own DB, with the ctx it is given: inside Tx that is the
-// transaction, where db would fail with ErrOutsideTx.
-type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
+// db is the DB the statement runs on, never nil: inside Tx it is the
+// transaction's, as Mutation.DB is for a hook. A filter that reads the
+// database to make its condition, such as a team's members or an
+// organization's subtree, reads through db and the ctx it is given, so
+// that a statement gets the same condition inside a transaction and
+// outside, where a DB captured at Connect fails with ErrOutsideTx:
+//
+//	func(ctx context.Context, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
+//		if entity != "Order" || op != velox.OpSelect {
+//			return velox.Allow(), nil
+//		}
+//		n, err := db.Query[veloxgen.Grant]().Where(veloxgen.Grants.UserID.EQ(userID(ctx))).Count(ctx)
+//		if err != nil {
+//			return velox.Predicate{}, err
+//		}
+//		if n == 0 {
+//			return velox.None(), nil
+//		}
+//		return velox.Allow(), nil
+//	}
+//
+// The filter's reads, under ctx or a context derived from it, are
+// statements like any other: the DB's other filters, the entities'
+// interceptors and their policies apply. The filter itself does not: a
+// statement made under a call of filter f, directly or through another
+// filter's reads, is not narrowed by f, so a filter that reads its own
+// entity does not call itself without end. velox keeps nothing between
+// statements: a filter that reads runs its reads once per statement for
+// each entity and op it is asked about. One that should read once per
+// request keeps its answer in the request's context. A read on SQLite's
+// pool of one connection outside a transaction runs before the statement
+// takes the connection, so it does not wait for it.
+type Filter func(ctx context.Context, db *DB, entity string, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
 // Tx and shard it opens, as ent's client.Intercept adds an interceptor for
@@ -100,7 +128,7 @@ type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)
 // WithoutPolicy does not lift it: f offers its own way to be skipped, such
 // as a context value it reads.
 //
-//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 //		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
 //			return velox.Allow(), nil
 //		}
@@ -127,47 +155,9 @@ func WithFilter(f Filter) Option {
 	if f == nil {
 		panic("velox: WithFilter(nil)")
 	}
-	return engine.WithFilter(engine.EntityFilterFn(f))
-}
-
-// FilterDB returns, to a Filter given ctx, the DB of the statement it is
-// called for: the DB the statement runs on, which inside Tx is the
-// transaction. A filter that reads the database reads through it, so that a
-// statement gets the same condition inside a transaction and outside:
-//
-//	velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
-//		if entity != "Order" || op != velox.OpSelect {
-//			return velox.Allow(), nil
-//		}
-//		n, err := velox.FilterDB(ctx).Query[veloxgen.Grant]().Where(veloxgen.Grants.UserID.EQ(userID(ctx))).Count(ctx)
-//		if err != nil {
-//			return velox.Predicate{}, err
-//		}
-//		if n == 0 {
-//			return velox.None(), nil
-//		}
-//		return velox.Allow(), nil
-//	})
-//
-// The filter's reads, under ctx or a context derived from it, are
-// statements like any other: the DB's other filters, the entities'
-// interceptors and their policies apply. The filter itself does not: a
-// statement made under a call of filter f, directly or through another
-// filter's reads, is not narrowed by f, so a filter that reads its own
-// entity does not call itself without end. velox keeps nothing between
-// statements: a filter that reads runs its reads once per statement for
-// each entity and op it is asked about. One that should read once per
-// request keeps its answer in the request's context.
-//
-// FilterDB returns nil under a context no filter was given. A read on
-// SQLite's pool of one connection outside a transaction runs before the
-// statement takes the connection, so it does not wait for it.
-func FilterDB(ctx context.Context) *DB {
-	e := engine.FilterDB(ctx)
-	if e == nil {
-		return nil
-	}
-	return (*DB)(unsafe.Pointer(e)) // DB is its engine.DB (see DB)
+	return engine.WithFilter(func(ctx context.Context, db *engine.DB, entity string, op Op) (Predicate, error) {
+		return f(ctx, (*DB)(unsafe.Pointer(db)), entity, op) // DB is its engine.DB (see DB)
+	})
 }
 
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.

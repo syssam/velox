@@ -3,7 +3,7 @@
 Status: accepted, 2026-11-21. Amended 2026-11-22: a filter that restricts
 a join entity fails the statements that read through it. Amended by
 [0132](0132-filter-reads-through-the-statements-db.md): a filter reads
-through `FilterDB(ctx)`, and is not applied to its own reads.
+through the `db` parameter it is given, and is not applied to its own reads.
 
 ## Context
 
@@ -31,7 +31,7 @@ asked for both at run time.
   (`"Invoice"`), as ent's `Mutation.Type` gives. Mutation had no name of
   its own; `untyped.MutationTable` gives a Table, not a name.
 - `velox.WithFilter(f Filter) Option`, with
-  `type Filter func(ctx context.Context, entity string, op Op) (Predicate, error)`
+  `type Filter func(ctx context.Context, db *DB, entity string, op Op) (Predicate, error)`
   and the same entity name. The engine keeps the filters in the DB's
   config, shared by its Tx and shards, and the scope calls them in
   `RowCond`, where it calls an entity's interceptors, before them. Every

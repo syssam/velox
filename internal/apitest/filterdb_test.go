@@ -17,15 +17,15 @@ type filterOwnerKey struct{}
 
 // ownerScope is the shape of a row scope that reads to make its condition,
 // as a team lookup does: the notes of the owner named in the context, whose
-// key the filter reads through read's DB. The fixture's DB is SQLite with a
-// pool of one connection.
-func ownerScope(read func(ctx context.Context) *velox.DB, errs *[]error) velox.Filter {
-	return func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+// key the filter reads through the DB read returns for the statement's.
+// The fixture's DB is SQLite with a pool of one connection.
+func ownerScope(read func(stmt *velox.DB) *velox.DB, errs *[]error) velox.Filter {
+	return func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		name, _ := ctx.Value(filterOwnerKey{}).(string)
 		if entity != "INote" || op != velox.OpSelect || name == "" {
 			return velox.Allow(), nil
 		}
-		owners, err := read(ctx).Query[fixture.IOwner]().Where(fixture.IOwners.Name.EQ(name)).Limit(10).All(ctx)
+		owners, err := read(stmt).Query[fixture.IOwner]().Where(fixture.IOwners.Name.EQ(name)).Limit(10).All(ctx)
 		if err != nil {
 			*errs = append(*errs, err)
 			return velox.None(), nil // a lookup that fails narrows, as nextapp's do
@@ -39,14 +39,14 @@ func ownerScope(read func(ctx context.Context) *velox.DB, errs *[]error) velox.F
 }
 
 // TestFilterReadsThroughTheStatementsDB: a filter that reads through
-// FilterDB gives a statement the same rows inside a Tx and outside it, on
-// SQLite's pool of one connection. The same filter reading on the DB it
+// the filter's db parameter gives a statement the same rows inside a Tx and
+// outside it, on SQLite's pool of one connection. The same filter reading on the DB it
 // captured fails inside the Tx with ErrOutsideTx, and under WithoutTx it
 // would wait for the connection the Tx holds, which is refused: the
 // statement then sees fewer rows inside the Tx than outside.
 func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 	var errs []error
-	db := interceptorDB(t, velox.WithFilter(ownerScope(velox.FilterDB, &errs)))
+	db := interceptorDB(t, velox.WithFilter(ownerScope(func(stmt *velox.DB) *velox.DB { return stmt }, &errs)))
 	o2 := context.WithValue(context.Background(), filterOwnerKey{}, "o2")
 	count := func(ctx context.Context, db *velox.DB) int64 {
 		t.Helper()
@@ -65,17 +65,17 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	if outside != 1 || inside != 1 || len(errs) != 0 {
-		t.Errorf("FilterDB: %d notes outside a Tx, %d inside, want 1 and 1; lookups failed: %v", outside, inside, errs)
+		t.Errorf("db parameter: %d notes outside a Tx, %d inside, want 1 and 1; lookups failed: %v", outside, inside, errs)
 	}
 
 	for _, withoutTx := range []bool{false, true} {
 		var errs []error
 		var db *velox.DB
-		f := ownerScope(func(context.Context) *velox.DB { return db }, &errs)
+		f := ownerScope(func(*velox.DB) *velox.DB { return db }, &errs)
 		if withoutTx {
 			inner := f
-			f = func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
-				return inner(velox.WithoutTx(ctx), entity, op)
+			f = func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
+				return inner(velox.WithoutTx(ctx), stmt, entity, op)
 			}
 		}
 		db = interceptorDB(t, velox.WithFilter(f))
@@ -93,24 +93,20 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 	}
 }
 
-// TestFilterDBIsTheStatementsDB: FilterDB gives the filter the DB the
-// statement runs on, the transaction's inside Tx, and nil under a context no
-// filter was given.
-func TestFilterDBIsTheStatementsDB(t *testing.T) {
+// TestFilterGetsTheStatementsDB: a filter is given the DB the statement
+// runs on, the transaction's inside Tx, and never nil.
+func TestFilterGetsTheStatementsDB(t *testing.T) {
 	var got []*velox.DB
-	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, entity string, _ velox.Op) (velox.Predicate, error) {
+	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, stmt *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
 		if entity == "INote" {
-			got = append(got, velox.FilterDB(ctx))
-			if s := fmt.Sprint(ctx); !strings.HasSuffix(s, ".WithFilterDB") {
+			got = append(got, stmt)
+			if s := fmt.Sprint(ctx); !strings.HasSuffix(s, ".WithFilter") {
 				t.Errorf("the filter's context is named %q", s)
 			}
 		}
 		return velox.Allow(), nil
 	}))
 	ctx := context.Background()
-	if velox.FilterDB(ctx) != nil {
-		t.Error("FilterDB outside a filter is not nil")
-	}
 	if _, err := db.Query[fixture.INote]().Count(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +119,7 @@ func TestFilterDBIsTheStatementsDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || got[0] != db || got[1] != txDB {
-		t.Errorf("FilterDB gave %v; want the DB %p, then the Tx %p", got, db, txDB)
+		t.Errorf("the filter was given %v; want the DB %p, then the Tx %p", got, db, txDB)
 	}
 }
 
@@ -145,11 +141,11 @@ func TestFilterReadsWithoutItself(t *testing.T) {
 	calls := map[string]int{}
 	var seen []int64
 	var tagged []bool
-	newest := func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	newest := func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "INote" {
 			return velox.Allow(), nil
 		}
-		ns, err := velox.FilterDB(ctx).Query[fixture.INote]().OrderBy(fixture.INotes.ID.Desc()).Limit(1).All(ctx)
+		ns, err := stmt.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Desc()).Limit(1).All(ctx)
 		if err != nil {
 			return velox.Predicate{}, err
 		}
@@ -162,11 +158,11 @@ func TestFilterReadsWithoutItself(t *testing.T) {
 		seen = append(seen, ns[0].ID)
 		return velox.FieldEQ("id", ns[0].ID), nil
 	}
-	noC := func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	noC := func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "INote" {
 			return velox.Allow(), nil
 		}
-		ok, err := velox.FilterDB(ctx).Query[fixture.IOwner]().Where(fixture.IOwners.ID.EQ(1), fixture.IOwners.Tagged.Has()).Exists(ctx)
+		ok, err := stmt.Query[fixture.IOwner]().Where(fixture.IOwners.ID.EQ(1), fixture.IOwners.Tagged.Has()).Exists(ctx)
 		if err != nil {
 			return velox.Predicate{}, err
 		}

@@ -68,7 +68,7 @@ type Scoper struct {
 	// Filters are the DB's WithFilter filters, which every entity's row
 	// condition gets before its interceptors', given the op (RowCond).
 	Filters []EntityFilterFn
-	// db is the DB the statement runs on, which FilterDB gives the filters;
+	// db is the DB the statement runs on, which the filters are given;
 	// nil in a test that has none.
 	db *DB
 	// Reads is set for a statement that reads only (a SELECT that is not

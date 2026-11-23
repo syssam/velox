@@ -28,9 +28,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   its `Sum()` and `Avg()` are rounded to 15 significant digits as a
   decimal column's are, so `Calc("? * ?", X.Qty, X.Price).Decimal().Sum()`
   is exact there (ADR 0131).
-- `velox.FilterDB(ctx)` gives a `WithFilter` filter the DB its statement
-  runs on, the transaction's inside `Tx`, so a filter that reads gets the
-  same answer inside a transaction and outside. A filter is not applied to
+- A `WithFilter` filter is given the DB its statement runs on, as its
+  second parameter, `func(ctx, db *velox.DB, entity string, op velox.Op)`,
+  the transaction's inside `Tx`, so a filter that reads gets the same
+  answer inside a transaction and outside. A filter is not applied to
   its own reads, which ends the recursion
   ([ADR 0132](docs/decisions/0132-filter-reads-through-the-statements-db.md)).
 - `velox.WithTxDefaults(opts...)` gives every outermost `Tx` on the DB

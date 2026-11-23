@@ -15,7 +15,7 @@ import (
 // applies to a soft delete, which reaches it as OpDelete, not OpUpdate.
 func TestFilterSeesSoftDeleteAsDelete(t *testing.T) {
 	var ops []velox.Op
-	db, raw, _ := open(t, velox.WithFilter(func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	db, raw, _ := open(t, velox.WithFilter(func(_ context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "SDoc" {
 			return velox.Allow(), nil
 		}
@@ -49,7 +49,7 @@ func TestFilterSeesSoftDeleteAsDelete(t *testing.T) {
 // TestRestoreUnderReadsOnlyFilter: a filter that narrows reads only does
 // not stop a soft delete, nor the restore, an update, that follows it.
 func TestRestoreUnderReadsOnlyFilter(t *testing.T) {
-	db, raw, _ := open(t, velox.WithFilter(func(_ context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	db, raw, _ := open(t, velox.WithFilter(func(_ context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		if entity != "SDoc" || op != velox.OpSelect {
 			return velox.Allow(), nil
 		}

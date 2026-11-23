@@ -1606,7 +1606,8 @@ refund := velox.On(func(next velox.Mutator) velox.Mutator {
 ```
 
 `velox.WithFilter(f)` adds a row filter for every entity. velox calls it
-with the statement's context, the entity's name and an op, at most once per
+with the statement's context, the DB it runs on, the entity's name and an
+op, at most once per
 statement for each entity and op, except where a relation loops back
 ([ADR 0091](decisions/0091-policy-cycles-and-text-keys.md)). The op is the
 statement's own for its own entity (`OpSelect`, `OpUpdate`, `OpDelete`, or
@@ -1620,7 +1621,7 @@ This soft-delete filter narrows reads only:
 
 ```go
 db, err := velox.Connect("postgres", dsn, velox.WithFilter(
-	func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	func(ctx context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
 			return velox.Allow(), nil
 		}
@@ -1642,21 +1643,21 @@ not a denial. `velox.None()` matches no row, for a caller who may see
 none. Several filters AND, in the order given.
 
 A filter that reads the database to make its condition, such as a team's
-members or an organization's subtree, reads through `velox.FilterDB(ctx)`,
-the DB the statement runs on, with the `ctx` it was given. Inside `Tx`
-that is the transaction, so the statement gets the same condition inside a
-transaction as outside; a read on the outer `db` would fail there with
-`ErrOutsideTx`. The filter's reads are not narrowed by the filter itself,
+members or an organization's subtree, reads through the `db` parameter,
+the DB the statement runs on, with the `ctx` it was given. It is never nil,
+as `m.DB()` is not for a hook. Inside `Tx` it is the transaction, so the
+statement gets the same condition inside a transaction as outside; a read
+on a DB captured at `Connect` would fail there with `ErrOutsideTx`. The filter's reads are not narrowed by the filter itself,
 so it does not call itself without end; the other filters, interceptors
 and policies apply to them
 ([ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)).
 
 ```go
-velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+velox.WithFilter(func(ctx context.Context, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
 	if entity != "Order" || op != velox.OpSelect {
 		return velox.Allow(), nil
 	}
-	teams, err := velox.FilterDB(ctx).Query[veloxgen.Member]().
+	teams, err := db.Query[veloxgen.Member]().
 		Where(veloxgen.Members.UserID.EQ(userID(ctx))).Limit(100).All(ctx)
 	if err != nil {
 		return velox.Predicate{}, err

@@ -304,7 +304,7 @@ lift it. A hook that must use the typed API of `veloxgen` (another entity, say)
 is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
 ent's `client.Use(hooks...)` is `velox.WithHooksAll(hooks...)`, and
 `m.Type()` is `m.Entity()`. ent's `client.Intercept(...)` that adds a
-condition is `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate,
+condition is `velox.WithFilter(func(ctx, db *velox.DB, entity string, op velox.Op) (velox.Predicate,
 error))`, a row filter for every entity with an interceptor's reach
 (decision 0098). ent's interceptor wraps queries only; a filter that
 returns `velox.Allow()` when `op != velox.OpSelect` does the same.
