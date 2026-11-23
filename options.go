@@ -64,9 +64,9 @@ type Option = engine.Option
 func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)) }
 
 // Filter is a row filter for every entity, which WithFilter adds. Given
-// the statement's context, the DB the statement runs on, an entity's name (as Mutation.Entity gives it,
-// "Invoice") and the op the entity is read for, it returns that entity's
-// row condition, by column name as an Interceptor's Filter does: FieldEQ
+// the statement's context, the DB the statement runs on, the entity (its
+// Name, as Mutation.Entity gives it, "Invoice", and its HasColumn) and the
+// op the entity is read for, it returns that entity's row condition, by column name as an Interceptor's Filter does: FieldEQ
 // and the like. It returns Allow() for an entity it does not restrict.
 // Its zero Predicate fails the statement, and so does an error, which is
 // not a denial.
@@ -93,8 +93,8 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // that a statement gets the same condition inside a transaction and
 // outside, where a DB captured at Connect fails with ErrOutsideTx:
 //
-//	func(ctx context.Context, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-//		if entity != "Order" || op != velox.OpSelect {
+//	func(ctx context.Context, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+//		if e.Name() != veloxgen.TypeOrder || op != velox.OpSelect {
 //			return velox.Allow(), nil
 //		}
 //		n, err := db.Query[veloxgen.Grant]().Where(veloxgen.Grants.UserID.EQ(userID(ctx))).Count(ctx)
@@ -118,7 +118,23 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // request keeps its answer in the request's context. A read on SQLite's
 // pool of one connection outside a transaction runs before the statement
 // takes the connection, so it does not wait for it.
-type Filter func(ctx context.Context, db *DB, entity string, op Op) (Predicate, error)
+type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
+
+// FilterEntity is the entity a Filter is called for. Name is its name in
+// the schema, the generated TypeX constant's value. HasColumn reports
+// whether it has a column of the given name, as FieldEQ names one, so a
+// filter can narrow every entity having some column, such as deleted_at,
+// without a list of them:
+//
+//	velox.WithFilter(func(ctx context.Context, _ *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+//		if !e.HasColumn("deleted_at") {
+//			return velox.Allow(), nil
+//		}
+//		return velox.FieldIsNull("deleted_at"), nil
+//	})
+//
+// Both read the entity's own metadata: nothing global, no lock.
+type FilterEntity = engine.FilterEntity
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
 // Tx and shard it opens, as ent's client.Intercept adds an interceptor for
@@ -128,8 +144,8 @@ type Filter func(ctx context.Context, db *DB, entity string, op Op) (Predicate, 
 // WithoutPolicy does not lift it: f offers its own way to be skipped, such
 // as a context value it reads.
 //
-//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-//		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
+//	db, err := velox.Connect("postgres", dsn, velox.WithFilter(func(ctx context.Context, _ *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+//		if op != velox.OpSelect || !e.HasColumn("deleted_at") || includeDeleted(ctx) {
 //			return velox.Allow(), nil
 //		}
 //		return velox.FieldIsNull("deleted_at"), nil
@@ -155,7 +171,7 @@ func WithFilter(f Filter) Option {
 	if f == nil {
 		panic("velox: WithFilter(nil)")
 	}
-	return engine.WithFilter(func(ctx context.Context, db *engine.DB, entity string, op Op) (Predicate, error) {
+	return engine.WithFilter(func(ctx context.Context, db *engine.DB, entity FilterEntity, op Op) (Predicate, error) {
 		return f(ctx, (*DB)(unsafe.Pointer(db)), entity, op) // DB is its engine.DB (see DB)
 	})
 }

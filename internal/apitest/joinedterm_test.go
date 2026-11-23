@@ -46,8 +46,8 @@ func TestJoinedTermSQL(t *testing.T) {
 		}
 	}
 	// A Calc and a DateTrunc of the parent, and the parent's Read filter in ON.
-	db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithFilter(func(_ context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-		if entity == "Invoice" {
+	db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithFilter(func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+		if fe.Name() == "Invoice" {
 			return velox.FieldEQ("org_id", 7), nil
 		}
 		return velox.Allow(), nil

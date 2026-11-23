@@ -171,10 +171,32 @@ func WithAllHooks(hs []HookFn) Option {
 }
 
 // EntityFilterFn is a filter WithFilter adds, as the engine runs it: given
-// the statement's context, the DB the statement runs on (never nil), an
-// entity's name (EntityName) and the op it is read for (RowCond's fop), it
-// returns the entity's row condition.
-type EntityFilterFn func(ctx context.Context, db *DB, entity string, op Op) (Predicate, error)
+// the statement's context, the DB the statement runs on (never nil), the
+// entity and the op it is read for (RowCond's fop), it returns the entity's
+// row condition.
+type EntityFilterFn func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
+
+// FilterEntity is the entity a WithFilter filter is called for. It reads
+// the entity's own metadata: no registry, no lock.
+type FilterEntity struct{ in *EntityInfo }
+
+// Name is the entity's name, as EntityName gives it: "Invoice".
+func (e FilterEntity) Name() string {
+	if e.in == nil {
+		return ""
+	}
+	return EntityName(e.in)
+}
+
+// HasColumn reports whether the entity has a column of the given name, as a
+// condition by name, such as FieldEQ, finds it.
+func (e FilterEntity) HasColumn(column string) bool {
+	if e.in == nil {
+		return false
+	}
+	_, ok := ColumnNamed(e.in, column)
+	return ok
+}
 
 // WithFilter adds f to the row filters of every entity, for every DB the
 // option configures and every Tx and shard it opens. The scope calls it

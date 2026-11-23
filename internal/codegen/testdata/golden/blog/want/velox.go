@@ -12,7 +12,7 @@ import (
 
 const _ = velox.GeneratedCodeIsVersion30
 
-// The names of the entities, which a velox.Filter receives as entity.
+// The names of the entities, as a velox.Filter's FilterEntity.Name gives them.
 const (
 	TypeCategory   = "Category"
 	TypeGroup      = "Group"

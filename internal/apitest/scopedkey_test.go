@@ -22,8 +22,8 @@ func hideIOwner(ctx context.Context) context.Context {
 
 // hideIOwnerFilter hides IOwner 1 from reads under hideIOwner's context, and
 // restricts nothing else.
-func hideIOwnerFilter(ctx context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-	if entity != "IOwner" || op != velox.OpSelect || ctx.Value(hideIOwnerKey{}) == nil {
+func hideIOwnerFilter(ctx context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+	if fe.Name() != "IOwner" || op != velox.OpSelect || ctx.Value(hideIOwnerKey{}) == nil {
 		return velox.Allow(), nil
 	}
 	return velox.FieldNEQ("id", 1), nil

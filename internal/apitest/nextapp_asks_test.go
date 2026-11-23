@@ -91,15 +91,17 @@ func TestIsZero(t *testing.T) {
 	}
 }
 
-// TestHasColumn: HasColumn finds a column of an entity by the names a Filter
-// is given, once the entity has been used, so a filter narrows the entities
-// that have a column without a list of them.
-func TestHasColumn(t *testing.T) {
+// TestFilterEntityHasColumn: a Filter's FilterEntity answers HasColumn
+// from the entity's own metadata, so a filter narrows the entities that
+// have a column without a list of them. Two packages' entities of one name
+// are told apart: testmodel's Invoice has paid, this package's does not.
+// The process-wide HasColumn it replaces answered by name, true for both.
+func TestFilterEntityHasColumn(t *testing.T) {
 	e := &fakeconn.Exec{}
 	var asked []string
-	db := openFake(velox.Postgres, e, velox.WithFilter(func(_ context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-		asked = append(asked, entity)
-		if !velox.HasColumn(entity, "paid") {
+	db := openFake(velox.Postgres, e, velox.WithFilter(func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+		asked = append(asked, fe.Name())
+		if !fe.HasColumn("paid") {
 			return velox.Allow(), nil
 		}
 		return velox.FieldEQ("paid", false), nil
@@ -112,19 +114,37 @@ func TestHasColumn(t *testing.T) {
 	if err != nil || strings.Contains(s, "paid") {
 		t.Errorf("Item: %s, %v; want no condition", s, err)
 	}
+	s, _, err = db.Query[Invoice]().Limit(1).SQL(ctx)
+	if err != nil || strings.Contains(s, "paid") {
+		t.Errorf("apitest's Invoice: %s, %v; want no condition", s, err)
+	}
 	if !slices.Contains(asked, "Invoice") || !slices.Contains(asked, "Item") {
 		t.Errorf("filter asked about %q", asked)
 	}
-	for _, c := range []struct {
-		entity, column string
-		want           bool
-	}{
-		{"Invoice", "paid", true}, {"Invoice", "nope", false}, {"Nope", "id", false}, {"Item", "paid", false}, {"Item", "qty", true},
-	} {
-		if got := velox.HasColumn(c.entity, c.column); got != c.want {
-			t.Errorf("HasColumn(%q, %q) = %v", c.entity, c.column, got)
-		}
+	var zero velox.FilterEntity
+	if zero.Name() != "" || zero.HasColumn("id") {
+		t.Error("the zero FilterEntity names an entity")
 	}
+}
+
+// Invoice is an entity of the name of testmodel's, without its paid column.
+type Invoice struct {
+	ID     int64
+	Number string
+}
+
+var invoiceMeta velox.MetaOnce[Invoice]
+
+// VeloxMeta returns Invoice's metadata.
+func (*Invoice) VeloxMeta() *velox.Meta[Invoice] {
+	return invoiceMeta.Load(func() velox.Descriptor[Invoice] {
+		return velox.Descriptor[Invoice]{
+			Table:      "other_invoices",
+			Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}, {Field: "Number", Name: "number"}},
+			PrimaryKey: []int{0},
+			FieldPtr:   func(x *Invoice, i int) any { return [...]any{&x.ID, &x.Number}[i] },
+		}
+	})
 }
 
 // TestTxFromJoins: under a transaction's context, TxFrom gives a DB that

@@ -95,13 +95,13 @@ func enter(ctx context.Context, key any, kind frameKind) (_ context.Context, ski
 // given ctx with a frame of its own and db, the DB the statement runs on.
 // skip is true, and f is not called, when ctx is under a call of filter i
 // already (enter).
-func callFilter(ctx context.Context, db *DB, filters []EntityFilterFn, i int, entity string, op Op) (p Predicate, skip bool, err error) {
+func callFilter(ctx context.Context, db *DB, filters []EntityFilterFn, i int, entity *EntityInfo, op Op) (p Predicate, skip bool, err error) {
 	f := &filters[i]
 	c, skip := enter(ctx, f, kindFilter)
 	if skip {
 		return Predicate{}, true, nil
 	}
-	p, err = (*f)(c, db, entity, op)
+	p, err = (*f)(c, db, FilterEntity{entity}, op)
 	return p, false, err
 }
 

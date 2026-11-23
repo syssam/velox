@@ -20,9 +20,9 @@ type filterOwnerKey struct{}
 // key the filter reads through the DB read returns for the statement's.
 // The fixture's DB is SQLite with a pool of one connection.
 func ownerScope(read func(stmt *velox.DB) *velox.DB, errs *[]error) velox.Filter {
-	return func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
+	return func(ctx context.Context, stmt *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
 		name, _ := ctx.Value(filterOwnerKey{}).(string)
-		if entity != "INote" || op != velox.OpSelect || name == "" {
+		if fe.Name() != "INote" || op != velox.OpSelect || name == "" {
 			return velox.Allow(), nil
 		}
 		owners, err := read(stmt).Query[fixture.IOwner]().Where(fixture.IOwners.Name.EQ(name)).Limit(10).All(ctx)
@@ -74,8 +74,8 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 		f := ownerScope(func(*velox.DB) *velox.DB { return db }, &errs)
 		if withoutTx {
 			inner := f
-			f = func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-				return inner(velox.WithoutTx(ctx), stmt, entity, op)
+			f = func(ctx context.Context, stmt *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+				return inner(velox.WithoutTx(ctx), stmt, fe, op)
 			}
 		}
 		db = interceptorDB(t, velox.WithFilter(f))
@@ -97,8 +97,8 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 // runs on, the transaction's inside Tx, and never nil.
 func TestFilterGetsTheStatementsDB(t *testing.T) {
 	var got []*velox.DB
-	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, stmt *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-		if entity == "INote" {
+	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, stmt *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+		if fe.Name() == "INote" {
 			got = append(got, stmt)
 			if s := fmt.Sprint(ctx); !strings.HasSuffix(s, ".WithFilter") {
 				t.Errorf("the filter's context is named %q", s)
@@ -141,8 +141,8 @@ func TestFilterReadsWithoutItself(t *testing.T) {
 	calls := map[string]int{}
 	var seen []int64
 	var tagged []bool
-	newest := func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		if entity != "INote" {
+	newest := func(ctx context.Context, stmt *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if fe.Name() != "INote" {
 			return velox.Allow(), nil
 		}
 		ns, err := stmt.Query[fixture.INote]().OrderBy(fixture.INotes.ID.Desc()).Limit(1).All(ctx)
@@ -158,8 +158,8 @@ func TestFilterReadsWithoutItself(t *testing.T) {
 		seen = append(seen, ns[0].ID)
 		return velox.FieldEQ("id", ns[0].ID), nil
 	}
-	noC := func(ctx context.Context, stmt *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		if entity != "INote" {
+	noC := func(ctx context.Context, stmt *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if fe.Name() != "INote" {
 			return velox.Allow(), nil
 		}
 		ok, err := stmt.Query[fixture.IOwner]().Where(fixture.IOwners.ID.EQ(1), fixture.IOwners.Tagged.Has()).Exists(ctx)

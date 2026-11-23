@@ -16,8 +16,8 @@ type noteFilterFails struct{}
 
 // noteFilter hides the note "a" from every statement, and fails under
 // noteFilterFails; it restricts no other entity.
-func noteFilter(ctx context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-	if entity != "INote" {
+func noteFilter(ctx context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+	if fe.Name() != "INote" {
 		return velox.Allow(), nil
 	}
 	if ctx.Value(noteFilterFails{}) != nil {

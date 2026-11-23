@@ -51,8 +51,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   name for every column. `Error()` is unchanged (ADR 0144).
   Regenerate: `velox.GeneratedCodeIsVersion30` replaces Version29.
 - velox-gen: the generated package names each entity in a constant,
-  `TypeUser = "User"`, as ent's does. The value is the entity a
-  `velox.Filter` receives and `velox.HasColumn` takes. A `TypeX` that
+  `TypeUser = "User"`, as ent's does. The value is the `Name()` of the
+  entity a `velox.Filter` receives. A `TypeX` that
   collides with another generated name is refused (ADR 0139).
   Regenerate: `velox.GeneratedCodeIsVersion29` replaces Version28.
 - `velox.Joined(rel, x)` reads a joined to-one relation's column, or a `Calc` or
@@ -72,8 +72,6 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `velox.IsZero(p)` reports the zero `Pred` or `Predicate`: a helper with no
   condition returns it, and its caller tests it. A function, not a method,
   so a package pays only where it calls it (ADR 0137).
-- `velox.HasColumn(entity, column)` lets a `WithFilter` filter narrow every
-  entity having a column, such as `deleted_at`, without a list (ADR 0137).
 - `velox.TxFrom(ctx, db)` returns the transaction ctx belongs to, with db's
   own policy bypass, so a helper given db and ctx joins it (ADR 0137).
 - `softdelete.By(column, key)` sets a column from a `scope.Key` in a soft
@@ -87,7 +85,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   decimal column's are, so `Calc("? * ?", X.Qty, X.Price).Decimal().Sum()`
   is exact there (ADR 0131).
 - A `WithFilter` filter is given the DB its statement runs on, as its
-  second parameter, `func(ctx, db *velox.DB, entity string, op velox.Op)`,
+  second parameter, `func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op)`,
   the transaction's inside `Tx`, so a filter that reads gets the same
   answer inside a transaction and outside. A filter is not applied to
   its own reads, which ends the recursion
@@ -793,6 +791,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
   `GeneratedCodeIsVersion28`: regenerate, since code generated under
   compat=veloxe before sets only `Veloxe` (ADR 0150).
+- A `WithFilter` filter receives the entity as a `velox.FilterEntity`, not
+  its name: `func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op)`.
+  `e.Name()` is the name it was given, and `e.HasColumn(column)` reads
+  that entity's own metadata. `velox.HasColumn(entity, column)` and its
+  process-wide registry are removed: it was false before an entity's first
+  use, could not tell two packages' entities of one name apart, and took a
+  lock per call (ADR 0148).
 - A `Calc` that aggregates is marked with `Term.Agg()` (`untyped.Agg`):
   velox no longer scans the text for SUM, MAX and the rest, which took
   SQLite's two-argument `MAX(a, b)` for an aggregate and missed

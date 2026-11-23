@@ -12,8 +12,8 @@ import (
 
 // noneFor is a filter that hides every row of entity.
 func noneFor(entity string) velox.Filter {
-	return func(_ context.Context, _ *velox.DB, e string, _ velox.Op) (velox.Predicate, error) {
-		if e == entity {
+	return func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+		if fe.Name() == entity {
 			return velox.None(), nil
 		}
 		return velox.Allow(), nil

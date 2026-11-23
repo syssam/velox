@@ -136,9 +136,10 @@ type privacyFilter struct {
 
 func (f *privacyFilter) Where(ps ...Predicate) { f.where = append(f.where, ps...) }
 
-// HasColumn reports whether the entity has a column of the given name.
+// HasColumn reports whether the entity has a column of the given name, as
+// FilterEntity's HasColumn does.
 func (f *privacyFilter) HasColumn(name string) bool {
-	_, ok := f.in.Column(name)
+	_, ok := ColumnNamed(f.in, name)
 	return ok
 }
 

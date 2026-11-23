@@ -161,8 +161,8 @@ func renderPackage(o *Out) string {
 }
 
 // typeConsts writes TypeX for each entity X, join entities too, sorted by
-// name, as ent's mutation.go does. Its value is the entity's name, which a
-// velox.Filter receives as its entity.
+// name, as ent's mutation.go does. Its value is the entity's name, which
+// the FilterEntity a velox.Filter receives gives as Name.
 func typeConsts(w *writer, o *Out) {
 	names := make([]string, len(o.Entities))
 	for i, e := range o.Entities {
@@ -173,7 +173,7 @@ func typeConsts(w *writer, o *Out) {
 	}
 	slices.Sort(names)
 	w.p("")
-	w.p("// The names of the entities, which a velox.Filter receives as entity.")
+	w.p("// The names of the entities, as a velox.Filter's FilterEntity.Name gives them.")
 	w.p("const (")
 	for _, n := range names {
 		w.p("%s%s = %s", typePrefix, n, strconv.Quote(n))

@@ -50,6 +50,8 @@ EntityLink.Name string
 EntityLink.Table string
 EntityLink.Type string
 EntityTable.Load(build func() []EntityLink) *EntityTable
+FilterEntity.HasColumn(column string) bool
+FilterEntity.Name() string
 Interceptor.Filter func(ctx context.Context) (Predicate, error)
 JoinClause.Left bool
 JoinClause.Link Link
@@ -768,7 +770,6 @@ func FieldNotNull(name string) Predicate
 func FiscalYear(start time.Month) DateOption
 func GoType(c ColumnInfo) reflect.Type
 func HasCleared(names ...string) Condition
-func HasColumn(entity, column string) bool
 func HasColumns(names ...string) Condition
 func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
@@ -892,7 +893,8 @@ type EntityTable = engine.EntityTable
 type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type Field = schema.Field
 type FieldChange = veloxtype.FieldChange
-type Filter func(ctx context.Context, db *DB, entity string, op Op) (Predicate, error)
+type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
+type FilterEntity = engine.FilterEntity
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type GroupingSet[E any] struct { }

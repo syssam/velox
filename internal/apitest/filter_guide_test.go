@@ -16,8 +16,8 @@ func TestGuideFilterExample(t *testing.T) {
 		name, _ := ctx.Value(filterOwnerKey{}).(string)
 		return name
 	}
-	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		if entity != "INote" || op != velox.OpSelect {
+	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, db *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if fe.Name() != "INote" || op != velox.OpSelect {
 			return velox.Allow(), nil
 		}
 		owners, err := db.Query[fixture.IOwner]().

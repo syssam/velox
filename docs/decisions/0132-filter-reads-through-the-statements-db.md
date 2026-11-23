@@ -1,7 +1,9 @@
 # 132. A filter reads through the statement's DB
 
 - Status: accepted, 2026-11-23. Amends
-  [0098](0098-hooks-and-filters-for-every-entity.md).
+  [0098](0098-hooks-and-filters-for-every-entity.md). Amended by
+  [0148](0148-explicit-aggregates-filter-entity-policy-db.md): the entity
+  is a `FilterEntity`, not its name.
 
 ## Context
 

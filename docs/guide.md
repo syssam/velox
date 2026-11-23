@@ -1780,8 +1780,8 @@ refund := velox.On(func(next velox.Mutator) velox.Mutator {
 ```
 
 `velox.WithFilter(f)` adds a row filter for every entity. velox calls it
-with the statement's context, the DB it runs on, the entity's name and an
-op, at most once per
+with the statement's context, the DB it runs on, the entity
+(`velox.FilterEntity`) and an op, at most once per
 statement for each entity and op, except where a relation loops back
 ([ADR 0091](decisions/0091-policy-cycles-and-text-keys.md)). The op is the
 statement's own for its own entity (`OpSelect`, `OpUpdate`, `OpDelete`, or
@@ -1795,19 +1795,18 @@ This soft-delete filter narrows reads only:
 
 ```go
 db, err := velox.Connect("postgres", dsn, velox.WithFilter(
-	func(ctx context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		if op != velox.OpSelect || !softDeleted[entity] || includeDeleted(ctx) {
+	func(ctx context.Context, _ *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if op != velox.OpSelect || !e.HasColumn("deleted_at") || includeDeleted(ctx) {
 			return velox.Allow(), nil
 		}
 		return velox.FieldIsNull("deleted_at"), nil
 	}))
 ```
 
-`velox.HasColumn(entity, column)` tells which entities have a column, by
-the names the filter is given, so the filter needs no `softDeleted` list:
-`!velox.HasColumn(entity, "deleted_at")` in its place. It knows every
-entity velox has used in the process, which includes the one the filter is
-called for.
+`e.HasColumn(column)` reports whether the entity has a column of that
+name, as `FieldEQ` names one, so the filter needs no list of soft-deleted
+entities. It reads the entity's own metadata: nothing global, no lock
+([ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
 
 It leaves writes alone for two reasons. ent's and veloxe's interceptors
 wrap queries only, so a port keeps their behaviour. And a restore must
@@ -1815,7 +1814,7 @@ reach a deleted row: code that reads it with the deleted included and then
 clears `deleted_at` under the plain context would otherwise update 0 rows
 and say nothing.
 
-`entity` is the entity's name, which the generated package names in a
+`e.Name()` is the entity's name, which the generated package names in a
 constant: `veloxgen.TypeOrder` is `"Order"`
 ([ADR 0139](decisions/0139-entity-type-constants.md)).
 
@@ -1837,8 +1836,8 @@ and policies apply to them
 ([ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)).
 
 ```go
-velox.WithFilter(func(ctx context.Context, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-	if entity != veloxgen.TypeOrder || op != velox.OpSelect {
+velox.WithFilter(func(ctx context.Context, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+	if e.Name() != veloxgen.TypeOrder || op != velox.OpSelect {
 		return velox.Allow(), nil
 	}
 	teams, err := db.Query[veloxgen.Member]().

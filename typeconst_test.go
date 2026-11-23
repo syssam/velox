@@ -18,14 +18,13 @@ func filterEntity[E any, PE velox.Entity[E]](ctx context.Context, db *velox.DB, 
 	return slices.Compact(*seen)
 }
 
-// TestTypeConstantIsFiltersEntity: gen.TypeX is the entity a velox.Filter
-// receives for a statement on X, a join entity's too, and the name
-// HasColumn takes.
+// TestTypeConstantIsFiltersEntity: gen.TypeX is the Name of the entity a
+// velox.Filter receives for a statement on X, a join entity's too.
 func TestTypeConstantIsFiltersEntity(t *testing.T) {
 	var seen []string
 	db, err := velox.Connect("sqlite", "file::memory:", velox.WithFilter(
-		func(_ context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-			seen = append(seen, entity)
+		func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+			seen = append(seen, fe.Name())
 			return velox.Allow(), nil
 		}))
 	if err != nil {
@@ -55,8 +54,5 @@ func TestTypeConstantIsFiltersEntity(t *testing.T) {
 		if len(c.got) != 1 || c.got[0] != c.want {
 			t.Errorf("filter of a query of %s got entity %q", c.want, c.got)
 		}
-	}
-	if !velox.HasColumn(testmodel.TypeInvoice, "number") {
-		t.Error("HasColumn does not know TypeInvoice's column number")
 	}
 }

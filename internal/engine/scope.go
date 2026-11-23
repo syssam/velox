@@ -174,9 +174,8 @@ func (sc *Scoper) markCut(at int) {
 func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 	var kids []Node
 	if len(sc.Filters) > 0 {
-		name := EntityName(t)
 		for i := range sc.Filters {
-			p, skip, err := callFilter(sc.Ctx, sc.db, sc.Filters, i, name, fop)
+			p, skip, err := callFilter(sc.Ctx, sc.db, sc.Filters, i, t, fop)
 			if skip {
 				continue
 			}
@@ -450,9 +449,8 @@ func (sc *Scoper) joinFree(j *EntityInfo) error {
 // read j's rows through the relation's two sides, so a condition on j
 // would make them disagree with a query of j's own.
 func joinUnfiltered(ctx context.Context, db *DB, filters []EntityFilterFn, j *EntityInfo) error {
-	name := EntityName(j)
 	for i := range filters {
-		p, skip, err := callFilter(ctx, db, filters, i, name, OpSelect)
+		p, skip, err := callFilter(ctx, db, filters, i, j, OpSelect)
 		switch {
 		case skip:
 		case err != nil:

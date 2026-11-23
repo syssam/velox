@@ -202,9 +202,9 @@ veloxe's own, or differ in a veloxe port:
 | `sqljson.ValueContains(f, v, sqljson.Path(k))` | `T.F.Array(k).Has(v)` ([ADR 0141](decisions/0141-json-array-at-a-path.md)) |
 | `GROUP BY ROLLUP(…)`, `CUBE(…)` in a `Modify` | `GroupBy(velox.Rollup[T](keys...))`, `velox.Cube`; MySQL `WITH ROLLUP` as the only key, SQLite refuses |
 | field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
-| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
+| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
-| the generated package's `velox.TypeUser` | `veloxgen.TypeUser`, the same value: the entity a filter receives, `m.Entity()` and `velox.HasColumn`'s first argument ([ADR 0139](decisions/0139-entity-type-constants.md)) |
+| the generated package's `velox.TypeUser` | `veloxgen.TypeUser`, the same value: the `Name()` of the entity a filter receives and `m.Entity()` ([ADR 0139](decisions/0139-entity-type-constants.md)) |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
 | `client.User.Get(ctx, id)`, `UpdateOneID(id)…Save(ctx)`, `DeleteOneID(id).Exec(ctx)` | `Where(U.ID.EQ(id))` and `One(ctx)` on `db.Query`, `db.Update` and `db.Delete`, or `db.Save(&u, cols...)` for an entity in hand ([guide](guide.md#one-row-by-key), [ADR 0121](decisions/0122-one-row-by-key.md)) |
 | `ForUpdate()` on SQLite, which veloxe ran without the clause | the same, under the option `velox.WithSQLiteLockingReads()`; without it the read fails ([guide](guide.md#row-locks), [ADR 0123](decisions/0123-sqlite-locking-reads-opt-in.md)) |
@@ -288,8 +288,9 @@ a nil predicate for "no condition" returns `velox.Predicate{}` or
 `velox.IsZero(p)`, not `p == nil` or reflection.
 
 **A filter finds columns by name.** A `WithFilter` filter that narrows the
-entities with `deleted_at` asks `velox.HasColumn(entity, "deleted_at")`,
-in place of a generated list of entity names.
+entities with `deleted_at` asks `e.HasColumn("deleted_at")` of the
+`velox.FilterEntity` it is given, in place of a generated list of entity
+names.
 
 **A rule may name columns from configuration.** `velox.FieldIn`,
 `FieldEQ` and `FieldInSelect` take any string. velox-gen checks a constant

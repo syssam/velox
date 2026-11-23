@@ -51,11 +51,11 @@ func (l *allFilterLog) reset() {
 // allFilter hides the note "a" from every statement, as the context's mode
 // says, and restricts no other entity.
 func allFilter(log *allFilterLog) velox.Filter {
-	return func(ctx context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
+	return func(ctx context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
 		log.mu.Lock()
-		log.seen = append(log.seen, entity)
+		log.seen = append(log.seen, fe.Name())
 		log.mu.Unlock()
-		if entity != "INote" {
+		if fe.Name() != "INote" {
 			return velox.Allow(), nil
 		}
 		m, _ := ctx.Value(allFilterKey{}).(allFilterMode)
@@ -280,9 +280,9 @@ func TestFiltersAndInOrder(t *testing.T) {
 	var calls []string
 	type key struct{}
 	f := func(name, body string) velox.Filter {
-		return func(ctx context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-			calls = append(calls, name+":"+entity+":"+ctx.Value(key{}).(string))
-			if entity != "INote" {
+		return func(ctx context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+			calls = append(calls, name+":"+fe.Name()+":"+ctx.Value(key{}).(string))
+			if fe.Name() != "INote" {
 				return velox.Allow(), nil
 			}
 			return velox.FieldNEQ("body", body), nil
@@ -362,7 +362,7 @@ func TestFilterUpsertOnMySQL(t *testing.T) {
 	if err := ow.Exec(context.Background()); err != nil {
 		t.Errorf("an upsert of IOwner: %v", err)
 	}
-	r := velox.WithFilter(func(context.Context, *velox.DB, string, velox.Op) (velox.Predicate, error) {
+	r := velox.WithFilter(func(context.Context, *velox.DB, velox.FilterEntity, velox.Op) (velox.Predicate, error) {
 		return velox.FieldEQ("name", "o"), nil
 	})
 	rdb := openPolicied(velox.MySQL, e, r)
@@ -475,8 +475,8 @@ type includeDeletedKey struct{}
 // reads, unless the context includes them, and leaves writes alone, as
 // veloxe's query-only interceptor did.
 func softDelete(readsOnly bool) velox.Filter {
-	return func(ctx context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		if entity != "sdUser" || readsOnly && op != velox.OpSelect || ctx.Value(includeDeletedKey{}) != nil {
+	return func(ctx context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if fe.Name() != "sdUser" || readsOnly && op != velox.OpSelect || ctx.Value(includeDeletedKey{}) != nil {
 			return velox.Allow(), nil
 		}
 		return velox.FieldIsNull("deleted_at"), nil
@@ -536,8 +536,8 @@ type opCall struct {
 
 // opLog returns a filter that restricts nothing and records its calls.
 func opLog(calls *[]opCall) velox.Filter {
-	return func(_ context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		*calls = append(*calls, opCall{entity, op})
+	return func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		*calls = append(*calls, opCall{fe.Name(), op})
 		return velox.Allow(), nil
 	}
 }
@@ -587,8 +587,8 @@ func TestFilterSeesTheOp(t *testing.T) {
 // conditions: the update's on the row, the read's inside the EXISTS.
 func TestFilterSelfRelationUpdate(t *testing.T) {
 	var calls []opCall
-	f := func(_ context.Context, _ *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-		calls = append(calls, opCall{entity, op})
+	f := func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		calls = append(calls, opCall{fe.Name(), op})
 		if op == velox.OpSelect {
 			return velox.FieldNEQ("name", "read"), nil
 		}
@@ -614,8 +614,8 @@ func TestFilterSelfRelationUpdate(t *testing.T) {
 // which read the join rows through the relation's two sides and would not
 // apply it. A query of the join entity's own applies it.
 func TestFilterOnJoinEntityRefused(t *testing.T) {
-	db := interceptorDB(t, velox.WithFilter(func(_ context.Context, _ *velox.DB, entity string, _ velox.Op) (velox.Predicate, error) {
-		if entity != "IJoin" {
+	db := interceptorDB(t, velox.WithFilter(func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+		if fe.Name() != "IJoin" {
 			return velox.Allow(), nil
 		}
 		return velox.FieldEQ("note_id", 2), nil

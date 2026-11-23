@@ -1,6 +1,8 @@
 # 137. Run-time names, IsZero, HasColumn, TxFrom and softdelete.By
 
-- Status: accepted, 2026-11-23.
+- Status: accepted, 2026-11-23. `velox.HasColumn` is superseded by
+  [0148](0148-explicit-aggregates-filter-entity-policy-db.md)'s
+  `FilterEntity.HasColumn`.
 
 ## Context
 
