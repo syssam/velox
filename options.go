@@ -134,7 +134,25 @@ type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predi
 //	})
 //
 // Both read the entity's own metadata: nothing global, no lock.
-type FilterEntity = engine.FilterEntity
+type FilterEntity struct{ in *engine.EntityInfo }
+
+// Name is the entity's name in the schema: "Invoice".
+func (e FilterEntity) Name() string {
+	if e.in == nil {
+		return ""
+	}
+	return engine.EntityName(e.in)
+}
+
+// HasColumn reports whether the entity has a column of the given name, as
+// FieldEQ finds one.
+func (e FilterEntity) HasColumn(column string) bool {
+	if e.in == nil {
+		return false
+	}
+	_, ok := engine.ColumnNamed(e.in, column)
+	return ok
+}
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
 // Tx and shard it opens, as ent's client.Intercept adds an interceptor for
@@ -171,8 +189,8 @@ func WithFilter(f Filter) Option {
 	if f == nil {
 		panic("velox: WithFilter(nil)")
 	}
-	return engine.WithFilter(func(ctx context.Context, db *engine.DB, entity FilterEntity, op Op) (Predicate, error) {
-		return f(ctx, (*DB)(unsafe.Pointer(db)), entity, op) // DB is its engine.DB (see DB)
+	return engine.WithFilter(func(ctx context.Context, db *engine.DB, entity *engine.EntityInfo, op Op) (Predicate, error) {
+		return f(ctx, (*DB)(unsafe.Pointer(db)), FilterEntity{entity}, op) // DB is its engine.DB (see DB)
 	})
 }
 

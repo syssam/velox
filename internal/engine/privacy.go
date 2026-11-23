@@ -104,7 +104,7 @@ type privacyFilter struct {
 func (f *privacyFilter) Where(ps ...Predicate) { f.where = append(f.where, ps...) }
 
 // HasColumn reports whether the entity has a column of the given name, as
-// FilterEntity's HasColumn does.
+// velox.FilterEntity's HasColumn does.
 func (f *privacyFilter) HasColumn(name string) bool {
 	_, ok := ColumnNamed(f.in, name)
 	return ok
@@ -135,13 +135,13 @@ func (f ignoredFilter) HasColumn(name string) bool {
 // queryCond is the condition the rule list eval gives a read of entity in:
 // the AND of what its rules gave the filter, or the error that denies the
 // read. A decision in the context replaces the rules.
-func queryCond(in *EntityInfo, eval QueryEval) func(ctx context.Context, db *DB) (Predicate, error) {
-	return func(ctx context.Context, db *DB) (Predicate, error) {
+func queryCond(in *EntityInfo, eval QueryEval) func(ctx context.Context, db StmtDB) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB) (Predicate, error) {
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return decisionCond(d)
 		}
 		f := &privacyFilter{in: in}
-		if err := eval(ctx, db, f); err != nil {
+		if err := eval(ctx, dbOf(db), f); err != nil {
 			return Predicate{}, err
 		}
 		return f.cond(), nil
@@ -150,13 +150,13 @@ func queryCond(in *EntityInfo, eval QueryEval) func(ctx context.Context, db *DB)
 
 // mutationCond is the condition the rule list eval gives an update or a
 // delete (op) of entity in, as queryCond.
-func mutationCond(in *EntityInfo, eval MutationEval) func(ctx context.Context, db *DB, op Op) (Predicate, error) {
-	return func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+func mutationCond(in *EntityInfo, eval MutationEval) func(ctx context.Context, db StmtDB, op Op) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB, op Op) (Predicate, error) {
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return decisionCond(d)
 		}
 		f := &privacyFilter{in: in}
-		if err := eval(ctx, db, op, f, nil); err != nil {
+		if err := eval(ctx, dbOf(db), op, f, nil); err != nil {
 			return Predicate{}, err
 		}
 		return f.cond(), nil
@@ -165,12 +165,12 @@ func mutationCond(in *EntityInfo, eval MutationEval) func(ctx context.Context, d
 
 // mutationInsert is the rule list eval as an Insert policy of entity in:
 // it judges each inserted row.
-func mutationInsert(in *EntityInfo, eval MutationEval) func(ctx context.Context, db *DB, r Row) error {
-	return func(ctx context.Context, db *DB, r Row) error {
+func mutationInsert(in *EntityInfo, eval MutationEval) func(ctx context.Context, db StmtDB, r Row) error {
+	return func(ctx context.Context, db StmtDB, r Row) error {
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return d
 		}
-		return eval(ctx, db, OpInsert, ignoredFilter{in}, &r)
+		return eval(ctx, dbOf(db), OpInsert, ignoredFilter{in}, &r)
 	}
 }
 

@@ -26,8 +26,8 @@ func TestGuards(t *testing.T) {
 		}
 		return Predicate{Node{Op: OpEQ, Col: 1, V: int64(1)}}, nil
 	})
-	var read func(context.Context, *DB) (Predicate, error)
-	read = guardPolicy(func(c context.Context, _ *DB) (Predicate, error) {
+	var read func(context.Context, StmtDB) (Predicate, error)
+	read = guardPolicy(func(c context.Context, _ StmtDB) (Predicate, error) {
 		if !strings.HasSuffix(frameOf(c).String(), ".Policy") {
 			t.Errorf("the frame: %s", frameOf(c))
 		}
@@ -36,8 +36,8 @@ func TestGuards(t *testing.T) {
 		}
 		return Predicate{Node{Op: OpEQ, Col: 3, V: int64(1)}}, nil
 	})
-	var write func(context.Context, *DB, Op) (Predicate, error)
-	write = guardWrite(func(c context.Context, _ *DB, _ Op) (Predicate, error) {
+	var write func(context.Context, StmtDB, Op) (Predicate, error)
+	write = guardWrite(func(c context.Context, _ StmtDB, _ Op) (Predicate, error) {
 		if !strings.HasSuffix(frameOf(c).String(), ".Policy") {
 			t.Errorf("the frame: %s", frameOf(c))
 		}
@@ -46,8 +46,8 @@ func TestGuards(t *testing.T) {
 		}
 		return Predicate{Node{Op: OpEQ, Col: 2, V: int64(1)}}, nil
 	})
-	var insert func(context.Context, *DB, Row) error
-	insert = guardInsert(func(c context.Context, _ *DB, _ Row) error {
+	var insert func(context.Context, StmtDB, Row) error
+	insert = guardInsert(func(c context.Context, _ StmtDB, _ Row) error {
 		if err := insert(c, nil, Row{}); err != nil {
 			t.Errorf("insert under itself: %v; want it to pass", err)
 		}

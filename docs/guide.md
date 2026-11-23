@@ -1118,7 +1118,7 @@ q := db.Query[veloxgen.Invoice]().Select(col, I.TotalCents.Sum()).GroupBy(col).L
 ([ADR 0127](decisions/0127-report-terms.md))
 
 The term's aggregates, `col.Sum()` and the rest, write what the handle's
-write. `Calc("SUM(?)", col).Agg()` works too, but on SQLite only the
+write. `velox.Agg(Calc("SUM(?)", col))` works too, but on SQLite only the
 term's `Sum` rounds a decimal column. A conditional distinct count is a `Calc` with
 `CountDistinct`:
 

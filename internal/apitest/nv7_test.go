@@ -24,9 +24,9 @@ func TestAggregateOfAColumnByName(t *testing.T) {
 	}
 	q := func(db *velox.DB) velox.Query[inv] {
 		return db.Query[inv]().
-			Select(org, total.Sum().As("sum"), velox.Calc[inv]("SUM(?)", total).Agg().As("calc")).
+			Select(org, total.Sum().As("sum"), velox.Agg(velox.Calc[inv]("SUM(?)", total)).As("calc")).
 			GroupBy(org).
-			Having(velox.Expr[inv]("? > ?", velox.Calc[inv]("SUM(?)", total).Agg(), 5)).
+			Having(velox.Expr[inv]("? > ?", velox.Agg(velox.Calc[inv]("SUM(?)", total)), 5)).
 			OrderBy(org.Asc()).
 			Limit(10)
 	}

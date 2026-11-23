@@ -808,7 +808,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   process-wide registry are removed: it was false before an entity's first
   use, could not tell two packages' entities of one name apart, and took a
   lock per call (ADR 0148).
-- A `Calc` that aggregates is marked with `Term.Agg()` (`untyped.Agg`):
+- A `Calc` that aggregates is marked with `velox.Agg` (`untyped.Agg`):
   velox no longer scans the text for SUM, MAX and the rest, which took
   SQLite's two-argument `MAX(a, b)` for an aggregate and missed
   `PERCENTILE_CONT` and user aggregates. `GroupBy` refuses an aggregate key.

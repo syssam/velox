@@ -89,20 +89,26 @@ type Interceptor struct {
 func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
 	// Each function is called under a frame of its own (guardPolicy), so
 	// that a statement its reads make is not judged by it.
-	pol := &EntityPolicy{Read: guardPolicy(p.Read)}
-	if w := p.Write; w != nil {
-		pol.Write = guardWrite(func(ctx context.Context, db *DB, _ Op) (Predicate, error) { return w(ctx, db) })
+	pol := &EntityPolicy{}
+	if r := p.Read; r != nil {
+		pol.Read = guardPolicy(func(ctx context.Context, db StmtDB) (Predicate, error) { return r(ctx, dbOf(db)) })
 	}
-	ins := guardInsert(p.Insert)
+	if w := p.Write; w != nil {
+		pol.Write = guardWrite(func(ctx context.Context, db StmtDB, _ Op) (Predicate, error) { return w(ctx, dbOf(db)) })
+	}
+	var ins func(ctx context.Context, db StmtDB, r Row) error
+	if i := p.Insert; i != nil {
+		ins = guardInsert(func(ctx context.Context, db StmtDB, r Row) error { return i(ctx, dbOf(db), r) })
+	}
 	if p.Query != nil {
 		pol.Query = guardPolicy(queryCond(in, p.Query))
 	}
 	if p.Mutation != nil {
-		pol.Write = andWriteConds([]func(context.Context, *DB, Op) (Predicate, error){pol.Write, guardWrite(mutationCond(in, p.Mutation))})
+		pol.Write = andWriteConds([]func(context.Context, StmtDB, Op) (Predicate, error){pol.Write, guardWrite(mutationCond(in, p.Mutation))})
 		ins = andInserts(ins, guardInsert(mutationInsert(in, p.Mutation)))
 	}
 	if ins != nil {
-		pol.Insert = func(ctx context.Context, db *DB, x unsafe.Pointer) error {
+		pol.Insert = func(ctx context.Context, db StmtDB, x unsafe.Pointer) error {
 			var misuse error
 			err := ins(ctx, db, NewRow(in, x, &misuse, true))
 			if misuse != nil {
@@ -115,11 +121,11 @@ func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
 }
 
 // andInserts is the Insert policy that runs a, then b; either may be nil.
-func andInserts(a, b func(ctx context.Context, db *DB, r Row) error) func(ctx context.Context, db *DB, r Row) error {
+func andInserts(a, b func(ctx context.Context, db StmtDB, r Row) error) func(ctx context.Context, db StmtDB, r Row) error {
 	if a == nil {
 		return b
 	}
-	return func(ctx context.Context, db *DB, r Row) error {
+	return func(ctx context.Context, db StmtDB, r Row) error {
 		if err := a(ctx, db, r); err != nil {
 			return err
 		}
@@ -175,30 +181,9 @@ func WithAllHooks(hs []HookFn) Option {
 // EntityFilterFn is a filter WithFilter adds, as the engine runs it: given
 // the statement's context, the DB the statement runs on (never nil), the
 // entity and the op it is read for (RowCond's fop), it returns the entity's
-// row condition.
-type EntityFilterFn func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
-
-// FilterEntity is the entity a WithFilter filter is called for. It reads
-// the entity's own metadata: no registry, no lock.
-type FilterEntity struct{ in *EntityInfo }
-
-// Name is the entity's name, as EntityName gives it: "Invoice".
-func (e FilterEntity) Name() string {
-	if e.in == nil {
-		return ""
-	}
-	return EntityName(e.in)
-}
-
-// HasColumn reports whether the entity has a column of the given name, as a
-// condition by name, such as FieldEQ, finds it.
-func (e FilterEntity) HasColumn(column string) bool {
-	if e.in == nil {
-		return false
-	}
-	_, ok := ColumnNamed(e.in, column)
-	return ok
-}
+// row condition. The root wraps entity as a velox.FilterEntity: a type
+// here with methods is described by every package that reaches DB.
+type EntityFilterFn func(ctx context.Context, db *DB, entity *EntityInfo, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for every DB the
 // option configures and every Tx and shard it opens. The scope calls it

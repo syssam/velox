@@ -347,7 +347,7 @@ func bindPolicies(info *EntityInfo, ps []interface{ Policy() Policy }) error {
 	return engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
 		all := make([]*engine.EntityPolicy, len(ps))
 		for i, x := range ps {
-			all[i] = engine.PolicyFor(info, x.Policy().erase())
+			all[i] = engine.PolicyFor(info, erasePolicy(x.Policy()))
 		}
 		return engine.AndPolicies(all), ""
 	})

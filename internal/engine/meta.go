@@ -43,16 +43,16 @@ type EntityInfo struct {
 
 // EntityPolicy is an entity's Policy, with E erased.
 //
-// Each function is given the DB the statement runs on: the transaction's
-// inside Tx.
+// Each function is given the DB the statement runs on, a *DB as a StmtDB
+// (see StmtDB): the transaction's inside Tx.
 type EntityPolicy struct {
-	Read func(ctx context.Context, db *DB) (Predicate, error) // nil when not declared
+	Read func(ctx context.Context, db StmtDB) (Predicate, error) // nil when not declared
 	// Query is Read for the statements that read only: Policy.Query's
 	// conditions.
-	Query func(ctx context.Context, db *DB) (Predicate, error)
+	Query func(ctx context.Context, db StmtDB) (Predicate, error)
 	// Write is given the write's kind, which Policy.Mutation's rules see.
-	Write  func(ctx context.Context, db *DB, op Op) (Predicate, error)
-	Insert func(ctx context.Context, db *DB, p unsafe.Pointer) error
+	Write  func(ctx context.Context, db StmtDB, op Op) (Predicate, error)
+	Insert func(ctx context.Context, db StmtDB, p unsafe.Pointer) error
 }
 
 // reads reports whether p conditions a statement that reads only.

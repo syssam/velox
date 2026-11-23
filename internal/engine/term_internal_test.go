@@ -58,8 +58,8 @@ func TestCheckProjectRefusals(t *testing.T) {
 
 func TestAndInserts(t *testing.T) {
 	var order []string
-	step := func(name string, err error) func(context.Context, *DB, Row) error {
-		return func(context.Context, *DB, Row) error {
+	step := func(name string, err error) func(context.Context, StmtDB, Row) error {
+		return func(context.Context, StmtDB, Row) error {
 			order = append(order, name)
 			return err
 		}

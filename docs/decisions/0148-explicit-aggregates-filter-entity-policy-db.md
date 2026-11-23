@@ -33,10 +33,13 @@ that fell short.
 
 ## Decision
 
-### 1. `Term.Agg()` marks an aggregate Calc
+### 1. `velox.Agg` marks an aggregate Calc
 
-`func (t Term[E]) Agg[_ Lazy[E]]() Term[E]` marks an expression as an
+`func Agg[E any](t Term[E]) Term[E]` marks an expression as an
 aggregate, as `Decimal()` marks one as holding decimals (0131).
+It is a function, not a method of Term: every package that names a Term
+describes its methods, and a method `Agg` added 432 bytes to each
+(`entityDescUse`); a function costs only where it is called.
 `untyped.Agg(t)` is the same for an untyped term. A marked term is placed
 and refused as an aggregate Term is (`hasAgg`): MySQL orders a grouped
 projection by it as written, not as `ANY_VALUE` of it; it cannot be inside
@@ -54,7 +57,7 @@ text itself; the database does (`TestCalcAgg`).
 
 ```go
 type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
-type FilterEntity = engine.FilterEntity
+type FilterEntity struct{ /* the entity's *engine.EntityInfo */ }
 func (e FilterEntity) Name() string
 func (e FilterEntity) HasColumn(column string) bool
 ```
@@ -68,6 +71,10 @@ The zero value names nothing. `velox.HasColumn`, `engine.HasColumn`,
 `HasColumn` reads the same index (`TestFilterEntityHasColumn`). The
 generated `TypeX` comment says the value is `FilterEntity.Name`'s; a
 comment only, so no version change.
+
+`FilterEntity` is declared in the root and the engine hands a filter the
+`*EntityInfo`: an engine type with methods that `DB` reaches is described
+by every package that uses a DB.
 
 The name `FilterEntity` was chosen over `EntityInfo` and `Meta`, which
 name other things, and over `Entity`, taken.
@@ -101,16 +108,24 @@ rule types (`PrivacyQuery`, `PrivacyMutation`, `QueryRule`, `QueryPolicy`,
 `MutationRule`, `MutationPolicy`, and `PrivacyFilter`, an alias) are
 declared in the root, and package privacy aliases them as before. The
 root erases a Policy to `engine.Policy`, whose functions take
-`*engine.DB`, and casts the DB back, as `WithFilter` does.
+`*engine.DB`, and casts the DB back, as `WithFilter` does. `erasePolicy`
+is a function, not a method of Policy, which every schema with a
+`Policy()` would describe.
 
 A generic `engine.Policy[D]` with `type Policy = engine.Policy[DB]` was
 built first and rejected: every package that names `velox.Policy`
 instantiated the rule types and their methods, and a Policy and three
 hooks grew an entity package by 177 KB, against 87 KB before. The root
-types cost nothing per package. One cost remains: `EntityPolicy`'s
-functions name `*DB`, so an entity package that uses no DB describes
-DB's methods (`entityDescriptor` 144550 to 169908 bytes); a package that
-uses a DB, as every program's does, already did (`entityDescUse` +386).
+types cost nothing per package.
+
+The functions an entity's metadata keeps (`EntityPolicy`'s, which
+`EntityInfo` reaches) take the DB as `engine.StmtDB`, an `any` holding
+the `*engine.DB`, as `MutationState.DB` is (`dbOf` converts). With
+`*DB` in those signatures an entity package that uses no DB described
+`DB` and all it reaches: `entityDescriptor` grew from 144550 to 169908
+bytes. With `StmtDB` the compile-cost bounds are those before this
+record: `entityDescriptor` 145480, `entityDescUse` 795980,
+`entityDescHooks` 881746, `entityDescMixin` 927220 bytes.
 
 An `Interceptor`'s `Filter` stays `func(ctx)`, ent's shape; one that reads
 still joins the transaction with `TxFrom` on a DB the application gave
@@ -120,7 +135,7 @@ the generated code is unchanged: no version change.
 
 ## Consequences
 
-- A `Calc` that aggregates needs `Agg()`. Forgetting it on MySQL writes
+- A `Calc` that aggregates needs `velox.Agg`. Forgetting it on MySQL writes
   `ANY_VALUE(SUM(x))` in a grouped ordering, which MySQL refuses: a loud
   failure, not a wrong answer.
 - A Filter compares `e.Name()` where it compared `entity`.

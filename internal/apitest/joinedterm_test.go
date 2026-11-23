@@ -108,7 +108,7 @@ func TestJoinedTermRefused(t *testing.T) {
 	}{
 		"no join":   {q.Select(velox.Joined(It.Invoice, I.OrgID)).Limit(1), "needs Join or LeftJoin"},
 		"aggregate": {q.Join(It.Invoice).Select(velox.Joined(It.Invoice, I.Total.Sum())).Limit(1), "aggregate the joined term instead"},
-		"calc aggregate": {q.Join(It.Invoice).Select(velox.Joined(It.Invoice, velox.Calc[inv]("SUM(?)", I.Total).Agg())).Limit(1),
+		"calc aggregate": {q.Join(It.Invoice).Select(velox.Joined(It.Invoice, velox.Agg(velox.Calc[inv]("SUM(?)", I.Total)))).Limit(1),
 			"aggregate the joined term instead"},
 		"relation's aggregate": {q.Join(It.Invoice).Select(velox.Joined(It.Invoice, I.Items.Count())).Limit(1), "relation's aggregate"},
 		"invalid inner":        {q.Join(It.Invoice).Select(velox.Joined(It.Invoice, velox.Calc[inv]("SELECT 1"))).Limit(1), "SELECT"},

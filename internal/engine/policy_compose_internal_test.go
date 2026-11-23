@@ -8,8 +8,8 @@ import (
 )
 
 // condOf is a Read condition that gives n's predicate, or err.
-func condOf(n Node, err error) func(context.Context, *DB) (Predicate, error) {
-	return func(context.Context, *DB) (Predicate, error) { return Predicate{n}, err }
+func condOf(n Node, err error) func(context.Context, StmtDB) (Predicate, error) {
+	return func(context.Context, StmtDB) (Predicate, error) { return Predicate{n}, err }
 }
 
 func TestAndEach(t *testing.T) {
@@ -18,15 +18,15 @@ func TestAndEach(t *testing.T) {
 	boom := errors.New("boom")
 	for _, c := range []struct {
 		name string
-		fs   []func(context.Context, *DB) (Predicate, error)
+		fs   []func(context.Context, StmtDB) (Predicate, error)
 		want Node
 		err  error
 	}{
-		{"an error stops", []func(context.Context, *DB) (Predicate, error){condOf(eq(1), nil), condOf(Node{}, boom)}, Node{}, boom},
-		{"a zero condition gives the zero predicate", []func(context.Context, *DB) (Predicate, error){condOf(eq(1), nil), condOf(Node{}, nil)}, Node{}, nil},
-		{"allows are skipped, none left", []func(context.Context, *DB) (Predicate, error){condOf(Node{Op: OpAllow}, nil), condOf(Node{Op: OpAllow}, nil)}, Node{Op: OpAllow}, nil},
-		{"one left is itself", []func(context.Context, *DB) (Predicate, error){condOf(Node{Op: OpAllow}, nil), condOf(eq(2), nil)}, eq(2), nil},
-		{"several are ANDed", []func(context.Context, *DB) (Predicate, error){condOf(eq(1), nil), condOf(eq(2), nil)}, Group(OpAnd, []Node{eq(1), eq(2)}), nil},
+		{"an error stops", []func(context.Context, StmtDB) (Predicate, error){condOf(eq(1), nil), condOf(Node{}, boom)}, Node{}, boom},
+		{"a zero condition gives the zero predicate", []func(context.Context, StmtDB) (Predicate, error){condOf(eq(1), nil), condOf(Node{}, nil)}, Node{}, nil},
+		{"allows are skipped, none left", []func(context.Context, StmtDB) (Predicate, error){condOf(Node{Op: OpAllow}, nil), condOf(Node{Op: OpAllow}, nil)}, Node{Op: OpAllow}, nil},
+		{"one left is itself", []func(context.Context, StmtDB) (Predicate, error){condOf(Node{Op: OpAllow}, nil), condOf(eq(2), nil)}, eq(2), nil},
+		{"several are ANDed", []func(context.Context, StmtDB) (Predicate, error){condOf(eq(1), nil), condOf(eq(2), nil)}, Group(OpAnd, []Node{eq(1), eq(2)}), nil},
 	} {
 		// A trailing allow keeps andConds from returning a lone condition as is.
 		got, err := andConds(append(c.fs, condOf(Node{Op: OpAllow}, nil)))(ctx, nil)
@@ -42,22 +42,22 @@ func TestAndEach(t *testing.T) {
 func TestAndWriteConds(t *testing.T) {
 	ctx := context.Background()
 	var ops []Op
-	w := func(n Node) func(context.Context, *DB, Op) (Predicate, error) {
-		return func(_ context.Context, _ *DB, op Op) (Predicate, error) {
+	w := func(n Node) func(context.Context, StmtDB, Op) (Predicate, error) {
+		return func(_ context.Context, _ StmtDB, op Op) (Predicate, error) {
 			ops = append(ops, op)
 			return Predicate{n}, nil
 		}
 	}
-	if andWriteConds(nil) != nil || andWriteConds([]func(context.Context, *DB, Op) (Predicate, error){nil}) != nil {
+	if andWriteConds(nil) != nil || andWriteConds([]func(context.Context, StmtDB, Op) (Predicate, error){nil}) != nil {
 		t.Error("none or only nils: want nil")
 	}
 	a := Node{Op: OpEQ, Col: 1, V: int64(1)}
-	one := andWriteConds([]func(context.Context, *DB, Op) (Predicate, error){nil, w(a)})
+	one := andWriteConds([]func(context.Context, StmtDB, Op) (Predicate, error){nil, w(a)})
 	if p, err := one(ctx, nil, OpDelete); err != nil || p.n.Col != 1 || len(ops) != 1 || ops[0] != OpDelete {
 		t.Errorf("one left: %+v, %v, ops %v", p.n, err, ops)
 	}
 	ops = nil
-	two := andWriteConds([]func(context.Context, *DB, Op) (Predicate, error){w(a), nil, w(Node{Op: OpEQ, Col: 2, V: int64(1)})})
+	two := andWriteConds([]func(context.Context, StmtDB, Op) (Predicate, error){w(a), nil, w(Node{Op: OpEQ, Col: 2, V: int64(1)})})
 	p, err := two(ctx, nil, OpUpdate)
 	if err != nil || p.n.Op != OpAnd || len(p.n.Kids) != 2 || len(ops) != 2 || ops[0] != OpUpdate || ops[1] != OpUpdate {
 		t.Errorf("two: %+v, %v, ops %v; want an AND of both, each given the op", p.n, err, ops)
@@ -76,15 +76,15 @@ func TestAndPolicies(t *testing.T) {
 
 	var order []string
 	denied := errors.New("denied")
-	ins := func(name string, err error) func(context.Context, *DB, unsafe.Pointer) error {
-		return func(context.Context, *DB, unsafe.Pointer) error {
+	ins := func(name string, err error) func(context.Context, StmtDB, unsafe.Pointer) error {
+		return func(context.Context, StmtDB, unsafe.Pointer) error {
 			order = append(order, name)
 			return err
 		}
 	}
 	eq := func(c int32) Node { return Node{Op: OpEQ, Col: c, V: int64(1)} }
 	a := &EntityPolicy{Read: condOf(eq(1), nil), Query: condOf(eq(3), nil), Insert: ins("a", nil)}
-	b := &EntityPolicy{Read: condOf(eq(2), nil), Write: func(context.Context, *DB, Op) (Predicate, error) { return Predicate{eq(4)}, nil }, Insert: ins("b", nil)}
+	b := &EntityPolicy{Read: condOf(eq(2), nil), Write: func(context.Context, StmtDB, Op) (Predicate, error) { return Predicate{eq(4)}, nil }, Insert: ins("b", nil)}
 	got := AndPolicies([]*EntityPolicy{a, nil, b})
 	if got == a || got == b {
 		t.Fatal("two policies: want a new one")

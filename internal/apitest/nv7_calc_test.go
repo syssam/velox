@@ -18,7 +18,7 @@ import (
 func TestCalcAgg(t *testing.T) {
 	db := openFake(velox.MySQL, &fakeconn.Exec{})
 	for _, text := range []string{"SUM(?)", "COALESCE(MAX(?), 0)", "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ?)", "my_agg(?)"} {
-		s := velox.Calc[inv](text, I.Total).Agg()
+		s := velox.Agg(velox.Calc[inv](text, I.Total))
 		got, _, err := db.Query[inv]().Select(I.OrgID, s).GroupBy(I.OrgID).OrderBy(s.Desc()).Limit(1).SQL(ctx)
 		if err != nil || strings.Contains(got, "ANY_VALUE") {
 			t.Errorf("%s: %s %v", text, got, err)
@@ -33,17 +33,17 @@ func TestCalcAgg(t *testing.T) {
 	}
 	// A marked Calc is refused where an aggregate is: inside an aggregate
 	// and as a GroupBy key.
-	agg := velox.Calc[inv]("my_agg(?)", I.Total).Agg()
+	agg := velox.Agg(velox.Calc[inv]("my_agg(?)", I.Total))
 	if _, _, err := db.Query[inv]().Select(I.OrgID, agg.Sum()).GroupBy(I.OrgID).Limit(1).SQL(ctx); err == nil {
 		t.Error("Sum of a marked Calc: no error")
 	}
 	if _, _, err := db.Query[inv]().Select(agg).GroupBy(agg).Limit(1).SQL(ctx); err == nil {
 		t.Error("GroupBy of a marked Calc: no error")
 	}
-	if _, _, err := db.Query[inv]().Select(velox.CountAll[inv]().Agg()).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), "Agg") {
+	if _, _, err := db.Query[inv]().Select(velox.Agg(velox.CountAll[inv]())).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), "Agg") {
 		t.Errorf("Agg of an aggregate Term: %v", err)
 	}
-	if _, _, err := db.Query[inv]().Select(velox.Calc[inv]("COUNT(*) OVER ()").Agg()).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), "window") {
+	if _, _, err := db.Query[inv]().Select(velox.Agg(velox.Calc[inv]("COUNT(*) OVER ()"))).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), "window") {
 		t.Errorf("Agg of a window function: %v", err)
 	}
 }

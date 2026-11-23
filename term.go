@@ -105,7 +105,7 @@ func (t Term[E]) Decimal[_ Lazy[E]]() Term[E] { return Term[E]{engine.DecimalTer
 // one, SUM(?) too, needs Agg, and one that does not, such as SQLite's
 // MAX(?, ?), does not. Agg of a term that is not an expression, or of a
 // window function, fails the statement.
-func (t Term[E]) Agg[_ Lazy[E]]() Term[E] { return Term[E]{engine.AggMarkTerm(t.t)} }
+func Agg[E any](t Term[E]) Term[E] { return Term[E]{engine.AggMarkTerm(t.t)} }
 
 // As names t as a result column of Select: SELECT t AS name. Scan reads
 // the column into the field of that name. A name is a letter or an

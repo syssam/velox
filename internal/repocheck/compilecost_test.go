@@ -302,13 +302,7 @@ var genericObjects = []struct {
 	// bytes, entityDescUse from 776890 to 781446, entityDescHooks from
 	// 861928 to 866786 and entityDescMixin to 912240, in the engine types an
 	// entity's package reaches; the upsert clause was 3.3 KB of it.
-	//
-	// A policy function given the statement's DB (ADR 0148) puts *DB in
-	// EntityPolicy, which EntityInfo holds, so an entity package that uses
-	// no DB describes DB's methods again: entityDescriptor took 169908
-	// bytes, up from 144550. One that uses a DB, as every program's does,
-	// described them already: entityDescUse grew from 796274 to 796660.
-	{"entityDescriptor", "", entityDescSrc, 172032}, // measured 169908
+	{"entityDescriptor", "", entityDescSrc, 146432}, // measured 144550
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -399,11 +393,16 @@ var genericObjects = []struct {
 	// Term.Equal and Term.Decimal (ADR 0127, 0131) took it to 795500,
 	// about 0.5 KB a method; entityDescHooks measured 880874 and
 	// entityDescMixin 926264, within their bounds.
-	{"entityDescUse", "", entityDescUseSrc, 796672}, // measured 796274 (Term.Agg)
+	//
+	// ADR 0148 keeps these bounds: velox.Agg is a function, not a Term
+	// method (one cost 432 bytes); FilterEntity is the root's; and the
+	// policy functions EntityInfo reaches take the DB as engine.StmtDB, an
+	// any, since a *DB in them cost entityDescriptor 25 KB.
+	{"entityDescUse", "", entityDescUseSrc, 796160}, // measured 795500
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.
-	{"entityDescHooks", "", entityDescHooksBound, 884736}, // measured 883256
+	{"entityDescHooks", "", entityDescHooksBound, 882176}, // measured 881170
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own

@@ -50,8 +50,6 @@ EntityLink.Name string
 EntityLink.Table string
 EntityLink.Type string
 EntityTable.Load(build func() []EntityLink) *EntityTable
-FilterEntity.HasColumn(column string) bool
-FilterEntity.Name() string
 Interceptor.Filter func(ctx context.Context) (Predicate, error)
 JoinClause.Left bool
 JoinClause.Link Link
@@ -569,6 +567,8 @@ func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) 
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
 func (db *DB) WithoutPolicy(reason string) *DB
+func (e FilterEntity) HasColumn(column string) bool
+func (e FilterEntity) Name() string
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
@@ -698,7 +698,6 @@ func (t JSONText[E]) NEQ[_ Lazy[E]](v string) Pred[E]
 func (t JSONText[E]) NotIn[_ Lazy[E]](vs ...string) Pred[E]
 func (t JSONText[E]) NotNull[_ Lazy[E]]() Pred[E]
 func (t JSONText[E]) Term[_ Lazy[E]]() Term[E]
-func (t Term[E]) Agg[_ Lazy[E]]() Term[E]
 func (t Term[E]) As[_ Lazy[E]](name string) Term[E]
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E]
 func (t Term[E]) Avg[_ Lazy[E]]() Term[E]
@@ -721,6 +720,7 @@ func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
 func AfterCommit(tx *DB, fn func(context.Context)) error
 func AfterRollback(tx *DB, fn func(context.Context)) error
+func Agg[E any](t Term[E]) Term[E]
 func Allow() Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
 func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
@@ -892,7 +892,7 @@ type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
 type Field = schema.Field
 type FieldChange = veloxtype.FieldChange
 type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
-type FilterEntity = engine.FilterEntity
+type FilterEntity struct { }
 type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type GroupingSet[E any] struct { }

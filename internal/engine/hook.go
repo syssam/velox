@@ -9,6 +9,19 @@ import (
 	"unsafe"
 )
 
+// StmtDB is the DB a statement runs on, a *DB, as the behaviour functions
+// an entity's metadata keeps (its policy's, its interceptors') are given
+// it. It is an any, as MutationState's DB is: EntityInfo reaches those
+// functions, and a *DB in their signatures made every Descriptor entity's
+// package describe DB and all it reaches, 25 KB (compilecost_test.go).
+type StmtDB = any
+
+// dbOf is the *DB in x, a StmtDB; nil for none.
+func dbOf(x StmtDB) *DB {
+	db, _ := x.(*DB)
+	return db
+}
+
 // MutationState is a write in flight: what Mutation holds. Its DB is an
 // any, a *DB that Mutation.DB converts: EntityInfo reaches mutation, and a *DB field
 // made every Descriptor entity's package 14 KiB larger (compilecost_test.go).
@@ -96,9 +109,9 @@ func AndPolicies(ps []*EntityPolicy) *EntityPolicy {
 	case 1:
 		return ps[0]
 	}
-	var reads, queries []func(ctx context.Context, db *DB) (Predicate, error)
-	var writes []func(ctx context.Context, db *DB, op Op) (Predicate, error)
-	var inserts []func(ctx context.Context, db *DB, p unsafe.Pointer) error
+	var reads, queries []func(ctx context.Context, db StmtDB) (Predicate, error)
+	var writes []func(ctx context.Context, db StmtDB, op Op) (Predicate, error)
+	var inserts []func(ctx context.Context, db StmtDB, p unsafe.Pointer) error
 	for _, p := range ps {
 		if p.Read != nil {
 			reads = append(reads, p.Read)
@@ -119,7 +132,7 @@ func AndPolicies(ps []*EntityPolicy) *EntityPolicy {
 	case 1:
 		out.Insert = inserts[0]
 	default:
-		out.Insert = func(ctx context.Context, db *DB, p unsafe.Pointer) error {
+		out.Insert = func(ctx context.Context, db StmtDB, p unsafe.Pointer) error {
 			for _, f := range inserts {
 				if err := f(ctx, db, p); err != nil {
 					return err
@@ -134,29 +147,29 @@ func AndPolicies(ps []*EntityPolicy) *EntityPolicy {
 // andConds is the condition that ANDs what each of fs returns, in order; nil
 // for none. The first error, or the first zero Pred, ends it: PolicyCond
 // denies the one and fails the other. An Allow adds nothing.
-func andConds(fs []func(ctx context.Context, db *DB) (Predicate, error)) func(ctx context.Context, db *DB) (Predicate, error) {
+func andConds(fs []func(ctx context.Context, db StmtDB) (Predicate, error)) func(ctx context.Context, db StmtDB) (Predicate, error) {
 	switch len(fs) {
 	case 0:
 		return nil
 	case 1:
 		return fs[0]
 	}
-	return func(ctx context.Context, db *DB) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB) (Predicate, error) {
 		return andEach(len(fs), func(i int) (Predicate, error) { return fs[i](ctx, db) })
 	}
 }
 
 // andWriteConds is andConds of Write conditions, which are given the
 // write's kind. A nil in fs is skipped.
-func andWriteConds(fs []func(ctx context.Context, db *DB, op Op) (Predicate, error)) func(ctx context.Context, db *DB, op Op) (Predicate, error) {
-	fs = slices.DeleteFunc(slices.Clone(fs), func(f func(context.Context, *DB, Op) (Predicate, error)) bool { return f == nil })
+func andWriteConds(fs []func(ctx context.Context, db StmtDB, op Op) (Predicate, error)) func(ctx context.Context, db StmtDB, op Op) (Predicate, error) {
+	fs = slices.DeleteFunc(slices.Clone(fs), func(f func(context.Context, StmtDB, Op) (Predicate, error)) bool { return f == nil })
 	switch len(fs) {
 	case 0:
 		return nil
 	case 1:
 		return fs[0]
 	}
-	return func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB, op Op) (Predicate, error) {
 		return andEach(len(fs), func(i int) (Predicate, error) { return fs[i](ctx, db, op) })
 	}
 }

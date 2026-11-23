@@ -101,7 +101,7 @@ func callFilter(ctx context.Context, db *DB, filters []EntityFilterFn, i int, en
 	if skip {
 		return Predicate{}, true, nil
 	}
-	p, err = (*f)(c, db, FilterEntity{entity}, op)
+	p, err = (*f)(c, db, entity, op)
 	return p, false, err
 }
 
@@ -126,12 +126,12 @@ func guardCond(f func(ctx context.Context) (Predicate, error)) func(ctx context.
 
 // guardPolicy is guardCond of a policy's Read or Query condition, which is
 // given the statement's DB.
-func guardPolicy(f func(ctx context.Context, db *DB) (Predicate, error)) func(ctx context.Context, db *DB) (Predicate, error) {
+func guardPolicy(f func(ctx context.Context, db StmtDB) (Predicate, error)) func(ctx context.Context, db StmtDB) (Predicate, error) {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
-	return func(ctx context.Context, db *DB) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB) (Predicate, error) {
 		c, skip := enter(ctx, key, kindPolicy)
 		if skip {
 			return allowed()
@@ -142,12 +142,12 @@ func guardPolicy(f func(ctx context.Context, db *DB) (Predicate, error)) func(ct
 
 // guardWrite is guardCond of a policy's Write condition, which is given the
 // write's kind.
-func guardWrite(f func(ctx context.Context, db *DB, op Op) (Predicate, error)) func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+func guardWrite(f func(ctx context.Context, db StmtDB, op Op) (Predicate, error)) func(ctx context.Context, db StmtDB, op Op) (Predicate, error) {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
-	return func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+	return func(ctx context.Context, db StmtDB, op Op) (Predicate, error) {
 		c, skip := enter(ctx, key, kindPolicy)
 		if skip {
 			return allowed()
@@ -158,12 +158,12 @@ func guardWrite(f func(ctx context.Context, db *DB, op Op) (Predicate, error)) f
 
 // guardInsert is guardCond of a policy's Insert check, which passes when
 // skipped.
-func guardInsert(f func(ctx context.Context, db *DB, r Row) error) func(ctx context.Context, db *DB, r Row) error {
+func guardInsert(f func(ctx context.Context, db StmtDB, r Row) error) func(ctx context.Context, db StmtDB, r Row) error {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
-	return func(ctx context.Context, db *DB, r Row) error {
+	return func(ctx context.Context, db StmtDB, r Row) error {
 		c, skip := enter(ctx, key, kindPolicy)
 		if skip {
 			return nil

@@ -91,10 +91,11 @@ type Policy struct {
 	Mutation MutationPolicy
 }
 
-// erase is p as the engine keeps it: each function given the engine's DB,
-// which a *DB is cast from (see DB), and each rule list given a query or
-// mutation that names the DB.
-func (p Policy) erase() engine.Policy {
+// erasePolicy is p as the engine keeps it: each function given the
+// engine's DB, which a *DB is cast from (see DB), and each rule list given
+// a query or mutation that names the DB. It is a function, not a method:
+// every package with a Policy() describes Policy's methods.
+func erasePolicy(p Policy) engine.Policy {
 	var e engine.Policy
 	if f := p.Read; f != nil {
 		e.Read = func(ctx context.Context, db *engine.DB) (Predicate, error) { return f(ctx, dbOf(db)) }
