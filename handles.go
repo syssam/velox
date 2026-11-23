@@ -1529,7 +1529,7 @@ func (c NullStringCol[E, V]) PutNull[_ Lazy[V]](r Row) error {
 	return rowSet[E]("PutNull", r, c.I, nil)
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -1586,6 +1586,9 @@ func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I)
 func (c JSONCol[E, V]) Len[_ Lazy[V]](keys ...string) JSONNumber[E] {
 	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindLen, keys)}
 }
+
+// Array is the JSON array at the path of object keys in the column, or the column's own array when no key is given, for the conditions on its elements: Has, HasSome, HasEvery and IsEmpty, false where the path is missing or holds no array.
+func (c JSONCol[E, V]) Array[_ Lazy[V]](keys ...string) JSONArray[E] { return jsonArray[E](c.I, keys) }
 
 // Old returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.
 func (c JSONCol[E, V]) Old[_ Lazy[V]](ch Change) V { return changeValue[E, V](ch, ch.row.Old, c.I) }
@@ -1666,6 +1669,11 @@ func (c NullJSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](
 // Len is the number of elements of the JSON array at the path of object keys in the column, or of the column's own array when no key is given, for its conditions and an ordering: NULL where the path is missing or holds no array (an object has no length).
 func (c NullJSONCol[E, V]) Len[_ Lazy[V]](keys ...string) JSONNumber[E] {
 	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindLen, keys)}
+}
+
+// Array is the JSON array at the path of object keys in the column, or the column's own array when no key is given, for the conditions on its elements: Has, HasSome, HasEvery and IsEmpty, false where the path is missing or holds no array.
+func (c NullJSONCol[E, V]) Array[_ Lazy[V]](keys ...string) JSONArray[E] {
+	return jsonArray[E](c.I, keys)
 }
 
 // SetNull sets the column to NULL.

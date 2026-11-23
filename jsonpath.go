@@ -228,3 +228,52 @@ func (b JSONBool[E]) IsNull[_ Lazy[E]]() Pred[E] {
 func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E] {
 	return jsonPred[E](b.col, b.path, engine.Node{Op: engine.OpNotNull})
 }
+
+// JSONArray is the JSON array at a path of object keys in a JSON column of
+// entity E, made by a JSON handle's Array, for the conditions on its
+// elements that the handle's Has, HasSome, HasEvery and IsEmpty make on the
+// column's own array. Where the path is missing or holds no array they are
+// false, and where the column is NULL they are NULL, as the handle's are.
+// Its conditions read alike on PostgreSQL (jsonb), MySQL and SQLite.
+type JSONArray[E any] struct {
+	col  int32
+	keys []string
+}
+
+func jsonArray[E any](col int32, keys []string) JSONArray[E] {
+	return JSONArray[E]{col, slices.Clone(keys)}
+}
+
+// Has is true where the array holds the element v: a string, a number or a
+// boolean, of any Go type of those kinds, as the handle's Has takes it.
+// PostgreSQL's form keeps a bare @> of the column, which a GIN index on it
+// serves.
+func (a JSONArray[E]) Has[_ Lazy[E]](v any) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONAtPath(engine.JSONHasNode(a.col, v), a.keys)))
+}
+
+// HasSome is true where the array holds one of vs. With no values it is
+// false.
+func (a JSONArray[E]) HasSome[_ Lazy[E]](vs ...any) Pred[E] { return a.each(false, vs) }
+
+// HasEvery is true where the array holds every one of vs. With no values it
+// is true.
+func (a JSONArray[E]) HasEvery[_ Lazy[E]](vs ...any) Pred[E] { return a.each(true, vs) }
+
+// IsEmpty is true where the array has no element, []: false for an array
+// with one, for a document that is no array and where the path is missing.
+func (a JSONArray[E]) IsEmpty[_ Lazy[E]]() Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONAtPath(engine.JSONEmptyNode(a.col), a.keys)))
+}
+
+// each is HasSome's and HasEvery's work: an Or or an And of Has.
+func (a JSONArray[E]) each[_ Lazy[E]](all bool, vs []any) Pred[E] {
+	kids := make([]engine.Node, len(vs))
+	for i, v := range vs {
+		kids[i] = engine.JSONAtPath(engine.JSONHasNode(a.col, v), a.keys)
+	}
+	if all {
+		return Pred[E](engine.NewPredicate(engine.Group(engine.OpAnd, kids)))
+	}
+	return Pred[E](engine.NewPredicate(engine.Group(engine.OpOr, kids)))
+}

@@ -362,8 +362,12 @@ func nodeKey(k []byte, d Dialect, n Node) []byte {
 		k = append(k, byte(p.Kind))
 		k = binary.AppendUvarint(k, uint64(len(p.Keys)))
 	case OpJSONHas:
-		// The element is an argument; its kind shapes SQLite's text.
+		// The element is an argument; its kind shapes SQLite's text, and
+		// the number of the path's keys the others'.
 		k = append(k, byte(n.V.(*jsonElem).kind))
+		k = binary.AppendUvarint(k, uint64(len(arrayPath(n))))
+	case OpJSONEmpty:
+		k = binary.AppendUvarint(k, uint64(len(arrayPath(n))))
 	case OpExpr:
 		k = exprKey(k, n.V.(*exprData))
 	case opRowIn:

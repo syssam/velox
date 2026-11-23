@@ -136,6 +136,8 @@ var (
 			"return jsonIsEmpty[E](c.I)"},
 		{"Len", "is the number of elements of the JSON array at the path of object keys in the column, or of the column's own array when no key is given, for its conditions and an ordering: NULL where the path is missing or holds no array (an object has no length).", "(keys ...string) JSONNumber[E]",
 			"return JSONNumber[E]{c.I, jsonPath(engine.JSONKindLen, keys)}"},
+		{"Array", "is the JSON array at the path of object keys in the column, or the column's own array when no key is given, for the conditions on its elements: Has, HasSome, HasEvery and IsEmpty, false where the path is missing or holds no array.", "(keys ...string) JSONArray[E]",
+			"return jsonArray[E](c.I, keys)"},
 	}
 	appendJSON = []method{
 		{"Append", "appends the elements of v, a slice, to the column's JSON array, as ent's AppendX does: PostgreSQL's ||, MySQL's JSON_MERGE_PRESERVE and SQLite's json_insert. A NULL column, or one holding the JSON null, becomes the elements; a document that is no array becomes the first element. v must encode as a JSON array; an insert refuses Append, as it refuses Add. PostgreSQL's column must be jsonb, as velox-gen writes it.", "(v V) Setter[E]",
@@ -214,7 +216,7 @@ var kinds = []kind{
 	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
 	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs, nullHook}},
 	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, nullSet, null, nullValues, ptrs, nullHook}},
-	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, appendJSON, jsonPaths, values, hook}},
+	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, appendJSON, jsonPaths, values, hook}},
 	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{nullSet, appendJSON, jsonPaths, null, nullValues, ptrs, nullHook}},
 }
 

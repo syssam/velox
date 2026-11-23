@@ -158,6 +158,10 @@ const UnitMonth
 const UnitQuarter
 const UnitWeek
 const UnitYear
+func (a JSONArray[E]) HasEvery[_ Lazy[E]](vs ...any) Pred[E]
+func (a JSONArray[E]) HasSome[_ Lazy[E]](vs ...any) Pred[E]
+func (a JSONArray[E]) Has[_ Lazy[E]](v any) Pred[E]
+func (a JSONArray[E]) IsEmpty[_ Lazy[E]]() Pred[E]
 func (b JSONBool[E]) EQ[_ Lazy[E]](v bool) Pred[E]
 func (b JSONBool[E]) IsNull[_ Lazy[E]]() Pred[E]
 func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E]
@@ -188,6 +192,7 @@ func (c Col[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c Col[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c JSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E]
+func (c JSONCol[E, V]) Array[_ Lazy[V]](keys ...string) JSONArray[E]
 func (c JSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
 func (c JSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
@@ -237,6 +242,7 @@ func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
 func (c NullCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullJSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E]
+func (c NullJSONCol[E, V]) Array[_ Lazy[V]](keys ...string) JSONArray[E]
 func (c NullJSONCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
 func (c NullJSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
@@ -893,6 +899,7 @@ type IndexInfo = veloxtype.IndexInfo
 type Input[E any] interface { Setters() ([]Setter[E], error) }
 type InsertQuery[E any] struct { }
 type Interceptor = engine.Interceptor
+type JSONArray[E any] struct { }
 type JSONBool[E any] struct { }
 type JSONCol[E, V any] struct { I int32 }
 type JSONNumber[E any] struct { }

@@ -780,6 +780,22 @@ index serves `Has` and `HasEvery`. velox-graphql offers them as
 `WhereOps(OpsJSONArray)` on a slice of strings, numbers or booleans. See
 [ADR 0080](decisions/0080-json-array-elements.md).
 
+An array inside an object is reached by `Array(keys...)`, which has the same
+four conditions:
+
+```go
+L := veloxgen.LandedCosts
+db.Query[veloxgen.LandedCost]().Where(velox.Or(
+	L.AllocationDetails.Array("receiptIds").Has(receiptID), // ent: sqljson.ValueContains(f, id, sqljson.Path("receiptIds"))
+	L.ItemReceiptID.EQ(receiptID)))
+```
+
+Where the path is missing, or holds a scalar or an object, the array holds
+nothing and is not empty, so `Not` matches the row. A NULL column matches
+neither. `Array()` with no key is the column's own array. On PostgreSQL the
+condition keeps `column @> '{"receiptIds":["…"]}'`, which a GIN index on the
+column serves. See [ADR 0140](decisions/0140-json-array-at-a-path.md).
+
 ### Subqueries on a column: Select and InSelect
 
 When no edge links the two columns, or you want to say which columns are

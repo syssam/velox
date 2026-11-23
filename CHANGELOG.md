@@ -26,6 +26,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `velox.Filter` receives and `velox.HasColumn` takes. A `TypeX` that
   collides with another generated name is refused (ADR 0139).
   Regenerate: `velox.GeneratedCodeIsVersion29` replaces Version28.
+- A JSON handle's `Array(keys...)` tests the elements of the array at a
+  path of object keys: `Has`, `HasSome`, `HasEvery` and `IsEmpty`, alike
+  on PostgreSQL, MySQL and SQLite, false where the path holds no array.
+  It is ent's `sqljson.ValueContains` with `sqljson.Path` (ADR 0140).
 - A policy function, privacy rule or interceptor Filter is not applied
   to a statement made under its own ctx, so one that reads its own
   entity ends instead of calling itself without end. One that reads

@@ -2,9 +2,11 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"strconv"
 	"unicode/utf8"
 )
@@ -76,6 +78,32 @@ func JSONHasNode(col int32, v any) Node {
 // NULL where the column is.
 func JSONEmptyNode(col int32) Node { return Node{Op: OpJSONEmpty, Col: col} }
 
+// JSONAtPath is n, a JSONHasNode or a JSONEmptyNode, on the array at the path
+// of object keys in its column in place of the column's own document. It is
+// false where the path is missing or holds no array, and NULL where the
+// column is NULL, as n is on the column. A key that a JSON path refuses
+// makes an invalid condition; no keys leaves n as it is.
+func JSONAtPath(n Node, keys []string) Node {
+	if n.Op == OpInvalid || len(keys) == 0 {
+		return n
+	}
+	if n.Op != OpJSONHas && n.Op != OpJSONEmpty {
+		return Node{Op: OpInvalid, V: errors.New("velox: a JSON array path on a condition that tests no JSON array")}
+	}
+	if err := (JSONPath{Kind: JSONKindLen, Keys: keys}).check(); err != nil {
+		return Node{Op: OpInvalid, V: err}
+	}
+	n.W = slices.Clone(keys)
+	return n
+}
+
+// arrayPath is the path of object keys of an OpJSONHas or OpJSONEmpty node:
+// nil for the column's own document.
+func arrayPath(n Node) []string {
+	keys, _ := n.W.([]string)
+	return keys
+}
+
 // jsonColumn reports whether column i is a JSON column, failing the statement
 // when it is not: the array conditions read JSON, which no other column holds.
 func (w *writer) jsonColumn(i int32) bool {
@@ -84,6 +112,55 @@ func (w *writer) jsonColumn(i int32) bool {
 	}
 	w.fail(fmt.Errorf("velox: %s: column %s is not a JSON column, which a JSON array condition needs", w.in.Name, w.in.Columns[i].Name))
 	return false
+}
+
+// jsonDoc writes the document at path keys in column i, as PostgreSQL's
+// jsonb_extract_path and MySQL's JSON_EXTRACT read it, or the column itself
+// for no keys. Every key, or MySQL's whole path, is an argument.
+func (w *writer) jsonDoc(i int32, keys []string) {
+	switch {
+	case len(keys) == 0:
+		w.colRef(i)
+	case w.d == Postgres:
+		w.str("jsonb_extract_path(")
+		w.colRef(i)
+		for _, k := range keys {
+			w.str(", ")
+			w.argOf(i, k)
+		}
+		w.str(")")
+	default: // MySQL
+		w.str("JSON_EXTRACT(")
+		w.colRef(i)
+		w.str(", ")
+		w.argOf(i, JSONPath{Keys: keys}.quotedPath())
+		w.str(")")
+	}
+}
+
+// docArgs writes the arguments of SQLite's json_type, json_each and
+// json_array_length, and MySQL's JSON_LENGTH, that name the document at path
+// keys in column i: the column, then the path as an argument when there are
+// keys.
+func (w *writer) docArgs(i int32, keys []string) {
+	w.colRef(i)
+	if len(keys) > 0 {
+		w.str(", ")
+		w.argOf(i, JSONPath{Keys: keys}.quotedPath())
+	}
+}
+
+// containsAt is the JSON document, as text, that holds the element of text
+// elem in an array at path keys: {"a":{"b":[elem]}}. PostgreSQL's @> finds
+// it in a document whose array at the path holds the element, which a GIN
+// index on the column serves.
+func containsAt(keys []string, elem string) string {
+	s := "[" + elem + "]"
+	for i := len(keys) - 1; i >= 0; i-- {
+		k, _ := json.Marshal(keys[i]) // a checked key always encodes
+		s = "{" + string(k) + ":" + s + "}"
+	}
+	return s
 }
 
 // jsonHas writes the OpJSONHas node n. PostgreSQL's @> and MySQL's
@@ -95,33 +172,58 @@ func (w *writer) jsonColumn(i int32) bool {
 // type of a NULL column is NULL, so the condition is NULL there on every
 // dialect. The bare @> stays a conjunct, so that a GIN index on a jsonb column
 // still serves it. PostgreSQL's column must be jsonb, as velox-gen writes it.
+//
+// At a path, PostgreSQL asks for an array there, and finds the element by @>
+// of the column against a document that holds it at the path (containsAt).
+// That @> is false where the path is missing, so the conjunction is false
+// there and NULL only for a NULL column, and the GIN index still serves it.
+// MySQL's and SQLite's are a CASE, as their tests at a missing path are NULL.
 func (w *writer) jsonHas(n Node) {
 	if !w.jsonColumn(n.Col) {
 		return
 	}
 	e := n.V.(*jsonElem)
+	keys := arrayPath(n)
 	switch w.d {
 	case Postgres:
 		w.str("(jsonb_typeof(")
-		w.colRef(n.Col)
+		w.jsonDoc(n.Col, keys)
 		w.str(") = 'array' AND ")
 		w.colRef(n.Col)
 		w.str(" @> ")
-		w.argOf(n.Col, e.text)
+		if len(keys) == 0 {
+			w.argOf(n.Col, e.text)
+		} else {
+			w.argOf(n.Col, containsAt(keys, e.text))
+		}
 		w.str("::jsonb)")
 	case MySQL:
-		w.str("(JSON_TYPE(")
-		w.colRef(n.Col)
-		w.str(") = 'ARRAY' AND JSON_CONTAINS(")
+		if len(keys) == 0 {
+			w.str("(JSON_TYPE(")
+			w.colRef(n.Col)
+			w.str(") = 'ARRAY' AND JSON_CONTAINS(")
+			w.colRef(n.Col)
+			w.str(", ")
+			w.argOf(n.Col, e.text)
+			w.str("))")
+			return
+		}
+		w.str("CASE WHEN JSON_TYPE(")
+		w.jsonDoc(n.Col, keys)
+		w.str(") = 'ARRAY' THEN JSON_CONTAINS(")
 		w.colRef(n.Col)
 		w.str(", ")
 		w.argOf(n.Col, e.text)
-		w.str("))")
+		w.str(", ")
+		w.argOf(n.Col, JSONPath{Keys: keys}.quotedPath())
+		w.str(") WHEN ")
+		w.colRef(n.Col)
+		w.str(" IS NULL THEN NULL ELSE 1 = 0 END")
 	default: // SQLite
 		w.str("CASE WHEN json_type(")
-		w.colRef(n.Col)
+		w.docArgs(n.Col, keys)
 		w.str(") = 'array' THEN EXISTS (SELECT 1 FROM json_each(")
-		w.colRef(n.Col)
+		w.docArgs(n.Col, keys)
 		w.str(") AS je WHERE ")
 		switch e.kind {
 		case JSONKindText:
@@ -140,28 +242,31 @@ func (w *writer) jsonHas(n Node) {
 	}
 }
 
-// jsonEmpty writes the OpJSONEmpty node n: the column is an array, and has no
-// element. The length of a document that is no array is not asked, which
-// PostgreSQL's jsonb_array_length refuses.
+// jsonEmpty writes the OpJSONEmpty node n: the column, or the document at its
+// path, is an array, and has no element. The length of a document that is no
+// array is not asked, which PostgreSQL's jsonb_array_length refuses.
 func (w *writer) jsonEmpty(n Node) {
 	if !w.jsonColumn(n.Col) {
 		return
 	}
+	keys := arrayPath(n)
 	switch w.d {
 	case Postgres:
 		w.str("CASE WHEN jsonb_typeof(")
-		w.colRef(n.Col)
+		w.jsonDoc(n.Col, keys)
 		w.str(") = 'array' THEN jsonb_array_length(")
+		w.jsonDoc(n.Col, keys)
 	case MySQL:
 		w.str("CASE WHEN JSON_TYPE(")
-		w.colRef(n.Col)
+		w.jsonDoc(n.Col, keys)
 		w.str(") = 'ARRAY' THEN JSON_LENGTH(")
+		w.docArgs(n.Col, keys)
 	default:
 		w.str("CASE WHEN json_type(")
-		w.colRef(n.Col)
+		w.docArgs(n.Col, keys)
 		w.str(") = 'array' THEN json_array_length(")
+		w.docArgs(n.Col, keys)
 	}
-	w.colRef(n.Col)
 	w.str(") = 0 WHEN ")
 	w.colRef(n.Col)
 	w.str(" IS NULL THEN NULL ELSE 1 = 0 END")
