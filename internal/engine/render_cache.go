@@ -215,6 +215,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		case MySQL:
 			k = keyRepeatKey(k, st.Project, st.OrderBy)
 		}
+		k = havingKey(k, d, st.Project, st.Distinct, st.OrderBy)
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Joins)))
 	for _, j := range st.Joins {

@@ -267,6 +267,127 @@ func TestSelectRepeatedTermMySQL(t *testing.T) {
 	}
 }
 
+// TestHavingRepeatedTerm: a HAVING term that repeats a GROUP BY key,
+// outside any aggregate, is written as the key is (decision 0138): on
+// PostgreSQL with the key's placeholders, binding nothing; on MySQL as MIN
+// of it, whose HAVING names no column outside an aggregate unless it is a
+// key column. A term inside an aggregate, or of another value, is written
+// as it is. The render cache keeps the shapes apart.
+func TestHavingRepeatedTerm(t *testing.T) {
+	bucket := func(n int) velox.Term[inv] { return velox.Calc[inv]("? * ?", I.OrgID, n) }
+	having := func(q velox.Query[inv], n int) velox.Query[inv] {
+		return q.Select(bucket(10), velox.CountAll[inv]()).GroupBy(bucket(10)).
+			Having(velox.Expr[inv]("? > ?", bucket(n), 15), velox.Expr[inv]("? > ?", bucket(n).Sum(), 5)).Limit(10)
+	}
+	for _, tc := range []struct {
+		d    velox.Dialect
+		n    int
+		sql  string
+		args []any
+	}{
+		{velox.Postgres, 10, `SELECT ("org_id" * $1), COUNT(*) FROM "invoices" GROUP BY ("org_id" * $1) ` +
+			`HAVING (("org_id" * $1) > $2) AND (SUM(("org_id" * $3)) > $4) LIMIT 10`, []any{10, 15, 10, 5}},
+		{velox.Postgres, 100, `SELECT ("org_id" * $1), COUNT(*) FROM "invoices" GROUP BY ("org_id" * $1) ` +
+			`HAVING (("org_id" * $2) > $3) AND (SUM(("org_id" * $4)) > $5) LIMIT 10`, []any{10, 100, 15, 100, 5}},
+		{velox.MySQL, 10, "SELECT ANY_VALUE((`org_id` * ?)), COUNT(*) FROM `invoices` GROUP BY (`org_id` * ?) " +
+			"HAVING (MIN((`org_id` * ?)) > ?) AND (SUM((`org_id` * ?)) > ?) LIMIT 10", []any{10, 10, 10, 15, 10, 5}},
+		{velox.MySQL, 100, "SELECT ANY_VALUE((`org_id` * ?)), COUNT(*) FROM `invoices` GROUP BY (`org_id` * ?) " +
+			"HAVING ((`org_id` * ?) > ?) AND (SUM((`org_id` * ?)) > ?) LIMIT 10", []any{10, 10, 100, 15, 100, 5}},
+		{velox.SQLite, 10, `SELECT ("org_id" * ?), COUNT(*) FROM "invoices" GROUP BY ("org_id" * ?) ` +
+			`HAVING (("org_id" * ?) > ?) AND (SUM(("org_id" * ?)) > ?) LIMIT 10`, []any{10, 10, 10, 15, 10, 5}},
+	} {
+		db := openFake(tc.d, &fakeconn.Exec{})
+		// The other value's shape first, on the same DB: the two share the
+		// text's cache, and the second run of each is a hit.
+		_, _, _ = having(db.Query[inv](), 110-tc.n).SQL(ctx)
+		for range 2 {
+			text, args, err := having(db.Query[inv](), tc.n).SQL(ctx)
+			if err != nil || text != tc.sql || !reflect.DeepEqual(args, tc.args) {
+				t.Errorf("%v %d:\n got %s %v %v\nwant %s %v", tc.d, tc.n, text, args, err, tc.sql, tc.args)
+			}
+		}
+	}
+	// A key that binds nothing: PostgreSQL matches it by its text; MySQL's
+	// HAVING needs MIN of it as well. A key column is written as it is.
+	next := velox.Calc[inv]("? + 1", I.OrgID)
+	for _, tc := range []struct {
+		d   velox.Dialect
+		sql string
+	}{
+		{velox.Postgres, `SELECT COUNT(*) FROM "invoices" GROUP BY ("org_id" + 1), "paid" HAVING (("org_id" + 1) > 2) AND ("paid") LIMIT 5`},
+		{velox.MySQL, "SELECT COUNT(*) FROM `invoices` GROUP BY (`org_id` + 1), `paid` HAVING (MIN((`org_id` + 1)) > 2) AND (`paid`) LIMIT 5"},
+	} {
+		text, _, err := openFake(tc.d, &fakeconn.Exec{}).Query[inv]().Select(velox.CountAll[inv]()).GroupBy(next, I.Paid).
+			Having(velox.Expr[inv]("? > 2", next), velox.Expr[inv]("?", I.Paid)).Limit(5).SQL(ctx)
+		if err != nil || text != tc.sql {
+			t.Errorf("no value %v:\n got %s %v\nwant %s", tc.d, text, err, tc.sql)
+		}
+	}
+	// Under MySQL's WITH ROLLUP MIN of a copy is not a subtotal row's NULL
+	// key, so the statement fails; PostgreSQL reuses the placeholders.
+	q := func(d velox.Dialect) (string, error) {
+		text, _, err := openFake(d, &fakeconn.Exec{}).Query[inv]().Select(velox.CountAll[inv]()).
+			GroupBy(velox.Rollup[inv](bucket(10))).Having(velox.Expr[inv]("? > 15", bucket(10))).Limit(5).SQL(ctx)
+		return text, err
+	}
+	if _, err := q(velox.MySQL); err == nil || !strings.Contains(err.Error(), "WITH ROLLUP") {
+		t.Errorf("MySQL rollup: %v", err)
+	}
+	if text, err := q(velox.Postgres); err != nil || strings.Contains(text, "$2") {
+		t.Errorf("PostgreSQL rollup: %s %v", text, err)
+	}
+}
+
+// TestDistinctOrderedByTerm: on MySQL a DISTINCT projection's ordering by
+// one of its result terms, not a column, is ANY_VALUE of it, in its IS
+// NULL and in itself (decision 0138): MySQL finds neither a copy with its
+// own ? nor x IS NULL of an expression in the select list. An ordering by
+// a column is as before; so is PostgreSQL, which reuses the placeholders.
+// An ordering by a term it does not select is refused before (guard).
+func TestDistinctOrderedByTerm(t *testing.T) {
+	bucket := func(n int) velox.Term[inv] { return velox.Calc[inv]("? * ?", I.OrgID, n) }
+	const b = "(`org_id` * ?)"
+	for _, tc := range []struct {
+		name string
+		d    velox.Dialect
+		q    func(velox.Query[inv]) velox.Query[inv]
+		sql  string
+	}{
+		{"bound", velox.MySQL, func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10), I.OrgID).Distinct().OrderBy(bucket(10).Desc(), I.OrgID.Asc())
+		}, "SELECT DISTINCT " + b + ", `org_id` FROM `invoices` ORDER BY ANY_VALUE(" + b + ") IS NULL DESC, ANY_VALUE(" + b + ") DESC, `org_id` LIMIT 10"},
+		{"no value", velox.MySQL, func(q velox.Query[inv]) velox.Query[inv] {
+			lower := velox.Calc[inv]("LOWER(?)", I.Number)
+			return q.Select(lower).Distinct().OrderBy(lower.Asc())
+		}, "SELECT DISTINCT (LOWER(`number`)) FROM `invoices` ORDER BY ANY_VALUE((LOWER(`number`))) IS NULL, ANY_VALUE((LOWER(`number`))) LIMIT 10"},
+		{"not distinct", velox.MySQL, func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10)).OrderBy(bucket(10).Asc())
+		}, "SELECT " + b + " FROM `invoices` ORDER BY " + b + " IS NULL, " + b + " LIMIT 10"},
+		{"PostgreSQL", velox.Postgres, func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10)).Distinct().OrderBy(bucket(10).Desc())
+		}, `SELECT DISTINCT ("org_id" * $1) FROM "invoices" ORDER BY ("org_id" * $1) DESC LIMIT 10`},
+	} {
+		db := openFake(tc.d, &fakeconn.Exec{})
+		for range 2 {
+			text, _, err := tc.q(db.Query[inv]().Limit(10)).SQL(ctx)
+			if err != nil || text != tc.sql {
+				t.Errorf("%s:\n got %s %v\nwant %s", tc.name, text, err, tc.sql)
+			}
+		}
+	}
+	// One DB renders both values of one text alike, from the cache the
+	// second time, with the values bound.
+	db := openFake(velox.MySQL, &fakeconn.Exec{})
+	for range 2 {
+		for _, n := range []int{10, 100} {
+			text, args, err := db.Query[inv]().Select(bucket(n)).Distinct().OrderBy(bucket(n).Asc()).Limit(10).SQL(ctx)
+			if err != nil || strings.Count(text, "ANY_VALUE(") != 2 || len(args) != 3 || args[2] != n {
+				t.Errorf("shared cache, %d: %s %v %v", n, text, args, err)
+			}
+		}
+	}
+}
+
 // TestOrderByExpression: an entity query orders by an expression, and the
 // same shape with other values renders alike.
 func TestOrderByExpression(t *testing.T) {

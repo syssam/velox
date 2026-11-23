@@ -102,6 +102,56 @@ func TestSelectRepeatedBoundTerm(t *testing.T) {
 	})
 }
 
+// TestHavingRepeatedTerm: a HAVING that tests a GROUP BY key written as an
+// expression runs on every dialect. On PostgreSQL a key with a bound value
+// was a new expression in HAVING, its value bound again, and failed with
+// 42803; velox writes it with the key's placeholders. MySQL's HAVING names
+// no column outside an aggregate unless it is a key column, so a key
+// expression there failed with error 1054, bound or not; velox writes it
+// as MIN of the key, which is the group's value (decision 0138).
+func TestHavingRepeatedTerm(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		type inv = testmodel.Invoice
+		bucket := velox.Calc[inv]("? * ?", I.OrgID, 10)
+		wantRows(t, "bound", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(bucket, velox.CountAll[inv]()).GroupBy(bucket).
+			Having(velox.Expr[inv]("? > ?", bucket, 15)).OrderBy(bucket.Asc()).Limit(10), 2),
+			[]string{"20 1"})
+		wantRows(t, "bound, not selected", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(velox.CountAll[inv]()).GroupBy(bucket).
+			Having(velox.Expr[inv]("? < ?", bucket, 15)).Limit(10), 1),
+			[]string{"4"})
+		next := velox.Calc[inv]("? + 1", I.OrgID)
+		wantRows(t, "no value", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(next, I.Total.Sum()).GroupBy(next).
+			Having(velox.Expr[inv]("? > 2", next)).Limit(10), 2),
+			[]string{"3 50"})
+	})
+}
+
+// TestDistinctOrderedByTerm: SELECT DISTINCT ordered by a selected
+// expression runs on every dialect. MySQL refused the ordering with error
+// 3065 or 3066: a copy of a term with a bound value is another expression,
+// and so is an expression's IS NULL, which velox writes first; velox writes
+// both as ANY_VALUE of the term (decision 0138).
+func TestDistinctOrderedByTerm(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		type inv = testmodel.Invoice
+		bucket := velox.Calc[inv]("? * ?", I.OrgID, 10)
+		wantRows(t, "bound", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(bucket).Distinct().OrderBy(bucket.Desc()).Limit(10), 1),
+			[]string{"20", "10"})
+		next := velox.Calc[inv]("? + 1", I.OrgID)
+		wantRows(t, "no value", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(next).Distinct().OrderBy(next.Asc()).Limit(10), 1),
+			[]string{"2", "3"})
+		wantRows(t, "an aggregate with a value", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(velox.Calc[inv]("? * ?", I.Total, 2).Sum()).GroupBy(I.OrgID).Distinct().
+			OrderBy(velox.Calc[inv]("? * ?", I.Total, 2).Sum().Asc()).Limit(10), 1),
+			[]string{"100", "200"})
+	})
+}
+
 // TestSelect runs Select, GroupBy, Having and an ordering by an aggregate
 // or an expression on every dialect. The invoices are (id, org, total, paid):
 // (1, 1, 10, yes), (2, 1, 20, no), (3, 1, 30, yes), (4, 1, 40, no),

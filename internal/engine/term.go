@@ -328,6 +328,9 @@ func (t Term) problem() error {
 // term writes t: a column as a condition writes it, an expression in
 // parentheses, an aggregate as FN(x).
 func (w *writer) term(t Term) {
+	if w.having && w.havingTerm(t) {
+		return
+	}
 	switch t.kind {
 	case termColumn:
 		if w.in.Columns[t.col].Codec {
@@ -351,11 +354,15 @@ func (w *writer) term(t Term) {
 		}
 		w.jsonValue(t.col, *t.path)
 	case termAgg:
+		// Inside an aggregate a term need not be grouped (havingTerm).
+		having := w.having
+		w.having = false
 		if t.of != nil && decimalTermAgg(w.d, w.in, t.fn, *t.of) {
 			w.sqliteDecimalAgg(func() { w.aggTerm(t) })
-			return
+		} else {
+			w.aggTerm(t)
 		}
-		w.aggTerm(t)
+		w.having = having
 	case termRel:
 		w.relTerm(t)
 	case termDate:
@@ -482,6 +489,9 @@ func (w *writer) projectStmt(st *Statement) {
 	if w.d == MySQL && len(p.GroupBy) > 0 {
 		w.keys = p
 	}
+	if w.d == MySQL && st.Distinct {
+		w.distinct = p
+	}
 	w.str("SELECT ")
 	if st.Distinct {
 		w.str("DISTINCT ")
@@ -504,12 +514,15 @@ func (w *writer) projectStmt(st *Statement) {
 		} else {
 			w.str(" AND ")
 		}
+		w.having = true
 		w.pred(h.n)
+		w.having = false
 	}
 	w.grouped = len(p.GroupBy) > 0
 	w.orderBy(st.OrderBy, false)
 	w.grouped = false
 	w.keys = nil
+	w.distinct = nil
 	w.qualify = false
 	w.selectTail(st)
 }
@@ -548,12 +561,17 @@ func (w *writer) orderTerm(o OrderTerm) {
 	// ? is another parameter: it is ANY_VALUE of it as well (anyKey).
 	nullAny := w.d == MySQL && w.grouped && !hasAgg(t)
 	key := w.anyKey(t)
+	// Under MySQL's DISTINCT an ordering term must be a result term as it
+	// is written: a copy with its own ? is not, nor is x IS NULL of an
+	// expression. ANY_VALUE of a result term is the row's value, and lifts
+	// the check (distinctRepeat).
+	dist := w.distinct != nil && distinctRepeat(w.distinct, t)
 	for k := range 2 {
 		if k == 0 && !null {
 			continue
 		}
 		switch {
-		case k == 0 && nullAny, k == 1 && key:
+		case k == 0 && (nullAny || dist), k == 1 && (key || dist):
 			w.anyValue(t)
 		case null || !w.repeatSpan(t): // PostgreSQL writes the term once
 			w.term(t)

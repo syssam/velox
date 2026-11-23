@@ -146,6 +146,12 @@ func distinctReads(st *Statement) bool {
 // distinctOrdered reports whether o, an ordering of a SELECT DISTINCT,
 // orders by a term the statement reads: a term of its projection, or the
 // one column a read of a column (Values, IDs) reads.
+// resultTerm reports whether t is one of p's result terms, names aside.
+func resultTerm(p *Projection, t Term) bool {
+	t = unnamed(t)
+	return slices.ContainsFunc(p.Terms, func(x Term) bool { return reflect.DeepEqual(unnamed(x), t) })
+}
+
 func distinctOrdered(st *Statement, o OrderTerm) bool {
 	t, expr := o.Expr.(Term)
 	if !expr {
@@ -155,8 +161,7 @@ func distinctOrdered(st *Statement, o OrderTerm) bool {
 		t = ColumnTerm(int32(o.Column))
 	}
 	if st.Project != nil {
-		t = unnamed(t)
-		return slices.ContainsFunc(st.Project.Terms, func(x Term) bool { return reflect.DeepEqual(unnamed(x), t) })
+		return resultTerm(st.Project, t)
 	}
 	return !expr && o.Rel == 0 && len(st.Columns) == 1 && st.Columns[0] == o.Column
 }

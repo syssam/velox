@@ -1,6 +1,8 @@
 # 0129. On MySQL a repeated GROUP BY key with a bound value is ANY_VALUE
 
 - Status: accepted, 2026-11-23. Amends 0128, which left MySQL open.
+  HAVING and DISTINCT are decision
+  [0138](0138-having-and-distinct-repeat-terms.md).
 
 ## Context
 

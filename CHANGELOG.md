@@ -1477,6 +1477,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A HAVING that tests a GROUP BY key written as an expression runs: on
+  PostgreSQL a key with a bound value is written with the key's
+  placeholders, where a copy failed with 42803; on MySQL the key is
+  written as `MIN` of it, where it failed with error 1054, bound or not.
+  On MySQL, SELECT DISTINCT ordered by a selected expression runs,
+  written as `ANY_VALUE` of it, where it failed with error 3065 or 3066
+  (ADR 0138).
 - mysql: a term with a bound value that is selected or ordered by and
   repeats a GROUP BY key is written as `ANY_VALUE` of it, so
   only_full_group_by takes it; it failed with error 1055. Under

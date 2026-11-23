@@ -1,6 +1,7 @@
 # 0128. On PostgreSQL a repeated projection term reuses its placeholders
 
-- Status: accepted, 2026-11-23. MySQL's case is decision 0129.
+- Status: accepted, 2026-11-23. MySQL's case is decision 0129. HAVING is
+  decision [0138](0138-having-and-distinct-repeat-terms.md).
 
 ## Context
 

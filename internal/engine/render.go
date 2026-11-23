@@ -57,6 +57,15 @@ type writer struct {
 	// and ordering terms that repeat a GROUP BY key are written as
 	// ANY_VALUE of it (anyKey); nil elsewhere.
 	keys *Projection
+	// having is set while a projection's HAVING is written, outside any
+	// aggregate in it: a term there that repeats a GROUP BY key is written
+	// with its placeholders, on PostgreSQL, or as MIN of it, on MySQL
+	// (havingTerm).
+	having bool
+	// distinct is the DISTINCT projection being written on MySQL, whose
+	// orderings by a result term are written as ANY_VALUE of it
+	// (distinctRepeat); nil elsewhere.
+	distinct *Projection
 }
 
 func (w *writer) fail(err error) {

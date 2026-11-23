@@ -290,3 +290,135 @@ func keyRepeatKey(k []byte, p *Projection, order []OrderTerm) []byte {
 	}
 	return k
 }
+
+// A HAVING term that repeats a GROUP BY key, outside any aggregate in it,
+// is written as the key is (decision 0138). On PostgreSQL a key with a
+// bound value is written with the key's placeholders, as an ordering is
+// (decision 0128): with its own, it is another expression, refused with
+// 42803. MySQL's HAVING names no column outside an aggregate unless it is
+// a key column, so an expression key there failed with error 1054, bound
+// or not, and ANY_VALUE does not lift that; the term is written as MIN of
+// it, which over a group's rows is the key's value. Under WITH ROLLUP a
+// subtotal row's key is NULL and MIN of a copy is not, so such a statement
+// fails. The render cache keys what each term repeats (havingKey).
+//
+// On MySQL a DISTINCT projection's ordering by a term that is one of its
+// result terms, not a column, is written as ANY_VALUE of it, in its
+// IS NULL and in itself. MySQL refuses an ordering it does not find in the
+// select list with error 3065, or 3066 for an aggregate: a copy with its
+// own ? is not found, and neither is x IS NULL of an expression. The row's
+// value of a result term is the value of each copy of it.
+
+// havingTerm writes t, a term of a HAVING outside any aggregate, as the
+// GROUP BY key it repeats is written, and reports whether it did.
+func (w *writer) havingTerm(t Term) bool {
+	switch w.d {
+	case Postgres:
+		if !termArgs(t) {
+			return false
+		}
+		w.having = false
+		ok := w.repeatSpan(t)
+		w.having = true
+		return ok
+	case MySQL:
+		if w.keys == nil || !havingKeyRepeat(w.keys, t) {
+			return false
+		}
+		if slices.ContainsFunc(w.keys.GroupBy, func(g Term) bool { return g.kind == termGrouping }) {
+			w.fail(fmt.Errorf("velox: %s: on MySQL HAVING cannot test an expression key of WITH ROLLUP outside an aggregate; test it in Where, or use PostgreSQL", w.in.Name))
+			return false
+		}
+		w.having = false
+		w.str("MIN(")
+		w.term(t)
+		w.str(")")
+		w.having = true
+		return true
+	}
+	return false
+}
+
+// havingKeyRepeat reports whether t, a term of a grouped MySQL
+// projection's HAVING, is a GROUP BY key of p that is not a column.
+func havingKeyRepeat(p *Projection, t Term) bool {
+	if t.kind == termColumn {
+		return false
+	}
+	found := false
+	groupKeys(p, func(_ int, k Term) bool {
+		found = sameTerm(k, t)
+		return !found
+	})
+	return found
+}
+
+// distinctRepeat reports whether t, an ordering term of a DISTINCT MySQL
+// projection p, is one of its result terms, as the guard finds it
+// (resultTerm), and not a column.
+func distinctRepeat(p *Projection, t Term) bool {
+	return t.kind != termColumn && resultTerm(p, t)
+}
+
+// havingTerms calls f with each term of p's HAVING that the writer checks
+// (havingTerm): each Expr's terms, and the terms inside them, but not
+// inside an aggregate or a relation's term, in the order written.
+func havingTerms(p *Projection, f func(Term)) {
+	var term func(Term)
+	term = func(t Term) {
+		f(t)
+		switch t.kind {
+		case termExpr:
+			for _, s := range t.x.slots {
+				if s.Term != nil {
+					term(*s.Term)
+				}
+			}
+		case termDate:
+			term(*t.of)
+		}
+	}
+	var node func(Node)
+	node = func(n Node) {
+		if n.Op == OpExpr {
+			for _, s := range n.V.(*exprData).slots {
+				if s.Term != nil {
+					term(*s.Term)
+				}
+			}
+		}
+		for _, k := range n.Kids {
+			node(k)
+		}
+	}
+	for _, h := range p.Having {
+		node(h.n)
+	}
+}
+
+// havingKey appends to a projection's key what its HAVING terms repeat:
+// on PostgreSQL 1 plus the index of the result term or GROUP BY key each
+// repeats (repeated), or 0; on MySQL whether each is a key (a term not
+// written still adds its part, which keeps the key exact). A DISTINCT
+// MySQL projection adds, for each ordering by a term, whether it is a
+// result term.
+func havingKey(k []byte, d Dialect, p *Projection, distinct bool, order []OrderTerm) []byte {
+	switch d {
+	case Postgres:
+		groups := 0
+		groupKeys(p, func(int, Term) bool { groups++; return true })
+		havingTerms(p, func(t Term) { k = binary.AppendUvarint(k, uint64(repeated(p, groups, t)+1)) })
+	case MySQL:
+		if len(p.GroupBy) > 0 {
+			havingTerms(p, func(t Term) { k = append(k, bit(havingKeyRepeat(p, t))) })
+		}
+		if distinct {
+			for _, o := range order {
+				if t, ok := o.Expr.(Term); ok {
+					k = append(k, bit(distinctRepeat(p, t)))
+				}
+			}
+		}
+	}
+	return k
+}
