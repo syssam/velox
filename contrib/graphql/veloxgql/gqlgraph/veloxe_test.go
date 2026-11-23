@@ -294,7 +294,7 @@ func (*vault) VeloxMeta() *velox.Meta[vault] {
 
 // nodeDB holds people 1..3, badges 3, 20 and 21, and vault 30: 3 is a person
 // and a badge.
-func nodeDB(t *testing.T) (*velox.DB, []*gqlgraph.Type) {
+func nodeDB(t *testing.T) (*velox.DB, []*gqlgraph.Type, *edgeLog) {
 	t.Helper()
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -320,14 +320,15 @@ func nodeDB(t *testing.T) (*velox.DB, []*gqlgraph.Type) {
 		{Name: "Person", Table: untyped.TableOf[person], Key: key},
 		{Name: "Vault", Table: untyped.TableOf[vault], Key: key},
 	}
-	return velox.Open(velox.SQLite, sqlDB), types
+	l := &edgeLog{sql: map[string][]string{}}
+	return velox.Open(velox.SQLite, sqlDB, velox.WithAround(l.around)), types, l
 }
 
 // TestResolveNode: the one row of the ID, through each type's Read policy:
 // a row it hides and a type whose policy denies count as none, which is
 // NOT_FOUND; an ID of two types is ErrAmbiguousNodeID.
 func TestResolveNode(t *testing.T) {
-	db, types := nodeDB(t)
+	db, types, _ := nodeDB(t)
 	ctx := context.Background()
 	n, err := gqlgraph.ResolveNode(ctx, db, types, int64(2))
 	if p, ok := n.(*person); err != nil || !ok || p.Name != "b" {
@@ -364,7 +365,7 @@ func TestResolveNode(t *testing.T) {
 // TestResolveNodes: one entry per ID, in order, nil for an ID no type has
 // that the caller may read; an ambiguous ID fails the whole list.
 func TestResolveNodes(t *testing.T) {
-	db, types := nodeDB(t)
+	db, types, _ := nodeDB(t)
 	ctx := context.Background()
 	ns, err := gqlgraph.ResolveNodes(ctx, db, types, []int64{20, 99, 1, 21, 30})
 	if err != nil || len(ns) != 5 || ns[1] != nil || ns[3] != nil || ns[4] != nil {

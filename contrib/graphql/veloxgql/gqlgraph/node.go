@@ -37,7 +37,8 @@ var (
 // is not there look the same, and node(id:) tells a caller nothing of a row
 // it may not read. Any other error, a driver's, is returned.
 //
-// It is the probe ResolveNode makes of each type; an application that
+// It is the read ResolveNode makes of each type its lookup finds; an
+// application that
 // resolves node(id:) its own way, as in an order of its own, calls it with
 // the types the generated NodeTypes returns.
 func LoadNode(ctx context.Context, db *velox.DB, c *Type, id any) (any, error) {
@@ -60,14 +61,25 @@ func LoadNode(ctx context.Context, db *velox.DB, c *Type, id any) (any, error) {
 }
 
 // ResolveNode returns the one row of the types that has the key id, as
-// veloxe's Client.Noder did: it probes every type with LoadNode, in the
-// order given, one query each. It fails with ErrNodeNotFound (NOT_FOUND)
-// when none has it, with ErrAmbiguousNodeID when more than one does, naming
-// them and not the ID, and with the first other error a probe returns.
+// veloxe's Client.Noder did. One statement finds which types hold the key,
+// reading keys only, under no policy; then LoadNode reads each type found,
+// in the order given, so a row that a policy hides or denies is none, as
+// is one that is not there. A type whose key is not an integer or a string
+// type, or has a codec, is read whatever the lookup finds. It fails with
+// ErrNodeNotFound (NOT_FOUND) when no type has a row the caller may read,
+// with ErrAmbiguousNodeID when more than one does, naming them and not the
+// ID, and with the first other error a statement returns.
 func ResolveNode(ctx context.Context, db *velox.DB, types []*Type, id any) (any, error) {
+	read, err := lookupNodes(ctx, db, types, []any{id})
+	if err != nil {
+		return nil, err
+	}
 	var node any
 	var found []string
-	for _, c := range types {
+	for i, c := range types {
+		if !read[i] {
+			continue
+		}
 		n, err := LoadNode(ctx, db, c, id)
 		if err != nil {
 			return nil, err
@@ -88,10 +100,12 @@ func ResolveNode(ctx context.Context, db *velox.DB, types []*Type, id any) (any,
 
 // ResolveNodes returns the row of each of ids, in order, as veloxe's
 // Client.Noders did, with nil for an ID that no type has, as Relay's
-// nodes(ids:) asks. It reads each type once, with one IN query of every
-// ID its key column can hold, as entgql's Noders does: one statement per
-// type, however many IDs. Each type's rows are one batch (veloxgql.Batch),
-// so an edge of theirs is read for all of them in one statement.
+// nodes(ids:) asks. One statement finds which types hold any of the IDs,
+// as ResolveNode's does; then it reads each type found once, with one IN
+// query of every ID its key column can hold, under the type's policies, as
+// entgql's Noders does: one statement per type found, however many IDs.
+// Each type's rows are one batch (veloxgql.Batch), so an edge of theirs is
+// read for all of them in one statement.
 //
 // More IDs than the MaxPage of veloxgql.LimitsFromContext(ctx) is
 // veloxgql.ErrPageTooLarge, BAD_USER_INPUT, before any statement. An ID
@@ -110,10 +124,17 @@ func ResolveNodes[K any](ctx context.Context, db *velox.DB, types []*Type, ids [
 
 // resolveNodes is ResolveNodes of ids, already capped.
 func resolveNodes(ctx context.Context, db *velox.DB, types []*Type, ids []any) ([]any, error) {
+	read, err := lookupNodes(ctx, db, types, ids)
+	if err != nil {
+		return nil, err
+	}
 	nodes := make([]any, len(ids))
 	found := make([][]string, len(ids)) // the types that have each ID
 	ambiguous := -1                     // the first ID of two types
-	for _, c := range types {
+	for j, c := range types {
+		if !read[j] {
+			continue
+		}
 		rows, err := loadNodes(ctx, db, c, ids)
 		if err != nil {
 			return nil, err

@@ -773,6 +773,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
+  the types that hold the IDs with one statement, then read only those
+  types under their policies: `node(id:)` is 2 statements, not one per
+  type of Node. Results, policy denials and ambiguity are unchanged; the
+  lookup is raw SQL, which Around hooks see as "Rows". No generated code
+  changes (ADR 0149).
 - `veloxtest.Open` on SQLite with an empty DSN, or one of a database in
   memory such as enttest's `file:ent?mode=memory&cache=shared&_fk=1`, gives
   each call a file of its own in `t.TempDir()`, a copy of the tables

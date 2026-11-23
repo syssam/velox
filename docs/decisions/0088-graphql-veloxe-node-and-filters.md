@@ -2,7 +2,9 @@
 
 Status: accepted, 2026-11-19. Extends 0087. Amends 0061 for compat=veloxe
 only: velox's own API still has no Node. Amended 2026-11-22 for
-`ResolveNodes` and the node budget: see the notes at the end.
+`ResolveNodes` and the node budget, and 2026-11-24 for what the filter
+caps are under compat and for the type lookup (0149): see the notes at the
+end.
 
 ## Context
 
@@ -61,6 +63,8 @@ possibly empty and over-100 `idIn` lists, and rely on the old meaning.
   <T>WhereInput" in a not, an or or a has<Edge>With, and skipped in an and
   (only when it is itself empty, as veloxe compared with `==`).
   MaxFilterWidth and MaxFilterNodes do not apply; MaxFilterDepth does.
+  (Superseded on 2026-11-22: MaxFilterNodes applies, as a budget of 10
+  times it, never over 30000; see the amendments.)
 
 ## Why
 
@@ -138,3 +142,20 @@ argument stays under SQLite's 32766, and a larger one is `ErrFilterTooLarge`,
 BAD_USER_INPUT, before any statement. The width cap still does not apply.
 Evidence: `TestVeloxeWhere` (an `idIn` of 9000 passes and one of 10000 is
 refused) and `TestVeloxeBindLimit` in `contrib/graphql/veloxgql/gqlgraph`.
+
+## Amendment, 2026-11-24: the filter caps as built, and the type lookup
+
+The decision's bullet and its "No width or node cap" reason still said
+that MaxFilterNodes does not apply under compat. The code applies it, as
+the amendment above says: `newBudget` in
+`contrib/graphql/veloxgql/gqlgraph/where.go` gives a where argument of a
+`Type.Veloxe` type a budget of 10 times `MaxFilterNodes` (10000 by
+default), held to 30000 under compat or not, and a larger argument is
+`ErrFilterTooLarge`, BAD_USER_INPUT, before any statement. What does not
+apply under compat is MaxFilterWidth (`Filter.width` returns early), so an
+`idIn` of over 100 IDs passes; MaxFilterDepth applies. Evidence:
+`TestVeloxeWhere` and `TestVeloxeBindLimit`.
+
+`ResolveNode` no longer probes every type, and `ResolveNodes` no longer
+reads every type: one statement finds which types hold the IDs, and only
+those are read, under their policies, with the same results (0149).

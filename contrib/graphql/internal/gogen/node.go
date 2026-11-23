@@ -15,8 +15,9 @@ import (
 // each implementing type's Go type to satisfy it, so each gets IsNode, as
 // veloxe's generated entities had. ResolveNode and ResolveNodes answer
 // node(id:) and nodes(ids:) as veloxe's Client.Noder and Client.Noders did,
-// ResolveNodes with one statement per type, for the application's resolvers; NodeTypes is for an application that
-// resolves them its own way. ok is false when no type has an ID, as the SDL
+// after one statement that finds the types holding the IDs, for the
+// application's resolvers; NodeTypes is for an application that resolves
+// them its own way. ok is false when no type has an ID, as the SDL
 // then has no Node.
 //
 // The file's name is no entity's: an entity named Noder would also take the
@@ -70,7 +71,7 @@ func (r *renderer) nodeFile(types []*sdl.Type) (file plugin.File, ok bool, err e
 	f.doc("", "NodeTypes returns the types of Node, in name order, for an application that resolves node(id:) its own way with gqlgraph.LoadNode.")
 	f.p("func NodeTypes() []*%s.Type { return %s.Clone(nodeTypes) }", impl, f.use("slices", "slices"))
 	f.p("")
-	f.doc("", "ResolveNode answers node(id:) as veloxe's Client.Noder did: the one node of any type whose key is id, read with db, so each type's Read policy applies, a hidden or denied row counting as none. It probes every type, one query each. Its error wraps gqlgraph.ErrNodeNotFound (NOT_FOUND) when no type has the ID, and gqlgraph.ErrAmbiguousNodeID when more than one does.")
+	f.doc("", "ResolveNode answers node(id:) as veloxe's Client.Noder did: the one node of any type whose key is id, read with db, so each type's Read policy applies, a hidden or denied row counting as none. One statement finds which types hold the ID; only those are read. Its error wraps gqlgraph.ErrNodeNotFound (NOT_FOUND) when no type has the ID, and gqlgraph.ErrAmbiguousNodeID when more than one does.")
 	f.p("func ResolveNode(ctx %s.Context, db *%s.DB, id %s) (Noder, error) {", ctx, velox, key.typ)
 	f.p("\tn, err := %s.ResolveNode(ctx, db, nodeTypes, id)", impl)
 	f.p("\tif err != nil {")
@@ -79,7 +80,7 @@ func (r *renderer) nodeFile(types []*sdl.Type) (file plugin.File, ok bool, err e
 	f.p("\treturn n.(Noder), nil")
 	f.p("}")
 	f.p("")
-	f.doc("", "ResolveNodes answers nodes(ids:) as veloxe's Client.Noders did: the node of each ID, in order, nil for one no type has. It reads each type with one IN query of the IDs, and each type's nodes batch their edges. More IDs than Limits.MaxPage is veloxgql.ErrPageTooLarge (BAD_USER_INPUT); an ID of two types is gqlgraph.ErrAmbiguousNodeID. Any other error stops it.")
+	f.doc("", "ResolveNodes answers nodes(ids:) as veloxe's Client.Noders did: the node of each ID, in order, nil for one no type has. One statement finds which types hold the IDs, then it reads each of those with one IN query of the IDs, and each type's nodes batch their edges. More IDs than Limits.MaxPage is veloxgql.ErrPageTooLarge (BAD_USER_INPUT); an ID of two types is gqlgraph.ErrAmbiguousNodeID. Any other error stops it.")
 	f.p("func ResolveNodes(ctx %s.Context, db *%s.DB, ids []%s) ([]Noder, error) {", ctx, velox, key.typ)
 	f.p("\tns, err := %s.ResolveNodes(ctx, db, nodeTypes, ids)", impl)
 	f.p("\tif err != nil {")

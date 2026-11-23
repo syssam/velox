@@ -44,8 +44,10 @@ func TestResolveNodesBatched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := log.counts(); got["children"] != 1 || got["owners"] != 1 || len(got) != 2 {
-		t.Errorf("statements by table %v, want one each of children and owners", got)
+	// The lookup, a raw statement of no table, finds no owner of the IDs,
+	// so owners is not read.
+	if got := log.counts(); got[""] != 1 || got["children"] != 1 || len(got) != 2 {
+		t.Errorf("statements by table %v, want the lookup and one of children", got)
 	}
 	if len(ns) != len(ids) || ns[2] != nil {
 		t.Fatalf("got %#v", ns)

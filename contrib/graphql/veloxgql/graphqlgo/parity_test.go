@@ -65,9 +65,9 @@ var parityCases = []parityCase{
 		query: `query($id: ID!) { node(id: $id) { __typename id ... on Post { title author { name } tags { name } } } }`,
 		vars:  map[string]any{"id": "11"},
 		want:  `"__typename":"Post"`,
-		// A probe of each type, then the post's author and its tags, each
-		// alone.
-		stmts: 5,
+		// The lookup of the ID's types, the post, then its author and its
+		// tags, each alone (ADR 0149); a probe of each of the 3 types was 5.
+		stmts: 4,
 	},
 	{
 		name:  "aliases",
