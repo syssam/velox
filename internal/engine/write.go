@@ -116,17 +116,26 @@ func swapped(c int32) int32 {
 	return c
 }
 
-// checkAssignedOnce refuses a column assigned twice: PostgreSQL rejects it
-// while MySQL and SQLite accept it, so velox refuses it everywhere.
-func checkAssignedOnce(info *EntityInfo, set []Assignment) error {
-	seen := make(map[int]bool, len(set))
-	for _, a := range set {
-		if seen[a.Column] {
-			return fmt.Errorf("velox: %s: column %s is assigned twice", info.Name, info.Columns[a.Column].Name)
-		}
-		seen[a.Column] = true
+// lastAssignments keeps, for a column assigned more than once, only its
+// last assignment, at that one's place: a builder's mutation holds one value
+// per field, as ent's does, so a later setter replaces an earlier one, Set,
+// Add or SetExpr alike. PostgreSQL rejects a column assigned twice, so the
+// statement never holds two.
+func lastAssignments(set []Assignment) []Assignment {
+	last := make(map[int]int, len(set))
+	for i, a := range set {
+		last[a.Column] = i
 	}
-	return nil
+	if len(last) == len(set) {
+		return set
+	}
+	out := make([]Assignment, 0, len(last))
+	for i, a := range set {
+		if last[a.Column] == i {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // withUpdateDefaults appends an assignment for every column with an
@@ -282,8 +291,9 @@ func writeWith(ctx context.Context, db *DB, st *Statement, dry, save bool, edges
 }
 
 // writeCore is an update's or delete's work inside the hooks, their next.
-// For an update it adds the UpdateDefault assignments, refuses a column
-// assigned twice or an Immutable one and runs the validators; then it sends
+// For an update it keeps a column's last assignment (lastAssignments), adds
+// the UpdateDefault assignments, refuses an Immutable column and runs the
+// validators; then it sends
 // the statement through the pipeline, whose guard runs first, or under
 // SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected. A
 // write through a recording handle is sent by trackedWrite, which reads the
@@ -308,7 +318,7 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 	}
 	if st.Op == OpUpdate {
 		in := st.Entity
-		set, err := withUpdateDefaults(in, st.Set, st.keep)
+		set, err := withUpdateDefaults(in, lastAssignments(st.Set), st.keep)
 		if err != nil {
 			return err
 		}
@@ -318,9 +328,6 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 			// nothing, so nothing is sent, nothing is recorded and no
 			// Version moves (ADR 0136). The guard still holds.
 			return db.guard(st)
-		}
-		if err := checkAssignedOnce(in, st.Set); err != nil {
-			return err
 		}
 		if v, ok := in.VersionColumn(); ok {
 			if err := refuseVersion(in, v, st.Set); err != nil {

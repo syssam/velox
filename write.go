@@ -135,10 +135,11 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 // setters returns the number of rows whose edges it wrote.
 //
 // The guard runs first, on the statement as built, then the entity's hooks
-// (Hooks). Then Exec adds an assignment for every column with an
-// UpdateDefault that the statement does not assign, refuses a column
-// assigned twice or an Immutable one (ErrImmutable), and runs the
-// validators, before the statement goes through the pipeline.
+// (Hooks). Then Exec keeps only the last setter of a column set more than
+// once, as ent's mutation keeps one value per field, adds an assignment for
+// every column with an UpdateDefault that the statement does not assign,
+// refuses an Immutable column (ErrImmutable), and runs the validators,
+// before the statement goes through the pipeline.
 func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	st, err := u.statement()
 	if err != nil {

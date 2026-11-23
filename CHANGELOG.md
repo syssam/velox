@@ -744,6 +744,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A column given more than one setter in an UPDATE keeps the last, as
+  ent's mutation does, instead of failing "assigned twice"; a Set edge
+  setter and its foreign key's setter replace each other the same way
+  (ADR 0140).
 - A value an insert's setter gives is stored, its zero included, as ent's
   `SetX` is: `Set(X.Rate.Set(0))` writes 0 over the column's declared
   database default and over a `Default`, in `Insert`, `InsertAll` and an

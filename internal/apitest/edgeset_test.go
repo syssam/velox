@@ -688,8 +688,10 @@ func TestEdgeSetterSetKey(t *testing.T) {
 			t.Errorf("update with Set of %s: nil", name)
 		}
 	}
-	if _, err := db.Update[sPost]().Set(sPosts.Author.Set(1), sPosts.AuthorID.Set(2)).Where(both).Exec(user); err == nil || !strings.Contains(err.Error(), "assigned twice") {
-		t.Errorf("Set with its column's setter: %v", err)
+	// An edge's Set and its column's setter name one column: the later wins
+	// (ADR 0140).
+	if text, args, err := db.Update[sPost]().Set(sPosts.Author.Set(1), sPosts.AuthorID.Set(2)).Where(both).SQL(user); err != nil || strings.Count(text, "author_id") < 1 || len(args) == 0 || args[0] != int64(2) {
+		t.Errorf("Set with its column's setter: %q %v %v", text, args, err)
 	}
 	if c, want := sPosts.Author.Set(1).Column(), sPosts.AuthorID.Set(1).Column(); c != want {
 		t.Errorf("Set's Column %d, want its key's, %d", c, want)

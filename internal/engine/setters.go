@@ -34,12 +34,36 @@ func (s Setters) Add(ss []Assignment) Setters {
 		case a.Op == AssignSkip:
 			s.Skipped = append(s.Skipped, a.Column)
 		case e != nil:
+			// A Set edge setter assigns its foreign key: it replaces an
+			// earlier setter of that column, as a later setter of a
+			// column does (lastAssignments, ADR 0140).
+			if c := e.Column(); c >= 0 {
+				s.Set = without(s.Set, func(b Assignment) bool { return b.Column == c })
+			}
 			s.Edges = append(s.Edges, e)
 		default:
+			if a.Column >= 0 {
+				s.Edges = without(s.Edges, func(x *EdgeSet) bool { return x.Column() == a.Column })
+			}
 			s.Set = append(s.Set, a)
 		}
 	}
 	return s
+}
+
+// without returns xs without the elements drop matches: xs itself when none
+// does, else a new slice, so a builder that shares xs keeps its own.
+func without[T any](xs []T, drop func(T) bool) []T {
+	if !slices.ContainsFunc(xs, drop) {
+		return xs
+	}
+	out := make([]T, 0, len(xs))
+	for _, x := range xs {
+		if !drop(x) {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // InsertSet returns the columns of in that s's column setters store a

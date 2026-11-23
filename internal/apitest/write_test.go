@@ -3,7 +3,9 @@ package apitest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -122,26 +124,48 @@ func TestSaveStoresUpdateDefaultOnlyAfterSuccess(t *testing.T) {
 	}
 }
 
-func TestAColumnAssignedTwiceIsRefused(t *testing.T) {
+// TestALaterSetterWins: a column assigned twice keeps the last assignment,
+// as ent's mutation keeps one value per field (ADR 0140), so the statement
+// assigns it once, at the later setter's place.
+func TestALaterSetterWins(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	inv := testmodel.Invoice{ID: 3}
-	want := "velox: testmodel.Invoice: column number is assigned twice"
-	if err := db.Save(&inv, I.Number, I.Number).Exec(ctx); err == nil || err.Error() != want || e.Calls != 0 {
-		t.Errorf("Save: %v, calls %d", err, e.Calls)
+	inv := testmodel.Invoice{ID: 3, Number: "N"}
+	if err := db.Save(&inv, I.Number, I.Number).Exec(ctx); err != nil || strings.Count(e.SQL, "number") != 1 {
+		t.Errorf("Save naming number twice: %v %s", err, e.SQL)
 	}
-	u := db.Update[testmodel.Invoice]().Set(I.Total.Add(1), I.Total.Set(2)).Where(I.ID.EQ(1))
-	want = "velox: testmodel.Invoice: column total is assigned twice"
-	if _, err := u.Exec(ctx); err == nil || err.Error() != want || e.Calls != 0 {
-		t.Errorf("Exec: %v, calls %d", err, e.Calls)
+	for name, tc := range map[string]struct {
+		u    velox.UpdateQuery[testmodel.Invoice]
+		want string
+		args []any
+	}{
+		"one Set":       {db.Update[testmodel.Invoice]().Set(I.Total.Add(1), I.Total.Set(2)).Where(I.ID.EQ(1)), `SET "total" = $1, "updated_at" = $2 WHERE`, []any{int64(2)}},
+		"two Set calls": {db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Set(2)).Where(I.ID.EQ(1)), `SET "total" = $1, "updated_at" = $2 WHERE`, []any{int64(2)}},
+		"Set then Add":  {db.Update[testmodel.Invoice]().Set(I.Total.Set(2)).Set(I.Total.Add(5)).Where(I.ID.EQ(1)), `SET "total" = "total" + $1, "updated_at" = $2 WHERE`, []any{int64(5)}},
+	} {
+		text, args, err := tc.u.SQL(ctx)
+		if err != nil {
+			t.Errorf("%s: %q %v", name, text, err)
+			continue
+		}
+		if !strings.Contains(text, tc.want) || len(args) == 0 || fmt.Sprint(args[0]) != fmt.Sprint(tc.args[0]) {
+			t.Errorf("%s: %q %v, want %q with %v", name, text, args, tc.want, tc.args)
+		}
+		if _, err := tc.u.Exec(ctx); err != nil {
+			t.Errorf("%s Exec: %v", name, err)
+		}
 	}
-	if text, _, err := u.SQL(ctx); text != "" || err == nil || err.Error() != want {
-		t.Errorf("SQL(ctx): %q %v", text, err)
+	// An insert keeps the last setter too: setters write the row it sends.
+	ins := testmodel.Invoice{OrgID: 1}
+	if _, args, err := db.Insert(&ins).Set(I.Number.Set("a")).Set(I.Number.Set("b")).SQL(ctx); err != nil || !slices.Contains(args, any("b")) || slices.Contains(args, any("a")) {
+		t.Errorf("insert setting number twice: %v %v", args, err)
 	}
-	// Set called twice is the same thing.
-	u = db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Set(2)).Where(I.ID.EQ(1))
-	if _, err := u.Exec(ctx); err == nil || err.Error() != want {
-		t.Errorf("two Set calls: %v", err)
+	// A builder is a value: one built from another by a later setter leaves
+	// the first as it was.
+	base := db.Update[testmodel.Invoice]().Set(I.Total.Set(2), I.Note.Set("a")).Where(I.ID.EQ(1))
+	_ = base.Set(I.Total.Set(9))
+	if _, args, err := base.SQL(ctx); err != nil || fmt.Sprint(args[0]) != "2" || fmt.Sprint(args[1]) != "a" {
+		t.Errorf("base after a derived Set: %v %v", args, err)
 	}
 }
 
@@ -205,7 +229,6 @@ func TestSaveSQL(t *testing.T) {
 	for name, q := range map[string]velox.SaveQuery[testmodel.Invoice]{
 		"nil pointer":     db.Save[testmodel.Invoice](nil, I.Number),
 		"nil column":      db.Save(&inv, I.Number, nil),
-		"twice":           db.Save(&inv, I.Number, I.Number),
 		"zero predicate":  db.Save(&inv, I.Number).Where(velox.Pred[testmodel.Invoice]{}),
 		"zero after good": db.Save(&inv, I.Number).Where(I.Total.EQ(1), velox.Pred[testmodel.Invoice]{}),
 	} {
