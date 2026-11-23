@@ -308,24 +308,21 @@ when that edge is loaded, with `With` on the child's query
 `compat=veloxe` too. veloxe read them as windows. Send `first` with
 `after`, or `last` with `before`.
 
-**An empty patch writes nothing.** An update whose setters are all
-`SetPtr(nil)` sends no statement and returns 0. No hook runs, and no
-`UpdateDefault` fires, so `updated_at` stays. veloxe's `UpdateOne` with
-nothing set still ran its hooks and set `updated_at`
-([ADR 0099](decisions/0099-keep-defaults-and-set-ptr.md)).
-
-**A zero over a database default needs an update.** A field such as
-`exchange_rate`, with a Go `Default` and `sqlschema.Default("1")`, makes
-velox-gen warn that "the zero value cannot be stored through Insert". An
-insert leaves the Go zero of a column with a database default to the
-database, a setter's zero included, so the row takes the default
-([ADR 0093](decisions/0093-lean-inserts.md)). To store the zero, update the row after the insert,
-make the field Nillable, or drop the database default and keep the Go
-`Default`, whose zero a setter stores
-([ADR 0082](decisions/0082-defaults-before-setters.md)). A
+**A zero a setter gives is stored.** A field such as `exchange_rate`, with
+a Go `Default` and `sqlschema.Default("1")`, stores 0 from
+`Set(X.ExchangeRate.Set(0))`, as veloxe's `SetExchangeRate(0)` did: every
+column a setter names is written
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)). A zero the
+struct holds with no setter is unset and takes the default. A
 `decimal.Decimal` that holds a non-nil `*big.Int`, such as `decimal.Zero`,
-is not the Go zero and is written
+is not the Go zero, and is written from the struct too
 ([guide](guide.md#fields)).
+
+**An empty patch still runs its hooks.** An update whose setters are all
+`SetPtr(nil)` runs its hooks and its `UpdateDefault`s, as veloxe's
+`UpdateOne` with nothing set did, so `updated_at` moves. When they assign
+nothing, no statement is sent and `Exec` returns 0
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)).
 
 **A self one-to-one reads from the right end.** With the key on the assoc
 edge, as in `reversed_by`/`reversal_of`, the inverse edge now returns the

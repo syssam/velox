@@ -223,10 +223,11 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 
 // Set adds setters. A column setter, a column handle's Set or SetNull,
 // stores its value in each entity before the insert, so it wins over the
-// field; Add and Sub fail the insert. A SetNull is an explicit NULL: the
-// column is written as NULL, so neither its database DEFAULT nor a
-// Default fills it, while a nil field no setter names gets the default
-// (ADR 0124). A SetPtr given a nil pointer is skipped, as ent's
+// field; Add and Sub fail the insert. The column of a column setter is
+// always written, as ent writes every field SetX was called for: Set(0)
+// stores 0 and SetNull stores NULL, so neither the column's database
+// DEFAULT nor a Default replaces them, while a zero or nil field no setter
+// names gets the default (ADR 0124, 0136). A SetPtr given a nil pointer is skipped, as ent's
 // SetNillableX(nil): the field stays as it is, so a nil one gets its
 // default, and a column of an upsert's Update that no other setter sets is
 // not updated (with none left, the upsert keeps the existing row, as
@@ -314,7 +315,7 @@ func (q InsertQuery[E]) SetInput[_ Lazy[E]](in Input[E]) InsertQuery[E] {
 //
 // A column whose database default the schema declares, and every row holds
 // the zero value in, is left out, and a nullable column every row holds nil
-// in, unless a setter stores that NULL; the database fills them. What it filled is read back into the entity:
+// in, unless a setter names the column; the database fills them. What it filled is read back into the entity:
 // with RETURNING, or a SELECT by key in the same transaction on MySQL (ADR
 // 0093).
 //
@@ -442,9 +443,9 @@ func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, db *engine.DB, mu *
 	var res Result
 	var err error
 	if q.one != nil {
-		err = insertOne(ctx, db, q.meta, q.one, q.set.InsertNulls(q.meta.Info), q.conflict, &res)
+		err = insertOne(ctx, db, q.meta, q.one, q.set.InsertSet(q.meta.Info), q.conflict, &res)
 	} else {
-		err = insertMany(ctx, db, q.meta, q.many, q.set.InsertNulls(q.meta.Info), q.conflict, &res)
+		err = insertMany(ctx, db, q.meta, q.many, q.set.InsertSet(q.meta.Info), q.conflict, &res)
 	}
 	if err == nil {
 		mu.Affected = res.Affected
@@ -458,12 +459,12 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 	var st Statement
 	if q.one != nil {
 		var err error
-		if st, _, err = oneStatement(ctx, &q.db.e, q.meta, q.one, q.set.InsertNulls(q.meta.Info), q.conflict); err != nil {
+		if st, _, err = oneStatement(ctx, &q.db.e, q.meta, q.one, q.set.InsertSet(q.meta.Info), q.conflict); err != nil {
 			return err
 		}
 	} else {
 		var err error
-		if st, err = engine.InsertAllStatement(ctx, &q.db.e, q.meta.Info, unsafe.Pointer(unsafe.SliceData(q.many)), unsafe.Sizeof(q.many[0]), len(q.many), q.set.InsertNulls(q.meta.Info), q.conflict); err != nil {
+		if st, err = engine.InsertAllStatement(ctx, &q.db.e, q.meta.Info, unsafe.Pointer(unsafe.SliceData(q.many)), unsafe.Sizeof(q.many[0]), len(q.many), q.set.InsertSet(q.meta.Info), q.conflict); err != nil {
 			return err
 		}
 	}
@@ -511,22 +512,23 @@ func rowValues[E any](m *metaState[E], p *E, cols []int) []any {
 
 // oneStatement prepares the entity at p, as Insert's Exec does, and returns
 // the statement that inserts it and its generated key column, -1 for none,
-// writing nulls, the columns its setters left NULL, as NULL. On
+// writing set, the columns its setters store a value in, as the entity
+// holds them. On
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
-func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, nulls []int, cf *ConflictClause) (Statement, int, error) {
+func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, set []int, cf *ConflictClause) (Statement, int, error) {
 	gen := generatedKey(m, p)
 	cols := engine.InsertColumns(m.Info, gen)
 	if len(cols) == 0 {
 		return Statement{}, -1, engine.ErrNothingToInsert(m.Info)
 	}
-	if err := engine.ValidateInsert(m.Info, db.D, unsafe.Pointer(p), cols, cf); err != nil {
+	if err := engine.ValidateInsert(m.Info, db.D, unsafe.Pointer(p), cols, set, cf); err != nil {
 		return Statement{}, -1, err
 	}
 	if err := engine.InsertAllowed(ctx, db, m.Info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.Info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.InTx}
-	engine.SetExplicitNulls(&st, nulls)
+	engine.SetExplicit(&st, set)
 	if engine.InfoBidi(m.Info) {
 		engine.MirrorRows(&st)
 	}
@@ -538,8 +540,8 @@ func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p 
 }
 
 // insertOne inserts the entity at p and sets out.Affected.
-func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, nulls []int, cf *ConflictClause, out *Result) error {
-	st, gen, err := oneStatement(ctx, db, m, p, nulls, cf)
+func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, set []int, cf *ConflictClause, out *Result) error {
+	st, gen, err := oneStatement(ctx, db, m, p, set, cf)
 	if err != nil {
 		return err
 	}
@@ -548,9 +550,9 @@ func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E,
 
 // insertMany inserts every entity in xs and sets out.Affected, with the
 // untyped API's batch insert (engine.InsertAllRows).
-func insertMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E, nulls []int, cf *ConflictClause, out *Result) error {
+func insertMany[E any](ctx context.Context, db *engine.DB, m *metaState[E], xs []E, set []int, cf *ConflictClause, out *Result) error {
 	if len(xs) == 0 {
 		return nil
 	}
-	return engine.InsertAllRows(ctx, db, m.Info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs), nulls, cf, out)
+	return engine.InsertAllRows(ctx, db, m.Info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs), set, cf, out)
 }

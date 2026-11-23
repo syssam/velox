@@ -2,7 +2,9 @@
 
 - Status: accepted, 2026-11-20. Supersedes [0064](0064-insert-null-literal.md).
   Amended by [0124](0124-explicit-null-in-inserts.md): a nil column a setter
-  stored (`SetNull`) is written as NULL, not left out.
+  stored (`SetNull`) is written as NULL, not left out. Amended by
+  [0136](0136-explicit-zero-and-empty-patch.md): every column a setter
+  names is written, its zero included, and velox-gen no longer warns.
 
 ## Context
 

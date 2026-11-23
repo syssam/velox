@@ -306,8 +306,8 @@ func TestGenerateWithBehaviourWithoutGen(t *testing.T) {
 }
 
 // A field that is not Nillable whose database default is a non-zero literal
-// generates, with a warning on stderr naming it (ADR 0093, D10).
-func TestGenerateWarnsOfNonZeroDefault(t *testing.T) {
+// generates without a warning: a setter stores its zero (ADR 0136).
+func TestGenerateNonZeroDefaultNoWarning(t *testing.T) {
 	dir := genModule(t, map[string]string{"veloxschema/flag.go": `package veloxschema
 
 import (
@@ -324,9 +324,7 @@ func (Flag) Fields() []schema.Field {
 }
 `})
 	code, _, errs := runCLI(t, dir, "./veloxschema")
-	if code != 0 || !strings.Contains(errs, "velox-gen: warning: veloxschema/flag.go:") ||
-		!strings.Contains(errs, `schema Flag: field "on": its database default is not the zero value`) ||
-		!strings.Contains(errs, "the zero value cannot be stored through Insert; make it Nillable to store it\n") {
+	if code != 0 || strings.Contains(errs, "warning") {
 		t.Errorf("%d %q", code, errs)
 	}
 }

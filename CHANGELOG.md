@@ -739,6 +739,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A value an insert's setter gives is stored, its zero included, as ent's
+  `SetX` is: `Set(X.Rate.Set(0))` writes 0 over the column's declared
+  database default and over a `Default`, in `Insert`, `InsertAll` and an
+  upsert's inserted rows, and is validated. A zero field no setter names
+  still takes its default. velox-gen no longer warns "the zero value
+  cannot be stored through Insert" (ADR 0136).
+- An update whose setters were all skipped, a `Set()` of none or an empty
+  `SetInput`, runs its hooks and its `UpdateDefault`s, as ent's does, so
+  `updated_at` moves; so does `UpdateQuery.One` with no setter. Nothing is
+  sent only when they assign nothing: `Exec` returns 0, `SQL` "", `One`
+  the row (ADR 0136).
 - `TxTimeout(d)` with `d <= 0` sets no bound of its own: it lifts a
   `WithTxDefaults` timeout, leaving `WithDeadlines`' limits.
 

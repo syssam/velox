@@ -3,6 +3,8 @@
 - Status: accepted, 2026-11-23. Amends [0093](0093-lean-inserts.md)'s
   rule that a nil nullable column is left out, and replaces
   [0119](0119-enum-placement-and-default-docs.md)'s silence on `SetNull`.
+  Amended by [0136](0136-explicit-zero-and-empty-patch.md): a setter's
+  zero is written as its NULL is (`InsertSet` replaces `InsertNulls`).
 
 ## Context
 

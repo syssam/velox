@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"unsafe"
 )
@@ -19,11 +20,13 @@ func ValidateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
 // ValidateRow does, except that a column the insert leaves to the
 // database's default (leftToDB) skips its validators: the database stores
 // its default, not the Go zero value (D10), so an enum with a declared
-// default inserts with its zero. A column cf writes (conflictWritten) is
-// sent as the row holds it (ADR 0093), and is validated.
-func ValidateInsert(in *EntityInfo, d Dialect, p unsafe.Pointer, cols []int, cf *ConflictClause) error {
+// default inserts with its zero. A column cf writes (conflictWritten), and
+// a column of set, which the insert's setters store a value in
+// (SetExplicit), is sent as the row holds it (ADR 0093, 0136), and is
+// validated.
+func ValidateInsert(in *EntityInfo, d Dialect, p unsafe.Pointer, cols, set []int, cf *ConflictClause) error {
 	return validateRow(in, p, cols, func(c int, v any) bool {
-		return !conflictWritten(cf, c) && leftToDB(in, d, c, v)
+		return !conflictWritten(cf, c) && !slices.Contains(set, c) && leftToDB(in, d, c, v)
 	})
 }
 

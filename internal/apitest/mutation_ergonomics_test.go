@@ -112,7 +112,8 @@ func TestKeepDefaultsUntyped(t *testing.T) {
 
 // TestSetPtrOnUpdate: a nil pointer's setter is skipped, a non-nil one
 // sets the value, on a Null kind too; SetNull still writes NULL. An update
-// whose every setter is skipped sends nothing.
+// whose every setter is skipped, and whose UpdateDefault is kept, sends
+// nothing.
 func TestSetPtrOnUpdate(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
@@ -131,12 +132,12 @@ func TestSetPtrOnUpdate(t *testing.T) {
 		t.Errorf("\n got %s %v\nwant %s", e.SQL, e.Args, want)
 	}
 	calls := e.Calls
-	if n, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).Exec(ctx); n != 0 || err != nil || e.Calls != calls {
-		t.Errorf("every setter skipped (TestUpdateOfOnlySkippedSetters): %d, %v, %d calls", n, err, e.Calls-calls)
+	if n, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).KeepDefaults(I.UpdatedAt).Where(I.ID.EQ(1)).Exec(ctx); n != 0 || err != nil || e.Calls != calls {
+		t.Errorf("every setter skipped (TestEmptyPatchRunsHooksAndUpdateDefaults): %d, %v, %d calls", n, err, e.Calls-calls)
 	}
-	e.Results = [][][]any{{{int64(1)}}, {invoiceRow(1)}}
+	e.Results = [][][]any{{invoiceRow(1)}}
 	logged := len(e.Log)
-	got, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).One(ctx)
+	got, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).KeepDefaults(I.UpdatedAt).Where(I.ID.EQ(1)).One(ctx)
 	if err != nil || got.ID != 1 {
 		t.Errorf("One with every setter skipped: %+v, %v", got, err)
 	}
@@ -266,45 +267,87 @@ func TestErrorHelpersOnVeloxErrors(t *testing.T) {
 	}
 }
 
-// TestUpdateOfOnlySkippedSetters: an update given setters that were all
-// skipped sends nothing and returns 0: no hook runs, no UpdateDefault fires.
-// SQL renders "". One reads the row as Writable. An update given no setter
-// at all still has no Set, and the guard and KeepDefaults still apply.
-func TestUpdateOfOnlySkippedSetters(t *testing.T) {
+// TestEmptyPatchRunsHooksAndUpdateDefaults: an update given setters that
+// were all skipped, or a Set of nothing, is an empty patch, as ent's Save
+// with nothing set: its hooks run and every UpdateDefault fires, so
+// updated_at is written, through Exec, SQL, One and the untyped API. An
+// update never given a Set still has no Set, and the guard and
+// KeepDefaults still apply (ADR 0136).
+func TestEmptyPatchRunsHooksAndUpdateDefaults(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	ran := 0
 	count := velox.Before(func(context.Context, *velox.Mutation) error { ran++; return nil }, velox.OpUpdate)
 	db := openFake(velox.Postgres, e, velox.WithHooksAll(count))
+	const touched = `UPDATE "invoices" SET "updated_at" = $1 WHERE "id" = $2`
 	n, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil), I.PaidAt.SetPtr(nil)).Where(I.ID.EQ(1)).Exec(ctx)
-	if n != 0 || err != nil || e.Calls != 0 || ran != 0 {
-		t.Errorf("typed Exec: %d, %v, %d calls, %d hook runs", n, err, e.Calls, ran)
+	if n != 1 || err != nil || e.SQL != touched || ran != 1 {
+		t.Errorf("typed Exec: %d, %v, %q, %d hook runs", n, err, e.SQL, ran)
 	}
-	if q, args, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).SQL(ctx); q != "" || args != nil || err != nil || ran != 0 {
-		t.Errorf("typed SQL: %q %v %v", q, args, err)
+	if _, err := db.Update[testmodel.Invoice]().Set().Where(I.ID.EQ(1)).Exec(ctx); err != nil || e.SQL != touched || ran != 2 {
+		t.Errorf("Set of nothing: %v, %q, %d hook runs", err, e.SQL, ran)
+	}
+	if q, _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).SQL(ctx); q != touched || err != nil || ran != 3 {
+		t.Errorf("typed SQL: %q %v, %d hook runs", q, err, ran)
 	}
 	tbl := untyped.TableOf[testmodel.Invoice]()
 	set := []velox.Setter[testmodel.Invoice]{I.Total.SetPtr(nil)}
-	n, err = untyped.Update(db, tbl).Assign(untyped.Assignments(set)...).Where(velox.Predicate(I.ID.EQ(1))).Exec(ctx)
-	if n != 0 || err != nil || e.Calls != 0 || ran != 0 {
-		t.Errorf("untyped Exec: %d, %v, %d calls, %d hook runs", n, err, e.Calls, ran)
+	if n, err := untyped.Update(db, tbl).Assign(untyped.Assignments(set)...).Where(velox.Predicate(I.ID.EQ(1))).Exec(ctx); n != 1 || err != nil || e.SQL != touched || ran != 4 {
+		t.Errorf("untyped Exec: %d, %v, %q, %d hook runs", n, err, e.SQL, ran)
 	}
-	if q, _, err := untyped.Update(db, tbl).Assign(untyped.Assignments(set)...).Where(velox.Predicate(I.ID.EQ(1))).SQL(ctx); q != "" || err != nil {
-		t.Errorf("untyped SQL: %q %v", q, err)
-	}
-	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Exec(ctx); !errors.Is(err, velox.ErrNoWhere) {
+	calls := e.Calls
+	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Exec(ctx); !errors.Is(err, velox.ErrNoWhere) || e.Calls != calls {
 		t.Errorf("no Where: %v", err)
 	}
 	if _, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).KeepDefaults(I.Note).Where(I.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), "no UpdateDefault") {
 		t.Errorf("KeepDefaults of a column without one: %v", err)
 	}
+	if _, err := db.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).Exec(ctx); err == nil || !strings.Contains(err.Error(), "Update has no Set") {
+		t.Errorf("typed without a Set: %v", err)
+	}
 	if _, err := untyped.Update(db, tbl).Where(velox.Predicate(I.ID.EQ(1))).Exec(ctx); err == nil || !strings.Contains(err.Error(), "Update has no Set") {
 		t.Errorf("untyped without a setter: %v", err)
 	}
 
-	e.Results = [][][]any{{{int64(1)}}, {invoiceRow(1)}}
+	// KeepDefaults of the only UpdateDefault: nothing is left to write.
+	calls, ran = e.Calls, 0
+	if n, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).KeepDefaults(I.UpdatedAt).Where(I.ID.EQ(1)).Exec(ctx); n != 0 || err != nil || e.Calls != calls || ran != 1 {
+		t.Errorf("kept: %d, %v, %d calls, %d hook runs", n, err, e.Calls-calls, ran)
+	}
+
+	// One by key: the UPDATE of updated_at, through the hooks, then the row.
+	ran = 0
+	e.Log, e.Results, e.Rows = nil, nil, [][]any{invoiceRow(1)}
 	got, err := db.Update[testmodel.Invoice]().Set(I.Total.SetPtr(nil)).Where(I.ID.EQ(1)).One(ctx)
-	if err != nil || got.ID != 1 || ran != 0 || !strings.Contains(strings.Join(e.Log, "\n"), "FOR UPDATE") {
+	if err != nil || got == nil || got.ID != 1 || ran != 1 || !strings.Contains(strings.Join(e.Log, "\n"), touched) {
 		t.Errorf("One: %+v, %v, %d hook runs, %v", got, err, ran, e.Log)
+	}
+	ran, e.Log = 0, nil
+	if _, err := db.Update[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err != nil || ran != 1 || !strings.Contains(strings.Join(e.Log, "\n"), touched) {
+		t.Errorf("One with no setter: %v, %d hook runs, %v", err, ran, e.Log)
+	}
+}
+
+// TestEmptyPatchSendsNothingLeftToWrite: an empty patch of an entity with
+// no UpdateDefault runs its hooks, and sends nothing when they assign
+// nothing: Exec returns 0, SQL "". A hook that assigns a column gets it
+// written (ADR 0136).
+func TestEmptyPatchSendsNothingLeftToWrite(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	ran := 0
+	count := velox.Before(func(context.Context, *velox.Mutation) error { ran++; return nil }, velox.OpUpdate)
+	db := openFake(velox.Postgres, e, velox.WithHooksAll(count))
+	n, err := db.Update[testmodel.Item]().Set(It.Qty.SetPtr(nil)).Where(It.ID.EQ(1)).Exec(ctx)
+	if n != 0 || err != nil || e.Calls != 0 || ran != 1 {
+		t.Errorf("Exec: %d, %v, %d calls, %d hook runs", n, err, e.Calls, ran)
+	}
+	if q, args, err := db.Update[testmodel.Item]().Set().Where(It.ID.EQ(1)).SQL(ctx); q != "" || args != nil || err != nil || ran != 2 {
+		t.Errorf("SQL: %q %v %v, %d hook runs", q, args, err, ran)
+	}
+
+	sku := velox.Before(func(_ context.Context, m *velox.Mutation) error { return m.Set("sku", "by-hook") }, velox.OpUpdate)
+	db = openFake(velox.Postgres, e, velox.WithHooksAll(sku))
+	if _, err := db.Update[testmodel.Item]().Set(It.Qty.SetPtr(nil)).Where(It.ID.EQ(1)).Exec(ctx); err != nil || e.SQL != `UPDATE "items" SET "sku" = $1 WHERE "id" = $2` {
+		t.Errorf("a hook's assignment: %q, %v", e.SQL, err)
 	}
 }
 
@@ -336,6 +379,24 @@ func TestHookSetBeatsKeepDefaults(t *testing.T) {
 	}
 	if want := `UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3`; e.SQL != want || e.Args[1] != t0 {
 		t.Errorf("\n got %s %v\nwant %s", e.SQL, e.Args, want)
+	}
+}
+
+// TestEmptyPatchVersionAndRecord: an empty patch left with nothing to
+// write sends nothing, so no Version column moves, and a recording handle
+// records nothing (ADR 0136).
+func TestEmptyPatchVersionAndRecord(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e)
+	P := testmodel.Papers
+	if n, err := db.Update[testmodel.Paper]().Set(P.Title.SetPtr(nil)).All().Exec(ctx); n != 0 || err != nil || e.Calls != 0 {
+		t.Errorf("Version entity, nothing to write: %d, %v, %d calls", n, err, e.Calls)
+	}
+	recorded := 0
+	sink := velox.RecordFunc(func(_ context.Context, _ *velox.DB, chs []velox.Change) error { recorded += len(chs); return nil })
+	rdb := openFake(velox.Postgres, e).Record(sink)
+	if n, err := rdb.Update[testmodel.Item]().Set(It.Qty.SetPtr(nil)).Where(It.ID.EQ(1)).Exec(ctx); n != 0 || err != nil || e.Calls != 0 || recorded != 0 {
+		t.Errorf("recorded empty patch: %d, %v, %d calls, %d changes", n, err, e.Calls, recorded)
 	}
 }
 

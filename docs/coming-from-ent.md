@@ -130,10 +130,21 @@ struct: `RETURNING` on PostgreSQL and SQLite, a `SELECT` by key on MySQL
 ([ADR 0093](decisions/0093-lean-inserts.md)). ent leaves out any field the
 builder did not set; velox, which has no "set" bit on a struct field, reads
 the zero value as unset for such a column only, as GORM's `default` tag
-does. A nil Nillable field is left out too, as in ent.
+does. A nil Nillable field is left out too, as in ent. A setter is ent's
+`SetX`: its column is always written, so `Set(U.Rate.Set(0))` stores 0 and
+`SetNull()` stores NULL over any default
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)).
 `CreateDefault` is filled in by gqlgen when a client leaves the field out.
 
-The same holds for a string: with `Default("x")`, an insert can never store `""`.
+The same holds for a string: with `Default("x")`, a struct's `""` takes the
+default, and `Set(U.Plan.Set(""))` stores `""`.
+
+**An update with nothing set.** As in ent, an update whose setters were all
+skipped (`SetPtr(nil)`), or whose `SetInput` gives nothing, still runs its
+hooks and its `UpdateDefault`s, so `updated_at` moves. When they assign
+nothing either, nothing is sent: `Exec` returns 0 and `One` returns the row
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)). An update
+never given a `Set` fails with "Update has no Set", where ent's would run.
 
 ## Edges
 

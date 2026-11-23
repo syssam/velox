@@ -313,6 +313,12 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 			return err
 		}
 		st.Set = set
+		if len(st.Set) == 0 {
+			// An empty patch: the hooks and the UpdateDefaults assigned
+			// nothing, so nothing is sent, nothing is recorded and no
+			// Version moves (ADR 0136). The guard still holds.
+			return db.guard(st)
+		}
 		if err := checkAssignedOnce(in, st.Set); err != nil {
 			return err
 		}

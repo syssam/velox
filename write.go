@@ -29,11 +29,13 @@ func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 // Set adds setters: assignments, made by the column handles' Set, SetNull,
 // Add and Sub, and edge setters, made by the relation handles' Add, Remove
 // and Clear. An update of only edge setters sends no UPDATE. A SetPtr given
-// a nil pointer is skipped. An update whose every setter was skipped sends
-// nothing: Exec returns 0 and SQL "", once the guard and KeepDefaults'
-// check pass. No hook runs and no UpdateDefault fires, unlike ent, whose
-// UpdateOne would still set updated_at. One reads the row as Writable. An
-// update given no setter at all fails with "Update has no Set".
+// a nil pointer is skipped. An update whose every setter was skipped, or
+// that was given a Set of nothing, is an empty patch: as in ent, its hooks
+// run and every UpdateDefault fires, so updated_at moves, and the UPDATE
+// writes what they assign. When they assign nothing either, nothing is
+// sent: Exec returns 0 and SQL "", once the guard and KeepDefaults' check
+// pass, and One reads the row as Writable (ADR 0136). An update never given
+// a Set fails with "Update has no Set".
 //
 // The edges are written for each row the update matches, in one
 // transaction with the UPDATE, a savepoint inside one: the update first
@@ -161,8 +163,10 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // returned; an Interceptor still filters it. An UPDATE by key that affects
 // no row is followed by a read of the row under the policies: a hook that
 // skips the write still gets the row. An Add or Sub on a key column is
-// refused. An update with no setter sends nothing and returns the row read
-// under the policies.
+// refused. An update with no setter, or only skipped ones, runs its hooks
+// and its UpdateDefaults as ent's UpdateOne does; when they assign nothing,
+// it sends no UPDATE and returns the row read under the policies
+// (ADR 0136).
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	if u.meta.Err != nil {
 		return nil, u.meta.Err

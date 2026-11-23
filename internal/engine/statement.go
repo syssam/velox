@@ -195,8 +195,8 @@ type Statement struct {
 	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
 	bidi *bidiStep
 	// keep holds the columns of an UPDATE whose UpdateDefault does not fire
-	// (KeepDefaults), and of an INSERT those its setters left NULL
-	// (SetExplicitNulls, nulls). One field serves both, as no statement is
+	// (KeepDefaults), and of an INSERT those its setters store a value in
+	// (SetExplicit, explicit). One field serves both, as no statement is
 	// both and a Statement fits its size class (TestStatementSize).
 	keep []int
 	// handed is set once Iter has handed the caller a row: a broken
@@ -212,9 +212,10 @@ type Statement struct {
 	// the upsert's update branch: an upsert that then affected fewer rows than it
 	// sent met a row the policy hides.
 	upsertPolicy bool
-	// skipped says the UPDATE was given a setter that was skipped (a SetPtr
-	// of a nil pointer): with no other setter left it sends nothing.
-	skipped bool
+	// patched says the UPDATE was given a Set, even one that left nothing
+	// to assign (setters all skipped, or none): an empty patch, which runs
+	// the hooks and the UpdateDefaults (CheckUpdateSet, ADR 0136).
+	patched bool
 	// columnRead says the SELECT reads one column for Values or IDs
 	// (ColumnRead), which Distinct may apply to.
 	columnRead bool
@@ -227,10 +228,11 @@ func KeepDefaults(st *Statement, cols []int) {
 	st.keep = append(slices.Clip(st.keep), cols...)
 }
 
-// nulls is st's columns its setters left NULL, for an INSERT: a nil cell in
-// one is written as NULL, neither left out to the column's DEFAULT nor
-// written as DEFAULT (LeanInsert, defaultCell, ADR 0124).
-func (st *Statement) nulls() []int {
+// explicit is st's columns its setters store a value in, for an INSERT: a
+// cell in one is written as the row holds it, its zero or nil included,
+// neither left out to the column's DEFAULT nor written as DEFAULT
+// (LeanInsert, defaultCell, ADR 0124, 0136).
+func (st *Statement) explicit() []int {
 	if st.Op != OpInsert {
 		return nil
 	}

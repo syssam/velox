@@ -171,28 +171,22 @@ A zero left to the database skips the field's validators, so an enum whose
 zero, `""`, is none of its values inserts and stores its default. A value
 given is validated, and so is a column an upsert's conflict clause writes.
 
-velox-gen warns of a field that is not Nillable whose database default is a
-non-zero literal, such as
-`field.Bool("active").Annotations(sqlschema.Default("true"))`: "the zero
-value cannot be stored through Insert". No `Insert` stores its `false`. A
-setter's zero is left to the database too, since velox reads the value, not
-who set it. A Go `Default` beside the database default does not change
-that. A decimal Other field with a non-zero default, such as an
-exchange rate's `"1"`, is warned of the same way. To store the zero:
+A setter is always written, as ent's `SetX` is: its column is in the
+INSERT with the value it gives, the zero included, so neither a database
+default nor a `Default` replaces it. Only a field no setter names is left
+to its default
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)):
 
-- Insert, then update. `Update` writes every value it sets, the zero
-  included:
-  `db.Update[veloxgen.Order]().Where(O.ID.EQ(o.ID)).Set(O.Rate.Set(r)).Exec(ctx)`.
-- Make the field Nillable and set a pointer to the zero: a non-nil value is
-  always written. The column becomes NULL-able.
-- Drop the database default and keep a Go `Default`. Then a setter's zero is
-  stored over it, as in the table above. A constant `Default` of a bool,
-  number, string or enum is still the column's `DEFAULT`.
+```go
+// field.Other("exchange_rate", decimal.Decimal{}).Annotations(sqlschema.Default("1"))
+db.Insert(&o).Exec(ctx)                                       // exchange_rate = 1
+db.Insert(&o).Set(veloxgen.Orders.ExchangeRate.Set(decimal.Decimal{})).Exec(ctx) // exchange_rate = 0
+```
 
-The zero is the Go zero value, as `reflect.Value.IsZero` sees it. So
-`decimal.Decimal{}` is left to the default, while a decimal zero that holds
-a non-nil `*big.Int`, such as shopspring's `decimal.Zero`, is not zero to
-velox, and is written as 0.
+The zero a struct leaves to the default is the Go zero value, as
+`reflect.Value.IsZero` sees it. So a struct's `decimal.Decimal{}` is left to
+the default, while a decimal zero that holds a non-nil `*big.Int`, such as
+shopspring's `decimal.Zero`, is not zero to velox, and is written as 0.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column
@@ -1241,9 +1235,13 @@ _, err := db.Update[veloxgen.Invoice]().
 ```
 
 On a nullable column a nil `p` still writes nothing: `SetNull()` writes
-NULL. An update whose every setter was skipped sends nothing and returns
-0: no hook runs and `updated_at` does not move, unlike ent. An update given
-no setter at all still fails. In an insert, a skipped setter leaves the
+NULL. An update whose every setter was skipped, or whose `SetInput` gives
+nothing, is an empty patch: as in ent, its hooks run and its
+`UpdateDefault`s fire, so `updated_at` moves. When they assign nothing
+either, nothing is sent: `Exec` returns 0, `SQL` returns "" and `One`
+returns the row
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)). An update
+never given a `Set` still fails. In an insert, a skipped setter leaves the
 field as it is, so a zero field still gets its declared database default.
 In an upsert, a column `Update` names is not updated when its only setter
 was skipped. With no column left, the update branch assigns the first

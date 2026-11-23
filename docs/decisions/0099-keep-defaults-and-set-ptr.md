@@ -1,6 +1,8 @@
 # 99. KeepDefaults, SetPtr and ent's error helpers
 
-Status: accepted, 2026-11-21.
+Status: accepted, 2026-11-21. Amended by [0136](0136-explicit-zero-and-empty-patch.md):
+an update whose setters were all skipped runs its hooks and UpdateDefaults,
+as ent's does, and sends nothing only when they assign nothing.
 
 ## Context
 

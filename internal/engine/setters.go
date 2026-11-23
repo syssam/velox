@@ -42,64 +42,44 @@ func (s Setters) Add(ss []Assignment) Setters {
 	return s
 }
 
-// InsertNulls returns the columns of in that s's column setters leave
-// NULL: a nullable column whose last setter is a Set of nil, SetNull. A
-// SetPtr of nil is skipped and sets nothing. An insert writes such a
-// column as NULL, not leaving it to its DEFAULT (ADR 0124). It is nil when
-// there is none.
-func (s Setters) InsertNulls(in *EntityInfo) []int {
+// InsertSet returns the columns of in that s's column setters store a
+// value in: each column a Set or SetNull names. A SetPtr of nil is skipped
+// and sets nothing. An insert writes such a column as its rows hold it, the
+// zero value and NULL included, never leaving it to its DEFAULT (ADR 0124,
+// 0136), as ent's create builder writes every field SetX was called for.
+// It is nil when there is none.
+func (s Setters) InsertSet(in *EntityInfo) []int {
 	var cols []int
-	for i, a := range s.Set {
-		if a.Op != AssignSet || a.Column < 0 || a.Column >= len(in.Columns) || !in.Columns[a.Column].Nullable || slices.Contains(cols, a.Column) {
+	for _, a := range s.Set {
+		if a.Op != AssignSet || a.Column < 0 || a.Column >= len(in.Columns) || slices.Contains(cols, a.Column) {
 			continue
 		}
-		last := a
-		for _, b := range s.Set[i+1:] {
-			if b.Column == a.Column {
-				last = b
-			}
-		}
-		if last.Op == AssignSet && last.Value == nil {
-			cols = append(cols, a.Column)
-		}
+		cols = append(cols, a.Column)
 	}
 	return cols
 }
 
 // UpdateSet adds the setters ss to st, an UPDATE, and edges, its edge
 // setters, as UpdateQuery.Set does, and returns the edge setters. A skipped
-// setter (AssignSkip) is dropped, and marks st as given one.
+// setter (AssignSkip) is dropped. It marks st as given a Set, even of
+// nothing: an empty patch.
 func UpdateSet(st *Statement, edges []*EdgeSet, ss []Assignment) []*EdgeSet {
 	set := Setters{Set: st.Set, Edges: edges}.Add(ss)
 	st.Set = set.Set
-	st.skipped = st.skipped || len(set.Skipped) > 0
+	st.patched = true
 	return set.Edges
 }
 
 // CheckUpdateSet refuses st, an UPDATE with edges edge setters, that was
-// given no setter at all: "Update has no Set". One whose every setter was
-// skipped passes, and sends nothing (skippedUpdate).
+// never given a Set: "Update has no Set". One given a Set that left nothing
+// to assign, setters that were all skipped or none, is an empty patch: it
+// passes, and runs the hooks and the UpdateDefaults as any update does,
+// sending nothing when they assign nothing either (writeCore, ADR 0136).
 func CheckUpdateSet(st *Statement, edges int) error {
-	if len(st.Set) == 0 && edges == 0 && !st.skipped {
+	if len(st.Set) == 0 && edges == 0 && !st.patched {
 		return fmt.Errorf("velox: %s: Update has no Set", st.Entity.Name)
 	}
 	return nil
-}
-
-// skippedOnly reports whether st, an UPDATE with edges edge setters, was
-// given setters that were all skipped, so that it sends nothing.
-func skippedOnly(st *Statement, edges int) bool {
-	return len(st.Set) == 0 && edges == 0 && st.skipped
-}
-
-// skippedUpdate is the work of an UPDATE whose every setter was skipped:
-// it checks the KeepDefaults columns and runs the guard, and sends nothing.
-// No hook runs, no UpdateDefault fires, and nothing is recorded.
-func skippedUpdate(db *DB, st *Statement) error {
-	if err := checkKeep(st.Entity, st.keep); err != nil {
-		return err
-	}
-	return db.guard(st)
 }
 
 // Unskipped returns as without its skipped setters (AssignSkip): as itself
@@ -281,9 +261,6 @@ func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsaf
 // Update runs st, an update, with the edge setters edges, as UpdateEdges
 // says; with none, it is Write's.
 func Update(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (int64, error) {
-	if skippedOnly(st, len(edges)) {
-		return 0, skippedUpdate(db, st)
-	}
 	if err := checkKeep(st.Entity, st.keep); err != nil {
 		return 0, err
 	}
@@ -302,9 +279,6 @@ func Update(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (int64
 // UpdateSQL is UpdateQuery.SQL's work for st with the edge setters edges:
 // the statement and arguments, "" for an update of only edge setters.
 func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (string, []any, error) {
-	if skippedOnly(st, len(edges)) {
-		return "", nil, skippedUpdate(db, st)
-	}
 	if err := checkKeep(st.Entity, st.keep); err != nil {
 		return "", nil, err
 	}
@@ -337,8 +311,11 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 //
 // Either way it reads the row back by its key, as the update left it
 // (writtenKey), without the Read policy, so a row the update moves out of
-// the caller's view is returned too. An st with no assignment sends no
-// UPDATE; with no setter at all, the row is read back under the policies.
+// the caller's view is returned too. An st with no assignment and no edge
+// still runs the hooks and the UpdateDefaults, as ent's UpdateOne does;
+// when they assign nothing either, no UPDATE is sent and the row is read
+// back under the policies (ADR 0136). One of only edge setters runs no
+// hook.
 func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
@@ -362,7 +339,7 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 		return nil, err
 	}
 	t := InfoTable(in)
-	if vals, ok := pinnedKeys(in, st); ok && len(edges) == 0 {
+	if vals, ok := pinnedWhere(in, st.Where); ok && len(edges) == 0 {
 		return updateByKey(ctx, db, t, st, vals)
 	}
 	cols := slices.Clone(in.PrimaryKey)
@@ -389,7 +366,7 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 			vals[i], _ = plain(in.kit.Value(row, k))
 		}
 		read, key := tx, keyPreds(t, vals)
-		if len(st.Set) > 0 {
+		if runsUpdate(st, len(edges)) {
 			st.InTx = true
 			st.Where = key // the row read, locked, matches st's conditions
 			n, _, _, err := writeWith(ctx, tx, st, false, false, p.sets)
@@ -429,14 +406,22 @@ func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (un
 	return out, nil
 }
 
+// runsUpdate reports whether UpdateOne sends st, with edges edge setters,
+// through the hooks: when it assigns something, or when it has no edge, an
+// empty patch, whose hooks and UpdateDefaults still run (ADR 0136). One of
+// only edge setters runs no hook.
+func runsUpdate(st *Statement, edges int) bool { return len(st.Set) > 0 || edges == 0 }
+
 // updateByKey is UpdateOne for an st whose conditions pin the row's key to
-// vals (pinnedKeys), that assigns something and writes no edge. It sends st
-// as it is. An UPDATE is scoped by the entity's interceptors and its Read
+// vals (pinnedWhere), that writes no edge. It sends st as it is, through
+// the hooks, an empty patch's too (ADR 0136). An UPDATE is scoped by the entity's interceptors and its Read
 // and Write policies, as the Writable read of the key would have been, and
 // it locks the row it changes, so the key read would add nothing.
 //
 // One row affected: it reads the row back by its key as written, without
-// the Read policy. None: a hook skipped the write, or no row matched. It
+// the Read policy. None: a hook skipped the write, no row matched, or the
+// hooks and the UpdateDefaults left nothing to assign and nothing was
+// sent. It
 // then reads the row under st's conditions and both policies, and returns
 // it, or ErrNotFound. More than one, which only a hook's SetAffected or the
 // driver can report, as the key matches one row: ErrNotSingular, and the
@@ -475,16 +460,6 @@ func updateByKey(ctx context.Context, db *DB, t Table, st *Statement, vals []any
 		return nil, err
 	}
 	return out, nil
-}
-
-// pinnedKeys returns the value of each primary-key column when st assigns
-// something and its conditions hold, at their top level, <column> = v for
-// every key column, v not nil: then they match one row at most.
-func pinnedKeys(in *EntityInfo, st *Statement) ([]any, bool) {
-	if len(st.Set) == 0 {
-		return nil, false
-	}
-	return pinnedWhere(in, st.Where)
 }
 
 // pinnedWhere returns the value of each primary-key column when where

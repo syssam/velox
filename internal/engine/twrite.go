@@ -320,7 +320,7 @@ func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, cf *
 	if len(cols) == 0 {
 		return Statement{}, -1, ErrNothingToInsert(t.info)
 	}
-	if err := ValidateInsert(t.info, db.D, p, cols, cf); err != nil {
+	if err := ValidateInsert(t.info, db.D, p, cols, nil, cf); err != nil {
 		return Statement{}, -1, err
 	}
 	if err := InsertAllowed(ctx, db, t.info, p); err != nil {
@@ -360,7 +360,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows, cf *Confl
 		return nil, 0, ErrNothingToInsert(t.info)
 	}
 	for i := range xs.n {
-		if err := ValidateInsert(t.info, db.D, xs.at(i), cols, cf); err != nil {
+		if err := ValidateInsert(t.info, db.D, xs.at(i), cols, xs.explicit, cf); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -374,7 +374,7 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows, cf *Confl
 
 // batch is the statement that inserts xs's rows from to to, prepared.
 func (t *table) batch(xs TableRows, from, to int, cols []int, cf *ConflictClause, inTx bool) Statement {
-	st := Statement{Op: OpInsert, Entity: t.info, Columns: slices.Clone(cols), Conflict: cf, InTx: inTx, Rows: make([][]any, 0, to-from), keep: xs.nulls}
+	st := Statement{Op: OpInsert, Entity: t.info, Columns: slices.Clone(cols), Conflict: cf, InTx: inTx, Rows: make([][]any, 0, to-from), keep: xs.explicit}
 	for i := from; i < to; i++ {
 		st.Rows = append(st.Rows, t.rowValues(xs.at(i), cols))
 	}
@@ -478,16 +478,16 @@ func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *Confli
 
 // InsertAllRows is InsertAll's Exec for the n entities of in that start at
 // p, size bytes apart: the untyped API's InsertAll, which the typed one
-// shares, so that no entity compiles a batch insert of its own. nulls are
-// the columns the insert's setters left NULL (SetExplicitNulls).
-func InsertAllRows(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, nulls []int, cf *ConflictClause, out *Result) error {
-	return InfoTable(in).state().insertMany(ctx, db, TableRows{p: p, size: size, n: n, info: in, nulls: nulls}, cf, out)
+// shares, so that no entity compiles a batch insert of its own. set are
+// the columns the insert's setters store a value in (SetExplicit).
+func InsertAllRows(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, set []int, cf *ConflictClause, out *Result) error {
+	return InfoTable(in).state().insertMany(ctx, db, TableRows{p: p, size: size, n: n, info: in, explicit: set}, cf, out)
 }
 
 // InsertAllStatement is the first statement InsertAllRows would send, for
 // SQL(ctx).
-func InsertAllStatement(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, nulls []int, cf *ConflictClause) (Statement, error) {
-	return InfoTable(in).state().firstBatch(ctx, db, TableRows{p: p, size: size, n: n, info: in, nulls: nulls}, cf)
+func InsertAllStatement(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, set []int, cf *ConflictClause) (Statement, error) {
+	return InfoTable(in).state().firstBatch(ctx, db, TableRows{p: p, size: size, n: n, info: in, explicit: set}, cf)
 }
 
 // readsBack reports whether an insert of xs's columns cols may read values
@@ -498,7 +498,7 @@ func (t *table) readsBack(db *DB, xs TableRows, cols []int) bool {
 
 // defaultRuns is DefaultRuns over xs.
 func (t *table) defaultRuns(db *DB, xs TableRows, cols []int) []int {
-	return DefaultRuns(t.info, db.D, cols, xs.nulls, xs.n, func(i, c int) any { return Elem(t.addr(xs.at(i), c)) })
+	return DefaultRuns(t.info, db.D, cols, xs.explicit, xs.n, func(i, c int) any { return Elem(t.addr(xs.at(i), c)) })
 }
 
 // insertBatches sends xs's rows, a statement of at most per rows within
@@ -573,7 +573,7 @@ func (u TableUpdate) SetNull(col int) TableUpdate { return u.Set(col, nil) }
 // assignment of a SetPtr given a nil pointer is skipped.
 func (u TableUpdate) Assign(as ...Assignment) TableUpdate {
 	u.st.Set = append(slices.Clip(u.st.Set), Unskipped(as)...)
-	u.st.skipped = u.st.skipped || slices.ContainsFunc(as, isSkip)
+	u.st.patched = true
 	return u
 }
 
@@ -627,9 +627,6 @@ func (u TableUpdate) Exec(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if skippedOnly(&st, 0) {
-		return 0, skippedUpdate(u.e, &st)
-	}
 	if err := checkKeep(st.Entity, st.keep); err != nil {
 		return 0, err
 	}
@@ -643,9 +640,6 @@ func (u TableUpdate) SQL(ctx context.Context) (string, []any, error) {
 	st, err := u.statement()
 	if err != nil {
 		return "", nil, err
-	}
-	if skippedOnly(&st, 0) {
-		return "", nil, skippedUpdate(u.e, &st)
 	}
 	_, q, args, err := Write(ctx, u.e, &st, true, false)
 	return q, args, err

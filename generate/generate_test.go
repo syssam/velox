@@ -235,21 +235,22 @@ func TestRunPluginErrors(t *testing.T) {
 	}
 }
 
-// flagSchema is a schema velox-gen warns of: a database default that is
-// not the zero value.
+// flagSchema is a schema velox-gen warns of: a Unique field of an entity
+// that lists softdelete.Mixin.
 const flagSchema = `package veloxschema
 
 import (
-	"github.com/syssam/velox/dialect"
-	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/mixin/softdelete"
 )
 
 type Flag struct{ schema.Schema }
 
+func (Flag) Mixin() []schema.Mixin { return []schema.Mixin{softdelete.Mixin{}} }
+
 func (Flag) Fields() []schema.Field {
-	return []schema.Field{field.Bool("on").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "true", dialect.MySQL: "true", dialect.SQLite: "true"}))}
+	return []schema.Field{field.String("code").Unique()}
 }
 `
 

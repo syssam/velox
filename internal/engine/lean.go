@@ -90,19 +90,20 @@ func (cf *ConflictClause) excludedRefs() []int {
 // that the conflict clause does not write (conflictWritten). A Rewrite hook
 // that puts a value in such a cell gets it written.
 func defaultCell(d Dialect, st *Statement, col int, v any) bool {
-	return st.dflt && d != SQLite && !conflictWritten(st.Conflict, col) && !slices.Contains(st.nulls(), col) && leftToDB(st.Entity, d, col, v)
+	return st.dflt && d != SQLite && !conflictWritten(st.Conflict, col) && !slices.Contains(st.explicit(), col) && leftToDB(st.Entity, d, col, v)
 }
 
-// SetExplicitNulls marks cols as the columns of st, an insert, that its
-// setters left NULL (Setters.InsertNulls): LeanInsert keeps each of them,
-// and a nil cell in one is written as NULL, so the column's DEFAULT does
-// not replace an explicit null (ADR 0124). The render cache tells such a
-// column from one left out by st.Columns, which then holds it.
-func SetExplicitNulls(st *Statement, cols []int) { st.keep = cols }
+// SetExplicit marks cols as the columns of st, an insert, that its
+// setters store a value in (Setters.InsertSet): LeanInsert keeps each of
+// them, and a cell in one is written as the row holds it, a nil as NULL and
+// a zero as the zero, so the column's DEFAULT does not replace a value a
+// setter gave (ADR 0124, 0136). The render cache tells such a column from
+// one left out by st.Columns, which then holds it.
+func SetExplicit(st *Statement, cols []int) { st.keep = cols }
 
 // LeanInsert removes from st, an insert, each column that every row leaves
 // empty (emptyCell), unless the conflict clause names it (conflictWritten)
-// or its setters left it NULL (SetExplicitNulls),
+// or its setters store a value in it (SetExplicit),
 // and returns the columns whose database default fills a cell, in st's
 // order: those it removed and, on PostgreSQL and MySQL, those it kept where
 // a row leaves the cell to the database, which is then written as the
@@ -139,7 +140,7 @@ func LeanInsert(d Dialect, st *Statement) []int {
 	}
 	n := 0
 	for i, col := range st.Columns {
-		if conflictWritten(st.Conflict, col) || slices.Contains(st.nulls(), col) {
+		if conflictWritten(st.Conflict, col) || slices.Contains(st.explicit(), col) {
 			continue
 		}
 		all := true
@@ -532,17 +533,17 @@ func readUpserted(ctx context.Context, db *DB, st *Statement, p unsafe.Pointer, 
 // has no DEFAULT keyword in VALUES. A row that leaves every column empty
 // and one to a default is a run of its own, sent as DEFAULT VALUES. On
 // PostgreSQL and MySQL a cell left to a default is written as DEFAULT
-// (LeanInsert), and the rows are one run. A column of nulls, which the
-// setters left NULL (SetExplicitNulls), is written in every row and leaves
-// nothing to a default. at(i, col) is the value of column
+// (LeanInsert), and the rows are one run. A column of set, which the
+// setters store a value in (SetExplicit), is written in every row and
+// leaves nothing to a default. at(i, col) is the value of column
 // col in row i. It returns the end of each run.
-func DefaultRuns(in *EntityInfo, d Dialect, cols, nulls []int, n int, at func(i, col int) any) []int {
+func DefaultRuns(in *EntityInfo, d Dialect, cols, set []int, n int, at func(i, col int) any) []int {
 	if d != SQLite {
 		return []int{n}
 	}
 	var dcols []int
 	for _, c := range cols {
-		if HasDBDefault(&in.Columns[c], d) && !slices.Contains(nulls, c) {
+		if HasDBDefault(&in.Columns[c], d) && !slices.Contains(set, c) {
 			dcols = append(dcols, c)
 		}
 	}
@@ -563,7 +564,7 @@ func DefaultRuns(in *EntityInfo, d Dialect, cols, nulls []int, n int, at func(i,
 		left := false
 		for _, c := range cols {
 			v := at(i, c)
-			if !emptyCell(in, d, c, v) || slices.Contains(nulls, c) {
+			if !emptyCell(in, d, c, v) || slices.Contains(set, c) {
 				return false
 			}
 			left = left || leftToDB(in, d, c, v)

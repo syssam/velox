@@ -197,16 +197,16 @@ func TestInsertExplicitNullOverDatabaseDefault(t *testing.T) {
 
 // TestZeroOverDatabaseDefault is the guide's account of storing a zero in a
 // NOT NULL column whose declared database default is not zero: a setter's
-// zero is left to the database, like the struct's, and the row takes the
-// default; an Update after the insert stores the zero.
+// zero is stored (ADR 0136), and so is an Update's.
 func TestZeroOverDatabaseDefault(t *testing.T) {
 	db, raw := defDB(t)
 	d := dDef{Name: "z"}
 	if err := db.Insert(&d).Set(dDefs.Score.Set(0)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if d.Score != 7 {
-		t.Errorf("a setter's zero: read back %d, want the default 7", d.Score)
+	var stored int64
+	if err := raw.QueryRow("SELECT score FROM ddefs WHERE id = ?", d.ID).Scan(&stored); err != nil || stored != 0 || d.Score != 0 {
+		t.Errorf("a setter's zero: stored %d, entity %d, %v; want 0", stored, d.Score, err)
 	}
 	if _, err := db.Update[dDef]().Where(dDefs.ID.EQ(d.ID)).Set(dDefs.Score.Set(0)).Exec(ctx); err != nil {
 		t.Fatal(err)
