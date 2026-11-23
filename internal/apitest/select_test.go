@@ -450,7 +450,7 @@ func TestSelectRows(t *testing.T) {
 	}
 	var got []row
 	q := db.Query[inv]().
-		Select(I.OrgID, velox.CountAll[inv](), velox.Calc[inv]("MAX(?)", I.Number)).
+		Select(I.OrgID, velox.CountAll[inv](), velox.Calc[inv]("MAX(?)", I.Number).Agg()).
 		GroupBy(I.OrgID).Limit(10)
 	for r, err := range q.Rows(ctx) {
 		if err != nil {

@@ -50,7 +50,7 @@ func joinedInner(t Term) error {
 				}
 			}
 		}
-		if t.x.agg {
+		if t.agg {
 			return joinedInner(Term{kind: termAgg})
 		}
 	}

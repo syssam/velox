@@ -28,9 +28,6 @@ type exprData struct {
 	// rel says a slot's term is or holds a relation's aggregate (RelTerm),
 	// which the scope gives its target's row condition.
 	rel bool
-	// agg says the text calls an aggregate function, such as SUM(?), and is
-	// no window: it is an aggregate as an aggregate Term is (hasAgg).
-	agg bool
 }
 
 // seal sets d's shape from its text pieces and what each slot holds. The
@@ -161,7 +158,7 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 		}
 		return nil, fmt.Errorf("velox: Expr %q has %d ?, and %d arguments", text, n, len(slots))
 	}
-	d := &exprData{parts: strings.Split(text, "?"), slots: slots, args: args, window: window, agg: !window && exprCallsAgg(text)}
+	d := &exprData{parts: strings.Split(text, "?"), slots: slots, args: args, window: window}
 	for _, s := range slots {
 		d.rel = d.rel || s.Term != nil && hasRel(*s.Term)
 	}
@@ -221,45 +218,6 @@ func checkExprText(text string) (window bool, err error) {
 		return false, bad("a parenthesis is never closed")
 	}
 	return window, nil
-}
-
-// aggFuncs are the aggregate functions of the three dialects that
-// exprCallsAgg finds in an expression's text, upper case.
-var aggFuncs = map[string]bool{
-	"SUM": true, "AVG": true, "MIN": true, "MAX": true, "COUNT": true, "TOTAL": true,
-	"ARRAY_AGG": true, "STRING_AGG": true, "GROUP_CONCAT": true, "JSON_AGG": true, "JSONB_AGG": true,
-	"JSON_GROUP_ARRAY": true, "JSON_GROUP_OBJECT": true, "JSON_ARRAYAGG": true, "JSON_OBJECTAGG": true,
-	"BOOL_AND": true, "BOOL_OR": true, "EVERY": true, "BIT_AND": true, "BIT_OR": true, "BIT_XOR": true,
-	"STDDEV": true, "STDDEV_POP": true, "STDDEV_SAMP": true, "VARIANCE": true, "VAR_POP": true, "VAR_SAMP": true,
-}
-
-// exprCallsAgg reports whether text, which checkExprText accepted, calls an
-// aggregate function outside a literal: one of aggFuncs, whatever its case,
-// followed by an opening parenthesis.
-func exprCallsAgg(text string) bool {
-	for i := 0; i < len(text); {
-		switch c := text[i]; {
-		case c == '\'':
-			end, _ := exprLiteral(text, i)
-			i = max(end, i+1)
-		case isIdentStart(c):
-			j := i
-			for j < len(text) && (isIdentStart(text[j]) || text[j] >= '0' && text[j] <= '9') {
-				j++
-			}
-			k := j
-			for k < len(text) && (text[k] == ' ' || text[k] == '\t' || text[k] == '\n' || text[k] == '\r') {
-				k++
-			}
-			if k < len(text) && text[k] == '(' && aggFuncs[strings.ToUpper(text[i:j])] {
-				return true
-			}
-			i = j
-		default:
-			i++
-		}
-	}
-	return false
 }
 
 // exprChar checks the byte of text at i, outside a literal and not a word's:

@@ -176,6 +176,24 @@ func DecimalTerm(t Term) Term {
 	return InvalidTerm(errors.New("velox: Decimal marks an expression, such as a Calc, as holding decimals; a column is decimal by its schema, and an aggregate by what it aggregates"))
 }
 
+// AggMarkTerm is t, an expression, marked as an aggregate: its text, such
+// as SUM(?) or PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ?), computes one
+// value of a group, so it is placed and refused as an aggregate Term is
+// (hasAgg). velox does not read the text to find one (decision 0148). Any
+// other term, and a window function, is an InvalidTerm.
+func AggMarkTerm(t Term) Term {
+	switch {
+	case t.kind == termInvalid:
+		return t
+	case t.kind != termExpr:
+		return InvalidTerm(errors.New("velox: Agg marks an expression, such as a Calc, as an aggregate; an aggregate Term, such as Sum, is one already, and a column is not one"))
+	case hasWindow(t):
+		return InvalidTerm(errors.New("velox: Agg marks an expression as an aggregate, and a window function (OVER) is not one"))
+	}
+	t.agg = true
+	return t.seal()
+}
+
 // sqliteDecimalAgg writes agg, a SUM or AVG of a decimal column on SQLite,
 // rounded to 15 significant digits when it is a REAL:
 //

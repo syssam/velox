@@ -101,6 +101,10 @@ A projection is read with `Rows`, by position. An entity query ordered by
 an expression cannot be paged with `After` or a cursor. See
 [ADR 0074](decisions/0074-projection.md).
 
+A `Calc` whose text aggregates, such as `SUM(?)` or a user's aggregate, is
+marked with `Agg()`, and velox then places it as an aggregate term. velox
+does not read the text to find one (ADR 0148).
+
 A `Calc` or `SelectRaw` may hold a window function: `COUNT(*) OVER ()`,
 `ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)`, `RANK`, `DENSE_RANK`, and
 `SUM`, `AVG`, `MIN`, `MAX` with `OVER`. Beside `GroupBy` and `Limit`,

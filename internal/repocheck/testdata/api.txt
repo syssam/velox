@@ -698,6 +698,7 @@ func (t JSONText[E]) NEQ[_ Lazy[E]](v string) Pred[E]
 func (t JSONText[E]) NotIn[_ Lazy[E]](vs ...string) Pred[E]
 func (t JSONText[E]) NotNull[_ Lazy[E]]() Pred[E]
 func (t JSONText[E]) Term[_ Lazy[E]]() Term[E]
+func (t Term[E]) Agg[_ Lazy[E]]() Term[E]
 func (t Term[E]) As[_ Lazy[E]](name string) Term[E]
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E]
 func (t Term[E]) Avg[_ Lazy[E]]() Term[E]
@@ -1594,6 +1595,7 @@ const PredLTE
 const PredNEQ
 const PredNotIn
 const PredNotNull
+func Agg(t Term) Term
 func And(ps ...velox.Predicate) velox.Predicate
 func Assignments[E any](set []velox.Setter[E]) []velox.Assignment
 func Avg(t Term) Term

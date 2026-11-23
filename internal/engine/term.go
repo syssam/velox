@@ -68,6 +68,7 @@ type Term struct {
 	r     *relAgg  // a termRel's relation, or a termJoined's (its n.V a RelRef; col is its index)
 	ext   *termExt // a termDate's or a termGrouping's
 	dec   bool     // a termExpr marked as holding decimals: DecimalTerm
+	agg   bool     // a termExpr marked as an aggregate: AggMarkTerm
 	shape string   // what shapes it in the render cache's key: see seal
 }
 
@@ -90,7 +91,7 @@ func (t Term) seal() Term {
 	b = binary.AppendUvarint(b, uint64(t.col+1))
 	switch t.kind {
 	case termExpr:
-		b = append(b, bit(t.dec))
+		b = append(b, bit(t.dec), bit(t.agg))
 		b = append(b, t.x.shape...)
 	case termAgg:
 		if t.of != nil {
@@ -206,7 +207,8 @@ func AggTerm(fn TermFn, of Term) Term {
 		return InvalidTerm(errors.New("velox: an aggregate of no term"))
 	case termInvalid:
 		return of
-	case termAgg:
+	}
+	if hasAgg(of) {
 		return InvalidTerm(errors.New("velox: an aggregate of an aggregate: SUM(MAX(x)) is not allowed in one statement"))
 	}
 	if hasRel(of) {
@@ -763,6 +765,9 @@ func checkProject(st *Statement, who string) error {
 		return fmt.Errorf("velox: %s: a projection cannot take a lock; GROUP BY and a lock do not mix", name)
 	case len(p.Terms) == 0:
 		return fmt.Errorf("velox: %s: a projection has no terms", name)
+	}
+	if slices.ContainsFunc(p.GroupBy, hasAgg) {
+		return fmt.Errorf("velox: %s: GroupBy holds an aggregate, which SQL computes per group; group by its terms and select the aggregate", name)
 	}
 	if slices.ContainsFunc(p.GroupBy, hasWindow) {
 		return fmt.Errorf("velox: %s: GroupBy holds a window function, which SQL computes after GROUP BY; group by its terms and select the window with Calc", name)

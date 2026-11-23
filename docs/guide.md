@@ -1027,12 +1027,23 @@ the groups count only rows the caller may see, which `Raw` does not give.
 `SelectRaw` and `Calc` take guarded text like `Expr`, so they keep the
 policies too. A projection needs a `Limit` or `AllowUnbounded()`. It cannot be
 read with `All`, `Count` and the rest, nor combined with `Columns`, `With`,
-`Join`, `After` or a lock, and an aggregate of an aggregate is refused. A
+`Join`, `After` or a lock, and an aggregate of an aggregate is refused, as
+is an aggregate in `GroupBy`. A
 value that is not a column handle or a term of the entity (a string, another
 entity's handle) fails the statement before anything is sent. An ordering by
 an expression cannot be a keyset cursor. `UNION` and CTEs are not in the
 builder; use [raw SQL](#raw-sql) for those
 ([ADR 0074](decisions/0074-projection.md), [ADR 0022](decisions/0022-group-by.md)).
+
+A `Calc` that computes one value of each group, such as
+`Calc("PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ?)", I.TotalCents)` or
+a user's aggregate, is marked with `Agg()`. velox then places it as an
+aggregate term: beside `GroupBy` without being a key, and on MySQL in an
+ordering as written. velox does not read the text to find an aggregate:
+`Calc("SUM(?)", x)` needs `Agg()` too, and SQLite's two-argument
+`MAX(?, ?)`, a value of each row, does not. `Agg()` of a window function
+or of a term that is not an expression fails the statement
+([ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
 
 A `Calc` or `SelectRaw` may be a window function, such as `COUNT(*) OVER ()`
 beside a `GroupBy` and `Limit` for a page of groups and their total. It is
@@ -1107,8 +1118,8 @@ q := db.Query[veloxgen.Invoice]().Select(col, I.TotalCents.Sum()).GroupBy(col).L
 ([ADR 0127](decisions/0127-report-terms.md))
 
 The term's aggregates, `col.Sum()` and the rest, write what the handle's
-write. `Calc("SUM(?)", col)` works too, but on SQLite only the term's `Sum`
-rounds a decimal column. A conditional distinct count is a `Calc` with
+write. `Calc("SUM(?)", col).Agg()` works too, but on SQLite only the
+term's `Sum` rounds a decimal column. A conditional distinct count is a `Calc` with
 `CountDistinct`:
 
 ```go

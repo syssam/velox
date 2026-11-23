@@ -393,7 +393,7 @@ var genericObjects = []struct {
 	// Term.Equal and Term.Decimal (ADR 0127, 0131) took it to 795500,
 	// about 0.5 KB a method; entityDescHooks measured 880874 and
 	// entityDescMixin 926264, within their bounds.
-	{"entityDescUse", "", entityDescUseSrc, 796160}, // measured 795500
+	{"entityDescUse", "", entityDescUseSrc, 796672}, // measured 796274 (Term.Agg)
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.

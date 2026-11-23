@@ -793,6 +793,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
   `GeneratedCodeIsVersion28`: regenerate, since code generated under
   compat=veloxe before sets only `Veloxe` (ADR 0150).
+- A `Calc` that aggregates is marked with `Term.Agg()` (`untyped.Agg`):
+  velox no longer scans the text for SUM, MAX and the rest, which took
+  SQLite's two-argument `MAX(a, b)` for an aggregate and missed
+  `PERCENTILE_CONT` and user aggregates. `GroupBy` refuses an aggregate key.
+  `SetExpr` no longer refuses aggregate text; the database does (ADR 0148).
 - `veloxtest.Open` on SQLite with an empty DSN, or one of a database in
   memory such as enttest's `file:ent?mode=memory&cache=shared&_fk=1`, gives
   each call a file of its own in `t.TempDir()`, a copy of the tables
@@ -1569,10 +1574,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `velox.Connect("sqlite", dsn)` turns foreign keys on when the DSN holds
   `_fk=1`, which modernc.org/sqlite ignores: on the "sqlite" driver only
   `_pragma=foreign_keys(…)` counts as the DSN's own setting (ADR 0147).
-- An expression whose text calls an aggregate function, such as
-  `Calc("SUM(?)", x)`, is an aggregate: MySQL orders a grouped projection
-  by it as written, not by `ANY_VALUE` of it, which nested one aggregate in
-  another, and `SetExpr` refuses it (ADR 0142).
+- A `Calc` marked `Agg()` is an aggregate: MySQL orders a grouped
+  projection by it as written, not by `ANY_VALUE` of it, which nested one
+  aggregate in another (ADR 0142, ADR 0148).
 - A HAVING that tests a GROUP BY key written as an expression runs: on
   PostgreSQL a key with a bound value is written with the key's
   placeholders, where a copy failed with 42803; on MySQL the key is

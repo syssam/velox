@@ -67,7 +67,7 @@ func checkSetExpr(st *Statement, who string, a Assignment) error {
 }
 
 // hasAgg reports whether t is or holds an aggregate: an aggregate Term, or
-// an expression whose text calls an aggregate function (exprCallsAgg).
+// an expression AggMarkTerm marked as one. velox does not read the text.
 func hasAgg(t Term) bool {
 	switch t.kind {
 	case termAgg:
@@ -75,7 +75,7 @@ func hasAgg(t Term) bool {
 	case termDate:
 		return hasAgg(*t.of)
 	case termExpr:
-		if t.x.agg {
+		if t.agg {
 			return true
 		}
 		for _, s := range t.x.slots {

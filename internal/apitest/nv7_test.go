@@ -13,9 +13,9 @@ import (
 // Calc's text, COUNT(DISTINCT CASE …) and SELECT DISTINCT keys.
 
 // TestAggregateOfAColumnByName: ColumnByName's Term aggregates as the
-// handle does (its Sum is the handle's Sum, written the same), and Calc may
-// hold an aggregate's text beside GroupBy, in Select and in Having; both run
-// on SQLite and agree.
+// handle does (its Sum is the handle's Sum, written the same), and a Calc
+// marked Agg is an aggregate beside GroupBy, in Select and in Having; both
+// run on SQLite and agree.
 func TestAggregateOfAColumnByName(t *testing.T) {
 	org, _ := velox.ColumnByName[inv]("org_id")
 	total, ok := velox.ColumnByName[inv]("total")
@@ -24,9 +24,9 @@ func TestAggregateOfAColumnByName(t *testing.T) {
 	}
 	q := func(db *velox.DB) velox.Query[inv] {
 		return db.Query[inv]().
-			Select(org, total.Sum().As("sum"), velox.Calc[inv]("SUM(?)", total).As("calc")).
+			Select(org, total.Sum().As("sum"), velox.Calc[inv]("SUM(?)", total).Agg().As("calc")).
 			GroupBy(org).
-			Having(velox.Expr[inv]("? > ?", velox.Calc[inv]("SUM(?)", total), 5)).
+			Having(velox.Expr[inv]("? > ?", velox.Calc[inv]("SUM(?)", total).Agg(), 5)).
 			OrderBy(org.Asc()).
 			Limit(10)
 	}
