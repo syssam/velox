@@ -892,6 +892,24 @@ posts, err := db.Query[veloxgen.Post]().
 joined, because it would repeat the owner; use `With` or `HasWith` for those
 ([ADR 0031](decisions/0031-to-one-joins.md)).
 
+A projection joins too. `velox.Joined(rel, x)` is the joined row's column, or a
+`Calc` or `DateTrunc` of it, as a term of the query's entity, so a child's
+rows are grouped by its parent's columns in one statement:
+
+```go
+status := velox.Joined(Items.Claim, C.Status)
+rows, err := velox.Scan[byStatus](ctx, db.Query[veloxgen.ExpenseClaimItem]().
+	Join(Items.Claim).
+	Where(Items.Claim.Is(C.DeletedAt.IsNull())).
+	Select(status, Items.BaseAmount.Sum().As("total")).
+	GroupBy(status).Limit(100))
+```
+
+The parent's Read policy is in the join's ON clause, so an inner join leaves
+out a row whose parent it hides, and a `LeftJoin` groups it under NULL.
+Aggregate a joined term (`velox.Joined(rel, x).Sum()`); an aggregate inside `Joined`
+is refused ([ADR 0143](decisions/0143-joined-terms-in-projections.md)).
+
 ### Linking rows
 
 A foreign key is an ordinary field, so a belongs-to link is set like any
@@ -1077,6 +1095,41 @@ q := db.Query[veloxgen.Invoice]().Select(col, I.TotalCents.Sum()).GroupBy(col).L
 
 ([ADR 0127](decisions/0127-report-terms.md))
 
+The term's aggregates, `col.Sum()` and the rest, write what the handle's
+write. `Calc("SUM(?)", col)` works too, but on SQLite only the term's `Sum`
+rounds a decimal column. A conditional distinct count is a `Calc` with
+`CountDistinct`:
+
+```go
+nonZero := velox.Calc[veloxgen.Invoice]("CASE WHEN ? <> 0 THEN ? END", I.TotalCents, I.TotalCents).CountDistinct()
+```
+
+A column computed beside full entity rows, such as a sort key for a cursor,
+is a projection of every column plus the `Calc`. Read it with `Scan` into a
+struct that embeds the entity:
+
+```go
+type keyed struct {
+	veloxgen.Record
+	SortKey string `velox:"sort_key"`
+}
+key := velox.Calc[veloxgen.Record]("COALESCE(?, '')", R.Name)
+var cols []velox.Selectable[veloxgen.Record]
+for _, c := range untyped.TableOf[veloxgen.Record]().Info().Columns {
+	t, _ := velox.ColumnByName[veloxgen.Record](c.Name)
+	cols = append(cols, t)
+}
+q := db.Query[veloxgen.Record]().Select(cols...).Select(key.As("sort_key")).
+	OrderBy(key.Asc(), R.ID.Asc()).Limit(20)
+// the next page: q.Where(velox.Expr[veloxgen.Record]("? > ? OR (? = ? AND ? > ?)", key, k, key, k, R.ID, id))
+rows, err := velox.Scan[keyed](ctx, q)
+```
+
+A group that comes from a dated table no edge describes, such as the
+membership a store had on an order's date, is a `CASE` term over the row's
+own columns, built from the memberships read first under their own policy
+([ADR 0142](decisions/0142-nextapp-projection-recipes.md)).
+
 ### Distinct
 
 `Distinct()` reads each distinct row once, `SELECT DISTINCT`, for a
@@ -1093,6 +1146,8 @@ read orders only by what it reads, a projection's terms or `Values`'
 column; any other ordering fails on every dialect, as PostgreSQL and MySQL
 refuse it
 ([ADR 0102](decisions/0102-distinct-explain-update-all-privacy-trace.md)).
+ent's `GroupBy(a, b).Scan` with no aggregate is `Select(a, b).Distinct()`,
+or `Select(a, b).GroupBy(a, b)`.
 
 ## Writing
 

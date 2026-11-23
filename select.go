@@ -48,7 +48,8 @@ func (q Query[E]) needProject[_ Lazy[E]](what string) Query[E] {
 // A projection is a read of E like any other: Where, the Read policy, the
 // scope, the interceptors, Limit and the row cap apply to it, and it needs
 // a Limit or AllowUnbounded. It cannot be combined with Columns, Omit, With,
-// Join, After, a lock or a per-owner read.
+// After, a lock or a per-owner read. With Join or LeftJoin of a to-one
+// relation it reads the joined row's terms through velox.Joined.
 func (q Query[E]) Select[_ Lazy[E]](ts ...Selectable[E]) Query[E] {
 	p := q.projection()
 	for _, t := range ts {

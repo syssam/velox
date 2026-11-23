@@ -33,6 +33,7 @@ const (
 	termRel      // an aggregate of a relation's rows: a correlated subquery (RelTerm)
 	termDate     // a time truncated to a unit (DateTruncTerm)
 	termGrouping // ROLLUP or CUBE of keys, a key of GROUP BY (GroupingTerm)
+	termJoined   // a term of a joined relation's target (JoinedTerm)
 )
 
 // TermFn is an aggregate function of a term.
@@ -64,7 +65,7 @@ type Term struct {
 	path  *JSONPath // a termJSON's
 	name  string    // the result column's name, NamedTerm's; "" for none
 	err   error
-	r     *relAgg  // a termRel's relation
+	r     *relAgg  // a termRel's relation, or a termJoined's (its n.V a RelRef; col is its index)
 	ext   *termExt // a termDate's or a termGrouping's
 	dec   bool     // a termExpr marked as holding decimals: DecimalTerm
 	shape string   // what shapes it in the render cache's key: see seal
@@ -111,6 +112,8 @@ func (t Term) seal() Term {
 		b = append(b, t.of.shape...)
 	case termGrouping:
 		b = extKey(b, t.ext)
+	case termJoined:
+		b = append(b, t.of.shape...)
 	}
 	b = binary.AppendUvarint(b, uint64(len(t.name)))
 	b = append(b, t.name...)
@@ -303,7 +306,7 @@ func (t Term) problem() error {
 		return errors.New("velox: the zero Term; make terms with Pick, Calc and CountAll")
 	case termInvalid:
 		return t.err
-	case termAgg, termRel, termDate:
+	case termAgg, termRel, termDate, termJoined:
 		if t.of != nil {
 			return t.of.problem()
 		}
@@ -369,6 +372,8 @@ func (w *writer) term(t Term) {
 		w.dateTrunc(t)
 	case termGrouping:
 		w.fail(errGroupingPlace)
+	case termJoined:
+		w.joinedTerm(t)
 	default:
 		w.fail(t.problem())
 	}
@@ -492,6 +497,8 @@ func (w *writer) projectStmt(st *Statement) {
 	if w.d == MySQL && st.Distinct {
 		w.distinct = p
 	}
+	joined := len(st.Joins) > 0
+	w.joins, w.qualify = st.Joins, joined
 	w.str("SELECT ")
 	if st.Distinct {
 		w.str("DISTINCT ")
@@ -504,6 +511,7 @@ func (w *writer) projectStmt(st *Statement) {
 	}
 	w.str(" FROM ")
 	w.table()
+	w.joinClauses()
 	w.where(st.Where)
 	if len(p.GroupBy) > 0 {
 		w.groupBy(p.GroupBy)
@@ -519,7 +527,7 @@ func (w *writer) projectStmt(st *Statement) {
 		w.having = false
 	}
 	w.grouped = len(p.GroupBy) > 0
-	w.orderBy(st.OrderBy, false)
+	w.orderBy(st.OrderBy, joined)
 	w.grouped = false
 	w.keys = nil
 	w.distinct = nil
@@ -632,6 +640,17 @@ func checkTermCols(t Term, bad func(int) error) error {
 				return err
 			}
 		}
+	case termJoined:
+		target, err := joinedTarget(t)
+		if err != nil {
+			return err
+		}
+		return checkTermCols(*t.of, func(c int) error {
+			if c < 0 || c >= len(target.Columns) {
+				return fmt.Errorf("velox: a joined term names column %d of %s, which has %d", c, target.Name, len(target.Columns))
+			}
+			return nil
+		})
 	case termRel:
 		l, err := existsLink(t.r.n)
 		if err != nil {
@@ -736,8 +755,8 @@ func checkProject(st *Statement, who string) error {
 		return fmt.Errorf("velox: %s: a projection is a SELECT", name)
 	case st.Count || st.Exists || st.Aggregate != 0 || st.GroupBy != 0:
 		return fmt.Errorf("velox: %s: a projection is not Count, Exists or an aggregate; read its terms with Rows", name)
-	case st.Each != nil || len(st.Joins) > 0:
-		return fmt.Errorf("velox: %s: a projection cannot be read with Join, With or LimitEach", name)
+	case st.Each != nil:
+		return fmt.Errorf("velox: %s: a projection cannot be read with With or LimitEach", name)
 	case st.Columns != nil:
 		return fmt.Errorf("velox: %s: a projection cannot be read with Columns or Omit; its terms are its columns", name)
 	case st.Lock != 0 || st.LockWait != 0:

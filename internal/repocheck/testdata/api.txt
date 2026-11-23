@@ -780,6 +780,7 @@ func IsNotFound(err error) bool
 func IsNotSingular(err error) bool
 func IsValidationError(err error) bool
 func IsZero[E any](p Pred[E]) bool
+func Joined[E, T any](r Rel[E, T], s Selectable[T]) Term[E]
 func LinkEntity[T any, PT Entity[T]](name, table string) EntityLink
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
 func LogArgs() LogOption

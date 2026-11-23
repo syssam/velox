@@ -93,7 +93,7 @@ func hasWindow(t Term) bool {
 	switch t.kind {
 	case termExpr:
 		return exprHasWindow(t.x)
-	case termAgg:
+	case termAgg, termJoined:
 		return t.of != nil && hasWindow(*t.of)
 	}
 	return false

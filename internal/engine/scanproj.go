@@ -91,6 +91,13 @@ func (s *ScanPlan) termNames(t Term) (name, goName string) {
 	case t.kind == termColumn:
 		c := &s.in.Columns[t.col]
 		return c.Name, c.Field
+	case t.kind == termJoined && t.of.kind == termColumn:
+		// The target's column, by its own names: the result column is
+		// named as the column it reads.
+		if in, err := joinedTarget(t); err == nil && int(t.of.col) < len(in.Columns) {
+			c := &in.Columns[t.of.col]
+			return c.Name, c.Field
+		}
 	}
 	return "", ""
 }
@@ -163,6 +170,12 @@ func (s *ScanPlan) termType(t Term) (typ reflect.Type, numeric bool) {
 		return reflect.TypeFor[float64](), false
 	case termDate:
 		return timeType, false
+	case termJoined:
+		in, err := joinedTarget(t)
+		if err != nil {
+			return nil, false
+		}
+		return (&ScanPlan{in: in}).termType(*t.of)
 	case termAgg:
 		switch t.fn {
 		case TermCount, TermCountDistinct, TermCountAll:

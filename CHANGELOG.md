@@ -26,6 +26,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `velox.Filter` receives and `velox.HasColumn` takes. A `TypeX` that
   collides with another generated name is refused (ADR 0139).
   Regenerate: `velox.GeneratedCodeIsVersion29` replaces Version28.
+- `velox.Joined(rel, x)` reads a joined to-one relation's column, or a `Calc` or
+  `DateTrunc` of it, as a term of the query's entity, and a projection
+  (`Select`) may now `Join` or `LeftJoin`: a child's rows group by their
+  parent's columns in one statement, the parent's policy in the join's ON
+  clause (ADR 0143).
 - A JSON handle's `Array(keys...)` tests the elements of the array at a
   path of object keys: `Has`, `HasSome`, `HasEvery` and `IsEmpty`, alike
   on PostgreSQL, MySQL and SQLite, false where the path holds no array.
@@ -1508,6 +1513,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- An expression whose text calls an aggregate function, such as
+  `Calc("SUM(?)", x)`, is an aggregate: MySQL orders a grouped projection
+  by it as written, not by `ANY_VALUE` of it, which nested one aggregate in
+  another, and `SetExpr` refuses it (ADR 0142).
 - A HAVING that tests a GROUP BY key written as an expression runs: on
   PostgreSQL a key with a bound value is written with the key's
   placeholders, where a copy failed with 42803; on MySQL the key is

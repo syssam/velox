@@ -181,6 +181,13 @@ veloxe's own, or differ in a veloxe port:
 | `COUNT(*) OVER ()` in a `Modify` | `velox.Calc[T]("COUNT(*) OVER ()")` or `SelectRaw`; a window function is refused in `Expr`, `GroupBy`, an aggregate and `SetExpr` ([ADR 0101](decisions/0101-window-terms-soft-delete-options.md)) |
 | a report's table from field names to columns, `sql.As(f, name)` by name | `velox.ColumnByName[T](column)`, a Term that selects, groups and orders ([guide](guide.md#date-buckets-subtotals-and-columns-by-name), [ADR 0127](decisions/0127-report-terms.md)) |
 | a date bucket in a `Modify`: `TO_CHAR(? AT TIME ZONE 'z', 'YYYY-MM')`, `date_trunc` | `velox.DateTrunc[T](velox.UnitMonth, col, velox.InZone(z))`, the bucket's first instant on every dialect; `FiscalYear(m)` for fiscal years and quarters; a date part (`EXTRACT`) stays a `Calc` |
+| `GroupBy(f…).Aggregate(velox.As(velox.Sum(col), n))` with a run-time `col` | `t, _ := velox.ColumnByName[T](col)`; `Select(key, t.Sum().As(n)).GroupBy(key)` ([ADR 0142](decisions/0142-nextapp-projection-recipes.md)) |
+| `GroupBy(a, b).Scan` with no aggregate | `Select(a, b).Distinct()` or `Select(a, b).GroupBy(a, b)`, read with `velox.Scan` |
+| `COUNT(DISTINCT CASE WHEN c <> 0 THEN c END)` in a `Modify` | `velox.Calc[T]("CASE WHEN ? <> 0 THEN ? END", c, c).CountDistinct()` |
+| `AppendSelectExprAs(expr, alias)` beside entity rows, read with `Value(alias)` | `Select` of every column (`ColumnByName`) and the `Calc` `.As(alias)`, scanned into a struct embedding the entity; the keyset an `Expr` over the same Term ([guide](guide.md#date-buckets-subtotals-and-columns-by-name)) |
+| a derived table in `Modify` so the parent's columns group the child | `Join(rel)` and `velox.Joined(rel, col)` in `Select` and `GroupBy`, the parent's policy in ON ([ADR 0143](decisions/0143-joined-terms-in-projections.md)) |
+| a hand join to a dated table with no edge (`store_group_member` on the document's date) | read the memberships first, then a `CASE` term over the document's own columns; a correlated outer reference is not built ([ADR 0142](decisions/0142-nextapp-projection-recipes.md)) |
+| `sqljson.ValueContains(f, v, sqljson.Path(k))` | `T.F.Array(k).Has(v)` ([ADR 0141](decisions/0141-json-array-at-a-path.md)) |
 | `GROUP BY ROLLUP(…)`, `CUBE(…)` in a `Modify` | `GroupBy(velox.Rollup[T](keys...))`, `velox.Cube`; MySQL `WITH ROLLUP` as the only key, SQLite refuses |
 | field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
 | `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |

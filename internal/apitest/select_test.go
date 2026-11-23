@@ -503,9 +503,10 @@ func TestSelectRefused(t *testing.T) {
 		{"Columns", func() error { return rowsErr(base().Columns(I.ID)) }, "Columns"},
 		{"Omit", func() error { return rowsErr(base().Omit(I.Note)) }, "Omit"},
 		{"With", func() error { return rowsErr(base().With(I.Items)) }, "With"},
-		{"Join", func() error {
-			return rowsErr(db.Query[testmodel.Ticket]().Select(Tk.Owner).Join(Tk.Invoice).Limit(5))
-		}, "Join"},
+		// A projection joins (ADR 0143), but a join's With loads entities.
+		{"Join With", func() error {
+			return rowsErr(db.Query[testmodel.Ticket]().Select(Tk.Owner).Join(Tk.Invoice.With(I.Items)).Limit(5))
+		}, "With"},
 		{"After", func() error { return rowsErr(base().After(&inv{ID: 1})) }, "After"},
 		{"ForUpdate", func() error { return rowsErr(base().ForUpdate()) }, "lock"},
 		{"no terms", func() error { return rowsErr(db.Query[inv]().Select().Limit(5)) }, "no terms"},

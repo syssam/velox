@@ -146,7 +146,7 @@ func termArgs(t Term) bool {
 				return true
 			}
 		}
-	case termAgg, termDate:
+	case termAgg, termDate, termJoined:
 		return t.of != nil && termArgs(*t.of)
 	case termJSON:
 		return len(t.path.Keys) > 0
@@ -180,6 +180,8 @@ func sameTerm(a, b Term) bool {
 	case termDate:
 		x, y := a.ext, b.ext
 		return x.unit == y.unit && x.zone == y.zone && x.offset == y.offset && x.fiscal == y.fiscal && sameTerm(*a.of, *b.of)
+	case termJoined:
+		return sameTerm(*a.of, *b.of) // col, the relation, is compared above
 	}
 	return false
 }

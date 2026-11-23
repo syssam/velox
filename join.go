@@ -28,7 +28,8 @@ import (
 // Load it with With, or test it with Has or HasWith. A join reads all of the
 // target's columns; Columns and Omit act on the entity's own. The target's
 // Read policy is in the join's ON clause. A query joins a relation once, and
-// a locking read, an aggregate and a per-owner read through a join table cannot join. After pages over a joined column
+// a locking read, an aggregate and a per-owner read through a join table cannot join.
+// A projection (Select) can: it reads the target's terms through Joined. After pages over a joined column
 // from the joined entity of the row it is given, which must have been read with
 // the same join and have one; of a LeftJoin, a row with none pages from NULL.
 // With still loads other relations in its own queries.
@@ -142,6 +143,33 @@ func (r Rel[E, T]) By[_ Lazy[T]](o Order[T]) Order[E] {
 	t := o.t
 	t.Rel = r.I + 1
 	return Order[E]{t}
+}
+
+// Joined is s, a column handle or a Term of the entity of r, a to-one
+// relation the query joins, as a Term of the query's entity: the value of
+// the joined row, for Select, GroupBy, an aggregate (Joined(r, x).Sum()), an
+// Expr or an ordering. The query must Join or LeftJoin r; a statement
+// without the join fails. So a child's rows are grouped by its parent's
+// columns in one statement:
+//
+//	C := veloxgen.ExpenseClaims
+//	status := velox.Joined(veloxgen.ExpenseClaimItems.Claim, C.Status)
+//	velox.Scan[byStatus](ctx, db.Query[veloxgen.ExpenseClaimItem]().
+//		Join(veloxgen.ExpenseClaimItems.Claim).
+//		Where(veloxgen.ExpenseClaimItems.Claim.Is(C.Status.NotIn(veloxgen.ExpenseClaimStatusDraft))).
+//		Select(status, veloxgen.ExpenseClaimItems.BaseAmount.Sum().As("total")).
+//		GroupBy(status).Limit(100))
+//
+// The target's Read policy is in the join's ON clause, as for any join, so
+// a row whose parent it hides is left out (kept, with NULL terms, by a
+// LeftJoin). s may be a column, a Calc, a JSON value or a DateTrunc of the
+// target; one holding an aggregate, a relation's aggregate or another
+// relation's Joined fails the statement. A joined column scans into the
+// field of its own name; a JSON column of the target cannot be selected.
+// It is a function, not a method of Rel: a method costs every entity
+// package that names a Rel about 0.8 KB (TestGenericTypesCompileSmall).
+func Joined[E, T any](r Rel[E, T], s Selectable[T]) Term[E] {
+	return Term[E]{engine.JoinedTerm(engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, termOf[T](s))}
 }
 
 // Fill stores t as the entity of r's field in owner, loaded, as a Join does

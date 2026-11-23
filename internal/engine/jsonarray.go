@@ -156,8 +156,8 @@ func (w *writer) docArgs(i int32, keys []string) {
 // index on the column serves.
 func containsAt(keys []string, elem string) string {
 	s := "[" + elem + "]"
-	for i := len(keys) - 1; i >= 0; i-- {
-		k, _ := json.Marshal(keys[i]) // a checked key always encodes
+	for _, key := range slices.Backward(keys) {
+		k, _ := json.Marshal(key) // a checked key always encodes
 		s = "{" + string(k) + ":" + s + "}"
 	}
 	return s
