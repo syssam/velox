@@ -986,6 +986,72 @@ a result column or an ordering, never a condition
 ([sql.md](sql.md#a-value-calc-and-selectraw),
 [ADR 0101](decisions/0101-window-terms-soft-delete-options.md)).
 
+### Date buckets, subtotals and columns by name
+
+`velox.DateTrunc` truncates a time to the start of its year, quarter,
+month, ISO week (from Monday), day or hour. One term is the result column,
+the group and the ordering:
+
+```go
+month := velox.DateTrunc[veloxgen.Invoice](velox.UnitMonth, I.CreatedAt,
+	velox.InZone("Europe/London"))
+for r, err := range db.Query[veloxgen.Invoice]().
+	Select(month, I.TotalCents.Sum()).
+	GroupBy(month).OrderBy(month.Asc()).
+	Limit(24).Rows(ctx) {
+	if err != nil {
+		return err
+	}
+	var start time.Time
+	var sum int64
+	if err := r.Scan(&start, &sum); err != nil {
+		return err
+	}
+}
+```
+
+The value is the bucket's first instant, which scans into a `time.Time` on
+every dialect; format the label in Go. Buckets are UTC unless `InZone`
+names a zone of the IANA database or an offset such as `+08:00`. MySQL
+needs its time zone tables for a name; SQLite takes an offset only.
+`FiscalYear(time.April)` starts the years and quarters in April. The unit,
+the zone and the month are written as literals, so the text is the same in
+`Select`, `GroupBy` and `OrderBy`. A part of a date, such as the month of
+the year or the hour of the day, is a `Calc`: `EXTRACT(MONTH FROM ?)` on
+PostgreSQL and MySQL.
+
+`velox.Rollup` adds subtotal rows to a `GroupBy`, and a grand total; in
+them the rolled-up keys are NULL, and `GROUPING(key)` is 1:
+
+```go
+grouping := velox.Calc[veloxgen.Invoice]("GROUPING(?)", I.OrgID)
+q := db.Query[veloxgen.Invoice]().
+	Select(I.OrgID, I.TotalCents.Sum(), grouping).
+	GroupBy(velox.Rollup[veloxgen.Invoice](I.OrgID)).
+	OrderBy(grouping.Asc(), I.OrgID.Asc()).Limit(100)
+```
+
+PostgreSQL takes `Rollup` and `Cube` among other keys. MySQL has only
+`WITH ROLLUP`, so there a `Rollup` is the only key, and `Cube` fails.
+SQLite has neither and fails the statement.
+
+Code that is given a field's name, such as a report built from a GraphQL
+request, gets the column's term with `velox.ColumnByName`. It selects,
+groups and orders as the handle does, and is false for an unknown name.
+`Order.Term()` and `Order.Descending()` read an ordering back,
+`Term.Column()` names the column a term is, and `RawRow.Columns()` names a
+row's columns:
+
+```go
+col, ok := velox.ColumnByName[veloxgen.Invoice]("org_id")
+if !ok {
+	return fmt.Errorf("unknown field")
+}
+q := db.Query[veloxgen.Invoice]().Select(col, I.TotalCents.Sum()).GroupBy(col).Limit(100)
+```
+
+([ADR 0127](decisions/0127-report-terms.md))
+
 ### Distinct
 
 `Distinct()` reads each distinct row once, `SELECT DISTINCT`, for a

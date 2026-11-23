@@ -179,6 +179,10 @@ veloxe's own, or differ in a veloxe port:
 | `velox.Open(dialect.Postgres, dsn)` | `velox.Connect("postgres", dsn, opts...)` |
 | `Modify(func(s *sql.Selector){…})`, `func(*sql.Selector)` predicates, `WhereP` | `velox.Expr` for a condition, `velox.Calc` for a term or an order, `Select` or `SelectRaw` with `Rows` for a projection, `velox.SetExpr` for an update ([sql.md](sql.md#coming-from-ent)) |
 | `COUNT(*) OVER ()` in a `Modify` | `velox.Calc[T]("COUNT(*) OVER ()")` or `SelectRaw`; a window function is refused in `Expr`, `GroupBy`, an aggregate and `SetExpr` ([ADR 0101](decisions/0101-window-terms-soft-delete-options.md)) |
+| a report's table from field names to columns, `sql.As(f, name)` by name | `velox.ColumnByName[T](column)`, a Term that selects, groups and orders ([guide](guide.md#date-buckets-subtotals-and-columns-by-name), [ADR 0127](decisions/0127-report-terms.md)) |
+| a date bucket in a `Modify`: `TO_CHAR(? AT TIME ZONE 'z', 'YYYY-MM')`, `date_trunc` | `velox.DateTrunc[T](velox.UnitMonth, col, velox.InZone(z))`, the bucket's first instant on every dialect; `FiscalYear(m)` for fiscal years and quarters; a date part (`EXTRACT`) stays a `Calc` |
+| `GROUP BY ROLLUP(…)`, `CUBE(…)` in a `Modify` | `GroupBy(velox.Rollup[T](keys...))`, `velox.Cube`; MySQL `WITH ROLLUP` as the only key, SQLite refuses |
+| field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
 | `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |

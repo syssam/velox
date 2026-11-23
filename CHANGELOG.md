@@ -30,6 +30,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `entities=A+B` writes those entities' SDL alone, with each where input
   theirs nest, for an application that serves part of its schema (ADR
   0125).
+- reports: `velox.ColumnByName[E](name)` is a column's Term by its name;
+  `velox.DateTrunc[E](unit, t, opts...)` truncates a time to a year,
+  quarter, month, ISO week, day or hour, `InZone(name)` and
+  `FiscalYear(start)`, as an instant on every dialect;
+  `velox.Rollup` and `velox.Cube` are keys of `GroupBy` (PostgreSQL; MySQL
+  `WITH ROLLUP` only); `Order.Term()`, `Order.Descending()`,
+  `Term.Column()` and `RawRow.Columns()` read an ordering and a row back. A
+  Term that is a column orders as its handle does, so After follows it
+  (ADR 0127).
 - veloxgql: `Service(ctx, db)` and `ServiceWithLimits(ctx, db, l)` let a
   service page through generated code outside a GraphQL request:
   `Paginate`, edge connections, `EdgeOne` and `EdgeList` read every column,
