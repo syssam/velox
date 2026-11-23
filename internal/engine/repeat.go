@@ -1,0 +1,225 @@
+package engine
+
+import (
+	"encoding/binary"
+	"reflect"
+	"slices"
+)
+
+// On PostgreSQL a projection's GROUP BY or ORDER BY term that repeats an
+// earlier term with bound values is written with the earlier term's
+// placeholders (decision 0128). PostgreSQL matches a grouped expression by
+// its text, and $1 and $3 are two parameters to it, so a date bucket
+// selected as date_trunc('month', x AT TIME ZONE $1) and grouped as
+// date_trunc('month', x AT TIME ZONE $2) failed with 42803; written with $1
+// both times, it is one expression, and PostgreSQL sends the value once.
+//
+// A term repeats an earlier one when sameTerm says so: the same text and
+// columns and equal values, whatever its name. The earlier ones are the
+// result terms, then, for an ordering, the GROUP BY keys, a Rollup's or
+// Cube's keys among them. MySQL's and SQLite's ? are positional and cannot
+// be repeated, so they bind the value at each place, as before. The render
+// cache keys which earlier term each one repeats (repeatKey), since equal
+// values decide it and the key holds no values.
+
+// termSpan is a term the writer wrote on PostgreSQL and the arguments it
+// bound: args[start:start+n].
+type termSpan struct {
+	t        Term
+	start, n int
+}
+
+// repeated returns the index of the first term t repeats among p's result
+// terms and its first groups GROUP BY keys (groupKeys' order), counted in
+// that order, or -1.
+func repeated(p *Projection, groups int, t Term) int {
+	if !termArgs(t) {
+		return -1
+	}
+	for i, e := range p.Terms {
+		if sameTerm(e, t) {
+			return i
+		}
+	}
+	found := -1
+	groupKeys(p, func(i int, e Term) bool {
+		if i >= groups {
+			return false
+		}
+		if sameTerm(e, t) {
+			found = len(p.Terms) + i
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// groupKeys calls f with each GROUP BY key of p and its index, a Rollup's
+// or Cube's keys in its place, until f returns false.
+func groupKeys(p *Projection, f func(int, Term) bool) {
+	n := 0
+	for _, g := range p.GroupBy {
+		set := []Term{g}
+		if g.kind == termGrouping {
+			set = g.ext.set
+		}
+		for _, k := range set {
+			if !f(n, k) {
+				return
+			}
+			n++
+		}
+	}
+}
+
+// writeSpan writes t, as a term or, when result, as a result column, and
+// records its arguments; when it repeats an earlier span it is written with
+// that span's placeholders and binds nothing.
+func (w *writer) writeSpan(t Term, result, distinct bool) {
+	if w.d != Postgres {
+		if result {
+			w.resultTerm(t, distinct)
+		} else {
+			w.term(t)
+		}
+		return
+	}
+	if !result && w.repeatSpan(t) {
+		return
+	}
+	start := len(w.args)
+	if result {
+		w.resultTerm(t, distinct)
+	} else {
+		w.term(t)
+	}
+	w.spans = append(w.spans, termSpan{t: t, start: start, n: len(w.args) - start})
+}
+
+// repeatSpan writes t with the placeholders of the first span it repeats,
+// and reports whether there was one.
+func (w *writer) repeatSpan(t Term) bool {
+	if !termArgs(t) {
+		return false
+	}
+	for _, s := range w.spans {
+		if sameTerm(s.t, t) {
+			w.reuse = s.start + 1
+			w.term(unnamed(t))
+			w.reuse = 0
+			return true
+		}
+	}
+	return false
+}
+
+// repeatKey appends to a PostgreSQL projection's key, for each GROUP BY
+// term and each ordering by a term, 1 plus the index of the earlier term it
+// repeats among the result terms and the GROUP BY terms, or 0.
+func repeatKey(k []byte, p *Projection, order []OrderTerm) []byte {
+	n := 0
+	groupKeys(p, func(i int, g Term) bool {
+		k = binary.AppendUvarint(k, uint64(repeated(p, i, g)+1))
+		n = i + 1
+		return true
+	})
+	for _, o := range order {
+		if t, ok := o.Expr.(Term); ok {
+			k = binary.AppendUvarint(k, uint64(repeated(p, n, t)+1))
+		}
+	}
+	return k
+}
+
+// termArgs reports whether t binds a value: an expression's argument, or a
+// JSON path's key.
+func termArgs(t Term) bool {
+	switch t.kind {
+	case termExpr:
+		if len(t.x.args) > 0 {
+			return true
+		}
+		for _, s := range t.x.slots {
+			if s.Term != nil && termArgs(*s.Term) {
+				return true
+			}
+		}
+	case termAgg, termDate:
+		return t.of != nil && termArgs(*t.of)
+	case termJSON:
+		return len(t.path.Keys) > 0
+	}
+	return false
+}
+
+// sameTerm reports whether a and b are written alike and bind equal values,
+// their names aside. A relation's aggregate is never the same: GROUP BY
+// refuses one, and its conditions are not compared.
+func sameTerm(a, b Term) bool {
+	if a.kind != b.kind || a.fn != b.fn || a.col != b.col {
+		return false
+	}
+	switch a.kind {
+	case termColumn:
+		return true
+	case termExpr:
+		return sameExpr(a.x, b.x)
+	case termAgg:
+		if a.of == nil || b.of == nil {
+			return a.of == b.of
+		}
+		return sameTerm(*a.of, *b.of)
+	case termJSON:
+		return a.path.Kind == b.path.Kind && slices.Equal(a.path.Keys, b.path.Keys)
+	case termDate:
+		x, y := a.ext, b.ext
+		return x.unit == y.unit && x.zone == y.zone && x.offset == y.offset && x.fiscal == y.fiscal && sameTerm(*a.of, *b.of)
+	}
+	return false
+}
+
+// sameExpr reports whether the expressions a and b have the same text,
+// slots and equal values.
+func sameExpr(a, b *exprData) bool {
+	if a == b {
+		return true
+	}
+	if !slices.Equal(a.parts, b.parts) || len(a.slots) != len(b.slots) || len(a.args) != len(b.args) {
+		return false
+	}
+	for i, s := range a.slots {
+		o := b.slots[i]
+		switch {
+		case (s.Term == nil) != (o.Term == nil):
+			return false
+		case s.Term != nil:
+			if !sameTerm(*s.Term, *o.Term) {
+				return false
+			}
+		case s.Col != o.Col:
+			return false
+		}
+	}
+	for i, v := range a.args {
+		if !sameValue(v, b.args[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameValue reports whether a and b are of one type and equal by ==. A value
+// == cannot compare, such as a slice, is never the same as another.
+func sameValue(a, b any) bool {
+	if reflect.TypeOf(a) != reflect.TypeOf(b) {
+		return false
+	}
+	if a == nil {
+		return true
+	}
+	if !reflect.ValueOf(a).Comparable() || !reflect.ValueOf(b).Comparable() {
+		return false
+	}
+	return a == b
+}

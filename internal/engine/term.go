@@ -485,7 +485,7 @@ func (w *writer) projectStmt(st *Statement) {
 		if i > 0 {
 			w.str(", ")
 		}
-		w.resultTerm(t, st.Distinct)
+		w.writeSpan(t, true, st.Distinct)
 	}
 	w.str(" FROM ")
 	w.table()
@@ -540,11 +540,12 @@ func (w *writer) orderTerm(o OrderTerm) {
 		if k == 0 && !null {
 			continue
 		}
-		if k == 0 && anyValue {
+		switch {
+		case k == 0 && anyValue:
 			w.str("ANY_VALUE(")
 			w.term(t)
 			w.str(")")
-		} else {
+		case null || !w.repeatSpan(t): // PostgreSQL writes the term once
 			w.term(t)
 		}
 		if k == 0 {

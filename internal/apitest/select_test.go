@@ -3,6 +3,7 @@ package apitest
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -98,6 +99,95 @@ func TestSelectTerms(t *testing.T) {
 	}
 	if len(args) != 2 || args[0] != 0.9 || args[1] != 0.9 {
 		t.Errorf("args %v", args)
+	}
+}
+
+// TestSelectRepeatedTermPlaceholders: on PostgreSQL a GROUP BY or ORDER BY
+// term that repeats a selected or grouped term with equal values is written
+// with its placeholders, so PostgreSQL sees one expression; a term of the
+// same text with another value binds its own. MySQL and SQLite bind the
+// value at each place. The render cache keeps the two shapes apart.
+func TestSelectRepeatedTermPlaceholders(t *testing.T) {
+	month := func(zone string) velox.Term[inv] {
+		return velox.Calc[inv]("date_trunc('month', ? AT TIME ZONE ?)", I.CreatedAt, zone)
+	}
+	q := func(db *velox.DB, group string) velox.Query[inv] {
+		return db.Query[inv]().Select(month("UTC").As("m"), velox.CountAll[inv]()).
+			GroupBy(month(group)).OrderBy(month("UTC").Asc()).Limit(10)
+	}
+	for _, tc := range []struct {
+		d     velox.Dialect
+		group string
+		sql   string
+		args  []any
+	}{
+		{velox.Postgres, "UTC",
+			`SELECT (date_trunc('month', "created_at" AT TIME ZONE $1)) AS "m", COUNT(*) FROM "invoices" ` +
+				`GROUP BY (date_trunc('month', "created_at" AT TIME ZONE $1)) ORDER BY (date_trunc('month', "created_at" AT TIME ZONE $1)) LIMIT 10`,
+			[]any{"UTC"}},
+		{velox.Postgres, "Asia/Hong_Kong",
+			`SELECT (date_trunc('month', "created_at" AT TIME ZONE $1)) AS "m", COUNT(*) FROM "invoices" ` +
+				`GROUP BY (date_trunc('month', "created_at" AT TIME ZONE $2)) ORDER BY (date_trunc('month', "created_at" AT TIME ZONE $1)) LIMIT 10`,
+			[]any{"UTC", "Asia/Hong_Kong"}},
+		{velox.SQLite, "UTC",
+			`SELECT (date_trunc('month', "created_at" AT TIME ZONE ?)) AS "m", COUNT(*) FROM "invoices" ` +
+				`GROUP BY (date_trunc('month', "created_at" AT TIME ZONE ?)) ORDER BY (date_trunc('month', "created_at" AT TIME ZONE ?)) IS NULL, (date_trunc('month', "created_at" AT TIME ZONE ?)) LIMIT 10`,
+			[]any{"UTC", "UTC", "UTC", "UTC"}},
+	} {
+		db := openFake(tc.d, &fakeconn.Exec{})
+		// Twice on one DB: the second is a cache hit.
+		for range 2 {
+			text, args, err := q(db, tc.group).SQL(ctx)
+			if err != nil || text != tc.sql {
+				t.Errorf("%v %s:\n got %s %v\nwant %s", tc.d, tc.group, text, err, tc.sql)
+			}
+			if !reflect.DeepEqual(args, tc.args) {
+				t.Errorf("%v %s: args %v, want %v", tc.d, tc.group, args, tc.args)
+			}
+		}
+	}
+	// One PostgreSQL DB renders both shapes, each from the cache the second time.
+	db := openFake(velox.Postgres, &fakeconn.Exec{})
+	for range 2 {
+		for _, g := range []string{"UTC", "Asia/Hong_Kong"} {
+			_, args, err := q(db, g).SQL(ctx)
+			if want := map[string]int{"UTC": 1, "Asia/Hong_Kong": 2}[g]; err != nil || len(args) != want {
+				t.Errorf("shared cache, %s: %v %v", g, args, err)
+			}
+		}
+	}
+	// Grouped and ordered by, not selected; an aggregate ordering binds anew.
+	text, args, err := db.Query[inv]().Select(velox.CountAll[inv]()).GroupBy(month("UTC")).
+		OrderBy(month("UTC").Desc(), velox.Calc[inv]("? * ?", I.Total, 2).Sum().Asc()).Limit(5).SQL(ctx)
+	want := `SELECT COUNT(*) FROM "invoices" GROUP BY (date_trunc('month', "created_at" AT TIME ZONE $1)) ` +
+		`ORDER BY (date_trunc('month', "created_at" AT TIME ZONE $1)) DESC, SUM(("total" * $2)) LIMIT 5`
+	if err != nil || text != want || len(args) != 2 {
+		t.Errorf("unselected:\n got %s %v %v\nwant %s", text, args, err, want)
+	}
+	// A Rollup's keys and a DateTrunc of a bound term repeat too, on
+	// PostgreSQL; MySQL's WITH ROLLUP and ANY_VALUE ordering bind anew.
+	net := velox.Calc[inv]("? * ?", I.Total, 2)
+	day := velox.DateTrunc[inv](velox.UnitDay, velox.Calc[inv]("? + ?", I.CreatedAt, 0))
+	for _, tc := range []struct {
+		d    velox.Dialect
+		keys []velox.Selectable[inv]
+		want string
+		n    int
+	}{
+		{velox.Postgres, []velox.Selectable[inv]{velox.Rollup[inv](net, I.OrgID)},
+			`SELECT ("total" * $1), COUNT(*) FROM "invoices" GROUP BY ROLLUP(("total" * $1), "org_id") ORDER BY ("total" * $1) LIMIT 5`, 1},
+		{velox.MySQL, []velox.Selectable[inv]{velox.Rollup[inv](net, I.OrgID)},
+			"SELECT (`total` * ?), COUNT(*) FROM `invoices` GROUP BY (`total` * ?), `org_id` WITH ROLLUP ORDER BY ANY_VALUE((`total` * ?)) IS NULL, (`total` * ?) LIMIT 5", 4},
+	} {
+		text, args, err := openFake(tc.d, &fakeconn.Exec{}).Query[inv]().Select(net, velox.CountAll[inv]()).
+			GroupBy(tc.keys...).OrderBy(net.Asc()).Limit(5).SQL(ctx)
+		if err != nil || text != tc.want || len(args) != tc.n {
+			t.Errorf("rollup %v:\n got %s %v %v\nwant %s", tc.d, text, args, err, tc.want)
+		}
+	}
+	text, args, err = db.Query[inv]().Select(day, velox.CountAll[inv]()).GroupBy(day).OrderBy(day.Asc()).Limit(5).SQL(ctx)
+	if err != nil || len(args) != 1 || strings.Count(text, "$1") != 3 || strings.Contains(text, "$2") {
+		t.Errorf("DateTrunc: %s %v %v", text, args, err)
 	}
 }
 

@@ -47,6 +47,12 @@ type writer struct {
 	track bool
 	shown []ArgShow
 	next  ArgShow
+	// spans are the terms of a PostgreSQL projection written so far, with
+	// their arguments, for a repeat to share (repeat.go). reuse, when not
+	// 0, is the placeholder the next argument writes in place of binding
+	// one: the repeat of a span is being written.
+	spans []termSpan
+	reuse int
 }
 
 func (w *writer) fail(err error) {
@@ -93,6 +99,14 @@ func (w *writer) colRef(i int32) {
 }
 
 func (w *writer) arg(v any) {
+	if w.reuse > 0 {
+		if !w.argsOnly {
+			placeholder(w.d, &w.b, w.reuse)
+		}
+		w.reuse++
+		w.next = ArgHidden
+		return
+	}
 	w.args = append(w.args, v)
 	if w.track {
 		w.shown = append(w.shown, w.next)

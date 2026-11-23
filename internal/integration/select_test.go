@@ -57,6 +57,49 @@ func wantRows(t *testing.T, name string, got, want []string) {
 	}
 }
 
+// TestSelectRepeatedBoundTerm: a term with a bound value that is selected,
+// grouped and ordered by is one expression to the database. PostgreSQL
+// matches a GROUP BY expression by its text, so the same term written with
+// $1 in the select list and $2 in GROUP BY failed with 42803 ("must appear
+// in the GROUP BY clause"); velox writes the repeat with the placeholders of
+// the first. MySQL is skipped: its ? cannot be repeated, and under
+// only_full_group_by its prepared statement still fails with error 1055.
+func TestSelectRepeatedBoundTerm(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		if tg.d == velox.MySQL {
+			t.Skip("MySQL still fails with 1055: ? cannot be repeated")
+		}
+		type inv = testmodel.Invoice
+		bucket := velox.Calc[inv]("? * ?", I.OrgID, 10)
+		wantRows(t, "bucket", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(bucket, velox.CountAll[inv]()).GroupBy(bucket).OrderBy(bucket.Desc()).Limit(10), 2),
+			[]string{"20 1", "10 4"})
+		// Grouped and ordered by, not selected.
+		wantRows(t, "unselected", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(velox.CountAll[inv]()).GroupBy(bucket).OrderBy(bucket.Asc()).Limit(10), 1),
+			[]string{"4", "1"})
+		// The same text with another value is another term.
+		other := velox.Calc[inv]("? * ?", I.OrgID, 100)
+		wantRows(t, "other value", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(bucket, velox.CountAll[inv]()).GroupBy(bucket, other).OrderBy(bucket.Asc()).Limit(10), 2),
+			[]string{"10 4", "20 1"})
+		if tg.d != velox.Postgres {
+			return
+		}
+		month := velox.Calc[inv]("date_trunc('month', ? AT TIME ZONE ?)", I.CreatedAt, "Asia/Hong_Kong")
+		n := 0
+		for _, err := range tg.db.Query[inv]().Select(month, velox.CountAll[inv]()).GroupBy(month).OrderBy(month.Asc()).Limit(10).Rows(ctx) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			n++
+		}
+		if n == 0 {
+			t.Error("date bucket: no rows")
+		}
+	})
+}
+
 // TestSelect runs Select, GroupBy, Having and an ordering by an aggregate
 // or an expression on every dialect. The invoices are (id, org, total, paid):
 // (1, 1, 10, yes), (2, 1, 20, no), (3, 1, 30, yes), (4, 1, 40, no),

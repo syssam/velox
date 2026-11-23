@@ -209,6 +209,9 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	}
 	if st.Project != nil {
 		k = projectionKey(k, d, st.Project)
+		if d == Postgres {
+			k = repeatKey(k, st.Project, st.OrderBy)
+		}
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Joins)))
 	for _, j := range st.Joins {

@@ -364,7 +364,7 @@ func (w *writer) groupBy(ts []Term) {
 			w.grouping(t)
 			continue
 		}
-		w.term(t)
+		w.writeSpan(t, false, false)
 	}
 }
 
@@ -375,7 +375,12 @@ func (w *writer) grouping(t Term) {
 	} else {
 		w.str("ROLLUP(")
 	}
-	w.terms(t.ext.set)
+	for i, k := range t.ext.set {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.writeSpan(k, false, false)
+	}
 	w.str(")")
 }
 

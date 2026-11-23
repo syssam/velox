@@ -1436,6 +1436,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `decimal.Decimal`, bound in an `Expr`, `Calc` or `SetExpr` is a number,
   so `Expr("? > ?", X.Amount.Sum(), decimal.NewFromInt(1))` compares as
   one; it was text, false for every group (ADR 0126).
+- postgres: a term with a bound value that is selected, grouped and ordered
+  by reuses its placeholders, so PostgreSQL sees one expression; it failed
+  with 42803 "must appear in the GROUP BY clause" (ADR 0128).
 - An insert's `SetNull()` of a nullable column with a default stores
   NULL. Before, the insert left the nil column out and the column's
   `DEFAULT` (a constant `Default`'s, or a declared one) was stored. A nil
