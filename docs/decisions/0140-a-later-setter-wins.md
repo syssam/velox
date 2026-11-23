@@ -18,6 +18,12 @@ conditional override.
   its place in the SET list (`lastAssignments`). It holds across Set calls
   and within one, for Set, SetNull, Add, Sub and SetExpr alike: a Set after
   an Add writes the Set, an Add after a Set writes the Add.
+- An Add or Sub after another Add or Sub of the column fails, naming it,
+  before anything is sent. ent and veloxe sum repeated Adds; keeping only
+  the last would lose the first silently, and summing in velox would need
+  arithmetic on every field type. The caller gives one Add of the sum.
+- A skipped setter (`SetPtr(nil)`, a skipped Input field) sets nothing, so
+  it never replaces an earlier setter, as veloxe's `SetNillableX(nil)`.
 - A Set edge setter assigns its foreign key: it and a setter of that column
   replace each other in the same way, the later winning.
 - `Save(&e, cols...)` that names a column twice writes it once.
@@ -37,6 +43,6 @@ twice by mistake is no longer reported; ent does not report it either.
 ## Evidence
 
 `internal/apitest/write_test.go`: `TestALaterSetterWins` (one Set, two Set
-calls, Set then Add, Save naming a column twice, a derived builder leaves
-its base unchanged); `edgeset_test.go`: `TestEdgeSetterSetKey` (an edge's
+calls, Set then Add, two Adds refused, SetPtr(nil) after Set, an insert,
+Save naming a column twice, a derived builder leaves its base unchanged); `edgeset_test.go`: `TestEdgeSetterSetKey` (an edge's
 Set and its column's setter, the later wins).

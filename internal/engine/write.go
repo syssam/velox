@@ -120,14 +120,19 @@ func swapped(c int32) int32 {
 // last assignment, at that one's place: a builder's mutation holds one value
 // per field, as ent's does, so a later setter replaces an earlier one, Set,
 // Add or SetExpr alike. PostgreSQL rejects a column assigned twice, so the
-// statement never holds two.
-func lastAssignments(set []Assignment) []Assignment {
+// statement never holds two. An Add or Sub after another Add or Sub of the
+// column is an error that names it: ent sums them, and dropping the first
+// would lose it silently.
+func lastAssignments(in *EntityInfo, set []Assignment) ([]Assignment, error) {
 	last := make(map[int]int, len(set))
 	for i, a := range set {
+		if j, ok := last[a.Column]; ok && isArith(a.Op) && isArith(set[j].Op) {
+			return nil, fmt.Errorf("velox: %s: %s is given Add or Sub twice; give it one Add of the sum", in.Name, in.Columns[a.Column].Field)
+		}
 		last[a.Column] = i
 	}
 	if len(last) == len(set) {
-		return set
+		return set, nil
 	}
 	out := make([]Assignment, 0, len(last))
 	for i, a := range set {
@@ -135,8 +140,10 @@ func lastAssignments(set []Assignment) []Assignment {
 			out = append(out, a)
 		}
 	}
-	return out
+	return out, nil
 }
+
+func isArith(op AssignOp) bool { return op == AssignAdd || op == AssignSub }
 
 // withUpdateDefaults appends an assignment for every column with an
 // UpdateDefault that set does not assign and keep does not name. A column
@@ -318,7 +325,11 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 	}
 	if st.Op == OpUpdate {
 		in := st.Entity
-		set, err := withUpdateDefaults(in, lastAssignments(st.Set), st.keep)
+		set, err := lastAssignments(in, st.Set)
+		if err != nil {
+			return err
+		}
+		set, err = withUpdateDefaults(in, set, st.keep)
 		if err != nil {
 			return err
 		}

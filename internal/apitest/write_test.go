@@ -155,6 +155,21 @@ func TestALaterSetterWins(t *testing.T) {
 			t.Errorf("%s Exec: %v", name, err)
 		}
 	}
+	// Two Adds of a column fail rather than drop the first: ent sums them.
+	for name, u := range map[string]velox.UpdateQuery[testmodel.Invoice]{
+		"Add, Add": db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Set(I.Total.Add(2)).Where(I.ID.EQ(1)),
+		"Add, Sub": db.Update[testmodel.Invoice]().Set(I.Total.Add(1), I.Total.Sub(2)).Where(I.ID.EQ(1)),
+	} {
+		want := "velox: testmodel.Invoice: Total is given Add or Sub twice; give it one Add of the sum"
+		if _, _, err := u.SQL(ctx); err == nil || err.Error() != want {
+			t.Errorf("%s: %v, want %q", name, err, want)
+		}
+	}
+	// A skipped setter (SetPtr of nil) never replaces an earlier one.
+	var none *float64
+	if _, args, err := db.Update[testmodel.Invoice]().Set(I.Total.Set(4)).Set(I.Total.SetPtr(none)).Where(I.ID.EQ(1)).SQL(ctx); err != nil || len(args) == 0 || fmt.Sprint(args[0]) != "4" {
+		t.Errorf("Set then SetPtr(nil): %v %v", args, err)
+	}
 	// An insert keeps the last setter too: setters write the row it sends.
 	ins := testmodel.Invoice{OrgID: 1}
 	if _, args, err := db.Insert(&ins).Set(I.Number.Set("a")).Set(I.Number.Set("b")).SQL(ctx); err != nil || !slices.Contains(args, any("b")) || slices.Contains(args, any("a")) {
