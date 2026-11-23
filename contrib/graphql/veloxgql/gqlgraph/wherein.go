@@ -7,6 +7,7 @@ import (
 	"reflect"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/untyped"
 )
 
@@ -52,6 +53,14 @@ const (
 	OpsText     = OpContains | OpHasPrefix | OpHasSuffix | OpEqualFold | OpContainsFold
 	OpsNull     = OpIsNil | OpNotNil
 )
+
+// opSuffix is the suffix of each predicate's input field name, in the order
+// of fieldOrder: "titleNEQ" is the field title's NEQ.
+var opSuffix = [...]string{
+	"", "NEQ", "In", "NotIn", "GT", "GTE", "LT", "LTE",
+	"Contains", "HasPrefix", "HasSuffix", "EqualFold", "ContainsFold",
+	"Has", "HasSome", "HasEvery", "IsEmpty", "IsNil", "NotNil",
+}
 
 // fieldOrder is the order of the predicates' fields in a where input, as
 // velox-graphql writes them: that of Field's, ArrayField's and IDField's
@@ -113,17 +122,42 @@ func (d *WhereField) fields() int {
 	return 1
 }
 
+// whereNames is the GraphQL names of a where input of c's type: its own, and
+// each of its fields', in the order of its struct's fields, as the SDL
+// spells them.
+func whereNames(c *Type) gqlcore.WhereNames {
+	var names []string
+	for i := range c.WhereFields {
+		d := &c.WhereFields[i]
+		switch d.Kind {
+		case WhereColumn, WhereID, WhereEdgeID, WhereArray:
+		default:
+			names = append(names, d.Name)
+			continue
+		}
+		for k, op := range fieldOrder {
+			if d.Ops&op != 0 {
+				names = append(names, d.Name+opSuffix[k])
+			}
+		}
+	}
+	return gqlcore.WhereNames{Input: c.Name + "WhereInput", Fields: names}
+}
+
 // Predicate is the condition of w, a generated where input of c's type, a
 // pointer to its struct: its Predicate. For generated code. It reads w's
 // fields as c.WhereFields describes them, and adds each that is set with
 // the helper of its kind, as a hand-written predicate method would (see
 // Filter): Field, IDField, EdgeIDField, ArrayField, Not, And, Or, Has and
 // HasWith, with the same predicates, errors and limits. A nested input's
-// condition is its Predicate. A nil w is an input that sets nothing.
+// condition is its Predicate. A nil w is an input that sets nothing; called
+// with it, Predicate also tells veloxgql.DecodeWhere, which asks through
+// ctx, the GraphQL names of the input's fields.
 func Predicate(ctx context.Context, c *Type, w any) (velox.Predicate, error) {
 	f := NewFilter(ctx, c)
 	v := reflect.ValueOf(w)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
+		gqlcore.TellWhereNames(ctx, func() gqlcore.WhereNames { return whereNames(c) })
 		return f.Pred()
 	}
 	s := v.Elem()

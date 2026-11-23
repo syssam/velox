@@ -26,6 +26,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   typeless column, as veloxe made it, instead of velox-gen refusing it. The
   text of a decimal stays as written (`"1.10"` is not stored as 1.1).
   MySQL and PostgreSQL still refuse it (ADR 0145).
+- `veloxgql.DecodeWhere(v, &w)` reads a kept filter, a JSON document of a
+  generated where input by its GraphQL names, as veloxe's generated
+  `UnmarshalGQL` did: an ID from a string or a number, enums, times,
+  decimals, nested `not`/`and`/`or`. An unknown key or a wrong type is an
+  error naming its path, such as `not.idIn[0]`. No generated code changes
+  (ADR 0146).
 - `velox.ValidationError.Name` is the schema field's name, such as
   `"address_city"`, as ent's `ValidationError.Name` is; for a Required
   edge, the name of its key field. A field with a `StorageKey` gets

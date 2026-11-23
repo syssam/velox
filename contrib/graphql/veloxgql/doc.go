@@ -135,6 +135,12 @@
 // "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.titleIn: filter
 // list is too long".
 //
+// A filter kept as a JSON document, such as a rule of an access policy,
+// reads into a where input with DecodeWhere, by the input's GraphQL field
+// names, and lowers with the input's Pred, where the limits apply. An
+// unknown key or a value of the wrong type is an error, never a filter
+// that sets less.
+//
 // The predicates are SQL's, with its three-valued logic, as entgql's are:
 // on a nullable column, NEQ and NotIn leave out the rows whose column is
 // NULL, and so does not, so a not is not the complement of its input (use

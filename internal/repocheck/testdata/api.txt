@@ -1742,6 +1742,7 @@ func Batch[E any](ctx context.Context, rows []*E)
 func DB(ctx context.Context) *velox.DB
 func DBFromContext(ctx context.Context) (*velox.DB, error)
 func DecodeCursor(s string) (Cursor, error)
+func DecodeWhere(v any, dst any) error
 func DefaultLimits() Limits
 func EncodeCursor(c Cursor) (string, error)
 func LimitsFromContext(ctx context.Context) Limits

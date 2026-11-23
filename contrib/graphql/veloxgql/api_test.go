@@ -35,6 +35,7 @@ var publicAPI = []string{
 	"DB",
 	"DBFromContext",
 	"DecodeCursor",
+	"DecodeWhere",
 	"DefaultLimits",
 	"EncodeCursor",
 	"ErrBadCursor",

@@ -223,6 +223,7 @@ veloxe's own, or differ in a veloxe port:
 | `gqlrelay`'s paging, where and collection helpers | `gqlgraph`, which only generated code calls |
 | `where.P()`, `where.Filter()` | `where.Pred(ctx)`, or the Paginate option `veloxgen.WithXFilter(where)` |
 | `where.AddPredicates(p)` | none: `q.Where(p)` before `Paginate` |
+| `w.UnmarshalGQL(doc)` of a kept filter (an access policy's `{"ownerId": "123"}`) | `veloxgql.DecodeWhere(doc, &w)`, then `w.Pred(ctx)`. An unknown key or a value of the wrong type is an error naming its path, such as `not.idIn[0]` ([ADR 0146](decisions/0146-decode-where.md)) |
 
 ## Behaviour that changes
 
