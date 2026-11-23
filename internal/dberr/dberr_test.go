@@ -2,6 +2,7 @@ package dberr
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io"
@@ -110,6 +111,9 @@ func TestPgxTypesMirrored(t *testing.T) {
 	if got := pgx.ErrTxClosed.Error(); got != PgTxClosed {
 		t.Errorf("pgx.ErrTxClosed is %q, PgTxClosed %q", got, PgTxClosed)
 	}
+	if got := pgx.ErrTxCommitRollback.Error(); got != PgTxCommitRollback {
+		t.Errorf("pgx.ErrTxCommitRollback is %q, PgTxCommitRollback %q", got, PgTxCommitRollback)
+	}
 	if !DriverSentinel(fmt.Errorf("x: %w", pgconn.ErrConnClosed), PgConnClosed) || !DriverSentinel(fmt.Errorf("x: %w", pgx.ErrTxClosed), PgTxClosed) {
 		t.Error("pgx's sentinels are not recognized through a wrap")
 	}
@@ -184,6 +188,105 @@ func TestRetryable(t *testing.T) {
 		if got := Retryable(err); got != want {
 			t.Errorf("Retryable(%v) = %v, want %v", err, got, want)
 		}
+	}
+}
+
+// TestRolledBack: an error of COMMIT that says the transaction rolled back,
+// per driver; any other leaves the outcome unknown.
+func TestRolledBack(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"pgx ErrTxCommitRollback", fmt.Errorf("velox: commit: %w", pgx.ErrTxCommitRollback), true},
+		{"pg deferred unique", &pgconn.PgError{Code: "23505"}, true},
+		{"pg deferred exclusion", &pgconn.PgError{Code: "23P01"}, true},
+		{"pg transaction rollback", &pgconn.PgError{Code: "40000"}, true},
+		{"pg serialization failure", &pgconn.PgError{Code: "40001"}, true},
+		{"pg transaction integrity", &pgconn.PgError{Code: "40002"}, true},
+		{"pg deadlock", &pgconn.PgError{Code: "40P01"}, true},
+		{"pg statement completion unknown", &pgconn.PgError{Code: "40003"}, false},
+		{"pg query canceled", &pgconn.PgError{Code: "57014"}, false},
+		{"pg admin shutdown", &pgconn.PgError{Code: "57P01"}, false},
+		{"pg tx closed", pgx.ErrTxClosed, false},
+		{"pg conn closed", pgconn.ErrConnClosed, false},
+		{"mysql deadlock", myErr(1213, "Deadlock found when trying to get lock"), true},
+		{"mysql rollback during commit", myErr(3101, "Plugin instructed the server to rollback the current transaction."), true},
+		{"mysql duplicate", myErr(1062, "Duplicate entry 'a' for key 'p.p_code_uq'"), true},
+		{"mysql lock wait timeout", myErr(1205, "Lock wait timeout exceeded"), false},
+		{"mysql error during commit", myErr(1180, "Got error 149 during COMMIT"), false},
+		{"mysql invalid conn", mysql.ErrInvalidConn, false},
+		{"bad conn", driver.ErrBadConn, false},
+		{"eof", io.EOF, false},
+		{"nil", nil, false},
+	} {
+		if got := RolledBack(c.err); got != c.want {
+			t.Errorf("%s: RolledBack(%v) = %v, want %v", c.name, c.err, got, c.want)
+		}
+	}
+}
+
+// TestRolledBackSQLite: modernc.org/sqlite's real errors at COMMIT. A
+// deferred foreign key, and SQLITE_BUSY from a reader holding the lock
+// COMMIT needs, are rollbacks: the driver rolls back, and the row is not
+// there.
+func TestRolledBackSQLite(t *testing.T) {
+	path := t.TempDir() + "/c.db"
+	open := func() *sql.DB {
+		db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(delete)&_pragma=busy_timeout(0)&_pragma=foreign_keys(1)")
+		if err != nil {
+			t.Fatal(err)
+		}
+		db.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = db.Close() })
+		return db
+	}
+	w, r := open(), open()
+	for _, q := range []string{
+		"CREATE TABLE p (id INTEGER PRIMARY KEY)",
+		"CREATE TABLE c (id INTEGER PRIMARY KEY, p_id INTEGER REFERENCES p (id) DEFERRABLE INITIALLY DEFERRED)",
+		"INSERT INTO p VALUES (1)",
+	} {
+		if _, err := w.ExecContext(t.Context(), q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commit := func(q string) error {
+		tx, err := w.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.ExecContext(t.Context(), q); err != nil {
+			t.Fatal(err)
+		}
+		return tx.Commit()
+	}
+	count := func() int {
+		var n int
+		if err := w.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM c").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	err := commit("INSERT INTO c VALUES (1, 2)")
+	if code, _, _ := SQLiteError(err); code != 787 || !RolledBack(err) || count() != 0 {
+		t.Errorf("deferred foreign key at COMMIT: %v (code %d), RolledBack %v, %d rows", err, code, RolledBack(err), count())
+	}
+
+	rtx, err := r.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := rtx.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM p").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	err = commit("INSERT INTO c VALUES (2, 1)")
+	_ = rtx.Rollback()
+	if code, _, _ := SQLiteError(err); code&0xff != 5 || !RolledBack(err) || count() != 0 {
+		t.Errorf("SQLITE_BUSY at COMMIT: %v (code %d), RolledBack %v, %d rows", err, code, RolledBack(err), count())
 	}
 }
 

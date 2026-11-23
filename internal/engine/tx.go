@@ -58,7 +58,8 @@ func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = t
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-// Each retry waits first, a random time from 5 ms that grows to at most a
+// An error that matches ErrCommitUnknown is not retried, MySQL's 1205 at
+// COMMIT included. Each retry waits first, a random time from 5 ms that grows to at most a
 // second; the transaction's deadline or ctx's end stops the wait, and the
 // retry.
 func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
@@ -378,7 +379,9 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err != nil && cause != nil && timedOut(tctx) && !dberr.Is(err, ErrTimeout) {
 			err = errors.Join(timeoutError("transaction"), err)
 		}
-		if err == nil || attempt > o.Retries || !dberr.Retryable(err) {
+		// A COMMIT whose outcome is unknown is never run again, though its
+		// error be retryable before COMMIT (MySQL's 1205).
+		if err == nil || attempt > o.Retries || !dberr.Retryable(err) || dberr.Is(err, ErrCommitUnknown) {
 			return err
 		}
 		if ctx.Err() != nil || tctx.Err() != nil || !retryWait(ctx, tctx, retryDelay(attempt)) {
@@ -554,12 +557,12 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		endTx(info, TxError)
 		// A deferred constraint is checked here: it is a *ConstraintError,
 		// with no entity, as the commit is no one statement's.
-		// A serialization failure or deadlock there is a rollback too.
-		// Anything else leaves the outcome unknown: ErrCommitUnknown.
+		// An error that says the transaction rolled back (dberr.RolledBack)
+		// is one; anything else leaves the outcome unknown: ErrCommitUnknown.
 		if ce := dberr.Constraint("", err); ce != nil {
 			err = ce
-		} else if !dberr.Retryable(err) {
-			err = commitUnknown{err}
+		} else if !dberr.RolledBack(err) {
+			err = commitUnknownError{err}
 		}
 		return true, endedErr(ctx, "transaction", fmt.Errorf("velox: commit: %w", err))
 	}
@@ -861,10 +864,10 @@ func (db *DB) Foreign(ctx context.Context) bool {
 	return m != nil && m != db.txRoot && !m.ended.Load()
 }
 
-// commitUnknown wraps a COMMIT's error to match ErrCommitUnknown, leaving
+// commitUnknownError wraps a COMMIT's error to match ErrCommitUnknown, leaving
 // its message and the driver's error as they were.
-type commitUnknown struct{ err error }
+type commitUnknownError struct{ err error }
 
-func (e commitUnknown) Error() string        { return e.err.Error() }
-func (e commitUnknown) Unwrap() error        { return e.err }
-func (e commitUnknown) Is(target error) bool { return target == ErrCommitUnknown } //nolint:errorlint // a sentinel compared by identity, as errors.Is does.
+func (e commitUnknownError) Error() string        { return e.err.Error() }
+func (e commitUnknownError) Unwrap() error        { return e.err }
+func (e commitUnknownError) Is(target error) bool { return target == ErrCommitUnknown } //nolint:errorlint // a sentinel compared by identity, as errors.Is does.

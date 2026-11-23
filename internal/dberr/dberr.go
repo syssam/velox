@@ -15,11 +15,13 @@ import (
 	"strings"
 )
 
-// PgConnClosed and PgTxClosed are the text of pgx's ErrConnClosed and ErrTxClosed.
+// PgConnClosed, PgTxClosed and PgTxCommitRollback are the text of pgx's
+// ErrConnClosed, ErrTxClosed and ErrTxCommitRollback.
 // TestPgxTypesMirrored pins them.
 const (
-	PgConnClosed = "conn closed"
-	PgTxClosed   = "tx is closed"
+	PgConnClosed       = "conn closed"
+	PgTxClosed         = "tx is closed"
+	PgTxCommitRollback = "commit unexpectedly resulted in rollback"
 )
 
 // Constraint reads a driver error as a violated constraint, or returns nil.
@@ -358,6 +360,42 @@ func Retryable(err error) bool {
 	}
 	if code, _, ok := SQLiteError(err); ok {
 		return code&0xff == 5 || code&0xff == 6 // SQLITE_BUSY, SQLITE_LOCKED and their extended codes
+	}
+	return false
+}
+
+// RolledBack reports an error of COMMIT that says the transaction rolled
+// back, so nothing of it committed. Any other error of COMMIT leaves the
+// outcome unknown: the database may have committed and the answer been lost.
+//
+//   - PostgreSQL: pgx's ErrTxCommitRollback, natively and through
+//     database/sql, the server's answer ROLLBACK to the COMMIT of an aborted
+//     transaction; an integrity violation (class 23), a deferred
+//     constraint's; a transaction rollback (class 40: 40000, 40001, 40002,
+//     40P01), but not 40003, statement_completion_unknown.
+//   - MySQL: a deadlock (1213), which rolls the whole transaction back, and
+//     3101, a rollback the server decided during COMMIT (Group
+//     Replication). A lock wait timeout (1205) rolls back only a statement
+//     unless innodb_rollback_on_timeout, and 1180, an engine's error during
+//     COMMIT, does not say what was kept: both are unknown.
+//   - SQLite: SQLITE_BUSY and SQLITE_LOCKED, after which COMMIT has not
+//     happened and both drivers roll back, and a constraint (a deferred
+//     foreign key, 787). Other errors, such as an I/O error, are unknown.
+//
+// A violated constraint that Constraint reads is a rollback on every
+// dialect.
+func RolledBack(err error) bool {
+	if DriverSentinel(err, PgTxCommitRollback) || Constraint("", err) != nil {
+		return true
+	}
+	if pg, ok := PgErrorOf(err); ok {
+		return strings.HasPrefix(pg.Code, "23") || pg.Code == "40000" || pg.Code == "40001" || pg.Code == "40002" || pg.Code == "40P01"
+	}
+	if n, _, ok := MySQLError(err); ok {
+		return n == 1213 || n == 3101
+	}
+	if code, _, ok := SQLiteError(err); ok {
+		return code&0xff == 5 || code&0xff == 6 || code&0xff == 19 // SQLITE_BUSY, SQLITE_LOCKED, SQLITE_CONSTRAINT
 	}
 	return false
 }

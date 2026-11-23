@@ -94,15 +94,19 @@ var (
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = engine.ErrOutsideTx
-	// ErrCommitUnknown is matched by a Tx's error when its COMMIT failed and
-	// the error does not say the transaction rolled back: a lost connection,
+	// ErrCommitUnknown is returned, matched by errors.Is beside the driver's
+	// error, by a Tx whose COMMIT failed when the error does not say the
+	// transaction rolled back: a lost connection,
 	// a driver error, or a context that ended while COMMIT was sent. The
 	// database may have committed. TxRetrySerializable does not run fn again
 	// after it, and a caller that retries on its own should not either: it
-	// reconciles, as for a lost acknowledgement. A deferred constraint
-	// checked at COMMIT (a *ConstraintError) and a serialization failure or
-	// deadlock there are rollbacks and do not match. The error's message and
-	// the driver's error in it are unchanged.
+	// reconciles, as for a lost acknowledgement. An error that says the
+	// transaction rolled back does not match: a deferred constraint (a
+	// *ConstraintError), a serialization failure or a deadlock,
+	// PostgreSQL's ROLLBACK answer to the COMMIT of an aborted transaction
+	// (pgx's ErrTxCommitRollback), MySQL's 3101, and SQLite's SQLITE_BUSY
+	// or SQLITE_LOCKED. A MySQL lock wait timeout at COMMIT matches. The
+	// error's message and the driver's error in it are unchanged.
 	ErrCommitUnknown = engine.ErrCommitUnknown
 	// ErrTxControl is returned by raw SQL, in a transaction, that would end it:
 	// COMMIT, END, ROLLBACK (ROLLBACK TO is allowed), ABORT, BEGIN, START, PREPARE

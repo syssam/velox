@@ -200,7 +200,7 @@ veloxe's own, or differ in a veloxe port:
 | `Each(ctx, fn)` | `for x, err := range q.Iter(ctx)` |
 | a filter's lookup on the client inside `WithTx` | a read through the filter's `db` parameter, the statement's DB ([guide](guide.md#hooks-and-filters-for-every-entity), [ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)) |
 | a client read inside `WithTx` that must not join it | a read on `db` under `velox.WithoutTx(ctx)`; under fn's `ctx` it fails with `ErrOutsideTx` |
-| a failed COMMIT, told apart by its message | `errors.Is(err, velox.ErrCommitUnknown)`: the outcome is unknown, so retry nothing ([ADR 0134](decisions/0134-commit-unknown.md)) |
+| a failed COMMIT, told apart by its message | `errors.Is(err, velox.ErrCommitUnknown)`: the outcome is unknown, so retry nothing. A COMMIT that says it rolled back does not match, such as PostgreSQL's answer to an aborted transaction, `pgx.ErrTxCommitRollback` ([ADR 0134](decisions/0134-commit-unknown.md)) |
 | a helper returning a `nil` predicate for "no condition", checked with `p == nil` | the zero `velox.Pred[E]{}`, checked with `reflect.ValueOf(p).IsZero()`: a `Pred` holds a slice, so it has no `nil` and no `==`. A zero `Pred` that reaches a query fails the statement, as a `nil` predicate panicked |
 | a retry and a timeout in every `WithTx` | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
 | `Select(f).Strings(ctx)`, `Ints(ctx)` | `velox.Values(ctx, q, T.F.Key())` |

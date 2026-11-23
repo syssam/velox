@@ -36,7 +36,8 @@ func TxReadOnly() TxOption { return engine.TxReadOnly() }
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-// Each retry waits first, a random time from 5 ms that grows to at most a
+// An error that matches ErrCommitUnknown is not retried, MySQL's 1205 at
+// COMMIT included. Each retry waits first, a random time from 5 ms that grows to at most a
 // second; the transaction's deadline or ctx's end stops the wait, and the
 // retry.
 func TxRetrySerializable(n int) TxOption { return engine.TxRetrySerializable(n) }

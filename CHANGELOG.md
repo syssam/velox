@@ -43,7 +43,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `velox.ErrCommitUnknown` is matched by a `Tx`'s error when its COMMIT
   failed and the error does not say the transaction rolled back, so a
   caller that retries on its own can stop before applying a committed
-  transaction twice
+  transaction twice. PostgreSQL's ROLLBACK answer to an aborted
+  transaction's COMMIT (pgx's `ErrTxCommitRollback`), a deferred
+  constraint, a serialization failure or deadlock, MySQL's 3101 and
+  SQLite's BUSY and LOCKED are rollbacks and do not match; MySQL's lock
+  wait timeout at COMMIT matches, and `TxRetrySerializable` no longer
+  retries it
   ([ADR 0134](docs/decisions/0134-commit-unknown.md)).
 
 - velox-graphql: `sdlfiles=entity` writes the SDL as `velox.graphql`, with
