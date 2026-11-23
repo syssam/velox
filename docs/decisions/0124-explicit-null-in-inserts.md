@@ -1,10 +1,8 @@
 # 124. An explicit NULL in an insert is stored as NULL
 
 - Status: accepted, 2026-11-23. Amends [0093](0093-lean-inserts.md)'s
-  rule that a nil nullable column is left out, and
-  [0099](0099-keep-defaults-and-set-ptr.md)'s insert case of `SetPtr`;
-  replaces [0119](0119-enum-placement-and-default-docs.md)'s silence on
-  `SetNull`.
+  rule that a nil nullable column is left out, and replaces
+  [0119](0119-enum-placement-and-default-docs.md)'s silence on `SetNull`.
 
 ## Context
 
@@ -19,19 +17,21 @@ as the column's `DEFAULT`, and for a `DEFAULT` the schema declares with
 which has no `DEFAULT`, stored NULL. 0119 kept the generated sentence for
 such a field silent on `SetNull` for this reason.
 
-The user ruled on the setters: `SetNull` stores NULL, never the default.
-So do `SetPtr(nil)` on a nullable column, an explicit null an `Input`'s
-`Setters` give through `SetInput`, and the same in `InsertAll` and an
-upsert's inserted rows, whatever default the field has. The open question
-was a nil pointer field in the inserted struct with no setter.
+The user ruled: `SetNull` stores NULL, never the default, in `Insert`,
+`InsertAll` and an upsert's inserted rows, whatever default the field
+has. An `Input` whose `Setters` give `SetNull` counts the same through
+`SetInput`. Two cases were left open: a nil pointer field in the inserted
+struct with no setter, and `SetPtr(nil)`.
 
-ent decides that case by whether the builder was told. Its create builder
+ent decides both by whether the builder was told. Its create builder
 fills a field's default in `defaults()` when `m.X()` reports the field
 unset. Only `SetX` sets it. `SetNillableX(nil)` sets nothing, and ent's
 create builder has no `ClearX`. So in ent a Nillable field with a
 `Default` gets the default unless a value is set. velox has no "set" bit
 on a struct field (0093). velox's `fillDefaults` already reads a nil
 pointer field as unset and fills the `Default` into it (0082).
+`SetPtr(nil)` is ent's `SetNillableX(nil)` (0099), and sets nothing in an
+update.
 
 ## Decision
 
@@ -39,21 +39,19 @@ pointer field as unset and fills the `Default` into it (0082).
   no setter names is unset. It gets its default, as in ent: a `Default` or
   default function fills it, and a column the insert leaves out gets its
   `DEFAULT`. Lean inserts (0093) still leave such a column out.
+- `SetPtr(nil)` sets nothing in an insert, as in an update and as ent's
+  `SetNillableX(nil)`: the field stays unset and gets its default. 0099
+  holds unchanged, its upsert rule included. nextapp calls `SetNillableX`
+  2,829 times; a meaning that differed between insert and update would
+  change those call sites without a word.
 - A column setter of the insert that stores nil is an explicit NULL:
-  `SetNull()`, and `SetPtr(nil)` on a nullable column. The last setter of
-  a column decides, so `SetNull()` followed by `Set(v)` stores v. An
-  `Input`'s setters count the same, through `SetInput`.
+  `SetNull()`. The last setter of a column decides, so `SetNull()`
+  followed by `Set(v)` stores v.
 - An explicit NULL's column is written in the INSERT as `NULL`. It is
   neither left out nor written as the `DEFAULT` keyword in a multi-row
   insert, and it splits no SQLite run (`DefaultRuns`). Nothing is read
   back for it: the entity's nil is what is stored. A hook that then sets
   a value in the field gets that value written.
-- `SetPtr(nil)` on a NOT NULL column is still skipped (0099). In an
-  upsert, a column `Update` names whose only setter is a nil `SetPtr` is
-  still not updated: the row the upsert inserts holds NULL, and an
-  existing row keeps its value. `SetNull()` with `Update` writes NULL to
-  the existing row too, as before.
-- An update's `SetPtr(nil)` is unchanged: it writes nothing.
 - The engine carries the columns in the insert's statement
   (`SetExplicitNulls`, from `Setters.InsertNulls`). A column written as
   NULL is in `Statement.Columns`, and the render cache's key holds the
@@ -68,11 +66,7 @@ pointer field as unset and fills the `Default` into it (0082).
 
 - `SetNull()` in an insert means what it says on every dialect, for every
   kind of default.
-- `SetPtr(nil)` in an insert departs from ent's `SetNillableX(nil)`, which
-  leaves a Nillable field to its default. A port from ent or veloxe whose
-  create path passes `SetNillableX(p)` with a nil `p` for "not given"
-  stores NULL in velox where it stored the default. Such a call is a
-  `Set(Xs.F.SetPtr(p))` only when the field has no default; otherwise
-  test `p` first.
+- `SetPtr(p)` keeps one meaning in inserts and updates: a nil `p` is "not
+  given". To store NULL from a nil pointer, test it and use `SetNull()`.
 - An insert of an explicit NULL sends the column, where it was left out:
   `INSERT INTO t (name, note) VALUES (?, NULL)`.

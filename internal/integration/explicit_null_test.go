@@ -85,12 +85,12 @@ func storedNullies(t *testing.T, tg target, name string) (note sql.NullString, l
 	return note, level, code
 }
 
-// TestInsertExplicitNull: an explicit null (SetNull, SetPtr of nil, an
-// Input's SetNull) in an insert stores NULL in a nullable column, whatever
-// its default: the DEFAULT the schema declared, a constant Default, which
-// is the column's DEFAULT too, or a DefaultFunc. A nil field with no setter
-// gets the default. Insert, InsertAll and an upsert's inserted rows alike
-// (ADR 0124).
+// TestInsertExplicitNull: an explicit null (SetNull, an Input's SetNull)
+// in an insert stores NULL in a nullable column, whatever its default: the
+// DEFAULT the schema declared, a constant Default, which is the column's
+// DEFAULT too, or a DefaultFunc. A nil field with no setter, and a SetPtr
+// of nil, which sets nothing as ent's SetNillableX(nil), get the default.
+// Insert, InsertAll and an upsert's inserted rows alike (ADR 0124).
 func TestInsertExplicitNull(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		freshNullies(t, tg)
@@ -101,9 +101,6 @@ func TestInsertExplicitNull(t *testing.T) {
 		}{
 			{"setnull", func(name string) error {
 				return tg.db.Insert(&nully{Name: name}).Set(N.Note.SetNull(), N.Level.SetNull(), N.Code.SetNull()).Exec(ctx)
-			}},
-			{"setptr", func(name string) error {
-				return tg.db.Insert(&nully{Name: name}).Set(N.Note.SetPtr(nil), N.Level.SetPtr(nil), N.Code.SetPtr(nil)).Exec(ctx)
 			}},
 			{"input", func(name string) error {
 				return tg.db.Insert(&nully{Name: name}).SetInput(nullInput{}).Exec(ctx)
@@ -118,7 +115,7 @@ func TestInsertExplicitNull(t *testing.T) {
 			}},
 			{"allupsert", func(name string) error {
 				return tg.db.InsertAll([]nully{{Name: name}, {Name: name + "2"}}).
-					Set(N.Note.SetPtr(nil), N.Level.SetNull(), N.Code.SetNull()).OnConflict(N.Name).Update(N.Level).Exec(ctx)
+					Set(N.Note.SetNull(), N.Level.SetNull(), N.Code.SetNull()).OnConflict(N.Name).Update(N.Level).Exec(ctx)
 			}},
 		}
 		for _, c := range cases {
@@ -131,17 +128,38 @@ func TestInsertExplicitNull(t *testing.T) {
 			}
 		}
 
-		// No setter: a nil field gets its default.
-		x := nully{Name: "unset"}
-		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
+		// No setter, or SetPtr of nil: a nil field gets its default.
+		ptr := func(q velox.InsertQuery[nully]) velox.InsertQuery[nully] {
+			return q.Set(N.Note.SetPtr(nil), N.Level.SetPtr(nil), N.Code.SetPtr(nil))
+		}
+		unset := []struct {
+			name string
+			run  func(name string) error
+		}{
+			{"unset", func(name string) error { return tg.db.Insert(&nully{Name: name}).Exec(ctx) }},
+			{"setptr", func(name string) error { return ptr(tg.db.Insert(&nully{Name: name})).Exec(ctx) }},
+			{"allptr", func(name string) error {
+				return ptr(tg.db.InsertAll([]nully{{Name: name}, {Name: name + "2"}})).Exec(ctx)
+			}},
+			{"upsertptr", func(name string) error {
+				return ptr(tg.db.Insert(&nully{Name: name})).OnConflict(N.Name).Update(N.Note).Exec(ctx)
+			}},
+		}
+		for _, c := range unset {
+			if err := c.run(c.name); err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			note, level, code := storedNullies(t, tg, c.name)
+			if note.String != "n" || level.Int64 != 5 || code.String != "fn" {
+				t.Errorf("%s: stored note %v, level %v, code %v; want the defaults", c.name, note, level, code)
+			}
+		}
+		x := nully{Name: "entity"}
+		if err := tg.db.Insert(&x).Set(N.Note.SetPtr(nil)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		note, level, code := storedNullies(t, tg, "unset")
-		if note.String != "n" || level.Int64 != 5 || code.String != "fn" {
-			t.Errorf("unset: stored note %v, level %v, code %v; want the defaults", note, level, code)
-		}
 		if x.Note == nil || *x.Note != "n" || x.Level == nil || *x.Level != 5 || x.Code == nil || *x.Code != "fn" {
-			t.Errorf("unset: entity %+v", x)
+			t.Errorf("entity read back %+v, want the defaults", x)
 		}
 
 		// A value set after an explicit null wins, as the last setter does.
@@ -153,8 +171,8 @@ func TestInsertExplicitNull(t *testing.T) {
 			t.Errorf("later: stored note %v, want v", note)
 		}
 
-		// SetPtr of nil in an upsert stores NULL in the row it inserts and
-		// leaves the existing row's column as it is (ADR 0099).
+		// SetPtr of nil in an upsert leaves the existing row's column as it
+		// is (ADR 0099).
 		tg.exec(t, "UPDATE nullies SET note = 'kept' WHERE name = 'unset'")
 		if err := tg.db.Insert(&nully{Name: "unset"}).Set(N.Note.SetPtr(nil)).OnConflict(N.Name).Update(N.Note).Exec(ctx); err != nil {
 			t.Fatal(err)

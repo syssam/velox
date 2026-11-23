@@ -226,10 +226,10 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // field; Add and Sub fail the insert. A SetNull is an explicit NULL: the
 // column is written as NULL, so neither its database DEFAULT nor a
 // Default fills it, while a nil field no setter names gets the default
-// (ADR 0124). A SetPtr given a nil pointer is that NULL on a nullable
-// column; on any other it is skipped and the field stays as it is. On
-// either, a column of an upsert's Update that only a nil SetPtr names
-// is not updated (with none left, the upsert keeps the existing row, as
+// (ADR 0124). A SetPtr given a nil pointer is skipped, as ent's
+// SetNillableX(nil): the field stays as it is, so a nil one gets its
+// default, and a column of an upsert's Update that no other setter sets is
+// not updated (with none left, the upsert keeps the existing row, as
 // DoNothing). An edge setter, a relation handle's
 // Add, Remove or Clear, is written after the insert, with each entity's key:
 //
@@ -268,7 +268,7 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // edge is written only when the insert affected a row: a hook that does not
 // call next writes none.
 func (q InsertQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) InsertQuery[E] {
-	q.set = q.set.AddInsert(q.meta.Info, assignments(ss))
+	q.set = q.set.Add(assignments(ss))
 	return q
 }
 

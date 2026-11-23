@@ -67,7 +67,7 @@ var (
 	}
 	nullSet = []method{
 		set[0],
-		setPtr(" On this nullable column an insert is the exception: a nil p stores NULL in the row it inserts, as SetNull does, not the column's default, and an upsert still leaves the existing row's column as it is (ADR 0124). An update's nil p does not write NULL: SetNull does."),
+		setPtr(" A nil p does not write NULL: SetNull does."),
 	}
 	values = []method{
 		{"Old", "returns the column's value in ch's old row: the zero value for an insert, or when ch is of another entity.", "(ch Change) V",

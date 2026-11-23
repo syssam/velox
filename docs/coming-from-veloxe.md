@@ -185,7 +185,7 @@ veloxe's own, or differ in a veloxe port:
 | `client.User.Get(ctx, id)`, `UpdateOneID(id)…Save(ctx)`, `DeleteOneID(id).Exec(ctx)` | `Where(U.ID.EQ(id))` and `One(ctx)` on `db.Query`, `db.Update` and `db.Delete`, or `db.Save(&u, cols...)` for an entity in hand ([guide](guide.md#one-row-by-key), [ADR 0121](decisions/0122-one-row-by-key.md)) |
 | `ForUpdate()` on SQLite, which veloxe ran without the clause | the same, under the option `velox.WithSQLiteLockingReads()`; without it the read fails ([guide](guide.md#row-locks), [ADR 0123](decisions/0123-sqlite-locking-reads-opt-in.md)) |
 | `SkipDefault(user.FieldUpdatedAt)` | `KeepDefaults(U.UpdatedAt)` |
-| `SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`; on a create of a Nillable field with a default, test `p` first: an insert's nil `SetPtr` stores NULL (ADR 0124) |
+| `SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))` |
 | the generated package's `IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` |
 | `OpCreate` | `OpInsert` |
 | `OpUpdate \| OpUpdateOne` | `OpUpdate` |

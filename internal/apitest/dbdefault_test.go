@@ -132,11 +132,11 @@ func TestInsertDatabaseDefaults(t *testing.T) {
 	}
 }
 
-// TestInsertExplicitNullOverDatabaseDefault: SetNull, or SetPtr of nil, of
-// a nullable column with a declared database default writes NULL, which is
-// stored and kept in the entity; a nil field with no setter leaves the
-// column out, so its default is stored. The render cache keeps the two
-// apart, in either order (ADR 0124).
+// TestInsertExplicitNullOverDatabaseDefault: SetNull of a nullable column
+// with a declared database default writes NULL, which is stored and kept
+// in the entity; a nil field with no setter, or a SetPtr of nil, which sets
+// nothing, leaves the column out, so its default is stored. The render
+// cache keeps the two apart, in either order (ADR 0124).
 func TestInsertExplicitNullOverDatabaseDefault(t *testing.T) {
 	db, raw := defDB(t)
 	note := velox.NullStringCol[dDef, string]{I: 4}
@@ -157,7 +157,8 @@ func TestInsertExplicitNullOverDatabaseDefault(t *testing.T) {
 	add("unset", nil, left, false)
 	add("setnull", []velox.Setter[dDef]{note.SetNull()}, null, true)
 	add("unset2", nil, left, false)
-	add("setptr", []velox.Setter[dDef]{note.SetPtr(nil)}, null, true)
+	add("setptr", []velox.Setter[dDef]{note.SetPtr(nil)}, left, false)
+	add("setnull2", []velox.Setter[dDef]{note.SetNull()}, null, true)
 	for _, s := range steps {
 		if got, _, err := s.q.SQL(ctx); err != nil || got != s.sql {
 			t.Errorf("%s: SQL\n got %s, %v\nwant %s", s.name, got, err, s.sql)

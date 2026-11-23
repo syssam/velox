@@ -1421,11 +1421,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 - An insert's `SetNull()` of a nullable column with a default stores
   NULL. Before, the insert left the nil column out and the column's
-  `DEFAULT` (a constant `Default`'s, or a declared one) was stored.
-  `SetPtr(nil)` on a nullable column is the same NULL in an insert, where it
-  was skipped; in an update it still writes nothing. A nil field no setter
-  names still gets its default, as in ent. velox-gen's sentence for such a
-  field names `SetNull` (ADR 0124).
+  `DEFAULT` (a constant `Default`'s, or a declared one) was stored. A nil
+  field no setter names, or only a nil `SetPtr`, still gets its default, as
+  in ent. velox-gen's sentence for such a field names `SetNull` (ADR
+  0124).
 - A statement on a Tx while another goroutine's statement on it is being
   sent fails, and the Tx then rolls back with an error that says a Tx is not
   safe for concurrent use. Before, both ran and raced on the transaction's
