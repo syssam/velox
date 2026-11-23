@@ -51,7 +51,9 @@ go tool velox-gen -out ./velox \
 | a hook that adds `SkipWhereInput` to every field without `WithWhereInputs(true)` | `where=whitelist` |
 | `graphqlgen.WithoutGQLGen()`, served by graphql-go | `engine=graphql-go` |
 | a hook that sets `OpsString` on filterable string fields | not needed: `OpsString` is a string field's default |
-| `WithSchemaPath`, `WithSchemaSplitMode(SchemaSplitPerEntity)` | not offered: one `velox.graphql` in the generated package |
+| `WithSchemaSplitMode(SchemaSplitPerEntity)` | the default under `compat=veloxe`: `velox.graphql` and `velox_<entity>.graphql`, veloxe's names; `sdlfiles=one` writes one file ([ADR 0125](decisions/0125-graphql-sdl-per-entity-and-subset.md)) |
+| a slicer over the SDL for an application that serves part of the schema | `entities=SalesOrder+SalesOrderItem` ([ADR 0125](decisions/0125-graphql-sdl-per-entity-and-subset.md)) |
+| `WithSchemaPath` | not offered: the SDL is in the generated package |
 
 `compat=veloxe` makes the API veloxe's generator made:
 
@@ -424,8 +426,8 @@ Queries and runtime:
 
 GraphQL:
 
-- **An SDL split per entity, and a chosen SDL path.** velox-graphql writes
-  one `velox.graphql` into the generated package.
+- **A chosen SDL path.** velox-graphql writes the SDL into the generated
+  package.
 - **Ordering by a to-many edge's count**
   ([ADR 0087](decisions/0087-graphql-veloxe-compat.md)).
 - **`AddPredicates`**, and **`first`+`before`, `last`+`after`,

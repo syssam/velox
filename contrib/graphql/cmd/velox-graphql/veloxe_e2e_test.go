@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -503,9 +504,21 @@ func TestVeloxeCompat(t *testing.T) {
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:compat=veloxe", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	sdl, err := os.ReadFile(filepath.Join(dir, "gen", "velox.graphql"))
+	// veloxe's files: velox.graphql and velox_<entity>.graphql (ADR 0125).
+	files, err := filepath.Glob(filepath.Join(dir, "gen", "*.graphql"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Contains(files, filepath.Join(dir, "gen", "velox_salesorder.graphql")) {
+		t.Errorf("gen has %v, no velox_salesorder.graphql", files)
+	}
+	var sdl []byte
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sdl = append(sdl, b...)
 	}
 	for _, want := range []string{"  customerId: ID!\n", "  organizationId: ID!\n", "  imageUrl: String!\n", "  customerIdNotIn: [ID!]\n", "  hasCustomer: Boolean\n", "  customFields: Map!\n", "  status: SalesOrderEntryStatus!\n", "enum SalesOrderEntryStatus", "enum SalesOrderStatus @goModel(model: \"example.com/app/schema.SalesOrderStatus\")", "  totalGT: Amount\n", "  totalNotIn: [Amount!]\n",
 		"interface Node @goModel(model: \"example.com/app/gen.Noder\") {", "type SalesOrder implements Node", "type Memo implements Node", "  nodes(ids: [ID!]!): [Node]!\n"} {

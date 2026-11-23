@@ -31,6 +31,7 @@ type graph struct {
 	// "Entity.edge", so each is warned of once.
 	warnings []string
 	warned   map[string]bool
+	emit     *emit // what render writes, and where; nil for all of it, to one file
 }
 
 // object is an entity's type.

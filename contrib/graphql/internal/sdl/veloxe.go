@@ -50,6 +50,24 @@ type Config struct {
 	// its Noder with @goModel under Veloxe, and every type under
 	// GraphQLGo; velox-graphql gives the request's.
 	Package string
+
+	// PerEntity writes the SDL as one file per entity and a shared file,
+	// velox.graphql, in place of velox.graphql alone (velox-graphql's
+	// option sdlfiles=entity; ADR 0125). An entity's file holds its type,
+	// connection, order, where and mutation inputs, and each enum only it
+	// uses; the shared file holds the vocabulary, Node, the root Query and
+	// each enum two entities use. gqlc makes a Go package of each file, so
+	// Query's fields and the entities' fields name their argument structs
+	// and resolver methods in packages of their own.
+	PerEntity bool
+	// Entities, when not empty, writes the SDL of these entities alone,
+	// by schema name (velox-graphql's option entities=; ADR 0125): their
+	// types and inputs and their Query fields. A field of theirs whose type
+	// is an entity left out is left out too. A where input keeps every
+	// predicate its Go struct has, so the where input of an entity left out
+	// that one of theirs nests is written, with its enums, however far it
+	// nests. The Go velox-graphql writes is the whole schema's.
+	Entities []string
 }
 
 // veloxeCamel is veloxe's GraphQL name of a schema name, as its generator's

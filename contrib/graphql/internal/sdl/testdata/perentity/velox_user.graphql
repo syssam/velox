@@ -1,0 +1,100 @@
+# User, as the type Account
+
+"""
+User is a person who writes posts.
+Its GraphQL type is Account.
+"""
+type Account {
+  id: ID!
+  createdAt: Time!
+  updatedAt: Time!
+  """The display name."""
+  displayName: String! @goField(name: "Name")
+  email: String!
+  role: UserRole!
+  nickname: String @deprecated(reason: "Use \"displayName\".")
+  bio: String
+  age: Int
+  score: Float!
+  externalID: UUID!
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean!
+  settings: JSON @goField(name: "SettingsGQL")
+  """The posts the user wrote."""
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  memberships: [Group!]! @goField(name: "Groups")
+  likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection!
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+"""A connection to a list of Account."""
+type AccountConnection {
+  """The edges of this page."""
+  edges: [AccountEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Account."""
+type AccountEdge {
+  """The Account at the end of the edge."""
+  node: Account!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Filters Account nodes: a node matches when every predicate given holds."""
+input AccountWhereInput {
+  not: AccountWhereInput
+  and: [AccountWhereInput!]
+  or: [AccountWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  displayName: String
+  displayNameNEQ: String
+  displayNameIn: [String!]
+  displayNameNotIn: [String!]
+  displayNameContains: String
+  displayNameHasPrefix: String
+  displayNameHasSuffix: String
+  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+}
+
+"""The input that creates an Account."""
+input CreateAccountInput {
+  createdAt: Time
+  updatedAt: Time
+  """The display name."""
+  displayName: String!
+  email: String!
+  role: UserRole
+  nickname: String @deprecated(reason: "Use \"displayName\".")
+  bio: String
+  age: Int
+  passwordHash: String!
+  score: Float
+  externalID: UUID
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean
+  settings: JSON
+  """The IDs of the Group nodes the edge groups leads to."""
+  membershipIDs: [ID!]
+  """The ID of the Account the edge best_friend leads to."""
+  bestFriendID: ID
+}

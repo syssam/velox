@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-graphql: `sdlfiles=entity` writes the SDL as `velox.graphql`, with
+  Query and the vocabulary, and one `velox_<label>.graphql` per entity.
+  gqlc makes a package of each file, so `Query.salesOrderItems` and
+  `SalesOrder.items` no longer both declare `SalesOrderItemsArgs`. It is
+  the default under compat=veloxe, with veloxe's names
+  (`velox_salesorder.graphql`); `sdlfiles=one` keeps one file.
+  `entities=A+B` writes those entities' SDL alone, with each where input
+  theirs nest, for an application that serves part of its schema (ADR
+  0125).
 - veloxgql: `Service(ctx, db)` and `ServiceWithLimits(ctx, db, l)` let a
   service page through generated code outside a GraphQL request:
   `Paginate`, edge connections, `EdgeOne` and `EdgeList` read every column,

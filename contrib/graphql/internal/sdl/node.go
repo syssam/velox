@@ -13,7 +13,7 @@ func (g *graph) hasNode() bool {
 		return false
 	}
 	for _, o := range g.objects {
-		if o.hasID {
+		if o.hasID && g.emit.writesType(o) {
 			return true
 		}
 	}

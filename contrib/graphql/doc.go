@@ -142,6 +142,28 @@
 // Without the marshalers, gqlgen writes the stored value as it is and hands
 // the GraphQL value to the query unchanged.
 //
+// sdlfiles=entity writes the SDL as velox.graphql and one file per entity,
+// velox_<label>.graphql:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:sdlfiles=entity ./veloxschema
+//
+// An entity's file has its type, connection, order, where and mutation
+// inputs, and the enums only it uses. velox.graphql has the scalars,
+// PageInfo, OrderDirection, the root Query and the enums two entities use.
+// gqlc makes a Go package of each file, so Query's fields and the entities'
+// name their argument structs apart. sdlfiles=one, one file, is the default,
+// and sdlfiles=entity is under compat=veloxe.
+//
+// entities= writes the SDL of the named schemas alone, separated by +:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:entities=Post+User ./veloxschema
+//
+// Each has its type, its inputs and its Query field; no other schema has a
+// Query field. A field whose type is a schema left out, such as an edge to
+// one, is left out. A where input keeps every predicate, as graphql-go binds
+// it to its Go struct, so a where input it nests is written too, without its
+// schema's type. The Go is the whole schema's either way (ADR 0125).
+//
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
 // has the predicates of its key in it, before the fields': the key has id,
 // idNEQ, idIn, idNotIn, and for an ordered key (an integer or a string)
@@ -754,6 +776,12 @@
 // input is a slice, nil when not given. Root fields are the application's:
 // gqlc puts each on a Resolver, one line over the generated code, as in
 // "Mutations".
+//
+// gqlc groups by SDL file and names an argument struct <Type><Field>Args,
+// and a root field's <Field>Args. In one velox.graphql, Query.postTags and
+// Post.tags then both declare PostTagsArgs, and the package does not build.
+// sdlfiles=entity, the default under compat=veloxe, puts Query in package
+// velox and Post in package post.
 //
 // A field gqlgen reads through a <Field>GQL getter, a JSON field or a field
 // of the application's own Go type, carries @goField(forceResolver: true):

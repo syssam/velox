@@ -28,7 +28,37 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // links, as its edge schema has a column Add cannot fill, and under
 // compat=veloxe of each order it drops from a field of a type veloxe did not
 // order, such as a decimal (sdl.Surface's Warnings).
+//
+// sdlfiles=entity writes the SDL as velox.graphql and a file per entity,
+// and sdlfiles=one as velox.graphql alone; one is the default, and entity
+// is under compat=veloxe, as veloxe wrote it (sdl.Config's PerEntity).
+// entities=A+B writes the SDL of the entities A and B alone (sdl.Config's
+// Entities); the Go is the whole schema's.
 func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
+	cfg, err := config(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	if req.Options["only"] == "enums" {
+		if cfg.Veloxe || cfg.WhereWhitelist || req.Options["sdlfiles"] != "" || len(cfg.Entities) > 0 {
+			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe, where=whitelist, sdlfiles and entities shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
+		}
+		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
+		return files, nil, err
+	}
+	sdlFiles, surface, err := sdl.RenderFiles(req.Model, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	gofiles, err := gogen.RenderSurface(req.Model, surface, req.OutPath, req.OutPackage, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return append(sdlFiles, gofiles...), surface.Warnings, nil
+}
+
+// config is the sdl.Config of req's options.
+func config(req *plugin.Request) (sdl.Config, error) {
 	var cfg sdl.Config
 	for k, v := range req.Options {
 		switch {
@@ -40,26 +70,25 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 		case k == "engine" && v == "gqlgen":
 		case k == "engine" && v == "graphql-go":
 			cfg.GraphQLGo, cfg.Package = true, req.OutPath
+		case k == "sdlfiles" && (v == "one" || v == "entity"):
+		case k == "entities" && v != "":
+			for n := range strings.SplitSeq(v, "+") {
+				if n == "" || slices.Contains(cfg.Entities, n) {
+					return cfg, fmt.Errorf("velox-graphql: entities=%s: name each entity once, separated by +", v)
+				}
+				cfg.Entities = append(cfg.Entities, n)
+			}
 		default:
-			return nil, nil, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, where=whitelist and engine=gqlgen or engine=graphql-go; it is given %s", options(req.Options))
+			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, and entities=A+B; it is given %s", options(req.Options))
 		}
 	}
-	if req.Options["only"] == "enums" {
-		if cfg.Veloxe || cfg.WhereWhitelist {
-			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe and where=whitelist shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
-		}
-		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
-		return files, nil, err
+	switch req.Options["sdlfiles"] {
+	case "entity":
+		cfg.PerEntity = true
+	case "":
+		cfg.PerEntity = cfg.Veloxe
 	}
-	s, surface, err := sdl.RenderSurface(req.Model, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	gofiles, err := gogen.RenderSurface(req.Model, surface, req.OutPath, req.OutPackage, cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-	return append([]plugin.File{{Path: "velox.graphql", Content: s}}, gofiles...), surface.Warnings, nil
+	return cfg, nil
 }
 
 // options are opts as written, in key order: key=value, or key alone.

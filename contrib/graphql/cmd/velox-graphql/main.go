@@ -71,8 +71,19 @@
 // github.com/syssam/velox/contrib/graphql, "graphql-go and gqlc", has the
 // gqlc.yaml it needs.
 //
-// only=enums takes neither compat nor where, and writes the same Go for
-// either engine. Any other option fails the run.
+// sdlfiles=entity writes the SDL as velox.graphql, with the root Query, and
+// one velox_<label>.graphql per entity, so that gqlc, which makes a Go
+// package of each file, names Query's argument structs apart from the
+// entities'. sdlfiles=one is the default, and entity is under compat=veloxe,
+// whose files are named as veloxe's were (velox_salesorder.graphql).
+// entities=A+B writes the SDL of the schemas A and B alone: a field whose
+// type is a schema left out is left out, and each where input a written
+// one nests is written; the Go is the whole schema's:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:engine=graphql-go,sdlfiles=entity,entities=SalesOrder+SalesOrderItem ./veloxschema
+//
+// only=enums takes neither compat, where, sdlfiles nor entities, and writes
+// the same Go for either engine. Any other option fails the run.
 package main
 
 import (

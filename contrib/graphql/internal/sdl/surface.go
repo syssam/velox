@@ -251,16 +251,11 @@ func BuildConfig(m *plugin.Model, cfg Config) (*Surface, error) {
 // RenderSurface is RenderConfig and BuildConfig from one build of m: the
 // SDL and its Surface.
 func RenderSurface(m *plugin.Model, cfg Config) (string, *Surface, error) {
-	g, err := build(m, cfg)
+	files, s, err := RenderFiles(m, cfg)
 	if err != nil {
 		return "", nil, err
 	}
-	s := g.surface()
-	out, err := g.render(cfg)
-	if err != nil {
-		return "", nil, err
-	}
-	return out, s, nil
+	return joinFiles(files), s, nil
 }
 
 // surface is the Surface of g, which it reads before the SDL is written.

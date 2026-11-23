@@ -75,14 +75,33 @@ func TestRun(t *testing.T) {
 
 	// compat=veloxe: veloxe's names, here the key of a field named from
 	// its schema name, and Node, bound to the request's package, with its
-	// Go in noder_gql.go.
-	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"compat": "veloxe"}, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+	// Go in noder_gql.go; and veloxe's files, velox.graphql and
+	// velox_user.graphql, unless sdlfiles=one.
+	vm := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 		Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", ElemType: "int64"}, {Name: "image_url", GoName: "ImageURL", Type: "string", ElemType: "string"}},
-	}}}}))
-	if resp.Error != "" || len(resp.Files) != 3 || resp.Files[1].Path != "noder_gql.go" || !strings.Contains(resp.Files[0].Content, "  imageUrl: String!\n") ||
+	}}}
+	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"compat": "veloxe"}, Model: vm}))
+	if resp.Error != "" || len(resp.Files) != 4 || resp.Files[1].Path != "velox_user.graphql" || resp.Files[2].Path != "noder_gql.go" ||
+		!strings.Contains(resp.Files[1].Content, "  imageUrl: String!\n") ||
 		!strings.Contains(resp.Files[0].Content, "interface Node @goModel(model: \"example.com/app/gen.Noder\")") {
 		t.Errorf("compat=veloxe: %+v", resp)
+	}
+	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"compat": "veloxe", "sdlfiles": "one"}, Model: vm}))
+	if resp.Error != "" || len(resp.Files) != 3 || resp.Files[0].Path != "velox.graphql" || !strings.Contains(resp.Files[0].Content, "  imageUrl: String!\n") {
+		t.Errorf("compat=veloxe,sdlfiles=one: %+v", resp)
+	}
+
+	// sdlfiles=entity without compat: velox_<label>.graphql. entities=User
+	// writes User's SDL alone, and the same Go.
+	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"sdlfiles": "entity"}, Model: m}))
+	if resp.Error != "" || len(resp.Files) != 3 || resp.Files[0].Path != "velox.graphql" || resp.Files[1].Path != "velox_user.graphql" ||
+		!strings.HasPrefix(resp.Files[1].Content, "# User\n") || strings.Contains(resp.Files[0].Content, "type User ") {
+		t.Errorf("sdlfiles=entity: %+v", resp)
+	}
+	resp = respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"entities": "User"}, Model: m}))
+	if resp.Error != "" || len(resp.Files) != 2 || !reflect.DeepEqual(resp.Files, respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Model: m})).Files) {
+		t.Errorf("entities=User: %+v", resp)
 	}
 
 	// engine: graphql-go's SDL binds User with @goModel and its Go is the
@@ -108,7 +127,14 @@ func TestRun(t *testing.T) {
 		"version":            {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":           {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed":          {"{", "request"},
-		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, where=whitelist and engine=gqlgen or engine=graphql-go; it is given a, x=y"},
+		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, and entities=A+B; it is given a, x=y"},
+		"sdlfiles":           {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"sdlfiles": "type"}, Model: m}), "it is given sdlfiles=type"},
+		"sdlfiles and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "sdlfiles": "entity"}, Model: m}), "give one or the other"},
+		"entities and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "entities": "User"}, Model: m}), "give one or the other"},
+		"entities empty":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": ""}, Model: m}), "it is given entities"},
+		"entities twice":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User+User"}, Model: m}), "entities=User+User: name each entity once, separated by +"},
+		"entities gap":       {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User++Post"}, Model: m}), "name each entity once"},
+		"entities unknown":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User+Post"}, Model: m}), "entities= names Post, which the schema package does not declare"},
 		"engine":             {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"engine": "graphql-go-v2"}, Model: m}), "it is given engine=graphql-go-v2"},
 		"engine no package":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"engine": "graphql-go"}, Model: m}), "engine=graphql-go binds every type to the generated package, and the request names none"},
 		"engine refuses": {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"engine": "graphql-go"}, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{

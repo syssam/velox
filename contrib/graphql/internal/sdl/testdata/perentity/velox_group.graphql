@@ -1,0 +1,40 @@
+# Group
+
+type Group {
+  id: ID!
+  name: String!
+  """Who can see the group; a String, as its enum is skipped."""
+  visibility: String!
+  users(after: Cursor, first: Int, before: Cursor, last: Int, where: AccountWhereInput): AccountConnection!
+}
+
+"""A connection to a list of Group."""
+type GroupConnection {
+  """The edges of this page."""
+  edges: [GroupEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Group."""
+type GroupEdge {
+  """The Group at the end of the edge."""
+  node: Group!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Group."""
+input GroupOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: GroupOrderField!
+}
+
+"""The fields connections to Group can be ordered by."""
+enum GroupOrderField {
+  NAME
+}

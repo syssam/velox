@@ -40,24 +40,58 @@ import (
 // declare itself.
 func Render(m *plugin.Model) (string, error) { return RenderConfig(m, Config{}) }
 
-// RenderConfig is Render under the options cfg.
+// RenderConfig is Render under the options cfg. Under Config.PerEntity it
+// is the files of RenderFiles one after another.
 func RenderConfig(m *plugin.Model, cfg Config) (string, error) {
-	g, err := build(m, cfg)
+	files, _, err := RenderFiles(m, cfg)
 	if err != nil {
 		return "", err
 	}
-	return g.render(cfg)
+	return joinFiles(files), nil
+}
+
+// RenderFiles is RenderSurface with the SDL as its files: velox.graphql
+// alone, or under Config.PerEntity velox.graphql first and then each
+// entity's file, in name order (ADR 0125).
+func RenderFiles(m *plugin.Model, cfg Config) ([]plugin.File, *Surface, error) {
+	g, err := build(m, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	s := g.surface()
+	files, err := g.render(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return files, s, nil
+}
+
+// joinFiles is the content of files, one after another.
+func joinFiles(files []plugin.File) string {
+	var b strings.Builder
+	for _, f := range files {
+		b.WriteString(f.Content)
+	}
+	return b.String()
 }
 
 // render is the SDL of g, checked as RenderConfig says.
-func (g *graph) render(cfg Config) (string, error) {
-	w := writer{app: true, cfg: cfg}
+func (g *graph) render(cfg Config) ([]plugin.File, error) {
+	e, err := g.plan(cfg)
+	if err != nil {
+		return nil, err
+	}
+	g.emit = e
+	w := writer{app: true, cfg: cfg, emit: e}
+	if cfg.PerEntity {
+		w.parts = map[string]*strings.Builder{}
+	}
 	g.write(&w)
 	out := w.String()
 	if err := parse(out); err != nil {
-		return "", fmt.Errorf("velox-graphql wrote an SDL that does not parse, which is a bug: %w", err)
+		return nil, fmt.Errorf("velox-graphql wrote an SDL that does not parse, which is a bug: %w", err)
 	}
-	own := writer{cfg: cfg}
+	own := writer{cfg: cfg, emit: e}
 	g.write(&own)
 	// The application declares the types graphql.Type names that velox does
 	// not, as it declares its directives, and under compat=veloxe the
@@ -75,9 +109,9 @@ func (g *graph) render(cfg Config) (string, error) {
 		own.line("scalar ", t)
 	}
 	if _, err := Check(own.String()); err != nil {
-		return "", own.explain(err)
+		return nil, own.explain(err)
 	}
-	return out, nil
+	return w.files(), nil
 }
 
 // jsonList is the scalar of the elements of a JSON field of these Go types,
@@ -95,6 +129,12 @@ type writer struct {
 	cfg   Config   // the options: under GraphQLGo, @goModel on every type
 	at    string   // the element being written, "" for velox-graphql's own
 	where []string // the element of each line written so far
+	emit  *emit    // what is written, and where; nil for all of it, to one file
+	// Under Config.PerEntity, the file being written, each file's lines,
+	// and the files in the order first written.
+	file      string
+	parts     map[string]*strings.Builder
+	fileOrder []string
 }
 
 func (w *writer) line(parts ...string) {
@@ -103,6 +143,19 @@ func (w *writer) line(parts ...string) {
 	}
 	w.WriteByte('\n')
 	w.where = append(w.where, w.at)
+	if w.parts == nil {
+		return
+	}
+	b := w.parts[w.file]
+	if b == nil {
+		b = &strings.Builder{}
+		w.parts[w.file] = b
+		w.fileOrder = append(w.fileOrder, w.file)
+	}
+	for _, p := range parts {
+		b.WriteString(p)
+	}
+	b.WriteByte('\n')
 }
 
 // model is the @goModel directive, after a space, that binds a type to the
@@ -203,6 +256,9 @@ func (w *writer) field(f gqlField) {
 	if f.resolver && !w.app {
 		return // its type may be the application's own: the standalone check cannot see it
 	}
+	if !w.emit.keeps(f) {
+		return // its type is an entity's that entities= leaves out
+	}
 	at := w.at
 	w.at = f.where
 	w.desc("  ", f.desc)
@@ -270,6 +326,7 @@ func (g *graph) veloxeScalars() []string {
 }
 
 func (g *graph) write(w *writer) {
+	w.file = sharedFile
 	leave := g.veloxeScalars()
 	for block := range strings.SplitSeq(strings.TrimSuffix(vocabulary, "\n"), "\n\n") {
 		if slices.ContainsFunc(leave, func(s string) bool { return strings.HasSuffix(block, "\nscalar "+s) }) {
@@ -296,10 +353,16 @@ func (g *graph) write(w *writer) {
 		}
 		w.line("}")
 	}
+	g.writeSharedEnums(w)
 
 	for _, o := range g.objects {
+		if !g.emit.writesType(o) && !g.emit.partial(o) {
+			continue
+		}
+		w.file = g.emit.file(o)
 		g.writeObject(w, o)
 	}
+	w.file = sharedFile
 
 	if binds := g.types.introspectionBinds(); binds != "" && !g.cfg.GraphQLGo {
 		w.line()
@@ -313,63 +376,87 @@ func (g *graph) write(w *writer) {
 }
 
 func (g *graph) writeObject(w *writer, o *object) {
+	full := g.emit.writesType(o)
 	w.line()
-	if o.name == o.ent.Name {
+	switch {
+	case !full:
+		w.line("# ", o.ent.Name, ": only the inputs another written input names")
+	case o.name == o.ent.Name:
 		w.line("# ", o.ent.Name)
-	} else {
+	default:
 		w.line("# ", o.ent.Name, ", as the type ", o.name)
 	}
-	w.line()
-	w.at = "schema " + o.ent.Name
-	w.desc("", o.ent.Comment)
-	// The entity's own Go type, and not the alias of graphql.Type's name,
-	// which gqlc does not see through.
-	w.line("type "+o.name+g.implementsNode(o), w.gen(o.ent.Name), w.dirs(o.dirs), " {")
-	for _, f := range o.fields {
-		w.field(f)
-	}
-	w.line("}")
-	w.at = ""
-
-	for _, en := range o.enums {
-		if en.name == "" || en.shared {
-			continue // a String, or declared with another field of its Go type
-		}
+	if full {
 		w.line()
-		// @goModel is not one of w.dirs's: it is velox-graphql's own, and
-		// binds the type whether or not the application's directives are
-		// written.
-		bind := w.gen(cmp.Or(en.goType, en.name)) // velox-gen's type, not an alias of it
-		if en.model != "" {
-			bind = " @goModel(model: " + quote(en.model) + ")"
-		}
-		w.line("enum ", en.name, bind, " {")
-		for _, v := range en.values {
-			w.line("  ", v)
+		w.at = "schema " + o.ent.Name
+		w.desc("", o.ent.Comment)
+		// The entity's own Go type, and not the alias of graphql.Type's name,
+		// which gqlc does not see through.
+		w.line("type "+o.name+g.implementsNode(o), w.gen(o.ent.Name), w.dirs(o.dirs), " {")
+		for _, f := range o.fields {
+			w.field(f)
 		}
 		w.line("}")
+		w.at = ""
 	}
 
-	if o.conn {
+	for _, en := range o.enums {
+		if g.emit.writesEnumAt(o, en) {
+			w.enum(en) // not a String, nor declared elsewhere
+		}
+	}
+
+	if o.conn && full {
 		writeConnection(w, o)
 	}
-	if o.order != nil {
+	if o.order != nil && g.emit.writes(o, o.name+"Order") {
 		w.order(o)
 	}
 	at := "schema " + o.ent.Name
-	if o.hasWhere {
+	if o.hasWhere && g.emit.writes(o, o.name+"WhereInput") {
 		w.at = at
 		w.input("Filters "+o.name+" nodes: a node matches when every predicate given holds.", o.name+"WhereInput", o.where)
 	}
-	if o.create != nil {
+	if o.create != nil && g.emit.writes(o, "Create"+o.name+"Input") {
 		w.at = at
 		w.input(inputDesc(o, true), "Create"+o.name+"Input", o.create)
 	}
-	if o.update != nil {
+	if o.update != nil && g.emit.writes(o, "Update"+o.name+"Input") {
 		w.at = at
 		w.input(inputDesc(o, false), "Update"+o.name+"Input", o.update)
 	}
 	w.at = ""
+}
+
+// enum writes the declaration of en.
+func (w *writer) enum(en gqlEnum) {
+	w.line()
+	// @goModel is not one of w.dirs's: it is velox-graphql's own, and
+	// binds the type whether or not the application's directives are
+	// written.
+	bind := w.gen(cmp.Or(en.goType, en.name)) // velox-gen's type, not an alias of it
+	if en.model != "" {
+		bind = " @goModel(model: " + quote(en.model) + ")"
+	}
+	w.line("enum ", en.name, bind, " {")
+	for _, v := range en.values {
+		w.line("  ", v)
+	}
+	w.line("}")
+}
+
+// writeSharedEnums writes the enums no one entity's block declares: under
+// Config.PerEntity those two entities' elements name, and under
+// Config.Entities those of an entity not written.
+func (g *graph) writeSharedEnums(w *writer) {
+	if g.emit == nil || len(g.emit.shared) == 0 {
+		return
+	}
+	w.line()
+	w.line("# The enums of more than one entity, or of an entity not written.")
+	for _, en := range g.emit.shared {
+		w.enum(en)
+	}
 }
 
 // writeConnection writes XConnection and XEdge of o. Under compat=veloxe the

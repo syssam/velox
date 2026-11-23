@@ -1,0 +1,228 @@
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
+
+"""A time, as an RFC 3339 string."""
+scalar Time
+
+"""A UUID, as a string."""
+scalar UUID
+
+"""Bytes, as a base64 string."""
+scalar Bytes
+
+"""A JSON value."""
+scalar JSON
+
+"""An unsigned 64-bit integer, as a decimal string."""
+scalar Uint64
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+
+"""Information about a page of a connection."""
+type PageInfo {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+# The root query.
+
+type Query {
+  """The connection to the Post nodes, filtered by where, ordered by orderBy and then the key, and paged by the other arguments."""
+  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+}
+
+# Post
+
+type Post {
+  id: ID!
+  title: String!
+  slug: String!
+  status: PostStatus!
+  publishedAt: Time
+  tags: [String!]!
+  views: Int!
+  rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
+  """Posts this post links to; a join of Post to itself."""
+  related(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+  relatedBy(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection!
+}
+
+enum PostStatus {
+  DRAFT
+  IN_REVIEW
+  LIVE
+}
+
+"""A connection to a list of Post."""
+type PostConnection {
+  """The edges of this page."""
+  edges: [PostEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Post."""
+type PostEdge {
+  """The Post at the end of the edge."""
+  node: Post!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Post."""
+input PostOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: PostOrderField!
+}
+
+"""The fields connections to Post can be ordered by."""
+enum PostOrderField {
+  TITLE
+  VIEWS
+  """Orders through writer: each Post without one, or whose writer the reader may not see, sorts as null, after every value ascending."""
+  AUTHOR_NAME
+}
+
+"""Filters Post nodes: a node matches when every predicate given holds."""
+input PostWhereInput {
+  not: PostWhereInput
+  and: [PostWhereInput!]
+  or: [PostWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  writerID: ID
+  writerIDNEQ: ID
+  writerIDIn: [ID!]
+  writerIDNotIn: [ID!]
+  title: String
+  titleNEQ: String
+  titleIn: [String!]
+  titleNotIn: [String!]
+  titleContains: String
+  titleHasPrefix: String
+  titleHasSuffix: String
+  titleEqualFold: String
+  titleContainsFold: String
+  slug: String
+  slugNEQ: String
+  slugIn: [String!]
+  slugNotIn: [String!]
+  status: PostStatus
+  statusNEQ: PostStatus
+  statusIn: [PostStatus!]
+  statusNotIn: [PostStatus!]
+  publishedAt: Time
+  publishedAtNEQ: Time
+  publishedAtIn: [Time!]
+  publishedAtNotIn: [Time!]
+  publishedAtGT: Time
+  publishedAtGTE: Time
+  publishedAtLT: Time
+  publishedAtLTE: Time
+  publishedAtIsNil: Boolean
+  publishedAtNotNil: Boolean
+  hasWriter: Boolean
+  hasWriterWith: [AccountWhereInput!]
+}
+
+"""The input that creates a Post."""
+input CreatePostInput {
+  title: String!
+  slug: String!
+  status: PostStatus
+  publishedAt: Time
+  tags: [String!]
+  rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
+  """The ID of the Account the edge author leads to."""
+  writerID: ID!
+  """The IDs of the Post nodes the edge related leads to."""
+  relatedIDs: [ID!]
+  """The IDs of the Post nodes the edge related_by leads to."""
+  relatedByIDs: [ID!]
+}
+
+"""The input that updates a Post: a field not given is left as it is."""
+input UpdatePostInput {
+  title: String
+  status: PostStatus
+  publishedAt: Time
+  """Sets the field published_at to NULL."""
+  clearPublishedAt: Boolean
+  tags: [String!]
+  views: Int
+  rating: Float
+  """Sets the field rating to NULL."""
+  clearRating: Boolean
+  """The ID of the Account the edge author leads to."""
+  writerID: ID
+  """The IDs of Post nodes to add to the edge related."""
+  addRelatedIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related; an ID the edge does not lead to is ignored."""
+  removeRelatedIDs: [ID!]
+  """Removes every Post from the edge related, before the IDs to remove and to add."""
+  clearRelated: Boolean
+  """The IDs of Post nodes to add to the edge related_by."""
+  addRelatedByIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related_by; an ID the edge does not lead to is ignored."""
+  removeRelatedByIDs: [ID!]
+  """Removes every Post from the edge related_by, before the IDs to remove and to add."""
+  clearRelatedBy: Boolean
+}
+
+# User: only the inputs another written input names
+
+"""Filters Account nodes: a node matches when every predicate given holds."""
+input AccountWhereInput {
+  not: AccountWhereInput
+  and: [AccountWhereInput!]
+  or: [AccountWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  displayName: String
+  displayNameNEQ: String
+  displayNameIn: [String!]
+  displayNameNotIn: [String!]
+  displayNameContains: String
+  displayNameHasPrefix: String
+  displayNameHasSuffix: String
+  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+}
