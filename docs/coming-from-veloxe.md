@@ -196,7 +196,11 @@ veloxe's own, or differ in a veloxe port:
 | `OpDelete \| OpDeleteOne` | `OpDelete` |
 | an op tested as a bit set | an op compared with `==`; `velox.On(h, ops...)` runs `h` for the ops listed |
 | `tx.OnCommit(func(next velox.Committer) velox.Committer {…})` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed |
-| `IDs(ctx)` | `velox.IDs[int64](ctx, q)` |
+| `IDs(ctx)` | `velox.IDs[int64](ctx, q.AllowUnbounded())`, or with a `Limit` |
+| `Each(ctx, fn)` | `for x, err := range q.Iter(ctx)` |
+| a filter's lookup on the client inside `WithTx` | a read through `velox.FilterDB(ctx)`, the statement's DB ([guide](guide.md#hooks-and-filters-for-every-entity), [ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)) |
+| a client read inside `WithTx` that must not join it | a read on `db` under `velox.WithoutTx(ctx)`; under fn's `ctx` it fails with `ErrOutsideTx` |
+| a retry and a timeout in every `WithTx` | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
 | `Select(f).Strings(ctx)`, `Ints(ctx)` | `velox.Values(ctx, q, T.F.Key())` |
 | the client option `velox.Debug()` | the option `velox.WithLog(logger)`, which writes Debug records, so the logger must be enabled at Debug; `velox.LogArgs()` shows arguments |
 | `e.Unwrap()` | none: an entity is a plain struct, with no client in it |
@@ -236,6 +240,25 @@ A velox filter is called with the op, `OpSelect` for reads and the write's
 op for updates and deletes. A filter that narrows reads only returns
 `velox.Allow()` when `op != velox.OpSelect`. Otherwise a restore that
 clears `deleted_at` under the plain context updates no row.
+
+**A read on the client inside a transaction fails.** Inside `db.Tx`, a
+statement on `db` under fn's `ctx` fails with `ErrOutsideTx`, where
+veloxe ran it outside the transaction. Run it on `tx`, or on `db` under
+`velox.WithoutTx(ctx)` when it must not join the transaction; on SQLite's
+pool of one connection that fails too, rather than wait for the
+transaction. A row-scope filter that looks up teams or an organization
+tree reads through `velox.FilterDB(ctx)`, which is `tx` inside the
+transaction. A lookup on `db` that swallows its error narrows the
+statement inside a transaction and not outside.
+
+**A transaction retries nothing by default.** nextapp's `WithTx` retried
+3 times with a 30-second timeout and turned a panic into an error. A velox
+`Tx` runs once, under `WithDeadlines`' `Tx` limit, and panics again after
+the rollback. `velox.WithTxDefaults` at `Connect` restores the retry and
+the timeout for every `Tx`, and a call's own options override them. A
+nested `Tx` does not retry on its own, and `gqlgenx`'s mutation
+transaction never retries. A panic stays a panic: recover it in fn to make
+it an error.
 
 **Back-references are not filled.** veloxe's `FeatureBidiEdgeRefs` set
 each loaded child's parent edge. velox sets a child's to-one edge only

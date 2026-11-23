@@ -1323,7 +1323,10 @@ err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 
 Inside the function, use `tx` and the `ctx` you were given. A statement on
 the outer `db` under that context fails with `velox.ErrOutsideTx`, which
-catches a common bug.
+catches a common bug. Work that must not join the transaction, such as an
+audit row that must survive a rollback, runs on `db` under
+`velox.WithoutTx(ctx)`. It needs a second connection, so on SQLite's pool
+of one it fails rather than wait for the transaction.
 
 A nested `tx.Tx(...)` is a savepoint: its error undoes only its own work,
 and the outer transaction goes on. This is how you recover from a failed
@@ -1337,6 +1340,16 @@ Options go after the function:
   again.
 - `velox.TxIsolation(level)`, `velox.TxReadOnly()` and
   `velox.TxTimeout(d)`.
+
+`velox.WithTxDefaults(opts...)` at `Connect` gives every transaction on the
+DB those options first, velox's own included; a call's options come after
+and override them. A nested `Tx` takes none and does not retry on its own:
+the outermost transaction's retry runs it again.
+
+```go
+db, err := velox.Connect("postgres", dsn, velox.WithTxDefaults(
+	velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second)))
+```
 
 ### A transaction you began
 
@@ -1625,8 +1638,36 @@ A filter fails closed. It returns `velox.Allow()` for an entity it does
 not restrict, the join entities of many-to-many edges included: restricting
 one makes `With` loads and `Has` disagree. The zero `velox.Predicate{}`, an
 error, or a column the entity lacks fails the statement, and an error is
-not a denial. `velox.Not(velox.Allow())` matches no row, for a caller who
-may see none. Several filters AND, in the order given.
+not a denial. `velox.None()` matches no row, for a caller who may see
+none. Several filters AND, in the order given.
+
+A filter that reads the database to make its condition, such as a team's
+members or an organization's subtree, reads through `velox.FilterDB(ctx)`,
+the DB the statement runs on, with the `ctx` it was given. Inside `Tx`
+that is the transaction, so the statement gets the same condition inside a
+transaction as outside; a read on the outer `db` would fail there with
+`ErrOutsideTx`. The filter's reads are not narrowed by the filter itself,
+so it does not call itself without end; the other filters, interceptors
+and policies apply to them
+([ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)).
+
+```go
+velox.WithFilter(func(ctx context.Context, entity string, op velox.Op) (velox.Predicate, error) {
+	if entity != "Order" || op != velox.OpSelect {
+		return velox.Allow(), nil
+	}
+	teams, err := velox.FilterDB(ctx).Query[veloxgen.Member]().
+		Where(veloxgen.Members.UserID.EQ(userID(ctx))).Limit(100).All(ctx)
+	if err != nil {
+		return velox.Predicate{}, err
+	}
+	ids := make([]any, len(teams))
+	for i, m := range teams {
+		ids[i] = m.TeamID
+	}
+	return velox.FieldIn("team_id", ids...), nil
+})
+```
 
 A schema written for veloxe keeps its `privacy` rules
 ([ADR 0089](decisions/0089-veloxe-privacy-shape.md)).
