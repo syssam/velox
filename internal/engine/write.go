@@ -207,6 +207,44 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 	return writeWith(ctx, db, st, dry, save, nil)
 }
 
+// DeleteOne is DeleteQuery.One: st, a delete, must remove one row. No row
+// removed is ErrNotFound: none matched, the policies or an interceptor hid
+// it, or a hook skipped the delete without SetAffected. A count of -1, which
+// the driver could not report, is taken as one row.
+//
+// When st's conditions pin every primary-key column (pinnedWhere), st is
+// one DELETE, sent as Exec sends it: it matches one row at most, so no
+// transaction is needed to undo a second. A count over one can then come
+// only from a hook's SetAffected or a bidirectional edge's mirror row, and
+// is taken as the one row. Otherwise st runs in a transaction, a savepoint
+// inside one, which a count over one rolls back with ErrNotSingular.
+func DeleteOne(ctx context.Context, db *DB, st *Statement) error {
+	if err := db.guard(st); err != nil {
+		return err
+	}
+	in := st.Entity
+	if _, ok := pinnedWhere(in, st.Where); ok {
+		n, _, _, err := Write(ctx, db, st, false, false)
+		if err == nil && n == 0 {
+			err = fmt.Errorf("velox: %s: %w", in.Name, ErrNotFound)
+		}
+		return err
+	}
+	return atomically(ctx, db, func(ctx context.Context, tx *DB) error {
+		st.InTx = true
+		n, _, _, err := Write(ctx, tx, st, false, false)
+		switch {
+		case err != nil:
+			return err
+		case n == 0:
+			return fmt.Errorf("velox: %s: %w", in.Name, ErrNotFound)
+		case n > 1:
+			return fmt.Errorf("velox: %s: the delete matched %d rows: %w", in.Name, n, ErrNotSingular)
+		}
+		return nil
+	})
+}
+
 // writeWith is Write of st with the edge setters edges, which its hooks see
 // (Mutation.Edges) and which the caller writes.
 func writeWith(ctx context.Context, db *DB, st *Statement, dry, save bool, edges []*EdgeSet) (int64, string, []any, error) {

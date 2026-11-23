@@ -33,6 +33,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `graphql.OrderUnguarded` dropped from a field of a type veloxe did not
   order (a decimal, a JSON field, a `Text`) is a warning naming the entity,
   the field and the reason.
+- delete: `DeleteQuery.One(ctx)` removes exactly one row, ent's
+  `DeleteOneID(id).Exec` as `Delete[E]().Where(X.ID.EQ(id)).One(ctx)`: no
+  row removed wraps `ErrNotFound`, a hidden or soft-deleted row included;
+  by key it is one DELETE, otherwise a transaction that rolls back with
+  `ErrNotSingular` on more than one row (ADR 0121).
 - insert: `UpdateSet(setters...)` gives an upsert's update branch `Set`,
   `SetNull`, `Add`, `Sub` and `SetExpr`, and `velox.Excluded(c)` names the
   inserted row in it; `UpdateWhere`, `OnConflictWhere` (a partial index) and

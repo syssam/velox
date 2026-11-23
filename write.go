@@ -252,6 +252,29 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	return n, err
 }
 
+// One runs the delete on the one row it matches, as ent's DeleteOne does.
+// Its error wraps ErrNotFound when it removes no row: none matches, the
+// Write policy or an Interceptor hides it, softdelete's included, or a hook
+// skips the delete without SetAffected. A delete by key is
+//
+//	err := db.Delete[billing.Invoice]().Where(I.ID.EQ(id)).One(ctx)
+//
+// When the conditions pin every primary-key column, One sends the DELETE as
+// Exec does, one statement. Otherwise it runs in a transaction, a savepoint
+// inside one, and its error wraps ErrNotSingular, with nothing removed, when
+// the delete matches more than one row. The hooks see the caller's
+// conditions either way.
+func (d DeleteQuery[E]) One[_ Lazy[E]](ctx context.Context) error {
+	if d.meta.Err != nil {
+		return d.meta.Err
+	}
+	if d.err != nil {
+		return d.err
+	}
+	st := engine.CloneStatement(&d.st)
+	return engine.DeleteOne(ctx, &d.db.e, &st)
+}
+
 // SQL returns the statement and arguments Exec would send for ctx, or the
 // error Exec would fail with before sending it; it sends nothing. It runs
 // every stage Exec runs before execution: the guard, the entity's hooks, the

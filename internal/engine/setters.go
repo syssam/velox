@@ -460,9 +460,18 @@ func pinnedKeys(in *EntityInfo, st *Statement) ([]any, bool) {
 	if len(st.Set) == 0 {
 		return nil, false
 	}
+	return pinnedWhere(in, st.Where)
+}
+
+// pinnedWhere returns the value of each primary-key column when where
+// holds, at its top level, <column> = v for every key column, v not nil.
+func pinnedWhere(in *EntityInfo, where []Predicate) ([]any, bool) {
+	if len(in.PrimaryKey) == 0 {
+		return nil, false
+	}
 	vals := make([]any, len(in.PrimaryKey))
 	for i, k := range in.PrimaryKey {
-		v, ok := pinnedValue(int32(k), st.Where)
+		v, ok := pinnedValue(int32(k), where)
 		if !ok {
 			return nil, false
 		}
