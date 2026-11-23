@@ -277,12 +277,21 @@ func (o *object) fieldName(i int) (string, error) {
 }
 
 // camel is the GraphQL name of a field or edge of o by its Go name and its
-// schema name: velox's, or veloxe's under Config.Veloxe.
+// schema name: velox's, or under Config.SchemaNames veloxe's.
 func (o *object) camel(goName, name string) string {
-	if o.veloxe {
+	if o.schema {
 		return veloxeCamel(name)
 	}
 	return camel(goName)
+}
+
+// idOf is the GraphQL name of the ID of the edge named name: customerID,
+// or under Config.SchemaNames customerId.
+func (o *object) idOf(name string) string {
+	if o.schema {
+		return name + "Id"
+	}
+	return name + "ID"
 }
 
 // edgeName is the GraphQL name of o's edge i.

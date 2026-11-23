@@ -2,6 +2,8 @@
 
 - Status: accepted, 2026-11-19. The user chose this over the application
   writing its own SDL, and over changing the API.
+  Amended 2026-11-24 by 0150: names from the schema name are the option
+  names=schema, which compat=veloxe presets and names=go overrides.
 
 ## Context
 

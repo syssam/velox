@@ -326,10 +326,10 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 				GoType: goType, GoPkg: goPkg},
 		})
 	}
-	idName := name + "ID"
-	if o.veloxe && ed.Field != "" && ed.FieldOn == o.ent.Name {
+	idName := o.idOf(name)
+	if o.veloxe && fk != nil && ed.FieldOn == o.ent.Name {
 		// veloxe's: the input takes the key field the edge is bound to.
-		idName = veloxeCamel(ed.Field)
+		idName = o.camel(fk.GoName, fk.Name)
 	}
 	edgeID := func(typ string) { add(idName, typ, goEdge+"ID", InputEdgeID) }
 	clearEdge := func() { add("clear"+upper(name), "Boolean", "Clear"+goEdge, InputClearEdge) }

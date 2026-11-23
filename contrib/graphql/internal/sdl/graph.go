@@ -50,7 +50,8 @@ type object struct {
 	plain  []Field              // the fields that are not edges, for the Go code
 	enums  []gqlEnum
 	fks    map[string]bool // the names of ent's foreign-key fields
-	veloxe bool            // Config.Veloxe: veloxe's names, foreign keys in the type
+	veloxe bool            // Config.Veloxe: veloxe's surface, foreign keys in the type
+	schema bool            // Config.SchemaNames: named by schema names, customerId
 	conn   bool            // it has a connection, XConnection and XEdge: always, but under Config.Veloxe only as veloxe had one (objectOf)
 
 	getters  []Getter     // the getters gqlgen binds fields to
@@ -141,6 +142,9 @@ func build(m *plugin.Model, cfg Config) (*graph, error) {
 	}
 	if cfg.GraphQLGo && cfg.Package == "" {
 		return nil, errors.New("velox-graphql: engine=graphql-go binds every type to the generated package, and the request names none")
+	}
+	if err := cfg.checkOptions(); err != nil {
+		return nil, err
 	}
 	g := newGraph(m)
 	g.cfg = cfg
@@ -261,7 +265,7 @@ func (g *graph) objectOf(e *plugin.Entity, fks map[string]bool) (*object, error)
 		// every element (ownDirective).
 		return nil, ownDirectives(e, where)
 	}
-	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks, veloxe: g.cfg.Veloxe, conn: true}
+	o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks, veloxe: g.cfg.Veloxe, schema: g.cfg.SchemaNames(), conn: true}
 	if o.veloxe {
 		// veloxe's hasRelayConnection: a schema with a QueryField has a
 		// connection only with RelayConnection; any other, always.

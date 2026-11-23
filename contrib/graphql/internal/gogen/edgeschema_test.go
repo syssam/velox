@@ -15,7 +15,7 @@ import (
 // testdata/edgeschema_graphqlgo. Membership and Follow have Go files like
 // any schema; User's update input has no field that adds to following.
 func TestEdgeSchemaGolden(t *testing.T) {
-	for dir, cfg := range map[string]sdl.Config{"edgeschema": {}, "edgeschema_graphqlgo": graphqlGoConfig} {
+	for dir, cfg := range map[string]sdl.Config{"edgeschema": {}, "edgeschema_graphqlgo": graphqlGoConfig, "edgeschema_schemanames": {Names: "schema"}} {
 		t.Run(dir, func(t *testing.T) {
 			files, err := RenderConfig(modeltest.EdgeSchema(t), outPath, "gen", cfg)
 			if err != nil {

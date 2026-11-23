@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-graphql: `names=go|schema` names fields by their Go names
+  (`imageURL`, the default) or by their schema names (`imageUrl`), for
+  the type, predicates, inputs and `DecodeWhere` alike. `filters=strict|veloxe`
+  chooses fail-closed where inputs (the default) or veloxe's, where an
+  empty `idIn` adds nothing. `compat=veloxe` presets `names=schema` and
+  `filters=veloxe`, and an explicit option wins, so
+  `compat=veloxe,filters=strict` keeps veloxe's API with fail-closed
+  filters (ADR 0150).
+
 - veloxtest: `RolledBack(t, ctx, db, fn)` runs fn in a transaction that
   always rolls back, a `t.Fatal` in fn included, for a test whose writes
   must not last (veloxe's `tx, _ := c.Tx(ctx); defer tx.Rollback()`).
@@ -779,6 +788,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   type of Node. Results, policy denials and ambiguity are unchanged; the
   lookup is raw SQL, which Around hooks see as "Rows". No generated code
   changes (ADR 0149).
+- `gqlgraph.Type.VeloxeFilters` gives a where input veloxe's semantics;
+  `Type.Veloxe` keeps veloxe's connections and plain foreign-key
+  predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
+  `GeneratedCodeIsVersion28`: regenerate, since code generated under
+  compat=veloxe before sets only `Veloxe` (ADR 0150).
 - `veloxtest.Open` on SQLite with an empty DSN, or one of a database in
   memory such as enttest's `file:ent?mode=memory&cache=shared&_fk=1`, gives
   each call a file of its own in `t.TempDir()`, a copy of the tables

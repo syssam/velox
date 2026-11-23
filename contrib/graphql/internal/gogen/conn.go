@@ -235,6 +235,9 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	if r.veloxe {
 		f.p("\tVeloxe: true,")
 	}
+	if r.veloxeFilters {
+		f.p("\tVeloxeFilters: true,")
+	}
 	f.p("}")
 	return nil
 }

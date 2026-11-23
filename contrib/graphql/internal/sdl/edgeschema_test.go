@@ -25,7 +25,7 @@ func TestEdgeSchemaGolden(t *testing.T) {
 	if ms, key := edgeOf(t, byName["User"], "memberships"), edgeOf(t, byName["Membership"], "user"); ms.Ref != "user" || key.Ref != "" {
 		t.Fatalf("the model's Ref pair is not one way: %q, %q", ms.Ref, key.Ref)
 	}
-	for name, cfg := range map[string]Config{"edgeschema.graphql": {}, "edgeschema_graphqlgo.graphql": graphqlGo(false), "edgeschema_veloxe.graphql": {Veloxe: true, Package: genPath}} {
+	for name, cfg := range map[string]Config{"edgeschema.graphql": {}, "edgeschema_graphqlgo.graphql": graphqlGo(false), "edgeschema_veloxe.graphql": {Veloxe: true, Package: genPath}, "edgeschema_schemanames.graphql": {Names: "schema"}} {
 		t.Run(name, func(t *testing.T) {
 			got, err := RenderConfig(modeltest.EdgeSchema(t), cfg)
 			if err != nil {

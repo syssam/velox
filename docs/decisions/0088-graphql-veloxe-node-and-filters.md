@@ -5,6 +5,9 @@ only: velox's own API still has no Node. Amended 2026-11-22 for
 `ResolveNodes` and the node budget, and 2026-11-24 for what the filter
 caps are under compat and for the type lookup (0149): see the notes at the
 end.
+Amended 2026-11-24 by 0150: veloxe's where semantics are the option
+filters=veloxe and `gqlgraph.Type.VeloxeFilters`, which compat=veloxe
+presets and filters=strict overrides; `Type.Veloxe` no longer gives them.
 
 ## Context
 

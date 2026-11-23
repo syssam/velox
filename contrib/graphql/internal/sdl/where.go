@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -184,6 +185,7 @@ type whereSubject struct {
 	goBase string // the Go name the predicates' Go names start with
 	target string // the type the predicates filter
 	edge   int    // the index of the foreign key's edge; -1 for none
+	on     string // the GraphQL name of what the predicates are on: the edge's, or the field's
 	v      goValue
 	dirs   []directive // the directives the predicates carry
 }
@@ -208,10 +210,7 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	if o.veloxe {
 		s.dirs = nil // veloxe put directives on the type's fields alone
 	}
-	on := s.name
-	if s.edge >= 0 && !o.veloxe {
-		on = strings.TrimSuffix(s.name, "ID")
-	}
+	on := cmp.Or(s.on, s.name)
 	// IsNil and NotNil are the handle's IsNull and NotNull, which only a
 	// nullable field's Null* handle has: a Nillable field's. An Optional
 	// JSON field's column holds NULL too, but only a Nillable one is asked.
@@ -294,14 +293,14 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		}
 		ed := e.Edges[j]
 		t := g.byName[ed.Target]
-		s.name, s.typ, s.kind, s.goBase, s.target, s.edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", t.name, j
+		s.name, s.typ, s.kind, s.goBase, s.target, s.edge, s.on = o.idOf(en), "ID", "ID", goOf(en, ed.GoName)+"ID", t.name, j, en
 		if o.veloxe {
 			// veloxe's: named from the field, as the type shows it.
 			n, err := o.fieldName(i)
 			if err != nil {
 				return s, err
 			}
-			s.name, s.goBase = n, goOf(n, f.GoName)
+			s.name, s.goBase, s.on = n, goOf(n, f.GoName), n
 		}
 		// The foreign key's IDs are its target's keys, in their Go type.
 		s.v = goValue{typ: t.keyTyp, pkg: t.keyPkg, own: true}

@@ -50,7 +50,7 @@ func (w *noteWhere) Predicate(ctx context.Context) (velox.Predicate, error) {
 
 var vNoteType = func() *gqlgraph.Type {
 	c := gqlgraph.TableType[note]("Note")
-	c.Veloxe = true
+	c.Veloxe, c.VeloxeFilters = true, true
 	c.WhereFields = []gqlgraph.WhereField{
 		{Name: "tags", Kind: gqlgraph.WhereArray, Ops: gqlgraph.OpHasSome | gqlgraph.OpHasEvery | gqlgraph.OpIsEmpty | gqlgraph.OpsNull, Col: 1},
 	}
@@ -91,6 +91,7 @@ var vTypes = func() (m [2]*gqlgraph.Type) {
 	for i := range m {
 		c := gqlgraph.TableType[person]("Person")
 		c.Veloxe = i == 0
+		c.VeloxeFilters = c.Veloxe
 		c.WhereFields = vFields
 		m[i] = c
 	}

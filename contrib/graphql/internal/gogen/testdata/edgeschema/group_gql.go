@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion27
+const _ = veloxgql.GeneratedCodeIsVersion28
 
 // Users is the edge users: a connection to the User nodes it leads to. Its
 // queries batch with the same edge of every row on g's page.

@@ -33,6 +33,7 @@ type vWhere struct {
 func (w *vWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 	typ := gqlgraph.TableType[person]("Person")
 	typ.Veloxe = w == nil || !w.def
+	typ.VeloxeFilters = typ.Veloxe
 	f := gqlgraph.NewFilter(ctx, typ)
 	if w == nil {
 		return f.Pred()
@@ -207,7 +208,7 @@ type vNoteWhere struct {
 
 func (w *vNoteWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 	typ := gqlgraph.TableType[note]("Note")
-	typ.Veloxe = true
+	typ.Veloxe, typ.VeloxeFilters = true, true
 	f := gqlgraph.NewFilter(ctx, typ)
 	gqlgraph.ArrayField(f, "tags", 1, gqlgraph.ArrayOps[string]{
 		HasSome: w.TagsHasSome, HasEvery: w.TagsHasEvery, IsEmpty: w.TagsIsEmpty, IsNil: w.TagsIsNil, NotNil: w.TagsNotNil,

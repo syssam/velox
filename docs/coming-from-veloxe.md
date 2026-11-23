@@ -48,6 +48,8 @@ go tool velox-gen -out ./velox \
 | veloxe | velox-graphql |
 | --- | --- |
 | the API `graphqlgen` made | `compat=veloxe` ([ADR 0087](decisions/0087-graphql-veloxe-compat.md), [0088](decisions/0088-graphql-veloxe-node-and-filters.md), [0108](decisions/0108-veloxe-compat-paging-and-fk-filters.md)) |
+| veloxe's names alone (`imageUrl`, `customerId`) | `names=schema`; `compat=veloxe` sets it ([ADR 0150](decisions/0150-graphql-names-and-filters-options.md)) |
+| veloxe's where semantics alone (an empty `idIn` adds nothing) | `filters=veloxe`; `compat=veloxe` sets it, and `compat=veloxe,filters=strict` keeps fail-closed filters ([ADR 0150](decisions/0150-graphql-names-and-filters-options.md)) |
 | a hook that adds `SkipWhereInput` to every field without `WithWhereInputs(true)` | `where=whitelist` |
 | `graphqlgen.WithoutGQLGen()`, served by graphql-go | `engine=graphql-go` |
 | a hook that sets `OpsString` on filterable string fields | not needed: `OpsString` is a string field's default |
@@ -58,7 +60,8 @@ go tool velox-gen -out ./velox \
 `compat=veloxe` makes the API veloxe's generator made:
 
 - Fields and edges take veloxe's camel case of the schema name:
-  `customer_id` is `customerId`.
+  `customer_id` is `customerId` (`names=schema`; `names=go` keeps
+  `customerID`).
 - A foreign key bound to an edge stays in the type as an `ID`, and its
   predicates are named from the field (`customerId`, `customerIdIn`).
 - An `Optional` field is nullable in the type, and a `Required` unique
@@ -70,7 +73,11 @@ go tool velox-gen -out ./velox \
 - Every type with an ID implements `Node`, and the root query has
   `node(id:)` and `nodes(ids:)`. The application answers them with the
   generated `ResolveNode` and `ResolveNodes`.
-- Where inputs, cursors, ties, page flags and foreign-key predicates
+- Where inputs behave as veloxe's did (`filters=veloxe`;
+  `filters=strict` keeps velox's fail-closed semantics, where an empty
+  `idIn` matches no node). An application that keeps access-policy
+  filters as documents should choose `filters=strict`.
+- Cursors, ties, page flags and foreign-key predicates
   behave as veloxe's did. [What stays the same](#what-stays-the-same-under-compatveloxe)
   lists them.
 
@@ -398,7 +405,9 @@ A client written against veloxe's API sees these as it did:
   `xNotNil`, and an empty `or` add nothing. A null entry is skipped. `not:
   {}` and `or: [{}]` are an error. A list has no width cap; the depth
   stays at 5. Unlike veloxe, a where argument holds at most 10 times
-  `MaxFilterNodes` (10000) inputs, predicates and list values.
+  `MaxFilterNodes` (10000) inputs, predicates and list values. Under
+  `filters=strict` none of this holds: where inputs fail closed, as
+  without compat.
 - **Node.** `node` of an ID no type has, or one the policy hides, is
   `NOT_FOUND`. `nodes` gives null for it. Unlike veloxe, `nodes` reads
   each type with one `IN` query, and takes at most `MaxPage` (100) IDs.

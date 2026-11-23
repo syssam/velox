@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -10,9 +11,6 @@ type Config struct {
 	// Veloxe makes the API the one veloxe's generator made, for an
 	// application whose clients are built against it (velox-graphql's
 	// option compat=veloxe):
-	//   - a field or edge is named by veloxeCamel of its schema name, so
-	//     customer_id is customerId and image_url is imageUrl, where velox
-	//     names it from its Go name (customerID, imageURL);
 	//   - a foreign-key field an edge is bound to is in the type, as an ID,
 	//     beside its edge;
 	//   - its where predicates are named from the field, customerId,
@@ -27,8 +25,26 @@ type Config struct {
 	//     by its Go name, and silence where veloxe ignored an annotation.
 	//   - the interface Node, which every type with an ID implements, and
 	//     node(id:) and nodes(ids:) first in the root query;
-	//   - a where input has veloxe's semantics (gqlgraph.Type's Veloxe).
+	//   - a connection and a foreign key's predicates have veloxe's
+	//     semantics (gqlgraph.Type's Veloxe).
+	// Names and Filters default by it (ADR 0150).
 	Veloxe bool
+	// Names is how fields and edges are named (velox-graphql's option
+	// names=; ADR 0150): "go" by their Go names, so customer_id is
+	// customerID and image_url is imageURL, as entgql does; "schema" by
+	// veloxeCamel of their schema names, customerId and imageUrl. A
+	// predicate's name starts with its field's, imageUrlNEQ, and an edge's
+	// foreign-key predicates and input are named by the edge, customerId
+	// and customerIdIn. Order values are graphql.OrderField's either way.
+	// "" is "schema" under Veloxe and "go" otherwise (SchemaNames).
+	Names string
+	// Filters is the semantics of the where inputs (velox-graphql's option
+	// filters=; gqlgraph.Type's VeloxeFilters; ADR 0150): "strict" fails
+	// closed, so an empty In matches no node and a false IsNil is IS NOT
+	// NULL; "veloxe" is veloxe's, where both add nothing, an empty or adds
+	// nothing, a nested empty input is an error and no width cap applies.
+	// "" is "veloxe" under Veloxe and "strict" otherwise (VeloxeFilters).
+	Filters string
 	// WhereWhitelist leaves out of the where inputs the predicates of every
 	// field but the key that lacks graphql.WhereInput (the old velox's
 	// EnableWhereInputs(true)), whatever its WhereOps (velox-graphql's option
@@ -76,6 +92,29 @@ type Config struct {
 	// one is refused, since graphql-go binds an input's every field. When
 	// empty, every type graphql.Type and graphql.Map name stays.
 	AppTypes []string
+}
+
+// SchemaNames reports whether c names fields by their schema names: Names
+// is "schema", or "" under Veloxe.
+func (c Config) SchemaNames() bool {
+	return c.Names == "schema" || c.Names == "" && c.Veloxe
+}
+
+// VeloxeFilters reports whether c gives the where inputs veloxe's
+// semantics: Filters is "veloxe", or "" under Veloxe.
+func (c Config) VeloxeFilters() bool {
+	return c.Filters == "veloxe" || c.Filters == "" && c.Veloxe
+}
+
+// checkOptions refuses a Names or a Filters c does not know.
+func (c Config) checkOptions() error {
+	switch {
+	case c.Names != "" && c.Names != "go" && c.Names != "schema":
+		return fmt.Errorf("velox-graphql: names=%s: names is go, a field's Go name (imageURL), or schema, its schema name (imageUrl)", c.Names)
+	case c.Filters != "" && c.Filters != "strict" && c.Filters != "veloxe":
+		return fmt.Errorf("velox-graphql: filters=%s: filters is strict, where an empty In matches no node, or veloxe, where it adds nothing", c.Filters)
+	}
+	return nil
 }
 
 // veloxeCamel is veloxe's GraphQL name of a schema name, as its generator's

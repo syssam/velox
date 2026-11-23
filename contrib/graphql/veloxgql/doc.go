@@ -4,7 +4,7 @@
 // client may ask for. It imports no engine.
 //
 // What only generated code calls is in package gqlgraph, whose names are
-// stable by GeneratedCodeIsVersion27 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion28 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name. An engine is
 // served through its adapter: package gqlgenx for gqlgen, package graphqlgo
 // for github.com/syssam/graphql-go. Generated code imports this package and
@@ -126,8 +126,8 @@
 // list of more than MaxFilterWidth entries, of inputs or of In or NotIn values,
 // fails with ErrFilterTooWide, and a where argument over its budget of
 // MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
-// Under compat=veloxe no width cap applies and the budget is 10 times
-// MaxFilterNodes. The budget is never over 30000, whatever the limits: each
+// Under filters=veloxe, compat=veloxe's default, no width cap applies and
+// the budget is 10 times MaxFilterNodes. The budget is never over 30000, whatever the limits: each
 // predicate and each In value binds a parameter, and the statement must
 // stay under every dialect's limit on them (SQLite's 32766).
 // None of it runs a query, so a refused filter fails before any statement is
@@ -236,8 +236,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion27 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion28 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
 // disagree. For generated code. It is replaced by the next number when generated
 // code must change.
-const GeneratedCodeIsVersion27 = true
+const GeneratedCodeIsVersion28 = true

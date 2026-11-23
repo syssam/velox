@@ -40,7 +40,7 @@ func TestVeloxeNoder(t *testing.T) {
 			t.Errorf("noder_gql.go lacks %q:\n%s", want, noder)
 		}
 	}
-	if !strings.Contains(got["post_gql.go"], "\tVeloxe: true,\n") {
+	if !strings.Contains(strings.Join(strings.Fields(got["post_gql.go"]), " "), " Veloxe: true,") {
 		t.Errorf("post_gql.go's postType has no Veloxe:\n%s", got["post_gql.go"])
 	}
 

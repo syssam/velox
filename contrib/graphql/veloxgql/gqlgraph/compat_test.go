@@ -365,7 +365,7 @@ func TestVeloxeForeignKeyPlain(t *testing.T) {
 		{"ownerIDGT 1", gqlgraph.Ops[int64]{GT: &one}, []int64{5, 6}},
 	} {
 		typ := gqlgraph.TableType[child]("Child")
-		typ.Veloxe = true
+		typ.Veloxe, typ.VeloxeFilters = true, true
 		f := gqlgraph.NewFilter(context.Background(), typ)
 		gqlgraph.EdgeIDField(f, "ownerID", ownerCol, ownerEdge, target, c.o)
 		p, err := f.Pred()
@@ -407,6 +407,7 @@ func TestVeloxeForeignKeyGenerated(t *testing.T) {
 		c := gqlgraph.TableType[child]("Child")
 		c.WhereFields = childInType.WhereFields
 		c.Veloxe = veloxe
+		c.VeloxeFilters = c.Veloxe
 		return c
 	}
 	tbl := untyped.TableOf[child]()

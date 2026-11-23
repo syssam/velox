@@ -43,7 +43,8 @@ type Limits struct {
 	// ErrFilterTooLarge, before any query runs. Depth and width alone do not
 	// bound an argument that holds one input many times over, as a GraphQL
 	// variable used at many places does. Under velox-graphql's
-	// compat=veloxe the budget is 10 times this. Either is held to 30000, so
+	// filters=veloxe, compat=veloxe's default, the budget is 10 times
+	// this. Either is held to 30000, so
 	// that a statement's parameters stay under every dialect's limit.
 	MaxFilterNodes int
 

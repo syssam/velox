@@ -104,22 +104,25 @@ type Type struct {
 	// such a column as BAD_USER_INPUT naming the field. CreateInputs and
 	// UpdateInputs stand for it in one input when the two inputs differ.
 	Inputs, CreateInputs, UpdateInputs []string
-	// Veloxe gives the type's where input veloxe's semantics, as
-	// velox-graphql's option compat=veloxe generates it, for clients built
-	// against veloxe's API: an empty In or NotIn list, a false IsNil, NotNil
-	// or IsEmpty, and an or of no inputs add nothing, where they otherwise
-	// match no node or the negated test; a null entry of an and, an or or a
-	// has<Edge>With is left out; a nested input that sets no predicate is
-	// an error (BAD_USER_INPUT) in a not, an or or a has<Edge>With, and left
-	// out of an and; and MaxFilterWidth does not apply, as veloxe had no
-	// such limit. MaxFilterDepth does, and a where argument's budget is 10
-	// times MaxFilterNodes, 10000 by default.
-	//
+	// VeloxeFilters gives the type's where input veloxe's semantics, as
+	// velox-graphql's option filters=veloxe generates it, and compat=veloxe
+	// by default, for clients built against veloxe's API: an empty In or
+	// NotIn list, a false IsNil, NotNil or IsEmpty, and an or of no inputs
+	// add nothing, where they otherwise match no node or the negated test;
+	// a null entry of an and, an or or a has<Edge>With is left out; a
+	// nested input that sets no predicate is an error (BAD_USER_INPUT) in a
+	// not, an or or a has<Edge>With, and left out of an and; and
+	// MaxFilterWidth does not apply, as veloxe had no such limit.
+	// MaxFilterDepth does, and a where argument's budget is 10 times
+	// MaxFilterNodes, 10000 by default. Without it a where input fails
+	// closed, whatever Veloxe is (ADR 0150).
+	VeloxeFilters bool
 	// Veloxe gives the type's connections and foreign keys veloxe's
-	// semantics too (ADR 0108): a connection takes a cursor veloxe wrote
-	// (see Paginate); an order of one term breaks ties by the key in
-	// that term's direction, where it is otherwise ASC; a page after a
-	// cursor has hasPreviousPage, and one before a cursor hasNextPage; and
+	// semantics, as velox-graphql's option compat=veloxe generates it
+	// (ADR 0108): a connection takes a cursor veloxe wrote (see Paginate);
+	// an order of one term breaks ties by the key in that term's
+	// direction, where it is otherwise ASC; a page after a cursor has
+	// hasPreviousPage, and one before a cursor hasNextPage; and
 	// EdgeIDField's predicates are the column's alone.
 	Veloxe bool
 

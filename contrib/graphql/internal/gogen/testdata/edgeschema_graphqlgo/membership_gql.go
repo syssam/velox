@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion27
+const _ = veloxgql.GeneratedCodeIsVersion28
 
 // MarshalGQL writes e as its value of the GraphQL enum MembershipRole.
 func (e MembershipRole) MarshalGQL(w io.Writer) {

@@ -176,6 +176,26 @@
 // binds every field of an input. Without apptypes= every such type stays,
 // and the application declares each (ADR 0130).
 //
+// names= chooses how fields are named. names=go, the default, camel-cases
+// the Go name, as entgql does: image_url is imageURL, and an edge's
+// foreign key filters as customerID and customerIDIn. names=schema
+// camel-cases the schema name, each word title-cased: imageUrl, customerId
+// and customerIdIn. Predicates, inputs and the names veloxgql.DecodeWhere
+// reads follow the field's name. Order values are graphql.OrderField's
+// either way. Nothing else changes: the foreign key stays out of the type.
+//
+// filters= chooses what a where input means. filters=strict, the default,
+// fails closed: an empty idIn or or matches no node, a false isNil means
+// IS NOT NULL, and MaxFilterWidth applies. filters=veloxe reads a where input
+// as veloxe did: an empty list or a false isNil adds nothing, a nested
+// empty input is an error, and the node budget is ten times larger
+// (veloxgql's gqlgraph.Type.VeloxeFilters).
+//
+// compat=veloxe sets names=schema and filters=veloxe. An explicit names=
+// or filters= wins, so compat=veloxe,filters=strict keeps veloxe's API with
+// fail-closed filters, for an application that keeps access-policy filters
+// as documents (ADR 0150). Any other value is refused.
+//
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
 // has the predicates of its key in it, before the fields': the key has id,
 // idNEQ, idIn, idNotIn, and for an ordered key (an integer or a string)
@@ -225,7 +245,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion27", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion28", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"

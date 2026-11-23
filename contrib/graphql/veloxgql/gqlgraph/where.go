@@ -42,14 +42,15 @@ import (
 // the entity: they are compiled once, for every where input, and those
 // generic over a field's Go type once for each type's shape.
 type Filter struct {
-	ctx    context.Context
-	typ    string // the GraphQL type: errors name its where input, "<Type>WhereInput"
-	t      untyped.Table
-	depth  int
-	budget *budget // the where argument's
-	veloxe bool    // Type.Veloxe: veloxe's semantics, see Type
-	ps     []velox.Predicate
-	err    error
+	ctx     context.Context
+	typ     string // the GraphQL type: errors name its where input, "<Type>WhereInput"
+	t       untyped.Table
+	depth   int
+	budget  *budget // the where argument's
+	veloxe  bool    // Type.VeloxeFilters: veloxe's semantics, see Type
+	plainFK bool    // Type.Veloxe: a foreign key's predicates are the column's
+	ps      []velox.Predicate
+	err     error
 }
 
 // name is the GraphQL name of a field of a where input, as its errors name
@@ -66,7 +67,7 @@ func (n name) String() string { return n.base + n.op }
 // The depth, how deeply the input is nested in the where argument, and the
 // argument's node budget travel in ctx, under one unexported key. A context
 // without them starts a where argument: depth 0, a full budget of
-// MaxFilterNodes (10 times that under c's Veloxe, and never over 30000), and
+// MaxFilterNodes (10 times that under c's VeloxeFilters, and never over 30000), and
 // the limits of veloxgql.LimitsFromContext(ctx). So each
 // call of a where input's Pred with a context of the application's has its own
 // budget, however often the context is used. A nested input's Pred is called
@@ -83,16 +84,16 @@ func (n name) String() string { return n.base + n.op }
 // The filter fails, before any query runs, on a key the column cannot hold;
 // on a nesting deeper than MaxFilterDepth (veloxgql.ErrFilterTooDeep); on an and, an
 // or, a has…With, an In or a NotIn of more than MaxFilterWidth entries
-// (veloxgql.ErrFilterTooWide), unless under Veloxe; and on a where argument
+// (veloxgql.ErrFilterTooWide), unless under VeloxeFilters; and on a where argument
 // over its budget of inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
 func NewFilter(ctx context.Context, c *Type) *Filter {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
 		lim := veloxgql.LimitsFromContext(ctx)
-		st = &state{budget: newBudget(lim, c.Veloxe)}
+		st = &state{budget: newBudget(lim, c.VeloxeFilters)}
 	}
-	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, veloxe: c.Veloxe}
+	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, veloxe: c.VeloxeFilters, plainFK: c.Veloxe}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
 		f.refuse(name{}, err)
 		return f
@@ -119,7 +120,7 @@ func (f *Filter) Pred() (velox.Predicate, error) {
 	return untyped.And(f.ps...), nil
 }
 
-// errEmptyPredicate is what Pred's error wraps, under Type.Veloxe, for a
+// errEmptyPredicate is what Pred's error wraps, under Type.VeloxeFilters, for a
 // nested input that sets no predicate.
 var errEmptyPredicate = errors.New("empty predicate")
 
@@ -139,7 +140,7 @@ type budget struct {
 }
 
 // veloxeBudget is how many times MaxFilterNodes a where argument may hold
-// under Type.Veloxe, whose clients send In lists over MaxFilterWidth, as
+// under Type.VeloxeFilters, whose clients send In lists over MaxFilterWidth, as
 // veloxe had no cap: 10000 nodes under the default limits.
 const veloxeBudget = 10
 
@@ -152,7 +153,7 @@ const veloxeBudget = 10
 const maxFilterNodes = 30000
 
 // newBudget is the budget of a where argument under lim: MaxFilterNodes,
-// veloxeBudget times that under Type.Veloxe, and never over maxFilterNodes.
+// veloxeBudget times that under Type.VeloxeFilters, and never over maxFilterNodes.
 func newBudget(lim veloxgql.Limits, veloxe bool) *budget {
 	most := lim.MaxFilterNodes
 	if veloxe {
@@ -256,7 +257,7 @@ func nestedCond[W comparable](f *Filter, w W, cond Cond[W]) (velox.Predicate, er
 
 // list is the conditions of ws, the inputs nested in f's at field, after
 // checkWidth; ok is false when one fails, and f has its error, which names
-// the entry, as "or[3]". Under Type.Veloxe a null entry is left out, as
+// the entry, as "or[3]". Under Type.VeloxeFilters a null entry is left out, as
 // veloxe left it out, and with skipEmpty (an and's) so is an entry that sets
 // no predicate.
 func list[W comparable](f *Filter, field string, ws []W, cond Cond[W], skipEmpty bool) (ps []velox.Predicate, ok bool) {
@@ -313,7 +314,7 @@ func And[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 
 // Or adds ws, the input's or: a node matches when it matches one of ws. An
 // empty ws matches no node, as an empty In does; a nil ws adds nothing. More
-// than MaxFilterWidth fails with ErrFilterTooWide. Under Type.Veloxe an
+// than MaxFilterWidth fails with ErrFilterTooWide. Under Type.VeloxeFilters an
 // empty ws, or one of only nulls, adds nothing.
 func Or[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	if f.err != nil || ws == nil {
@@ -561,7 +562,7 @@ func EdgeIDField[V any](f *Filter, field string, col, edge int, target *Type, o 
 // WhereEdgeID calls too: the IDs predicates and IsNil and NotNil of a
 // foreign key, scoped to the relation edge, unless under Type.Veloxe.
 func edgeIDs[V any](f *Filter, field string, col, edge int, target untyped.Table, o Ops[V]) {
-	fk := fkScope{edge: edge, target: target, on: !f.veloxe}
+	fk := fkScope{edge: edge, target: target, on: !f.plainFK}
 	ids(f, field, col, o, fk)
 	f.fkNull(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil, fk)
 	f.fkNull(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil, fk)

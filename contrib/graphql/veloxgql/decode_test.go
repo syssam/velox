@@ -93,12 +93,13 @@ func (d *dec) Scan(v any) error { d.s = fmt.Sprint(v); return nil }
 // accountType is the gqlgraph type velox-graphql writes for account, under
 // compat=veloxe.
 var accountType = gqlgraph.Type{
-	Name:       "Account",
-	Table:      untyped.TableOf[account],
-	Key:        []gqlgraph.Column{{Name: "id", Index: 0}},
-	AlwaysRead: []int{0},
-	Fields:     []string{"id", "ownerId", "status", "addressCity", "openedAt", "balance"},
-	Veloxe:     true,
+	Name:          "Account",
+	Table:         untyped.TableOf[account],
+	Key:           []gqlgraph.Column{{Name: "id", Index: 0}},
+	AlwaysRead:    []int{0},
+	Fields:        []string{"id", "ownerId", "status", "addressCity", "openedAt", "balance"},
+	Veloxe:        true,
+	VeloxeFilters: true,
 	WhereFields: []gqlgraph.WhereField{
 		{Name: "not", Kind: gqlgraph.WhereNot},
 		{Name: "and", Kind: gqlgraph.WhereAnd},

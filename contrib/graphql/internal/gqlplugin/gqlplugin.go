@@ -19,7 +19,12 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // Generate answers a request: the schema, velox.graphql, and the Go files
 // gqlgen binds it to; or with only=enums, the enum marshalers alone. With
 // compat=veloxe, the API is the one veloxe's generator made (sdl.Config's
-// Veloxe); with where=whitelist, only fields with WhereInput filter
+// Veloxe). names=schema names fields by their schema names, imageUrl, and
+// names=go by their Go names, imageURL (sdl.Config's SchemaNames).
+// filters=veloxe gives where inputs veloxe's semantics, and filters=strict
+// velox's fail-closed ones (sdl.Config's VeloxeFilters). go and strict are
+// the defaults; compat=veloxe makes schema and veloxe the defaults, and an
+// explicit names= or filters= wins over it. With where=whitelist, only fields with WhereInput filter
 // (sdl.Config's WhereWhitelist); with engine=graphql-go, the schema and the
 // Go are for graphql-go's gqlc (sdl.Config's GraphQLGo), and engine=gqlgen
 // is the default. only=enums writes the same Go for either engine. It
@@ -42,8 +47,8 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 		return nil, nil, err
 	}
 	if req.Options["only"] == "enums" {
-		if cfg.Veloxe || cfg.WhereWhitelist || req.Options["sdlfiles"] != "" || len(cfg.Entities) > 0 || len(cfg.AppTypes) > 0 {
-			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe, where=whitelist, sdlfiles, entities and apptypes shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
+		if cfg.Veloxe || cfg.WhereWhitelist || cfg.Names != "" || cfg.Filters != "" || req.Options["sdlfiles"] != "" || len(cfg.Entities) > 0 || len(cfg.AppTypes) > 0 {
+			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe, names, filters, where=whitelist, sdlfiles, entities and apptypes shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
 		}
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err
@@ -67,6 +72,10 @@ func config(req *plugin.Request) (sdl.Config, error) {
 		case k == "only" && v == "enums":
 		case k == "compat" && v == "veloxe":
 			cfg.Veloxe, cfg.Package = true, req.OutPath
+		case k == "names" && v != "":
+			cfg.Names = v
+		case k == "filters" && v != "":
+			cfg.Filters = v
 		case k == "where" && v == "whitelist":
 			cfg.WhereWhitelist = true
 		case k == "engine" && v == "gqlgen":
@@ -88,7 +97,7 @@ func config(req *plugin.Request) (sdl.Config, error) {
 				cfg.AppTypes = append(cfg.AppTypes, n)
 			}
 		default:
-			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", options(req.Options))
+			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, names=go or names=schema, filters=strict or filters=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", options(req.Options))
 		}
 	}
 	switch req.Options["sdlfiles"] {

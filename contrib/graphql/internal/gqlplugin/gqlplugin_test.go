@@ -91,6 +91,27 @@ func TestRun(t *testing.T) {
 	if resp.Error != "" || len(resp.Files) != 3 || resp.Files[0].Path != "velox.graphql" || !strings.Contains(resp.Files[0].Content, "  imageUrl: String!\n") {
 		t.Errorf("compat=veloxe,sdlfiles=one: %+v", resp)
 	}
+	if !strings.Contains(strings.Join(strings.Fields(resp.Files[2].Content), " "), " VeloxeFilters: true,") {
+		t.Errorf("compat=veloxe gives no VeloxeFilters:\n%s", resp.Files[2].Content)
+	}
+
+	// names= and filters= win over compat=veloxe's defaults, and stand
+	// without it.
+	for _, c := range []struct {
+		opts    map[string]string
+		name    string
+		filters bool
+	}{
+		{map[string]string{"compat": "veloxe", "sdlfiles": "one", "names": "go", "filters": "strict"}, "imageURL", false},
+		{map[string]string{"names": "schema"}, "imageUrl", false},
+		{map[string]string{"names": "go", "filters": "veloxe"}, "imageURL", true},
+	} {
+		resp := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: c.opts, Model: vm}))
+		goSrc := strings.Join(strings.Fields(resp.Files[len(resp.Files)-1].Content), " ")
+		if resp.Error != "" || !strings.Contains(resp.Files[0].Content, "  "+c.name+": String!\n") || strings.Contains(goSrc, " VeloxeFilters: true,") != c.filters {
+			t.Errorf("%v: %+v", c.opts, resp)
+		}
+	}
 
 	// sdlfiles=entity without compat: velox_<label>.graphql. entities=User
 	// writes User's SDL alone, and the same Go.
@@ -127,7 +148,12 @@ func TestRun(t *testing.T) {
 		"version":            {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":           {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed":          {"{", "request"},
-		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given a, x=y"},
+		"names":              {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", Options: map[string]string{"names": "snake"}, Model: m}), "velox-graphql: names=snake: names is go, a field's Go name (imageURL), or schema, its schema name (imageUrl)"},
+		"names empty":        {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", Options: map[string]string{"compat": "veloxe", "names": ""}, Model: m}), "it is given compat=veloxe, names"},
+		"filters":            {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", Options: map[string]string{"compat": "veloxe", "filters": "entgql"}, Model: m}), "velox-graphql: filters=entgql: filters is strict, where an empty In matches no node, or veloxe, where it adds nothing"},
+		"names and only":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "names": "schema"}, Model: m}), "give one or the other"},
+		"filters and only":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "filters": "strict"}, Model: m}), "give one or the other"},
+		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, names=go or names=schema, filters=strict or filters=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given a, x=y"},
 		"sdlfiles":           {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"sdlfiles": "type"}, Model: m}), "it is given sdlfiles=type"},
 		"sdlfiles and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "sdlfiles": "entity"}, Model: m}), "give one or the other"},
 		"entities and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "entities": "User"}, Model: m}), "give one or the other"},
