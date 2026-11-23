@@ -21,6 +21,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.IsZero(p)` reports the zero `Pred` or `Predicate`: a helper with no
+  condition returns it, and its caller tests it. A function, not a method,
+  so a package pays only where it calls it (ADR 0137).
+- `velox.HasColumn(entity, column)` lets a `WithFilter` filter narrow every
+  entity having a column, such as `deleted_at`, without a list (ADR 0137).
+- `velox.TxFrom(ctx, db)` returns the transaction ctx belongs to, with db's
+  own policy bypass, so a helper given db and ctx joins it (ADR 0137).
+- `softdelete.By(column, key)` sets a column from a `scope.Key` in a soft
+  delete's UPDATE, and `softdelete.Assigns` joins several (ADR 0137).
+
 - `Term[E].Equal` reports whether two terms are the same: written alike,
   with equal bound values, their names aside. A report compares an
   ordering's `Term()` with its bucket by it (ADR 0127).

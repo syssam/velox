@@ -1333,6 +1333,22 @@ and the outer transaction goes on. This is how you recover from a failed
 insert on PostgreSQL, where a failed statement otherwise aborts the whole
 transaction.
 
+A helper that is handed `db` and the caller's `ctx`, rather than `tx`, joins
+the caller's transaction with `velox.TxFrom(ctx, db)`. The DB it returns runs
+in that transaction and has `db`'s own `WithoutPolicy` reason, or none, never
+the outer transaction's. It is false outside a transaction, after one ended,
+and for another DB's
+([ADR 0137](decisions/0137-nextapp-port-helpers.md)):
+
+```go
+func WithTx(ctx context.Context, db *velox.DB, fn func(ctx context.Context, tx *velox.DB) error) error {
+	if tx, ok := velox.TxFrom(ctx, db); ok {
+		return fn(ctx, tx) // or tx.Tx(ctx, fn) for a savepoint
+	}
+	return db.Tx(ctx, fn)
+}
+```
+
 Options go after the function:
 
 - `velox.TxRetrySerializable(n)` reruns the function after a serialization
@@ -1575,6 +1591,28 @@ and it only affects code that is handed that DB; a context carries no bypass
 ([ADR 0054](decisions/0054-fail-closed-runtime.md)). See the
 [policy example](../examples/policy).
 
+A helper that builds a condition and may have none to add returns the zero
+`velox.Predicate{}` (or `Pred[E]{}`), and its caller tests it with
+`velox.IsZero(p)` before using it, since a statement holding the zero
+condition fails.
+
+To assert a helper's SQL in a test, render a query that holds it on a DB
+with no connection. `SQL` sends nothing; `WithoutPolicy` keeps the Read
+policy out of the text, while an interceptor's condition stays in it:
+
+```go
+db := velox.Open(velox.Postgres, nil).WithoutPolicy("render a condition")
+text, args, err := db.Query[veloxgen.Invoice]().
+	Where(velox.Pred[veloxgen.Invoice](unpaid("A-1", "A-2"))).
+	Limit(1).SQL(ctx)
+// SELECT ... FROM "invoices" WHERE (NOT "paid" AND "number" = ANY($1)) LIMIT 1
+```
+
+A condition by name may take its column from configuration, such as
+`velox.FieldIn(cfg.OrgColumn, ids...)`. velox-gen checks a constant name
+and warns on any other. The statement checks every name when it runs, and
+an unknown one fails it, naming the entity and the column.
+
 ### Interceptors
 
 An interceptor is a filter that applies to every statement on an entity,
@@ -1628,6 +1666,12 @@ db, err := velox.Connect("postgres", dsn, velox.WithFilter(
 		return velox.FieldIsNull("deleted_at"), nil
 	}))
 ```
+
+`velox.HasColumn(entity, column)` tells which entities have a column, by
+the names the filter is given, so the filter needs no `softDeleted` list:
+`!velox.HasColumn(entity, "deleted_at")` in its place. It knows every
+entity velox has used in the process, which includes the one the filter is
+called for.
 
 It leaves writes alone for two reasons. ent's and veloxe's interceptors
 wrap queries only, so a port keeps their behaviour. And a restore must
@@ -1989,6 +2033,17 @@ softdelete.Mixin{
 	},
 	Reads: softdelete.Unfiltered,
 }
+```
+
+`softdelete.By(column, key)` is an `Assign` that sets a column to a
+`scope.Key`'s value in the delete's context, and nothing when there is
+none. `softdelete.Assigns` joins several:
+
+```go
+softdelete.Mixin{Assign: softdelete.Assigns(
+	softdelete.By("deleted_by_user_id", auth.User),
+	softdelete.By("deleted_by_member_id", auth.Member),
+)}
 ```
 
 ## Raw SQL

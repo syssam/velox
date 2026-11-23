@@ -248,10 +248,40 @@ statement on `db` under fn's `ctx` fails with `ErrOutsideTx`, where
 veloxe ran it outside the transaction. Run it on `tx`, or on `db` under
 `velox.WithoutTx(ctx)` when it must not join the transaction; on SQLite's
 pool of one connection that fails too, rather than wait for the
-transaction. A row-scope filter that looks up teams or an organization
+transaction. A `WithTx(ctx, db, fn)` helper that kept its own transaction
+key in the context, so that a nested call joined the outer transaction,
+asks `velox.TxFrom(ctx, db)` instead: it returns the transaction ctx
+belongs to, with `db`'s own `WithoutPolicy` reason, and the helper runs fn
+on it, or begins `db.Tx` when it is false
+([ADR 0137](decisions/0137-nextapp-port-helpers.md)).
+A row-scope filter that looks up teams or an organization
 tree reads through the filter's `db` parameter, which is `tx` inside the
 transaction. A lookup on `db` that swallows its error narrows the
 statement inside a transaction and not outside.
+
+**A nil predicate is the zero Predicate.** A veloxe helper that returned
+a nil predicate for "no condition" returns `velox.Predicate{}` or
+`Pred[E]{}`. A statement that holds it fails, so the caller tests it with
+`velox.IsZero(p)`, not `p == nil` or reflection.
+
+**A filter finds columns by name.** A `WithFilter` filter that narrows the
+entities with `deleted_at` asks `velox.HasColumn(entity, "deleted_at")`,
+in place of a generated list of entity names.
+
+**A rule may name columns from configuration.** `velox.FieldIn`,
+`FieldEQ` and `FieldInSelect` take any string. velox-gen checks a constant
+name and warns on any other, and the statement checks it when it runs.
+An unknown name fails the statement, naming the entity and the column.
+To check a rule's SQL in a test, render a query that holds it with
+`velox.Open(d, nil)` and `Query.SQL`, which needs no database
+([guide](guide.md#policies)).
+
+**softdelete records who deleted.** `softdelete.Mixin{Assign: ...}` sets
+more columns in the soft delete's UPDATE. `softdelete.By("deleted_by_id",
+key)` reads a `scope.Key`'s value, and `softdelete.Assigns` joins several,
+for a row that records the user, employee or member. `Reads:
+softdelete.Unfiltered` leaves reads unfiltered, as nextapp's services
+filter `deleted_at` themselves.
 
 **A transaction retries nothing by default.** nextapp's `WithTx` retried
 3 times with a 30-second timeout and turned a panic into an error. A velox
