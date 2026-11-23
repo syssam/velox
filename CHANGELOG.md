@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- veloxtest: `RolledBack(t, ctx, db, fn)` runs fn in a transaction that
+  always rolls back, a `t.Fatal` in fn included, for a test whose writes
+  must not last (veloxe's `tx, _ := c.Tx(ctx); defer tx.Rollback()`).
 - On SQLite an Other field with no SQLite `SchemaType`, such as a
   `decimal.Decimal` whose `SchemaType` names MySQL and PostgreSQL only, is a
   typeless column, as veloxe made it, instead of velox-gen refusing it. The
