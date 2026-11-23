@@ -235,6 +235,63 @@ func TestRunPluginErrors(t *testing.T) {
 	}
 }
 
+// flagSchema is a schema velox-gen warns of: a database default that is
+// not the zero value.
+const flagSchema = `package veloxschema
+
+import (
+	"github.com/syssam/velox/dialect"
+	"github.com/syssam/velox/dialect/sqlschema"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+)
+
+type Flag struct{ schema.Schema }
+
+func (Flag) Fields() []schema.Field {
+	return []schema.Field{field.Bool("on").Annotations(sqlschema.DefaultExprs(map[string]string{dialect.Postgres: "true", dialect.MySQL: "true", dialect.SQLite: "true"}))}
+}
+`
+
+// The plugins run beside velox-gen's own work, but a run reads as if they
+// ran last: velox-gen's warnings come before a plugin's, and velox-gen's
+// own failure is the run's error, with no word from the plugin.
+func TestRunPluginAfterOwnWork(t *testing.T) {
+	t.Parallel()
+	dir := module(t, map[string]string{"veloxschema/flag.go": flagSchema})
+	warn := generate.Plugin{Tool: "p", Run: func(context.Context, *plugin.Request) (*plugin.Response, error) {
+		return &plugin.Response{Warnings: []string{"from the plugin"}}, nil
+	}}
+	var stderr bytes.Buffer
+	res, err := generate.Run(context.Background(), dir, generate.Config{Env: offline(), Plugins: []generate.Plugin{warn}, Stderr: &stderr})
+	if err != nil {
+		t.Fatalf("%v\n%s", err, stderr.String())
+	}
+	own := strings.Index(stderr.String(), "velox-gen: warning: ")
+	theirs := strings.Index(stderr.String(), "velox-gen: plugin p: warning: from the plugin\n")
+	if own < 0 || theirs < own {
+		t.Errorf("stderr: %q", stderr.String())
+	}
+	if n := len(res.Warnings); n < 2 || res.Warnings[n-1] != "plugin p: from the plugin" {
+		t.Errorf("Warnings: %q", res.Warnings)
+	}
+	// A user's file that declares an entity's type fails the run first.
+	if err := os.WriteFile(filepath.Join(dir, "veloxgen", "mine.go"), []byte("package veloxgen\n\ntype Flag struct{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fail := generate.Plugin{Tool: "p", Run: func(context.Context, *plugin.Request) (*plugin.Response, error) {
+		return &plugin.Response{Warnings: []string{"from the plugin"}, Error: "boom"}, nil
+	}}
+	stderr.Reset()
+	_, err = generate.Run(context.Background(), dir, generate.Config{Env: offline(), Plugins: []generate.Plugin{fail}, Stderr: &stderr})
+	if err == nil || !strings.Contains(err.Error(), "declares type Flag, which velox-gen generates") || strings.Contains(err.Error(), "boom") {
+		t.Errorf("%v", err)
+	}
+	if strings.Contains(stderr.String(), "from the plugin") {
+		t.Errorf("stderr: %q", stderr.String())
+	}
+}
+
 // A done context stops Run before it loads anything.
 func TestRunContext(t *testing.T) {
 	t.Parallel()

@@ -1,17 +1,14 @@
 package codegen
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -54,7 +51,13 @@ func Inspect(dir, pattern string, env []string) (importPath, name string, schema
 
 // InspectContext is Inspect, whose go commands ctx stops.
 func InspectContext(ctx context.Context, dir, pattern string, env []string) (importPath, name string, schemas []string, err error) {
-	pkg, names, err := inspectContext(ctx, dir, pattern, env)
+	return CacheOf(ctx).InspectContext(ctx, dir, pattern, env)
+}
+
+// InspectContext is the package's InspectContext, whose go commands and
+// files c keeps.
+func (c *Cache) InspectContext(ctx context.Context, dir, pattern string, env []string) (importPath, name string, schemas []string, err error) {
+	pkg, names, err := c.inspectContext(ctx, dir, pattern, env)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -65,13 +68,13 @@ func InspectContext(ctx context.Context, dir, pattern string, env []string) (imp
 // file that only some builds include is refused: velox-gen generates one
 // model for every build. A file no build includes, such as one behind
 // //go:build ignore, and a _test.go file are not read.
-func inspect(dir, pattern string, env []string) (*listed, []string, error) {
-	return inspectContext(context.Background(), dir, pattern, env)
+func (c *Cache) inspect(dir, pattern string, env []string) (*listed, []string, error) {
+	return c.inspectContext(context.Background(), dir, pattern, env)
 }
 
 // inspectContext is inspect, whose go commands ctx stops.
-func inspectContext(ctx context.Context, dir, pattern string, env []string) (*listed, []string, error) {
-	pkg, err := listContext(ctx, dir, pattern, env)
+func (c *Cache) inspectContext(ctx context.Context, dir, pattern string, env []string) (*listed, []string, error) {
+	pkg, err := c.listContext(ctx, dir, pattern, env)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -82,11 +85,11 @@ func inspectContext(ctx context.Context, dir, pattern string, env []string) (*li
 			continue
 		}
 		path := filepath.Join(pkg.Dir, name)
-		src, err := os.ReadFile(path)
+		src, err := c.readFile(path)
 		if err != nil {
 			return nil, nil, err
 		}
-		if sys, line := GoFileSystems(name, src, goVersion); sys == SomeSystems {
+		if sys, line := c.fileSystems(path, name, src, goVersion); sys == SomeSystems {
 			return nil, nil, &Error{Pos: posString(token.Position{Filename: path, Line: max(line, 1)}),
 				Reason: "go builds this file of the schema package only on some systems or with some tags; velox-gen reads the schemas from files that every build includes"}
 		}
@@ -94,7 +97,15 @@ func inspectContext(ctx context.Context, dir, pattern string, env []string) (*li
 			files[name] = src
 		}
 	}
-	names, err := candidates(files)
+	// The Cache parses the files by their paths, which an *Error's position
+	// names as prefixFiles would.
+	names, err := candidatesWith(files, func(name string) (*token.FileSet, *ast.File) {
+		f, err := c.parseFile(filepath.Join(pkg.Dir, name), files[name], 0)
+		if err != nil {
+			return nil, nil
+		}
+		return c.fset, f
+	})
 	if err != nil {
 		return nil, nil, prefixFiles(err, pkg.Dir)
 	}
@@ -125,7 +136,12 @@ func prefixFiles(err error, dir string) error {
 // builder's, are returned as *Error values joined with errors.Join, each with
 // the position of the type or element when it has one.
 func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
-	pkg, cands, err := inspect(dir, pattern, env)
+	return NewCache().Load(dir, pattern, env)
+}
+
+// Load is the package's Load, whose go commands and files c keeps.
+func (c *Cache) Load(dir, pattern string, env []string) (*loadjson.Model, error) {
+	pkg, cands, err := c.inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +156,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	// A deferred call does not run when a signal ends the process, as
 	// ci-local's fail-fast does: the handler removes tmp then.
 	defer removeOnSignal(tmp)()
-	exp, err := exports(pkg.Module.Dir, pkg.ImportPath, env)
+	exp, err := c.exports(pkg.Module.Dir, pkg.ImportPath, env)
 	if err != nil {
 		return nil, fmt.Errorf("loading %s:\n%w", pkg.ImportPath, err)
 	}
@@ -154,7 +170,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	if err := os.WriteFile(filepath.Join(tmp, "main.go"), program(pkg.ImportPath, names), 0o644); err != nil {
 		return nil, err
 	}
-	out, stderr, err := run(pkg.Module.Dir, env, "run", "./"+filepath.Base(tmp))
+	out, stderr, err := c.run(pkg.Module.Dir, env, "run", "./"+filepath.Base(tmp))
 	if err != nil {
 		msg := strings.ReplaceAll(stderr, tmp, "velox-gen")
 		msg = strings.ReplaceAll(msg, filepath.Base(tmp), "velox-gen")
@@ -170,7 +186,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", pkg.ImportPath, err)
 	}
-	typeLines(pkg, m)
+	c.typeLines(pkg, m)
 	if len(m.Errors) > 0 {
 		errs := make([]error, len(m.Errors))
 		for i, e := range m.Errors {
@@ -184,11 +200,11 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 // typeLines sets each schema's Pos to the line that declares its type in
 // the package's files, which stands for the schema better than the line of
 // one of its methods, and which a schema that declares no method has too.
-func typeLines(pkg *listed, m *loadjson.Model) {
-	fset := token.NewFileSet()
+func (c *Cache) typeLines(pkg *listed, m *loadjson.Model) {
+	fset := c.fset
 	at := map[string]string{}
 	for _, name := range pkg.GoFiles {
-		f, err := parser.ParseFile(fset, filepath.Join(pkg.Dir, name), nil, parser.SkipObjectResolution)
+		f, err := c.parsePath(filepath.Join(pkg.Dir, name), 0)
 		if err != nil {
 			continue // the program that wrote m compiled it
 		}
@@ -233,17 +249,17 @@ func decodeModel(b []byte) (*loadjson.Model, error) {
 }
 
 // list runs go list for pattern and returns the one package it names.
-func list(dir, pattern string, env []string) (*listed, error) {
-	return listContext(context.Background(), dir, pattern, env)
+func (c *Cache) list(dir, pattern string, env []string) (*listed, error) {
+	return c.listContext(context.Background(), dir, pattern, env)
 }
 
 // listContext is list, whose go commands ctx stops.
-func listContext(ctx context.Context, dir, pattern string, env []string) (*listed, error) {
-	out, stderr, err := runContext(ctx, dir, env, "list", listFields, pattern)
+func (c *Cache) listContext(ctx context.Context, dir, pattern string, env []string) (*listed, error) {
+	out, stderr, err := c.runContext(ctx, dir, env, "list", listFields, pattern)
 	if err != nil {
 		msg := strings.TrimSpace(stderr)
 		switch {
-		case !inModule(ctx, dir, env):
+		case !c.inModule(ctx, dir, env):
 			return nil, errors.New("the schema package must be in a module")
 		case strings.Contains(pattern, "..."):
 			// Several packages, or none: velox-gen reads exactly one.
@@ -253,6 +269,11 @@ func listContext(ctx context.Context, dir, pattern string, env []string) (*liste
 		}
 		return nil, errors.New(msg)
 	}
+	return decodeListed(out, pattern)
+}
+
+// decodeListed decodes the one package go list wrote, as out, for pattern.
+func decodeListed(out, pattern string) (*listed, error) {
 	dec := json.NewDecoder(strings.NewReader(out))
 	var pkg listed
 	if err := dec.Decode(&pkg); err != nil {
@@ -274,31 +295,12 @@ func listContext(ctx context.Context, dir, pattern string, env []string) (*liste
 }
 
 // inModule reports whether the go command in dir runs in a module.
-func inModule(ctx context.Context, dir string, env []string) bool {
-	out, _, err := runContext(ctx, dir, env, "env", "GOMOD")
+func (c *Cache) inModule(ctx context.Context, dir string, env []string) bool {
+	out, _, err := c.runContext(ctx, dir, env, "env", "GOMOD")
 	mod := strings.TrimSpace(out)
 	return err != nil || (mod != "" && mod != os.DevNull)
 }
 
-// run runs go with args in dir and returns what it wrote to stdout and
-// stderr. A nil env means os.Environ().
-func run(dir string, env []string, args ...string) (stdout, stderr string, err error) {
-	return runContext(context.Background(), dir, env, args...)
-}
-
-// runContext is run, whose command ctx stops.
-func runContext(ctx context.Context, dir string, env []string, args ...string) (stdout, stderr string, err error) {
-	var so, se bytes.Buffer
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir, cmd.Stdout, cmd.Stderr = dir, &so, &se
-	if env != nil {
-		cmd.Env = env
-	}
-	err = cmd.Run()
-	return so.String(), se.String(), err
-}
-
-// program is the main package that marshals the named schemas of the package
 // at importPath and prints the result.
 func program(importPath string, names []string) []byte {
 	var b strings.Builder

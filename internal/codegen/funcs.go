@@ -31,6 +31,11 @@ type FuncPkg struct {
 // internal packages allows it and it does not import, directly or through
 // others, the generated package.
 func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]FuncPkg, error) {
+	return NewCache().FuncPackages(dir, g, cfg, env)
+}
+
+// FuncPackages is the package's FuncPackages, whose go commands c keeps.
+func (c *Cache) FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]FuncPkg, error) {
 	seen := map[string]bool{}
 	for _, e := range g.Entities {
 		for _, f := range e.Fields {
@@ -45,7 +50,7 @@ func FuncPackages(dir string, g *Graph, cfg Config, env []string) (map[string]Fu
 		return nil, nil
 	}
 	pkgs := slices.Sorted(maps.Keys(seen))
-	out, stderr, err := run(dir, env, append([]string{"list", "-e", "-deps", "-json=ImportPath,Name,Imports,Error"}, pkgs...)...)
+	out, stderr, err := c.run(dir, env, append([]string{"list", "-e", "-deps", "-json=ImportPath,Name,Imports,Error"}, pkgs...)...)
 	if err != nil {
 		return nil, fmt.Errorf("go list %s: %w\n%s", strings.Join(pkgs, " "), err, strings.TrimSpace(stderr))
 	}

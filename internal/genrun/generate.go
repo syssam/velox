@@ -151,13 +151,13 @@ func ExplainLoad(ctx context.Context, dir, pattern, out string, env []string, er
 		return err
 	}
 	var cerr error
-	switch {
+	switch c := codegen.CacheOf(ctx); {
 	case schemas != nil:
-		_, cerr = codegen.Behaviour(dir, pattern, genPath, env, schemas)
+		_, cerr = c.Behaviour(dir, pattern, genPath, env, schemas)
 	case strings.Contains(err.Error(), "import cycle not allowed"):
 		// go list's words for the cycle: another failure to list the
 		// package, such as a file only some builds include, is its own.
-		cerr = codegen.CheckGenImports(dir, pattern, genPath, env)
+		cerr = c.CheckGenImports(dir, pattern, genPath, env)
 	}
 	if cerr != nil {
 		return RelErrors(dir, cerr)
@@ -166,13 +166,16 @@ func ExplainLoad(ctx context.Context, dir, pattern, out string, env []string, er
 }
 
 // LoadModel loads and builds the schema package at pattern and lowers the
-// graph to the names of its generated entities.
+// graph to the names of its generated entities. It reads through the
+// codegen.Cache ctx carries, or a new one.
 func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string) (*Model, error) {
-	importPath, name, schemas, err := codegen.InspectContext(ctx, dir, pattern, env)
+	ctx = codegen.WithCache(ctx)
+	c := codegen.CacheOf(ctx)
+	importPath, name, schemas, err := c.InspectContext(ctx, dir, pattern, env)
 	if err != nil {
 		return nil, ExplainLoad(ctx, dir, pattern, out, env, RelErrors(dir, err), nil)
 	}
-	m, err := codegen.Load(dir, pattern, env)
+	m, err := c.Load(dir, pattern, env)
 	if err != nil {
 		return nil, ExplainLoad(ctx, dir, pattern, out, env, RelErrors(dir, err), schemas)
 	}
@@ -213,32 +216,29 @@ func (l *Log) pluginWarn(name, text string) {
 	l.Warnings = append(l.Warnings, "plugin "+name+": "+text)
 }
 
-// genConfig is the codegen.Config of the package at out, named pkg, for the
-// schema package at pattern: the import path of out, the Hooks and Policy
+// genConfig is the codegen.Config of the package at genPath, named pkg, for
+// the schema package at pattern: genPath, the Hooks and Policy
 // methods the schema package declares (codegen.Behaviour), the behaviour of
 // the entities' mixins (codegen.MixinBehaviour), and the relations that
 // behaviour names (codegen.CheckBehaviour), whose warnings go to log
 // with codegen.SoftDeleteWarnings', codegen.DefaultWarnings' and
 // codegen.EdgeSchemaWarnings'.
 // UserDoc is left for the caller.
-func genConfig(ctx context.Context, gm *Model, dir, pattern, out, pkg string, env []string, log *Log) (codegen.Config, error) {
+func genConfig(ctx context.Context, gm *Model, dir, pattern, genPath, pkg string, env []string, log *Log) (codegen.Config, error) {
 	cfg := codegen.Config{Package: pkg, SchemaPath: gm.ImportPath, SchemaName: gm.Name}
-	genPath, err := DirImportPath(ctx, out, env)
-	if err != nil {
-		return cfg, err
-	}
-	bound, err := codegen.Behaviour(dir, pattern, genPath, env, gm.Names)
+	c := codegen.CacheOf(ctx)
+	bound, err := c.Behaviour(dir, pattern, genPath, env, gm.Names)
 	if err != nil {
 		return cfg, err
 	}
 	cfg.GenPath = genPath
 	cfg.Bound = bound
-	mixins, err := codegen.MixinBehaviour(dir, pattern, gm.Graph, env)
+	mixins, err := c.MixinBehaviour(dir, pattern, gm.Graph, env)
 	if err != nil {
 		return cfg, RelErrors(dir, err)
 	}
 	cfg.Mixins = mixins
-	warnings, err := codegen.CheckBehaviour(dir, pattern, gm.Graph, bound, mixins, env)
+	warnings, err := c.CheckBehaviour(dir, pattern, gm.Graph, bound, mixins, env)
 	warnings = append(warnings, codegen.SoftDeleteWarnings(gm.Graph)...)
 	warnings = append(warnings, codegen.DefaultWarnings(gm.Graph)...)
 	warnings = append(warnings, codegen.EdgeSchemaWarnings(gm.Graph)...)
@@ -248,7 +248,7 @@ func genConfig(ctx context.Context, gm *Model, dir, pattern, out, pkg string, en
 	if err != nil {
 		return cfg, RelErrors(dir, err)
 	}
-	if cfg.Funcs, err = codegen.FuncPackages(dir, gm.Graph, cfg, env); err != nil {
+	if cfg.Funcs, err = c.FuncPackages(dir, gm.Graph, cfg, env); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
@@ -265,16 +265,27 @@ type Output struct {
 // BuildOutput generates the files of the package at out, named pkg, for the
 // schema package at pattern, and runs the plugins on the model. The files of
 // the user's in out are checked against what velox-gen writes. Nothing is
-// written.
+// written. It reads through the codegen.Cache ctx carries, or a new one.
 func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir, out, pkg string, env []string, log *Log) (*Output, error) {
-	cfg, err := genConfig(ctx, gm, dir, pattern, out, pkg, env, log)
+	ctx = codegen.WithCache(ctx)
+	genPath, err := DirImportPath(ctx, out, env)
 	if err != nil {
 		return nil, err
 	}
-	if err := codegen.CheckUserFiles(out, gm.Names); err != nil {
+	// The plugins run beside velox-gen's own work, on a model encoded
+	// first; what they print and their error come after velox-gen's own, as
+	// in a run that calls them last. A run that fails first stops them.
+	plugged := startPlugins(ctx, plugins, pluginBodies(plugins, gm, pkg, genPath), pattern, dir, out, env)
+	defer plugged.stop()
+	cfg, err := genConfig(ctx, gm, dir, pattern, genPath, pkg, env, log)
+	if err != nil {
 		return nil, err
 	}
-	if cfg.UserDoc, err = codegen.HasPackageDoc(out); err != nil {
+	c := codegen.CacheOf(ctx)
+	if err := c.CheckUserFiles(out, gm.Names); err != nil {
+		return nil, err
+	}
+	if cfg.UserDoc, err = c.HasPackageDoc(out); err != nil {
 		return nil, err
 	}
 	files, err := codegen.Generate(gm.Graph, cfg)
@@ -285,9 +296,9 @@ func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir,
 	for _, file := range files {
 		o.Want[filepath.Join(out, filepath.FromSlash(file.Name))] = file.Data
 	}
-	// The plugins run after velox-gen's own files are built and before
-	// anything is written.
-	o.Plugin, o.Owners, err = pluginFiles(ctx, plugins, gm, pattern, dir, out, pkg, cfg.GenPath, env, log)
+	// The plugins' files are read after velox-gen's own files are built and
+	// before anything is written.
+	o.Plugin, o.Owners, err = plugged.wait(log)
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +331,7 @@ type Result struct {
 // write's own error.
 func Run(ctx context.Context, dir string, c Config) (Result, error) {
 	dir = cmp.Or(dir, ".")
+	ctx = codegen.WithCache(ctx)
 	stdout, stderr := c.Stdout, c.Stderr
 	if stdout == nil {
 		stdout = io.Discard
@@ -429,7 +441,11 @@ func relFileError(dir string, err error) error {
 }
 
 // ModuleDir is the directory of the module that holds the package at pattern.
+// A go list of it the codegen.Cache of ctx holds answers it.
 func ModuleDir(ctx context.Context, dir, pattern string, env []string) (string, error) {
+	if mod, ok := codegen.CacheOf(ctx).ModuleDir(dir, pattern, env); ok {
+		return mod, nil
+	}
 	cmd := exec.CommandContext(ctx, "go", "list", "-f", "{{.Module.Dir}}", pattern)
 	cmd.Dir = dir
 	if env != nil {

@@ -47,8 +47,13 @@ func behaviourResult(m string) string {
 //
 // The result holds only the entities that have at least one of the methods.
 func SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
+	return NewCache().SchemaMethods(dir, entities)
+}
+
+// SchemaMethods is the package's SchemaMethods, which reads dir through c.
+func (c *Cache) SchemaMethods(dir string, entities []string) (map[string]Bound, error) {
 	out := map[string]Bound{}
-	err := userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
+	err := c.userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			fd, ok := d.(*ast.FuncDecl)
 			if !ok || fd.Recv == nil || !slices.Contains(behaviourMethods, fd.Name.Name) {
@@ -140,11 +145,16 @@ func behaviourSignature(t *ast.FuncType, m, velox, privacy string) bool {
 // other packages is an error that names the chain of imports. env is the
 // environment of go list; nil means os.Environ().
 func Behaviour(dir, pattern, genPath string, env, entities []string) (map[string]Bound, error) {
-	pkgDir, err := checkGenImports(dir, pattern, genPath, env)
+	return NewCache().Behaviour(dir, pattern, genPath, env, entities)
+}
+
+// Behaviour is the package's Behaviour, whose go commands and files c keeps.
+func (c *Cache) Behaviour(dir, pattern, genPath string, env, entities []string) (map[string]Bound, error) {
+	pkgDir, err := c.checkGenImports(dir, pattern, genPath, env)
 	if err != nil {
 		return nil, err
 	}
-	return SchemaMethods(pkgDir, entities)
+	return c.SchemaMethods(pkgDir, entities)
 }
 
 // CheckGenImports refuses a schema package, at pattern, that imports
@@ -152,7 +162,13 @@ func Behaviour(dir, pattern, genPath string, env, entities []string) (map[string
 // runs it when the loader fails too, since go list reports such an import
 // cycle with no chain. env is the environment of go list.
 func CheckGenImports(dir, pattern, genPath string, env []string) error {
-	_, err := checkGenImports(dir, pattern, genPath, env)
+	return NewCache().CheckGenImports(dir, pattern, genPath, env)
+}
+
+// CheckGenImports is the package's CheckGenImports, whose go commands and
+// files c keeps.
+func (c *Cache) CheckGenImports(dir, pattern, genPath string, env []string) error {
+	_, err := c.checkGenImports(dir, pattern, genPath, env)
 	return err
 }
 
@@ -162,12 +178,12 @@ const genImportReason = "the schema declares behaviour by column name and does n
 
 // checkGenImports is CheckGenImports, which also returns the schema
 // package's directory.
-func checkGenImports(dir, pattern, genPath string, env []string) (string, error) {
-	pkg, err := listAny(dir, pattern, env)
+func (c *Cache) checkGenImports(dir, pattern, genPath string, env []string) (string, error) {
+	pkg, err := c.listAny(dir, pattern, env)
 	if err != nil {
 		return "", err
 	}
-	err = userFiles(pkg.Dir, parser.ImportsOnly, func(fset *token.FileSet, path string, f *ast.File) error {
+	err = c.userFiles(pkg.Dir, parser.ImportsOnly, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, im := range f.Imports {
 			if p, _ := strconv.Unquote(im.Path.Value); p == genPath {
 				return &FileError{Path: path, Line: fset.Position(im.Pos()).Line, Reason: fmt.Sprintf("the schema package imports %s: %s", p, genImportReason)}
@@ -178,7 +194,7 @@ func checkGenImports(dir, pattern, genPath string, env []string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	chain, err := genImports(dir, pkg.ImportPath, genPath, env)
+	chain, err := c.genImports(dir, pkg.ImportPath, genPath, env)
 	if err != nil {
 		return "", err
 	}
@@ -192,12 +208,12 @@ func checkGenImports(dir, pattern, genPath string, env []string) (string, error)
 // an import cycle through the generated package, which checkGenImports
 // explains: it returns the package go list -e reports, when it has a
 // directory, and list's error otherwise.
-func listAny(dir, pattern string, env []string) (*listed, error) {
-	pkg, err := list(dir, pattern, env)
+func (c *Cache) listAny(dir, pattern string, env []string) (*listed, error) {
+	pkg, err := c.list(dir, pattern, env)
 	if err == nil {
 		return pkg, nil
 	}
-	out, _, lerr := run(dir, env, "list", "-e", listFields, pattern)
+	out, _, lerr := c.run(dir, env, "list", "-e", listFields, pattern)
 	if lerr != nil {
 		return nil, err
 	}
@@ -216,8 +232,8 @@ func listAny(dir, pattern string, env []string) (*listed, error) {
 // generated package not written yet, is still a node of the graph. What
 // the generated packages import is not followed: they import the schema
 // package.
-func genImports(dir, importPath, genPath string, env []string) ([]string, error) {
-	out, stderr, err := run(dir, env, "list", "-e", "-deps", "-json=ImportPath,Imports", importPath)
+func (c *Cache) genImports(dir, importPath, genPath string, env []string) ([]string, error) {
+	out, stderr, err := c.run(dir, env, "list", "-e", "-deps", "-json=ImportPath,Imports", importPath)
 	if err != nil {
 		return nil, fmt.Errorf("go list -deps %s: %w\n%s", importPath, err, strings.TrimSpace(stderr))
 	}

@@ -71,7 +71,14 @@ type candDecls struct {
 // struct that embeds schema.Schema, directly or through other unexported
 // structs of the package, when no type of the package embeds it.
 func candidates(files map[string][]byte) ([]string, error) {
-	d, err := readCandDecls(files)
+	return candidatesWith(files, nil)
+}
+
+// candidatesWith is candidates, whose files parse, when it is not nil,
+// parses by name: a file it returns nil for is parsed as candidates parses
+// it, which gives the error.
+func candidatesWith(files map[string][]byte, parse func(name string) (*token.FileSet, *ast.File)) ([]string, error) {
+	d, err := readCandDecls(files, parse)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +111,19 @@ func candidates(files map[string][]byte) ([]string, error) {
 	return out, nil
 }
 
-// readCandDecls parses the files, in name order, and returns their type
-// declarations and the receivers of their methods named Type.
-func readCandDecls(files map[string][]byte) (*candDecls, error) {
+// readCandDecls parses the files, in name order, with parse when it is not
+// nil (candidatesWith), and returns their type declarations and the
+// receivers of their methods named Type.
+func readCandDecls(files map[string][]byte, parse func(name string) (*token.FileSet, *ast.File)) (*candDecls, error) {
 	d := &candDecls{specs: map[string]*candSpec{}, typeMethod: map[string]bool{}}
 	fset := token.NewFileSet()
 	for _, fname := range slices.Sorted(maps.Keys(files)) {
+		if parse != nil {
+			if fs, f := parse(fname); f != nil {
+				d.addFile(fs, f)
+				continue
+			}
+		}
 		f, err := parser.ParseFile(fset, fname, files[fname], parser.SkipObjectResolution)
 		if err != nil {
 			return nil, err
@@ -228,8 +242,8 @@ func posString(p token.Position) string {
 // dependencies, and returns the export data file of each package by import
 // path. A package that does not compile is an error that names it, and the
 // chain of imports that reaches it from the schema package.
-func exports(dir, importPath string, env []string) (map[string]string, error) {
-	out, stderr, err := run(dir, env, "list", "-e", "-export", "-deps", "-json=ImportPath,Export,Imports,Error", importPath)
+func (c *Cache) exports(dir, importPath string, env []string) (map[string]string, error) {
+	out, stderr, err := c.run(dir, env, "list", "-e", "-export", "-deps", "-json=ImportPath,Export,Imports,Error", importPath)
 	if err != nil {
 		msg := strings.TrimSpace(stderr)
 		if msg == "" {

@@ -520,7 +520,7 @@ func TestMixinPackageErrors(t *testing.T) {
 		}
 	})
 	t.Run("go list fails", func(t *testing.T) {
-		_, err := listDirs(filepath.Join(t.TempDir(), "gone"), []string{"example.com/x"}, offline())
+		_, err := NewCache().listDirs(filepath.Join(t.TempDir(), "gone"), []string{"example.com/x"}, offline())
 		if err == nil || !strings.HasPrefix(err.Error(), "go list example.com/x: ") {
 			t.Fatalf("got %v", err)
 		}

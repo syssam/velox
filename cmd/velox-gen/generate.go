@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/syssam/velox/generate"
+	"github.com/syssam/velox/internal/codegen"
 	"github.com/syssam/velox/internal/genrun"
 )
 
@@ -106,21 +107,23 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	if err != nil {
 		return fail(err)
 	}
-	gm, err := genrun.LoadModel(context.Background(), dir, pattern, out, pkg, env)
+	// One cache: the model and the output list and parse the schema once.
+	ctx := codegen.WithCache(context.Background())
+	gm, err := genrun.LoadModel(ctx, dir, pattern, out, pkg, env)
 	if err != nil {
 		return fail(err)
 	}
 	if fi, err := os.Stat(out); err != nil || !fi.IsDir() {
 		return fail(fmt.Errorf("%s is not a directory; run velox-gen to generate it first", genrun.RelPath(dir, out)))
 	}
-	mod, err := genrun.ModuleDir(context.Background(), dir, out, env)
+	mod, err := genrun.ModuleDir(ctx, dir, out, env)
 	if err != nil {
 		return fail(err)
 	}
 	// The plugins' Go files are compiled with the package, as they are on
 	// disk; they must be the files the plugins write now. A plugin path that
 	// collides with a file of velox-gen's fails as it does in generate.
-	o, err := genrun.BuildOutput(context.Background(), f.genPlugins(), gm, pattern, dir, out, pkg, env, &genrun.Log{Stderr: stderr})
+	o, err := genrun.BuildOutput(ctx, f.genPlugins(), gm, pattern, dir, out, pkg, env, &genrun.Log{Stderr: stderr})
 	if err != nil {
 		return fail(err)
 	}

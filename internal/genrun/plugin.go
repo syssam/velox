@@ -45,15 +45,14 @@ type Plugin struct {
 // differ only in case are one file, or one directory, as they are on a
 // case-insensitive file system; a path is not both a file and a directory.
 // A tool's stderr is shown only when it fails.
-func runPlugins(ctx context.Context, specs []Plugin, modDir, goVersion string, req plugin.Request, env []string, log *Log) (files map[string][]byte, owners map[string]string, err error) {
+func runPlugins(ctx context.Context, specs []Plugin, modDir, goVersion string, bodies []pluginBody, env []string, log *Log) (files map[string][]byte, owners map[string]string, err error) {
 	files, owners = map[string][]byte{}, map[string]string{}
 	by := map[string]string{}   // folded file path → the path that took it
 	dirs := map[string]string{} // folded directory path → the spelling that took it
 	dirOwner := map[string]string{}
-	for _, spec := range specs {
+	for i, spec := range specs {
 		name := spec.Name
-		req.Options = spec.Options
-		body, err := json.Marshal(req)
+		body, err := bodies[i].body, bodies[i].err
 		if err != nil {
 			return nil, nil, err
 		}
@@ -327,12 +326,78 @@ func withHeader(path, content string) []byte {
 	return []byte(headerFor(path) + "\n\n" + content)
 }
 
-// pluginFiles runs plugins on the model of gm and returns their files by
-// absolute path, and the plugin that wrote each. It runs the tools in the
-// module of the schema package at pattern. out is the directory of the
-// package that holds the entities, named pkg, at import path outPath: the
-// plugins' paths are below it.
-func pluginFiles(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir, out, pkg, outPath string, env []string, log *Log) (files map[string][]byte, owners map[string]string, err error) {
+// pluginBody is the request a plugin is given, as JSON, or the error of
+// encoding it.
+type pluginBody struct {
+	body []byte
+	err  error
+}
+
+// pluginBodies encodes the request of each plugin, with its options, on
+// the model of gm. out is the directory of the package that holds the
+// entities, named pkg, at import path outPath.
+func pluginBodies(plugins []Plugin, gm *Model, pkg, outPath string) []pluginBody {
+	if len(plugins) == 0 {
+		return nil
+	}
+	req := plugin.Request{Protocol: plugin.ProtocolVersion, Generator: buildinfo.Generator(), OutPackage: pkg, OutPath: outPath, Model: codegen.PluginModel(gm.Graph, gm.Out)}
+	bodies := make([]pluginBody, len(plugins))
+	for i, spec := range plugins {
+		req.Options = spec.Options
+		bodies[i].body, bodies[i].err = json.Marshal(req)
+	}
+	return bodies
+}
+
+// pluginRun is plugins running beside velox-gen's own generation: their
+// files, owners and error once done is closed, and what they print, held
+// for wait to print after velox-gen's own lines.
+type pluginRun struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+	files  map[string][]byte
+	owners map[string]string
+	err    error
+	stderr bytes.Buffer
+	log    Log
+}
+
+// startPlugins runs, in a goroutine, pluginFiles of the plugins with the
+// bodies pluginBodies encoded. stop or wait ends it.
+func startPlugins(ctx context.Context, plugins []Plugin, bodies []pluginBody, pattern, dir, out string, env []string) *pluginRun {
+	ctx, cancel := context.WithCancel(ctx)
+	r := &pluginRun{cancel: cancel, done: make(chan struct{})}
+	r.log.Stderr = &r.stderr
+	go func() {
+		defer close(r.done)
+		r.files, r.owners, r.err = pluginFiles(ctx, plugins, bodies, pattern, dir, out, env, &r.log)
+	}()
+	return r
+}
+
+// wait waits for the plugins and returns their files, owners and error,
+// after it prints their lines to log as they would have printed them.
+func (r *pluginRun) wait(log *Log) (map[string][]byte, map[string]string, error) {
+	<-r.done
+	r.cancel()
+	_, _ = log.Stderr.Write(r.stderr.Bytes())
+	log.Warnings = append(log.Warnings, r.log.Warnings...)
+	return r.files, r.owners, r.err
+}
+
+// stop stops the plugins, whose result a failed run does not read, and
+// waits for them.
+func (r *pluginRun) stop() {
+	r.cancel()
+	<-r.done
+}
+
+// pluginFiles runs plugins on the bodies pluginBodies encoded and returns
+// their files by absolute path, and the plugin that wrote each. It runs the
+// tools in the module of the schema package at pattern. out is the
+// directory of the package that holds the entities: the plugins' paths are
+// below it.
+func pluginFiles(ctx context.Context, plugins []Plugin, bodies []pluginBody, pattern, dir, out string, env []string, log *Log) (files map[string][]byte, owners map[string]string, err error) {
 	if len(plugins) == 0 {
 		return nil, nil, nil
 	}
@@ -342,8 +407,7 @@ func pluginFiles(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir,
 			return nil, nil, err
 		}
 	}
-	req := plugin.Request{Protocol: plugin.ProtocolVersion, Generator: buildinfo.Generator(), OutPackage: pkg, OutPath: outPath, Model: codegen.PluginModel(gm.Graph, gm.Out)}
-	rel, byPlugin, err := runPlugins(ctx, plugins, mod, codegen.ModuleGoVersion(out), req, env, log)
+	rel, byPlugin, err := runPlugins(ctx, plugins, mod, codegen.ModuleGoVersion(out), bodies, env, log)
 	if err != nil {
 		return nil, nil, err
 	}

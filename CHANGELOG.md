@@ -648,6 +648,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- velox-gen is faster, and writes the same bytes. One run lists the schema
+  package once and reads and parses each of its files once, where each pass
+  did both again. The packages a mixin's file imports are found with one
+  go list, and only the one an embedded type names is parsed whole. The
+  generated files, and velox-graphql's, are gofmt'd in parallel, and the
+  plugins run beside velox-gen's own work. A run makes 9 go commands, where
+  it made 21. On a 496-entity schema with velox-graphql, a run takes
+  2.8 s, where it took 6.0 s; velox-graphql alone takes 0.6 s, where it
+  took 1.2 s.
 - A query's LIMIT is a literal in every dialect, as SQLite's already was and
   as ent writes it; OFFSET stays a parameter. PostgreSQL's generic plan,
   which pgx's statement cache reaches after five runs, guessed a tenth of the

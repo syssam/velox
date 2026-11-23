@@ -4,9 +4,12 @@ import (
 	"cmp"
 	"fmt"
 	"go/format"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/syssam/velox/plugin"
 )
@@ -39,29 +42,51 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 // privacy/privacy.go. Render does not
 // change o, and the same o gives the same bytes.
 func Render(o *Out) ([]File, error) {
-	files := make([]File, 0, len(o.Entities)+1)
-	add := func(name, src string) error {
-		data, err := formatted(name, src)
+	files := make([]File, 0, len(o.Entities)+2)
+	var srcs []string
+	add := func(name, src string) {
+		files = append(files, File{Name: name})
+		srcs = append(srcs, src)
+	}
+	for _, e := range o.Entities {
+		add(entityFile(e.Label), renderEntity(o, e))
+	}
+	add("velox.go", renderPackage(o))
+	if o.Privacy {
+		add("privacy/privacy.go", renderPrivacy(o))
+	}
+	err := formatAll(len(files), func(i int) error {
+		data, err := formatted(files[i].Name, srcs[i])
+		files[i].Data = data
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// formatAll calls format for each of 0 to n-1, on up to GOMAXPROCS
+// goroutines, and returns the error of the least i whose call fails: the
+// error a loop that stops at the first failure returns.
+func formatAll(n int, format func(i int) error) error {
+	errs := make([]error, n)
+	next := atomic.Int64{}
+	var wg sync.WaitGroup
+	for range min(n, runtime.GOMAXPROCS(0)) {
+		wg.Go(func() {
+			for i := int(next.Add(1) - 1); i < n; i = int(next.Add(1) - 1) {
+				errs[i] = format(i)
+			}
+		})
+	}
+	wg.Wait()
+	for _, err := range errs {
 		if err != nil {
 			return err
 		}
-		files = append(files, File{Name: name, Data: data})
-		return nil
 	}
-	for _, e := range o.Entities {
-		if err := add(entityFile(e.Label), renderEntity(o, e)); err != nil {
-			return nil, err
-		}
-	}
-	if err := add("velox.go", renderPackage(o)); err != nil {
-		return nil, err
-	}
-	if o.Privacy {
-		if err := add("privacy/privacy.go", renderPrivacy(o)); err != nil {
-			return nil, err
-		}
-	}
-	return files, nil
+	return nil
 }
 
 // entityFile is the Go file of the entity labelled label: <label>.go, as

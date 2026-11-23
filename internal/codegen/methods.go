@@ -1,14 +1,10 @@
 package codegen
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,7 +37,12 @@ func (e *FileError) Error() string {
 // one only some builds include is a *FileError (see userFiles). A missing dir
 // is no files.
 func CheckUserFiles(dir string, entities []string) error {
-	return userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
+	return NewCache().CheckUserFiles(dir, entities)
+}
+
+// CheckUserFiles is the package's CheckUserFiles, which reads dir through c.
+func (c *Cache) CheckUserFiles(dir string, entities []string) error {
+	return c.userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
@@ -69,63 +70,19 @@ func CheckUserFiles(dir string, entities []string) error {
 // directives. A file no build includes does not count, and one only some
 // builds include is a *FileError (see userFiles). A missing dir is no files.
 func HasPackageDoc(dir string) (bool, error) {
+	return NewCache().HasPackageDoc(dir)
+}
+
+// HasPackageDoc is the package's HasPackageDoc, which reads dir through c.
+func (c *Cache) HasPackageDoc(dir string) (bool, error) {
 	found := false
-	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ *token.FileSet, _ string, f *ast.File) error {
+	err := c.userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ *token.FileSet, _ string, f *ast.File) error {
 		if f.Doc != nil && strings.TrimSpace(f.Doc.Text()) != "" {
 			found = true
 		}
 		return nil
 	})
 	return found, err
-}
-
-// userFiles parses, with mode, each non-test .go file in dir that does not
-// start with velox-gen's header, and calls fn with it. Whatever system
-// velox-gen runs on, it leaves out a file that no build includes
-// (GoFileSystems, at the go version of dir's go.mod): //go:build ignore, or a
-// name that starts with _ or .. It refuses, as a *FileError, one that only
-// some builds include, such as one behind a GOOS or a custom tag: the
-// generated code, built on another system or with other tags, would bind what
-// the package there does not have, or would leave a policy unbound in a build
-// that has it. A missing dir is no files.
-func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path string, f *ast.File) error) error {
-	des, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	goVersion := ModuleGoVersion(dir)
-	fset := token.NewFileSet()
-	for _, de := range des {
-		name := de.Name()
-		if de.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		path := filepath.Join(dir, name)
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if bytes.HasPrefix(src, []byte(strings.TrimSuffix(header, "\n\n")+"\n")) {
-			continue
-		}
-		switch sys, line := GoFileSystems(name, src, goVersion); sys {
-		case NoSystem:
-			continue
-		case SomeSystems:
-			return &FileError{Path: path, Line: line, Reason: "go leaves it out of some builds; velox-gen reads hooks and policies only from files that every build includes"}
-		}
-		f, err := parser.ParseFile(fset, path, src, mode|parser.SkipObjectResolution)
-		if err != nil {
-			return err
-		}
-		if err := fn(fset, path, f); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // writeKeys and readKeys are the keys of a velox.Policy that hold

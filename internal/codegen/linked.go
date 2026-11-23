@@ -7,7 +7,6 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/importer"
-	"go/parser"
 	"go/token"
 	"go/types"
 	"io"
@@ -59,6 +58,12 @@ import (
 // conditions are not checked. A call in another package is not seen: velox
 // checks it when its statement runs, against the package's EntityTable.
 func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) ([]string, error) {
+	return NewCache().CheckBehaviour(dir, pattern, g, bound, mixins, env)
+}
+
+// CheckBehaviour is the package's CheckBehaviour, whose go commands and files
+// c keeps.
+func (c *Cache) CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixins map[string][]MixinBound, env []string) ([]string, error) {
 	if err := edgeSchemaBehaviour(g, bound, mixins); err != nil {
 		return nil, err
 	}
@@ -86,7 +91,7 @@ func CheckBehaviour(dir, pattern string, g *Graph, bound map[string]Bound, mixin
 		return nil, nil
 	}
 	pattern = strings.TrimSpace(pattern)
-	sc, err := checkSources(dir, g.Package, pattern, pkgs, env)
+	sc, err := c.checkSources(dir, g.Package, pattern, pkgs, env)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +142,7 @@ func dedupe(errs []error) []error {
 
 // sources are type-checked packages, by import path.
 type sources struct {
+	c     *Cache // parses the files
 	fset  *token.FileSet
 	pkgs  map[string]*types.Package
 	info  *types.Info
@@ -223,13 +229,14 @@ func objKey(obj types.Object) string {
 
 // checkSources type-checks the packages at paths from source. schemaPath is
 // the import path of the schema package, which pattern names in dir.
-func checkSources(dir, schemaPath, pattern string, paths []string, env []string) (*sources, error) {
-	all, exp, err := listSources(dir, schemaPath, pattern, paths, env)
+func (c *Cache) checkSources(dir, schemaPath, pattern string, paths []string, env []string) (*sources, error) {
+	all, exp, err := c.listSources(dir, schemaPath, pattern, paths, env)
 	if err != nil {
 		return nil, err
 	}
 	sc := &sources{
-		fset: token.NewFileSet(),
+		c:    c,
+		fset: c.fset,
 		pkgs: map[string]*types.Package{},
 		info: &types.Info{
 			Types: map[ast.Expr]types.TypeAndValue{},
@@ -271,7 +278,7 @@ type listedSource struct {
 // listSources runs go list -export on pattern and the paths but schemaPath,
 // and their dependencies. It returns each listed package, and the export
 // data file of each, by import path.
-func listSources(dir, schemaPath, pattern string, paths []string, env []string) (map[string]*listedSource, map[string]string, error) {
+func (c *Cache) listSources(dir, schemaPath, pattern string, paths []string, env []string) (map[string]*listedSource, map[string]string, error) {
 	args := []string{"list", "-e", "-export", "-deps", "-json=ImportPath,Export,Dir,GoFiles,Error"}
 	targets := []string{pattern}
 	for _, p := range paths {
@@ -279,7 +286,7 @@ func listSources(dir, schemaPath, pattern string, paths []string, env []string) 
 			targets = append(targets, p)
 		}
 	}
-	out, stderr, err := run(dir, env, append(args, targets...)...)
+	out, stderr, err := c.run(dir, env, append(args, targets...)...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("go list -export %s: %w\n%s", strings.Join(targets, " "), err, strings.TrimSpace(stderr))
 	}
@@ -306,7 +313,7 @@ func listSources(dir, schemaPath, pattern string, paths []string, env []string) 
 func (sc *sources) check(imp types.Importer, path string, p *listedSource) error {
 	var files []*ast.File
 	for _, name := range p.GoFiles {
-		f, err := parser.ParseFile(sc.fset, filepath.Join(p.Dir, name), nil, parser.SkipObjectResolution)
+		f, err := sc.c.parsePath(filepath.Join(p.Dir, name), 0)
 		if err != nil {
 			return err
 		}

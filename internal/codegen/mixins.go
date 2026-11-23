@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/printer"
 	"go/token"
 	"maps"
@@ -48,7 +49,13 @@ type MixinBound struct {
 // name. A mixin with behaviour listed twice by one entity is an *Error.
 // CheckBehaviour checks the columns the methods' bodies name.
 func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]MixinBound, error) {
-	r := &mixinReader{dir: dir, env: env, dirs: map[string]string{}, pkgs: map[string]*mixinPkg{}}
+	return NewCache().MixinBehaviour(dir, pattern, g, env)
+}
+
+// MixinBehaviour is the package's MixinBehaviour, whose go commands and files
+// c keeps.
+func (c *Cache) MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]MixinBound, error) {
+	r := &mixinReader{c: c, dir: dir, env: env, dirs: map[string]string{}, pkgs: map[string]*mixinPkg{}, names: map[string]string{}}
 	var paths []string
 	for _, e := range g.Entities {
 		for _, m := range e.Mixins {
@@ -61,7 +68,7 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 		return nil, nil
 	}
 	if slices.Contains(paths, g.Package) {
-		pkg, err := list(dir, pattern, env)
+		pkg, err := c.list(dir, pattern, env)
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +76,7 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 		paths = slices.DeleteFunc(paths, func(p string) bool { return p == g.Package })
 	}
 	if len(paths) > 0 {
-		dirs, err := listDirs(dir, paths, env)
+		dirs, err := c.listDirs(dir, paths, env)
 		if err != nil {
 			return nil, err
 		}
@@ -111,8 +118,8 @@ func MixinBehaviour(dir, pattern string, g *Graph, env []string) (map[string][]M
 
 // listDirs returns the directories of the packages at paths, by go list run
 // in dir.
-func listDirs(dir string, paths []string, env []string) (map[string]string, error) {
-	out, stderr, err := run(dir, env, append([]string{"list", "-e", "-find", "-json=ImportPath,Dir,Error"}, paths...)...)
+func (c *Cache) listDirs(dir string, paths []string, env []string) (map[string]string, error) {
+	out, stderr, err := c.run(dir, env, append([]string{"list", "-e", "-find", "-json=ImportPath,Dir,Error"}, paths...)...)
 	if err != nil {
 		return nil, fmt.Errorf("go list %s: %w\n%s", strings.Join(paths, " "), err, strings.TrimSpace(stderr))
 	}
@@ -136,10 +143,12 @@ func listDirs(dir string, paths []string, env []string) (map[string]string, erro
 
 // mixinReader reads the source of the packages that declare mixins.
 type mixinReader struct {
-	dir  string               // where go list runs
-	env  []string             // its environment
-	dirs map[string]string    // import path → directory
-	pkgs map[string]*mixinPkg // import path → its parsed files
+	c     *Cache               // runs go list and parses the files
+	dir   string               // where go list runs
+	env   []string             // its environment
+	dirs  map[string]string    // import path → directory
+	pkgs  map[string]*mixinPkg // import path → its parsed files
+	names map[string]string    // import path → its package name, by pkgName
 }
 
 // mixinPkg is a parsed package.
@@ -177,7 +186,7 @@ func (r *mixinReader) pkg(path string) (*mixinPkg, error) {
 	}
 	dir, ok := r.dirs[path]
 	if !ok {
-		dirs, err := listDirs(r.dir, []string{path}, r.env)
+		dirs, err := r.c.listDirs(r.dir, []string{path}, r.env)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +194,7 @@ func (r *mixinReader) pkg(path string) (*mixinPkg, error) {
 		r.dirs[path] = dir
 	}
 	p := &mixinPkg{path: path, types: map[string]*mixinType{}, methods: map[string][]*mixinMethodDecl{}}
-	err := userFiles(dir, 0, func(fset *token.FileSet, fp string, f *ast.File) error {
+	err := r.c.userFiles(dir, 0, func(fset *token.FileSet, fp string, f *ast.File) error {
 		p.fset, p.name = fset, f.Name.Name
 		for _, d := range f.Decls {
 			switch d := d.(type) {
@@ -214,6 +223,74 @@ func (r *mixinReader) pkg(path string) (*mixinPkg, error) {
 	}
 	r.pkgs[path] = p
 	return p, nil
+}
+
+// find looks up, with one go list, the directories of those of paths whose
+// directory r does not know yet. A path go list cannot find is left to pkg,
+// which reports it; so is every path when go list itself fails.
+func (r *mixinReader) find(paths []string) {
+	var todo []string
+	for _, p := range paths {
+		if _, ok := r.dirs[p]; !ok && !slices.Contains(todo, p) {
+			todo = append(todo, p)
+		}
+	}
+	if len(todo) < 2 {
+		return // pkg lists one path itself
+	}
+	out, _, err := r.c.run(r.dir, r.env, append([]string{"list", "-e", "-find", "-json=ImportPath,Dir,Error"}, todo...)...)
+	if err != nil {
+		return
+	}
+	dec := json.NewDecoder(strings.NewReader(out))
+	for dec.More() {
+		var p struct {
+			ImportPath, Dir string
+			Error           *struct{ Err string }
+		}
+		if dec.Decode(&p) != nil {
+			return
+		}
+		if p.Error == nil || p.Dir != "" {
+			r.dirs[p.ImportPath] = p.Dir
+		}
+	}
+}
+
+// pkgName is the name of the package at path as pkg reads it, from the
+// package clauses of its files alone, and ok false when pkg would fail to
+// read the files. A name pkgName gives that pkg does not, because a file
+// does not parse past its package clause, is caught by pkg's own error.
+func (r *mixinReader) pkgName(path string) (name string, ok bool) {
+	if p, ok := r.pkgs[path]; ok {
+		return p.name, true
+	}
+	if n, ok := r.names[path]; ok {
+		return n, n != ""
+	}
+	dir, ok := r.dirs[path]
+	if !ok {
+		dirs, err := r.c.listDirs(r.dir, []string{path}, r.env)
+		if err != nil {
+			r.names[path] = ""
+			return "", false
+		}
+		dir = dirs[path]
+		r.dirs[path] = dir
+	}
+	err := r.c.userFiles(dir, parser.PackageClauseOnly, func(_ *token.FileSet, _ string, f *ast.File) error {
+		name = f.Name.Name
+		return nil
+	})
+	if err != nil {
+		r.names[path] = ""
+		return "", false
+	}
+	if name == "" {
+		name = guessName(path)
+	}
+	r.names[path] = name
+	return name, true
 }
 
 // methods returns the behaviour methods of the type name of the package at
@@ -330,6 +407,15 @@ func recvPtr(fd *ast.FuncDecl) bool {
 // none. A package imported without a name is found by its package name,
 // which r reads, or its path's last element.
 func importPath(f *ast.File, local string, r *mixinReader) string {
+	if r != nil {
+		var find []string
+		for _, im := range f.Imports {
+			if p, _ := strconv.Unquote(im.Path.Value); im.Name == nil && guessName(p) != local {
+				find = append(find, p)
+			}
+		}
+		r.find(find)
+	}
 	for _, im := range f.Imports {
 		p, _ := strconv.Unquote(im.Path.Value) // the parser checked the literal
 		if im.Name != nil {
@@ -341,7 +427,12 @@ func importPath(f *ast.File, local string, r *mixinReader) string {
 		if guessName(p) == local {
 			return p
 		}
-		if r != nil {
+		if r == nil {
+			continue
+		}
+		// The package clauses name the package; pkg parses it whole only
+		// when the name is local's.
+		if name, ok := r.pkgName(p); ok && name == local {
 			if pk, err := r.pkg(p); err == nil && pk.name == local {
 				return p
 			}
