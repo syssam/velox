@@ -20,14 +20,16 @@ import (
 // path that forgot to return a condition never lets a caller through. Any
 // error they return denies the statement.
 //
-// A policy function decides from ctx and, for Insert, the row. One that
-// reads joins the statement's transaction with TxFrom(ctx, db); a
-// statement made under its ctx is not judged by it.
+// A policy function decides from ctx, db and, for Insert, the row. db is
+// the DB the statement runs on: the transaction's inside Tx. One that
+// reads, reads through db; a statement made under its ctx is not judged by
+// it. The root's Policy, whose functions take the root's DB, is erased to
+// this one.
 type Policy struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWith
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into
 	// the update branch of an upsert, on the existing row.
-	Read func(ctx context.Context) (Predicate, error)
+	Read func(ctx context.Context, db *DB) (Predicate, error)
 	// Write is ANDed into every UPDATE, DELETE and Save, and into an upsert's
 	// update branch, with Read. It decides which existing rows may change; it
 	// does not check the new values, so a writer may set a column the policy
@@ -36,12 +38,12 @@ type Policy struct {
 	// A row Write hides is left alone, and that is not an error: an Update or
 	// Delete that matches only such rows affects 0 rows, as with SQL
 	// row-level security.
-	Write func(ctx context.Context) (Predicate, error)
+	Write func(ctx context.Context, db *DB) (Predicate, error)
 	// Insert checks every inserted or upserted row, after the entity's hooks,
 	// the defaults and the validators. It reads the row with Row.Value; a
 	// Row.Set in it is a misuse, which fails the insert: a policy decides,
 	// and does not change the row.
-	Insert func(ctx context.Context, r Row) error
+	Insert func(ctx context.Context, db *DB, r Row) error
 
 	// Query is veloxe's query rules (package privacy). Their conditions are
 	// ANDed into every read of the entity, after Read's: a SELECT, Count,
@@ -50,12 +52,12 @@ type Policy struct {
 	// upsert's update branch, or anything inside one, as veloxe's query
 	// policy did not. Any error they return, but a Decision of Allow or
 	// Skip, denies the read.
-	Query QueryPolicy
+	Query QueryEval
 	// Mutation is veloxe's mutation rules (package privacy). They judge
 	// every inserted or upserted row, after Insert, and their conditions
 	// are ANDed into every UPDATE, DELETE and Save, and an upsert's update
 	// branch, after Write's.
-	Mutation MutationPolicy
+	Mutation MutationEval
 }
 
 // Interceptor filters an entity's rows for the application. Filter's
@@ -85,24 +87,24 @@ type Interceptor struct {
 
 // PolicyFor is p as entity in keeps it.
 func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
-	// Each function is called under a frame of its own (guardCond), so that
-	// a statement its reads make is not judged by it.
-	pol := &EntityPolicy{Read: guardCond(p.Read, kindPolicy)}
+	// Each function is called under a frame of its own (guardPolicy), so
+	// that a statement its reads make is not judged by it.
+	pol := &EntityPolicy{Read: guardPolicy(p.Read)}
 	if w := p.Write; w != nil {
-		pol.Write = guardWrite(func(ctx context.Context, _ Op) (Predicate, error) { return w(ctx) })
+		pol.Write = guardWrite(func(ctx context.Context, db *DB, _ Op) (Predicate, error) { return w(ctx, db) })
 	}
 	ins := guardInsert(p.Insert)
-	if len(p.Query) > 0 {
-		pol.Query = guardCond(queryCond(in, p.Query), kindPolicy)
+	if p.Query != nil {
+		pol.Query = guardPolicy(queryCond(in, p.Query))
 	}
-	if len(p.Mutation) > 0 {
-		pol.Write = andWriteConds([]func(context.Context, Op) (Predicate, error){pol.Write, guardWrite(mutationCond(in, p.Mutation))})
+	if p.Mutation != nil {
+		pol.Write = andWriteConds([]func(context.Context, *DB, Op) (Predicate, error){pol.Write, guardWrite(mutationCond(in, p.Mutation))})
 		ins = andInserts(ins, guardInsert(mutationInsert(in, p.Mutation)))
 	}
 	if ins != nil {
-		pol.Insert = func(ctx context.Context, x unsafe.Pointer) error {
+		pol.Insert = func(ctx context.Context, db *DB, x unsafe.Pointer) error {
 			var misuse error
-			err := ins(ctx, NewRow(in, x, &misuse, true))
+			err := ins(ctx, db, NewRow(in, x, &misuse, true))
 			if misuse != nil {
 				return &rowMisuseError{misuse}
 			}
@@ -113,15 +115,15 @@ func PolicyFor(in *EntityInfo, p Policy) *EntityPolicy {
 }
 
 // andInserts is the Insert policy that runs a, then b; either may be nil.
-func andInserts(a, b func(ctx context.Context, r Row) error) func(ctx context.Context, r Row) error {
+func andInserts(a, b func(ctx context.Context, db *DB, r Row) error) func(ctx context.Context, db *DB, r Row) error {
 	if a == nil {
 		return b
 	}
-	return func(ctx context.Context, r Row) error {
-		if err := a(ctx, r); err != nil {
+	return func(ctx context.Context, db *DB, r Row) error {
+		if err := a(ctx, db, r); err != nil {
 			return err
 		}
-		return b(ctx, r)
+		return b(ctx, db, r)
 	}
 }
 
@@ -142,7 +144,7 @@ func FiltersFor(is []Interceptor, base int) ([]FilterFn, string) {
 		if f == nil {
 			return nil, fmt.Sprintf("Interceptors()[%d] has a nil Filter", base+i)
 		}
-		fs[i] = guardCond(f, kindInterceptor)
+		fs[i] = guardCond(f)
 	}
 	return fs, ""
 }

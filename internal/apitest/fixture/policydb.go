@@ -20,10 +20,10 @@ type PNote struct {
 // The functions PNote's behaviour calls: its Read, Write and Insert
 // policies, its Query rule, and its interceptor's Filter.
 var (
-	PNoteRead   func(ctx context.Context) (velox.Predicate, error)
-	PNoteWrite  func(ctx context.Context) (velox.Predicate, error)
-	PNoteInsert func(ctx context.Context, r velox.Row) error
-	PNoteQuery  func(ctx context.Context, f privacy.Filter) error
+	PNoteRead   func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
+	PNoteWrite  func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
+	PNoteInsert func(ctx context.Context, db *velox.DB, r velox.Row) error
+	PNoteQuery  func(ctx context.Context, q privacy.Query) error
 	PNoteFilter func(ctx context.Context) (velox.Predicate, error)
 )
 
@@ -42,29 +42,29 @@ func (*PNote) VeloxMeta() *velox.Meta[PNote] { return pNoteMeta.Load(pNoteDescri
 // Policy calls PNoteRead, PNoteWrite, PNoteInsert and PNoteQuery.
 func (*PNote) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
 			if PNoteRead == nil {
 				return velox.Allow(), nil
 			}
-			return PNoteRead(ctx)
+			return PNoteRead(ctx, db)
 		},
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
 			if PNoteWrite == nil {
 				return velox.Allow(), nil
 			}
-			return PNoteWrite(ctx)
+			return PNoteWrite(ctx, db)
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, db *velox.DB, r velox.Row) error {
 			if PNoteInsert == nil {
 				return nil
 			}
-			return PNoteInsert(ctx, r)
+			return PNoteInsert(ctx, db, r)
 		},
-		Query: privacy.QueryPolicy{privacy.FilterFunc(func(ctx context.Context, f privacy.Filter) error {
+		Query: privacy.QueryPolicy{privacy.QueryRuleFunc(func(ctx context.Context, q privacy.Query) error {
 			if PNoteQuery == nil {
 				return privacy.Skip
 			}
-			return PNoteQuery(ctx, f)
+			return PNoteQuery(ctx, q)
 		})},
 	}
 }

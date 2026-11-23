@@ -82,7 +82,7 @@ import (
 const docEdge = "doc"
 
 func (Comment) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return visible(), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return visible(), nil }}
 }
 
 func visible() velox.Predicate { return velox.HasEdgeWith(docEdge, velox.HasEdge("owner")) }
@@ -141,7 +141,7 @@ import (
 var edgeName = "doc"
 
 func (Comment) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.HasEdge(edgeName), nil
 	}}
 }

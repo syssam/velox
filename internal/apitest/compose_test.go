@@ -117,8 +117,10 @@ func composeDesc[E any](table string, row func(*E) *cRow) velox.Descriptor[E] {
 	if table[2] == '1' {
 		policies = append(policies, func() velox.Policy {
 			return velox.Policy{
-				Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "hidden"), nil },
-				Insert: func(_ context.Context, r velox.Row) error {
+				Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
+					return velox.FieldNEQ("name", "hidden"), nil
+				},
+				Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 					if r.Value("name") == "banned" {
 						return errors.New("banned")
 					}

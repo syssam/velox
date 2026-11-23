@@ -18,6 +18,7 @@ func (f *recFilter) Where(ps ...velox.Predicate) { f.n += len(ps) }
 type recQuery struct{ f *recFilter }
 
 func (q recQuery) Filter() privacy.Filter { return q.f }
+func (q recQuery) DB() *velox.DB          { return nil }
 
 type recMutation struct {
 	op velox.Op
@@ -26,6 +27,7 @@ type recMutation struct {
 
 func (m recMutation) Op() velox.Op                   { return m.op }
 func (m recMutation) Filter() privacy.Filter         { return m.f }
+func (m recMutation) DB() *velox.DB                  { return nil }
 func (m recMutation) Value(string) (any, bool)       { return nil, false }
 func (m recMutation) withOp(op velox.Op) recMutation { m.op = op; return m }
 

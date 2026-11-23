@@ -512,7 +512,7 @@ func TestNilMutatorAndPanickingHooks(t *testing.T) {
 type uPolicy struct{ ID int64 }
 
 func (*uPolicy) Policy() velox.Policy {
-	return velox.Policy{Insert: func(context.Context, velox.Row) error { return velox.Deny("never") }}
+	return velox.Policy{Insert: func(context.Context, *velox.DB, velox.Row) error { return velox.Deny("never") }}
 }
 
 var uPolicyMeta velox.MetaOnce[uPolicy]
@@ -679,7 +679,7 @@ var hUps = struct {
 var hUpAffected int64 = -1
 
 func (*hUp) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldGT("n", 0), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldGT("n", 0), nil }}
 }
 
 func (*hUp) Hooks() []velox.Hook {
@@ -842,7 +842,7 @@ var hSofts = struct {
 }{velox.NumberCol[hSoft, int64]{I: 0}, velox.NumberCol[hSoft, int64]{I: 1}, velox.Col[hSoft, bool]{I: 2}}
 
 func (*hSoft) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldGT("id", 0), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldGT("id", 0), nil }}
 }
 
 type noCount struct{}

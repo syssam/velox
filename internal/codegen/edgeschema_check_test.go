@@ -100,7 +100,7 @@ func esCheck(t *testing.T, decls string) error {
 // or Insert policy and hooks are allowed.
 func TestEdgeSchemaBehaviourRefused(t *testing.T) {
 	readPolicy := func(key string) string {
-		return "func (Membership) Policy() velox.Policy {\n\treturn velox.Policy{" + key + ": func(context.Context) (velox.Predicate, error) { // mark\n\t\treturn velox.FieldEQ(\"user_id\", 1), nil\n\t}}\n}\n"
+		return "func (Membership) Policy() velox.Policy {\n\treturn velox.Policy{" + key + ": func(context.Context, *velox.DB) (velox.Predicate, error) { // mark\n\t\treturn velox.FieldEQ(\"user_id\", 1), nil\n\t}}\n}\n"
 	}
 	interceptors := "func (Membership) Interceptors() []velox.Interceptor { return nil }\n"
 	for _, c := range []struct{ name, decls, want string }{
@@ -128,7 +128,7 @@ func TestEdgeSchemaBehaviourRefused(t *testing.T) {
 		})
 	}
 	t.Run("allowed", func(t *testing.T) {
-		decls := "func (Membership) Policy() velox.Policy {\n\treturn velox.Policy{Write: func(context.Context) (velox.Predicate, error) {\n\t\treturn velox.FieldEQ(\"user_id\", 1), nil\n\t}}\n}\n\n" +
+		decls := "func (Membership) Policy() velox.Policy {\n\treturn velox.Policy{Write: func(context.Context, *velox.DB) (velox.Predicate, error) {\n\t\treturn velox.FieldEQ(\"user_id\", 1), nil\n\t}}\n}\n\n" +
 			"func (Membership) Hooks() []velox.Hook { return nil }\n"
 		if err := esCheck(t, decls); err != nil {
 			t.Fatal(err)

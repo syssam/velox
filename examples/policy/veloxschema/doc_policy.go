@@ -12,7 +12,7 @@ import (
 // restriction, and a zero Predicate is an error.
 func (Doc) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			switch u := auth.UserFromContext(ctx); u {
 			case "":
 				return velox.Predicate{}, velox.Deny("no user")
@@ -23,7 +23,7 @@ func (Doc) Policy() velox.Policy {
 			}
 		},
 		// Write filters which rows may change; Read applies too.
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			switch u := auth.UserFromContext(ctx); u {
 			case "":
 				return velox.Predicate{}, velox.Deny("no user")
@@ -34,7 +34,7 @@ func (Doc) Policy() velox.Policy {
 			}
 		},
 		// Insert checks each new row.
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			if u := auth.UserFromContext(ctx); u != "admin" && r.Value("owner") != u {
 				return velox.Deny("a doc must be created by its owner")
 			}

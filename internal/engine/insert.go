@@ -292,7 +292,7 @@ func InsertColumns(in *EntityInfo, skip int) []int {
 // and validated, unless WithoutPolicy.
 func InsertAllowed(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer) error {
 	if pol := in.policy; pol != nil && pol.Insert != nil && db.bypass == "" {
-		if err := pol.Insert(ctx, p); err != nil {
+		if err := pol.Insert(ctx, db, p); err != nil {
 			if m, ok := errors.AsType[*rowMisuseError](err); ok {
 				return newStageError(in.Name, "policy", m.err)
 			}

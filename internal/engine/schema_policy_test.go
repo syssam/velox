@@ -50,11 +50,11 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Errorf("read: %s %v", re.SQL, re.Args)
 	}
 	x.Title = ""
-	if err := p.Insert(ctx, unsafe.Pointer(&x)); !errors.Is(err, velox.ErrDenied) {
+	if err := p.Insert(ctx, nil, unsafe.Pointer(&x)); !errors.Is(err, velox.ErrDenied) {
 		t.Errorf("insert of an untitled row: %v", err)
 	}
 	x.Title = "t"
-	if err := p.Insert(ctx, unsafe.Pointer(&x)); err != nil {
+	if err := p.Insert(ctx, nil, unsafe.Pointer(&x)); err != nil {
 		t.Errorf("insert of a titled row: %v", err)
 	}
 

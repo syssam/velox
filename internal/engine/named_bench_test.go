@@ -41,20 +41,20 @@ func bnBadOf(ctx context.Context) string { v, _ := ctx.Value(bnBad{}).(string); 
 // by its index, converted to a Cond: the statement does not resolve it.
 func (*bnIdx) Policy() velox.Policy {
 	org := velox.NumberCol[bnIdx, int64]{I: 1}
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		return velox.Predicate(org.EQ(bnOrgOf(ctx))), nil
 	}}
 }
 
 func (*bnName) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			if bnBadOf(ctx) == "policy" {
 				return velox.FieldEQ("orgg_id", 1), nil
 			}
 			return velox.FieldEQ("org_id", bnOrgOf(ctx)), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			if r.Value("org_id") != bnOrgOf(ctx) {
 				return velox.Deny("another org")
 			}

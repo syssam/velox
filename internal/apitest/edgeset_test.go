@@ -32,7 +32,9 @@ func (*sUser) VeloxMeta() *velox.Meta[sUser] { return sUserMeta.Load(sUserDescri
 
 // Policy hides the user named "hidden" from Read.
 func (*sUser) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("name", "hidden"), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
+		return velox.FieldNEQ("name", "hidden"), nil
+	}}
 }
 
 func sUserDescriptor() velox.Descriptor[sUser] {
@@ -280,9 +282,9 @@ func sSpineDescriptor() velox.Descriptor[sSpine] {
 // sHiddenPolicy hides a hidden row from Read and, when locks, a locked row
 // from Write.
 func sHiddenPolicy(locks bool) velox.Policy {
-	p := velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("hidden", false), nil }}
+	p := velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("hidden", false), nil }}
 	if locks {
-		p.Write = func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("locked", false), nil }
+		p.Write = func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("locked", false), nil }
 	}
 	return p
 }

@@ -414,7 +414,7 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 }
 
 func (*dPolicyJoin) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil }}
 }
 
 // dLinker has tags through dLink, a join entity whose Insert policy checks a
@@ -472,14 +472,14 @@ func (*dLink) VeloxMeta() *velox.Meta[dLink] {
 // not see.
 func (*dLink) Policy() velox.Policy {
 	return velox.Policy{
-		Insert: func(_ context.Context, r velox.Row) error {
+		Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 			l := r.Entity().(*dLink)
 			if l.TagID == 13 {
 				return velox.Deny("not that tag")
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },
+		Write: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil },
 	}
 }
 
@@ -676,7 +676,7 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 }
 
 func (*dPeer) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if ctx.Value(peerCycle{}) != nil {
 			return velox.HasEdgeWith("friends", velox.FieldGT("id", 0)), nil
 		}

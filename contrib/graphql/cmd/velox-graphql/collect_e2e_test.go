@@ -91,7 +91,7 @@ import (
 // Policy hides the withdrawn reviews, those of 0 stars.
 func (Review) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("stars", 0), nil },
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldNEQ("stars", 0), nil },
 	}
 }
 `
@@ -113,14 +113,14 @@ var Org = scope.NewKey[int64]("org")
 // refuses an insert into another one.
 func orgPolicy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			org, err := Org.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ("org_id", org), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
 	}
 }
 

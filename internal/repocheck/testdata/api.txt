@@ -57,11 +57,7 @@ JoinClause.Left bool
 JoinClause.Link Link
 JoinClause.On []Predicate
 JoinClause.Ref RelRef
-Policy.Insert func(ctx context.Context, r Row) error
-Policy.Mutation MutationPolicy
-Policy.Query QueryPolicy
-Policy.Read func(ctx context.Context) (Predicate, error)
-Policy.Write func(ctx context.Context) (Predicate, error)
+PrivacyFilter is interface { Where(ps ...Predicate) }
 Projection.GroupBy []Term
 Projection.Having []Predicate
 Projection.Terms []Term
@@ -609,6 +605,8 @@ func (o One[T]) Get[_ Lazy[T]]() (*T, bool)
 func (o One[T]) MarshalJSON() ([]byte, error)
 func (o Order[E]) Descending[_ Lazy[E]]() bool
 func (o Order[E]) Term[_ Lazy[E]]() Term[E]
+func (p MutationPolicy) EvalMutation(ctx context.Context, m PrivacyMutation) error
+func (p QueryPolicy) EvalQuery(ctx context.Context, q PrivacyQuery) error
 func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E]
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
 func (q InsertQuery[E]) OnConflictWhere[_ Lazy[E]](ps ...Pred[E]) InsertQuery[E]
@@ -920,6 +918,8 @@ type Meta[E any] struct { }
 type Mixin = schema.Mixin
 type MutateFunc func(ctx context.Context, m *Mutation) error
 type Mutation struct { }
+type MutationPolicy []MutationRule
+type MutationRule interface { EvalMutation(ctx context.Context, m PrivacyMutation) error }
 type Mutator interface { Mutate(ctx context.Context, m *Mutation) error }
 type NullCol[E, V any] struct { I int32 }
 type NullJSONCol[E, V any] struct { I int32 }
@@ -935,11 +935,16 @@ type OrderTerm = veloxtype.OrderTerm
 type Order[E any] struct { }
 type OtherCol[E, V any] struct { I int32 }
 type Paged[E, K, O, C any] interface { *E PaginateQuery(ctx context.Context, q Query[E], after *K, first *int, before *K, last *int, opts []O) (C, error) }
-type Policy = engine.Policy
+type Policy struct { Read func(ctx context.Context, db *DB) (Predicate, error) Write func(ctx context.Context, db *DB) (Predicate, error) Insert func(ctx context.Context, db *DB, r Row) error Query QueryPolicy Mutation MutationPolicy }
 type PolicyError = veloxtype.PolicyError
 type Pred[E any] = engine.Pred[E]
 type Predicate = Pred[anyEntity]
+type PrivacyFilter = engine.PrivacyFilter
+type PrivacyMutation interface { Op() Op Filter() PrivacyFilter Value(name string) (any, bool) DB() *DB }
+type PrivacyQuery interface { Filter() PrivacyFilter DB() *DB }
 type Projection = engine.Projection
+type QueryPolicy []QueryRule
+type QueryRule interface { EvalQuery(ctx context.Context, q PrivacyQuery) error }
 type Query[E any] struct { }
 type RawQuery[E any] struct { }
 type RawRow = engine.RawRow
@@ -1449,15 +1454,6 @@ var ErrStale
 
 package privacy
 Decision.Error() string
-Filter is interface { Where(ps ...Predicate) }
-Mutation is interface { Op() Op Filter() PrivacyFilter Value(name string) (any, bool) }
-MutationPolicy is []MutationRule
-MutationPolicy.EvalMutation(ctx context.Context, m PrivacyMutation) error
-MutationRule is interface { EvalMutation(ctx context.Context, m PrivacyMutation) error }
-Query is interface { Filter() PrivacyFilter }
-QueryPolicy is []QueryRule
-QueryPolicy.EvalQuery(ctx context.Context, q PrivacyQuery) error
-QueryRule is interface { EvalQuery(ctx context.Context, q PrivacyQuery) error }
 func (f FilterFunc) EvalMutation(ctx context.Context, m Mutation) error
 func (f FilterFunc) EvalQuery(ctx context.Context, q Query) error
 func (f MutationRuleFunc) EvalMutation(ctx context.Context, m Mutation) error
@@ -1474,18 +1470,18 @@ func IsDecision(err error) bool
 func OnMutationOperation(rule MutationRule, op velox.Op) MutationRule
 func Skipf(format string, a ...any) error
 type Decision = engine.Decision
-type Filter = engine.PrivacyFilter
+type Filter = velox.PrivacyFilter
 type FilterFunc func(context.Context, Filter) error
 type Filterable interface { Filter() Filter }
-type Mutation = engine.PrivacyMutation
-type MutationPolicy = engine.MutationPolicy
-type MutationRule = engine.MutationRule
+type Mutation = velox.PrivacyMutation
+type MutationPolicy = velox.MutationPolicy
+type MutationRule = velox.MutationRule
 type MutationRuleFunc func(context.Context, Mutation) error
 type Policy = velox.Policy
-type Query = engine.PrivacyQuery
+type Query = velox.PrivacyQuery
 type QueryMutationRule interface { QueryRule MutationRule }
-type QueryPolicy = engine.QueryPolicy
-type QueryRule = engine.QueryRule
+type QueryPolicy = velox.QueryPolicy
+type QueryRule = velox.QueryRule
 type QueryRuleFunc func(context.Context, Query) error
 var Allow
 var Deny

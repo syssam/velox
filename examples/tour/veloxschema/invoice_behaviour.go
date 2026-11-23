@@ -15,7 +15,7 @@ func (Invoice) Policy() velox.Policy {
 	return velox.Policy{
 		// Accountants see every invoice of their organization; viewers see
 		// only the ones that were sent.
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			switch role.FromContext(ctx) {
 			case role.Accountant:
 				return velox.Allow(), nil
@@ -24,13 +24,13 @@ func (Invoice) Policy() velox.Policy {
 			}
 			return velox.Predicate{}, velox.Deny("no billing role")
 		},
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			if err := role.RequireAccountant(ctx); err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, _ velox.Row) error { return role.RequireAccountant(ctx) },
+		Insert: func(ctx context.Context, _ *velox.DB, _ velox.Row) error { return role.RequireAccountant(ctx) },
 	}
 }
 

@@ -256,7 +256,7 @@ func (*note) VeloxMeta() *velox.Meta[note] { return noteMeta.Load(noteDescriptor
 // Policy hides secret notes; fixture.OrgPolicy, bound before it, confines
 // notes to the context's org.
 func (*note) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldEQ("secret", false), nil
 	}}
 }

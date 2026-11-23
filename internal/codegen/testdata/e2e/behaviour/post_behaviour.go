@@ -40,13 +40,13 @@ func (Post) Interceptors() []velox.Interceptor {
 // "forbidden".
 func (Post) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			if v, _ := ctx.Value(viewerKey{}).(bool); v {
 				return velox.FieldEQ("status", "published"), nil
 			}
 			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			if r.Value("title") == "forbidden" {
 				return velox.Deny("that title is forbidden")
 			}

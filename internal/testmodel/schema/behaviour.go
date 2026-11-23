@@ -12,7 +12,7 @@ import (
 // tickets they own; "admin" sees, changes and creates every ticket. InOrg's
 // policy, ANDed before it, confines tickets to the context's Org.
 func (Ticket) Policy() velox.Policy {
-	own := func(ctx context.Context) (velox.Predicate, error) {
+	own := func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		switch u := actor.UserFromContext(ctx); u {
 		case "":
 			return velox.Predicate{}, velox.Deny("no user")
@@ -25,7 +25,7 @@ func (Ticket) Policy() velox.Policy {
 	return velox.Policy{
 		Read:  own,
 		Write: own,
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			if u := actor.UserFromContext(ctx); u != "admin" && r.Value("owner") != u {
 				return velox.Deny("a ticket must be created by its owner")
 			}

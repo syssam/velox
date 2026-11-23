@@ -58,8 +58,8 @@ func TestCheckProjectRefusals(t *testing.T) {
 
 func TestAndInserts(t *testing.T) {
 	var order []string
-	step := func(name string, err error) func(context.Context, Row) error {
-		return func(context.Context, Row) error {
+	step := func(name string, err error) func(context.Context, *DB, Row) error {
+		return func(context.Context, *DB, Row) error {
 			order = append(order, name)
 			return err
 		}
@@ -67,19 +67,19 @@ func TestAndInserts(t *testing.T) {
 	ctx := context.Background()
 	denied := errors.New("denied")
 
-	if got := andInserts(nil, step("b", nil)); got == nil || got(ctx, Row{}) != nil || strings.Join(order, "") != "b" {
+	if got := andInserts(nil, step("b", nil)); got == nil || got(ctx, nil, Row{}) != nil || strings.Join(order, "") != "b" {
 		t.Errorf("a nil first: runs only b, got %v", order)
 	}
 	order = nil
-	if err := andInserts(step("a", nil), step("b", nil))(ctx, Row{}); err != nil || strings.Join(order, "") != "ab" {
+	if err := andInserts(step("a", nil), step("b", nil))(ctx, nil, Row{}); err != nil || strings.Join(order, "") != "ab" {
 		t.Errorf("both: err %v, order %v", err, order)
 	}
 	order = nil
-	if err := andInserts(step("a", denied), step("b", nil))(ctx, Row{}); !errors.Is(err, denied) || strings.Join(order, "") != "a" {
+	if err := andInserts(step("a", denied), step("b", nil))(ctx, nil, Row{}); !errors.Is(err, denied) || strings.Join(order, "") != "a" {
 		t.Errorf("a first denies: err %v, order %v; want b skipped", err, order)
 	}
 	order = nil
-	if err := andInserts(step("a", nil), step("b", denied))(ctx, Row{}); !errors.Is(err, denied) || strings.Join(order, "") != "ab" {
+	if err := andInserts(step("a", nil), step("b", denied))(ctx, nil, Row{}); !errors.Is(err, denied) || strings.Join(order, "") != "ab" {
 		t.Errorf("b denies: err %v, order %v", err, order)
 	}
 }

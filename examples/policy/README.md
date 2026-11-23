@@ -20,9 +20,9 @@ acts as is in the small package `auth`:
 ```go
 func (Doc) Policy() velox.Policy {
 	return velox.Policy{
-		Read:   func(ctx context.Context) (velox.Predicate, error) { … }, // ANDed into every read
-		Write:  func(ctx context.Context) (velox.Predicate, error) { … }, // ANDed into every update and delete
-		Insert: func(ctx context.Context, r velox.Row) error { … },  // checks each new row
+		Read:   func(ctx context.Context, db *velox.DB) (velox.Predicate, error) { … }, // ANDed into every read
+		Write:  func(ctx context.Context, db *velox.DB) (velox.Predicate, error) { … }, // ANDed into every update and delete
+		Insert: func(ctx context.Context, db *velox.DB, r velox.Row) error { … }, // checks each new row
 	}
 }
 ```

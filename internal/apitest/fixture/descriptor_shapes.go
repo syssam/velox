@@ -40,14 +40,14 @@ type PnoteWriteKey struct{}
 
 func (*Pnote) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			PnoteReads.Add(1)
 			if a, ok := ctx.Value(PnoteKey{}).(PnoteAnswer); ok {
 				return a.P, a.Err
 			}
 			return velox.FieldEQ("owner", "ann"), nil
 		},
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			PnoteWrites.Add(1)
 			if a, ok := ctx.Value(PnoteWriteKey{}).(PnoteAnswer); ok {
 				return a.P, a.Err
@@ -130,15 +130,15 @@ func NoteDryRun(ctx context.Context, hook string) {
 
 func (*Dnote) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			NoteDryRun(ctx, "Read")
 			return velox.Allow(), nil
 		},
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			NoteDryRun(ctx, "Write")
 			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, _ velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, _ velox.Row) error {
 			NoteDryRun(ctx, "Insert")
 			return nil
 		},

@@ -266,6 +266,28 @@ func fakeConn(e *fakeconn.Exec) velox.Conn { return engine.NewConn(e, 0) }
 // also relies on when it gives its fn the DB of an engine.DB.
 func engineOf(db *velox.DB) *engine.DB { return (*engine.DB)(unsafe.Pointer(db)) }
 
+// rootOf is db as the root's DB, which holds an engine.DB as its only field.
+func rootOf(db *engine.DB) *velox.DB { return (*velox.DB)(unsafe.Pointer(db)) }
+
+// erasePolicy is p's Read, Write and Insert as the engine keeps them, as
+// the root erases a Policy. These tests declare no privacy rule lists.
+func erasePolicy(p velox.Policy) engine.Policy {
+	var e engine.Policy
+	if f := p.Read; f != nil {
+		e.Read = func(ctx context.Context, db *engine.DB) (velox.Predicate, error) { return f(ctx, rootOf(db)) }
+	}
+	if f := p.Write; f != nil {
+		e.Write = func(ctx context.Context, db *engine.DB) (velox.Predicate, error) { return f(ctx, rootOf(db)) }
+	}
+	if f := p.Insert; f != nil {
+		e.Insert = func(ctx context.Context, db *engine.DB, r velox.Row) error { return f(ctx, rootOf(db), r) }
+	}
+	if len(p.Query) > 0 || len(p.Mutation) > 0 {
+		panic("erasePolicy: a rule list")
+	}
+	return e
+}
+
 // setReplicaDown puts db's replica i in back-off until until.
 func setReplicaDown(db *velox.DB, i int, until time.Time) {
 	engineOf(db).Rt.One.Replicas[i].DownUntil.Store(until.UnixNano())
@@ -361,7 +383,7 @@ func loadDescriptor[E any](d velox.Descriptor[E], targets ...engine.RelTarget) (
 		err = engine.ErasePolicy(info, func() (*engine.EntityPolicy, string) {
 			all := make([]*engine.EntityPolicy, len(ps))
 			for i, p := range ps {
-				all[i] = engine.PolicyFor(info, p.Policy())
+				all[i] = engine.PolicyFor(info, erasePolicy(p.Policy()))
 			}
 			return engine.AndPolicies(all), ""
 		})

@@ -19,7 +19,7 @@ import (
 type orgMixin struct{}
 
 func (orgMixin) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("org_id", 7), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("org_id", 7), nil }}
 }
 
 func (orgMixin) Hooks() []velox.Hook {

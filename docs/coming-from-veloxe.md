@@ -428,11 +428,13 @@ These hold with or without compat:
 - The privacy rule lists keep veloxe's meaning: a `Query` list applies to
   reads, a `Mutation` list to writes, and `privacy.DecisionContext` lifts
   them ([ADR 0089](decisions/0089-veloxe-privacy-shape.md)). A rule that
-  read through `gen.FromContext(ctx)` or `TxFromContext(ctx)` keeps the DB
-  it was given and joins the transaction: `rdb, ok := velox.TxFrom(ctx,
-  db); if !ok { rdb = db }`. A read made under a rule's ctx is not
-  judged by that rule's list, so a rule that reads its own entity ends
-  ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md)).
+  read through `gen.FromContext(ctx)` or `TxFromContext(ctx)` reads
+  through `q.DB()` or `m.DB()`, the DB the statement runs on, the
+  transaction's inside `Tx`; a `velox.Policy` function gets the same DB as
+  its `db` parameter. A read made under a rule's ctx is not judged by that
+  rule's list, so a rule that reads its own entity ends
+  ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md),
+  [ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
 - `Optional` stays NOT NULL, and `Nillable` makes a column NULL-able
   ([ADR 0003](decisions/0003-nullability.md)).
 

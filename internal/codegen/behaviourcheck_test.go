@@ -135,7 +135,7 @@ func lineOf(t *testing.T, decls, marker string) int {
 
 // read is a Policy of entity whose Read returns cond.
 func read(entity, cond string) string {
-	return "func (" + entity + ") Policy() velox.Policy {\n\treturn velox.Policy{Read: func(context.Context) (velox.Predicate, error) {\n\t\treturn " + cond + ", nil\n\t}}\n}\n"
+	return "func (" + entity + ") Policy() velox.Policy {\n\treturn velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {\n\t\treturn " + cond + ", nil\n\t}}\n}\n"
 }
 
 // hook is a Hooks of entity whose one hook runs body on m.
@@ -145,7 +145,7 @@ func hook(entity, body string) string {
 
 // insert is a Policy of entity whose Insert runs body on r.
 func insert(entity, body string) string {
-	return "func (" + entity + ") Policy() velox.Policy {\n\treturn velox.Policy{Insert: func(_ context.Context, r velox.Row) error {\n\t\t" + body + "\n\t}}\n}\n"
+	return "func (" + entity + ") Policy() velox.Policy {\n\treturn velox.Policy{Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {\n\t\t" + body + "\n\t}}\n}\n"
 }
 
 // checkRefusal is a case that CheckBehaviour refuses: the error names the line

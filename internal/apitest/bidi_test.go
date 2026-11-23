@@ -84,7 +84,7 @@ var bidiSeen struct {
 }
 
 func (*bnodeFriendP) Policy() velox.Policy {
-	return velox.Policy{Insert: func(_ context.Context, r velox.Row) error {
+	return velox.Policy{Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 		x := r.Entity().(*bnodeFriendP)
 		bidiSeen.inserted = append(bidiSeen.inserted, *x)
 		return nil
@@ -813,7 +813,7 @@ type btspouse struct {
 // Policy confines the model to the context's org and lets every write: the
 // clearing of the old partner bypasses it, and says so.
 func (*btspouse) Policy() velox.Policy {
-	return velox.Policy{Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }}
+	return velox.Policy{Write: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil }}
 }
 
 var btspouseMeta velox.MetaOnce[btspouse]

@@ -63,14 +63,14 @@ func OrgHooks() []velox.Hook { return KeyHooks(testmodel.Org, "org_id") }
 // refuses a row whose column is not it.
 func KeyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			v, err := key.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ(column, v), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			return key.Match(ctx, r.Value(column))
 		},
 	}
@@ -122,7 +122,7 @@ type RenameTo struct{}
 var SomeTime = time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 
 func (*DAuthor) Policy() velox.Policy {
-	return velox.Policy{Insert: func(_ context.Context, r velox.Row) error {
+	return velox.Policy{Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 		if r.Value("name") == "mallory" {
 			return velox.Deny("not mallory")
 		}

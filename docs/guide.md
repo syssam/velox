@@ -834,7 +834,7 @@ with `velox.FieldInSelect(column, entity, key, conditions...)`: this row's
 
 ```go
 func (Doc) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		// a document is visible when its org_id is that of an organisation the viewer reads
 		return velox.FieldInSelect("org_id", "Org", "id", velox.FieldEQ("active", true)), nil
 	}}
@@ -1618,10 +1618,14 @@ has three parts:
 - `Write` returns a condition ANDed into updates, deletes and `Save`.
 - `Insert` checks each new row.
 
+Each function is given the statement's ctx and `db`, the DB the statement
+runs on (the transaction inside `db.Tx`), for a policy that reads; one
+that reads nothing names it `_`.
+
 ```go
 func (Invoice) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			switch role.FromContext(ctx) {
 			case role.Accountant:
 				return velox.Allow(), nil
@@ -1630,13 +1634,13 @@ func (Invoice) Policy() velox.Policy {
 			}
 			return velox.Predicate{}, velox.Deny("no billing role")
 		},
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			if err := role.RequireAccountant(ctx); err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, _ velox.Row) error { return role.RequireAccountant(ctx) },
+		Insert: func(ctx context.Context, _ *velox.DB, _ velox.Row) error { return role.RequireAccountant(ctx) },
 	}
 }
 ```
@@ -1684,27 +1688,20 @@ and it only affects code that is handed that DB; a context carries no bypass
 [policy example](../examples/policy).
 
 Prefer a condition that reads nothing itself, such as `velox.HasEdgeWith`,
-which runs inside the statement. A policy function, privacy rule or
-interceptor that must read to decide, such as a lookup of an
-organization's subtree, reads with its ctx on the DB the application gave
-it, joined to the statement's transaction with `velox.TxFrom`, as an ent
-rule uses `ent.TxFromContext`. Inside `db.Tx` the DB alone fails with
-`ErrOutsideTx`. A schema cannot name the generated types, so it reads with
-`Rows` or package `untyped`. velox reads the policy from the schema's zero
-value, so the DB comes from a variable the application sets after
-`Connect`:
+which runs inside the statement. A policy function that must read to
+decide, such as a lookup of an organization's subtree, reads through the
+`db` it is given, with its ctx. `db` is the DB the statement runs on,
+never nil: inside `db.Tx` it is the transaction, as `m.DB()` is for a hook
+and the `db` a filter gets, so the policy gets the same answer inside a
+transaction and outside. A privacy rule reads through `q.DB()` or
+`m.DB()` of the query or mutation it judges. A schema cannot name the
+generated types, so it reads with `Rows` or package `untyped`:
 
 ```go
-var AppDB *velox.DB // set by the application after Connect
-
 func (Org) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
-		rdb, ok := velox.TxFrom(ctx, AppDB)
-		if !ok {
-			rdb = AppDB
-		}
+	return velox.Policy{Read: func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
 		var orgs []any
-		for row, err := range rdb.Rows(ctx, "org subtree",
+		for row, err := range db.Rows(ctx, "org subtree",
 			"SELECT id FROM orgs WHERE path LIKE ?", orgPath(ctx)+"%") {
 			if err != nil {
 				return velox.Predicate{}, err
@@ -1723,7 +1720,8 @@ func (Org) Policy() velox.Policy {
 A statement made under a policy function's or an interceptor's ctx is not
 judged by that function, whatever DB it runs on, so a policy that reads
 its own entity ends; every other policy, interceptor and filter applies to
-it ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md)).
+it ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md),
+[ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
 
 A helper that builds a condition and may have none to add returns the zero
 `velox.Predicate{}` (or `Pred[E]{}`), and its caller tests it with
@@ -1753,9 +1751,9 @@ An interceptor is a filter that applies to every statement on an entity,
 like a `Read` policy, but `WithoutPolicy` does not lift it. It is meant for
 application rules that even admin code should respect, such as hiding
 soft-deleted rows. Declare `Interceptors() []velox.Interceptor` on a schema
-or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`. A
-Filter that reads joins the transaction with `velox.TxFrom`, as a policy
-does.
+or mixin; each has a `Filter func(ctx) (velox.Predicate, error)`. It is
+given no DB: a Filter that reads joins the statement's transaction with
+`velox.TxFrom(ctx, db)` on a DB the application gave it.
 
 ### Hooks and filters for every entity
 
@@ -2085,14 +2083,14 @@ func (InOrg) Fields() []velox.Field {
 
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			org, err := OrgKey.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ("org_id", org), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			return OrgKey.Match(ctx, r.Value("org_id"))
 		},
 	}

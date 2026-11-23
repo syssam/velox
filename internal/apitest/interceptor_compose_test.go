@@ -40,7 +40,7 @@ func (*lAnd) VeloxMeta() *velox.Meta[lAnd] {
 		policy := func(label string, insert string) func() velox.Policy {
 			return func() velox.Policy {
 				return velox.Policy{
-					Read: func(ctx context.Context) (velox.Predicate, error) {
+					Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 						lAndTrace = append(lAndTrace, "read "+label)
 						if label == "a" {
 							switch ctx.Value(lModeKey{}) {
@@ -52,7 +52,7 @@ func (*lAnd) VeloxMeta() *velox.Meta[lAnd] {
 						}
 						return velox.FieldNEQ("name", label), nil
 					},
-					Insert: func(_ context.Context, r velox.Row) error {
+					Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 						lAndTrace = append(lAndTrace, "insert "+label)
 						if r.Value("name") == insert {
 							return velox.Deny(label + " refuses " + insert)

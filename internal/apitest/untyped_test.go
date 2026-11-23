@@ -92,9 +92,9 @@ func ubAllow(f func(ctx context.Context) (velox.Predicate, error)) func(ctx cont
 
 func (*ubDoc) Policy() velox.Policy {
 	return velox.Policy{
-		Read:  func(ctx context.Context) (velox.Predicate, error) { return ubAllow(ubRead)(ctx) },
-		Write: func(ctx context.Context) (velox.Predicate, error) { return ubAllow(ubWrite)(ctx) },
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Read:  func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) { return ubAllow(ubRead)(ctx) },
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) { return ubAllow(ubWrite)(ctx) },
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			if ubInsert == nil {
 				return nil
 			}
@@ -162,7 +162,7 @@ func (*ubDoc) VeloxMeta() *velox.Meta[ubDoc] {
 // Policy lets a comment be read only when its doc is: velox.HasEdge("doc")
 // names the relation, whose target's Read policy applies inside the EXISTS.
 func (*ubComment) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("doc"), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("doc"), nil }}
 }
 
 var ubCommentMeta velox.MetaOnce[ubComment]
@@ -184,7 +184,7 @@ func (*ubComment) VeloxMeta() *velox.Meta[ubComment] {
 
 // Policy names the relation "doc", which ubLoose's descriptor does not link.
 func (*ubLoose) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("doc"), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("doc"), nil }}
 }
 
 var ubLooseMeta velox.MetaOnce[ubLoose]

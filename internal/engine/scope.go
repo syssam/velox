@@ -24,7 +24,7 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 		}
 	}
 	if policy && in.policy.Write != nil {
-		p, err := in.policy.Write(sc.Ctx, OpUpdate)
+		p, err := in.policy.Write(sc.Ctx, sc.db, OpUpdate)
 		if write, err = sc.PolicyCond(in, OpUpdate, "Write", p, err); err != nil {
 			return err
 		}
@@ -199,7 +199,7 @@ func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 		}
 	}
 	if t.policy != nil && t.policy.Read != nil && sc.PolicyOn() {
-		p, err := t.policy.Read(sc.Ctx)
+		p, err := t.policy.Read(sc.Ctx, sc.db)
 		c, err := sc.PolicyCond(t, op, "Read", p, err)
 		if err != nil {
 			return Predicate{}, err
@@ -209,7 +209,7 @@ func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 		}
 	}
 	if sc.Reads && t.policy != nil && t.policy.Query != nil && sc.PolicyOn() {
-		p, err := t.policy.Query(sc.Ctx)
+		p, err := t.policy.Query(sc.Ctx, sc.db)
 		c, err := sc.PolicyCond(t, op, "Query", p, err)
 		if err != nil {
 			return Predicate{}, err
@@ -612,7 +612,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 			if op == OpSelect {
 				op = OpUpdate // a Writable SELECT reads the rows an update changes
 			}
-			p, err := pol.Write(ctx, op)
+			p, err := pol.Write(ctx, db, op)
 			if write, err = sc.PolicyCond(in, st.Op, "Write", p, err); err != nil {
 				return err
 			}

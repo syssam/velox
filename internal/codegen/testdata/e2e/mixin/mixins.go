@@ -29,7 +29,9 @@ type Tenant struct{ mixin.Schema }
 func (Tenant) Fields() []schema.Field { return []schema.Field{field.Int64("org_id").Immutable()} }
 
 func (Tenant) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) { return velox.FieldEQ("org_id", orgOf(ctx)), nil }}
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
+		return velox.FieldEQ("org_id", orgOf(ctx)), nil
+	}}
 }
 
 func (Tenant) Hooks() []velox.Hook {

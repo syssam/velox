@@ -108,16 +108,15 @@ func callFilter(ctx context.Context, db *DB, filters []EntityFilterFn, i int, en
 // allowed is a skipped condition's result: no restriction.
 func allowed() (Predicate, error) { return NewPredicate(Node{Op: OpAllow}), nil }
 
-// guardCond is f, a condition of kind (an interceptor's Filter, a policy's
-// Read or Query), called under a frame of its own, and skipped, with no
-// restriction, under a call of itself (enter).
-func guardCond(f func(ctx context.Context) (Predicate, error), kind frameKind) func(ctx context.Context) (Predicate, error) {
+// guardCond is f, an interceptor's Filter, called under a frame of its
+// own, and skipped, with no restriction, under a call of itself (enter).
+func guardCond(f func(ctx context.Context) (Predicate, error)) func(ctx context.Context) (Predicate, error) {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
 	return func(ctx context.Context) (Predicate, error) {
-		c, skip := enter(ctx, key, kind)
+		c, skip := enter(ctx, key, kindInterceptor)
 		if skip {
 			return allowed()
 		}
@@ -125,34 +124,50 @@ func guardCond(f func(ctx context.Context) (Predicate, error), kind frameKind) f
 	}
 }
 
-// guardWrite is guardCond of a policy's Write condition, which is given the
-// write's kind.
-func guardWrite(f func(ctx context.Context, op Op) (Predicate, error)) func(ctx context.Context, op Op) (Predicate, error) {
+// guardPolicy is guardCond of a policy's Read or Query condition, which is
+// given the statement's DB.
+func guardPolicy(f func(ctx context.Context, db *DB) (Predicate, error)) func(ctx context.Context, db *DB) (Predicate, error) {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
-	return func(ctx context.Context, op Op) (Predicate, error) {
+	return func(ctx context.Context, db *DB) (Predicate, error) {
 		c, skip := enter(ctx, key, kindPolicy)
 		if skip {
 			return allowed()
 		}
-		return f(c, op)
+		return f(c, db)
+	}
+}
+
+// guardWrite is guardCond of a policy's Write condition, which is given the
+// write's kind.
+func guardWrite(f func(ctx context.Context, db *DB, op Op) (Predicate, error)) func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+	if f == nil {
+		return nil
+	}
+	key := new(behaviourKey)
+	return func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+		c, skip := enter(ctx, key, kindPolicy)
+		if skip {
+			return allowed()
+		}
+		return f(c, db, op)
 	}
 }
 
 // guardInsert is guardCond of a policy's Insert check, which passes when
 // skipped.
-func guardInsert(f func(ctx context.Context, r Row) error) func(ctx context.Context, r Row) error {
+func guardInsert(f func(ctx context.Context, db *DB, r Row) error) func(ctx context.Context, db *DB, r Row) error {
 	if f == nil {
 		return nil
 	}
 	key := new(behaviourKey)
-	return func(ctx context.Context, r Row) error {
+	return func(ctx context.Context, db *DB, r Row) error {
 		c, skip := enter(ctx, key, kindPolicy)
 		if skip {
 			return nil
 		}
-		return f(c, r)
+		return f(c, db, r)
 	}
 }

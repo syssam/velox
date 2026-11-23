@@ -42,7 +42,7 @@ func posterRule(cfg ruleConfig) velox.Predicate {
 // Policy shows a poster the users who have a post, as the Post's own Read
 // policy lets that context see it: a subquery on another entity, by name.
 func (User) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if v, _ := ctx.Value(configuredKey{}).(bool); v {
 			return posterRule(ruleConfig{column: "id", table: "posts", key: "author_id", edge: "posts"}), nil
 		}

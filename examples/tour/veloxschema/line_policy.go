@@ -11,12 +11,12 @@ import (
 // only accountants change them. velox ANDs it after InOrg's policy.
 func (Line) Policy() velox.Policy {
 	return velox.Policy{
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			if err := role.RequireAccountant(ctx); err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, _ velox.Row) error { return role.RequireAccountant(ctx) },
+		Insert: func(ctx context.Context, _ *velox.DB, _ velox.Row) error { return role.RequireAccountant(ctx) },
 	}
 }

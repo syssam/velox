@@ -98,7 +98,7 @@ var ePostMeta velox.MetaOnce[ePost]
 func (*ePost) VeloxMeta() *velox.Meta[ePost] { return ePostMeta.Load(ePostDescriptor) }
 
 func (*ePost) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("secret", false), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("secret", false), nil }}
 }
 
 // Mixin lists the behaviour that runs before ePost's own.

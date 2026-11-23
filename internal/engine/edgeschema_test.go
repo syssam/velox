@@ -91,7 +91,7 @@ func (*esMember) VeloxMeta() *velox.Meta[esMember] {
 type esSecret struct{ ID, UserID, GroupID int64 }
 
 func (*esSecret) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("user_id", 1), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("user_id", 1), nil }}
 }
 
 var esSecretMeta velox.MetaOnce[esSecret]

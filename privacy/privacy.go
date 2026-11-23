@@ -35,9 +35,9 @@
 // and narrow every UPDATE, DELETE and Save (velox.OpUpdate, velox.OpDelete).
 //
 // A rule that reads to decide, as veloxe's did through a client from the
-// context, reads with ctx on its DB joined to the statement's
-// transaction, velox.TxFrom(ctx, db), as velox.Policy shows. A statement
-// made under a rule's ctx is not judged by its Policy's list.
+// context, reads with ctx through Query.DB or Mutation.DB: the DB the
+// statement runs on, the transaction's inside Tx. A statement made under
+// a rule's ctx is not judged by its Policy's list.
 //
 // DecisionContext puts a decision in a context: every Query and Mutation
 // list then returns it without running its rules, Allow lifting them and
@@ -99,25 +99,26 @@ func Skipf(format string, a ...any) error {
 type Policy = velox.Policy
 
 type (
-	// Query is the read a QueryRule judges: Filter narrows it.
-	Query = engine.PrivacyQuery
-	// Mutation is the write a MutationRule judges: its Op, its Filter, and
-	// an inserted row's values.
-	Mutation = engine.PrivacyMutation
+	// Query is the read a QueryRule judges: Filter narrows it, and DB is
+	// the DB it runs on.
+	Query = velox.PrivacyQuery
+	// Mutation is the write a MutationRule judges: its Op, its Filter, an
+	// inserted row's values, and DB, the DB it runs on.
+	Mutation = velox.PrivacyMutation
 	// Filter narrows a statement: Where's conditions are ANDed into it. The
 	// value a rule is given also has HasColumn(name string) bool, which
 	// reports whether the entity has a column of that name, for a rule
 	// shared by several entities.
-	Filter = engine.PrivacyFilter
+	Filter = velox.PrivacyFilter
 	// QueryRule decides a read.
-	QueryRule = engine.QueryRule
+	QueryRule = velox.QueryRule
 	// QueryPolicy is a list of query rules; it is a QueryRule itself.
-	QueryPolicy = engine.QueryPolicy
+	QueryPolicy = velox.QueryPolicy
 	// MutationRule decides a write.
-	MutationRule = engine.MutationRule
+	MutationRule = velox.MutationRule
 	// MutationPolicy is a list of mutation rules; it is a MutationRule
 	// itself.
-	MutationPolicy = engine.MutationPolicy
+	MutationPolicy = velox.MutationPolicy
 )
 
 // QueryMutationRule is a rule for both reads and writes.

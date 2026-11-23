@@ -46,8 +46,8 @@ func pcEntities() *velox.EntityTable {
 
 // pcMine is nextapp's rule: column IN (SELECT conversation_id FROM
 // participants WHERE user_id = me).
-func pcMine(column string) func(context.Context) (velox.Predicate, error) {
-	return func(ctx context.Context) (velox.Predicate, error) {
+func pcMine(column string) func(context.Context, *velox.DB) (velox.Predicate, error) {
+	return func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		return velox.FieldInSelect(column, "ConversationParticipant", "conversation_id", velox.FieldEQ("user_id", pcUserOf(ctx))), nil
 	}
 }
@@ -93,13 +93,13 @@ type pcC struct {
 }
 
 func (*pcA) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldInSelect("b_id", "B", "id", velox.FieldEQ("open", true)), nil
 	}}
 }
 
 func (*pcB) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldInSelect("id", "A", "b_id", velox.FieldEQ("shown", true)), nil
 	}}
 }
@@ -118,7 +118,7 @@ type pcApproval struct {
 }
 
 func (*pcDoc) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldInSelect("id", "Approval", "entity_id", velox.FieldEQ("status", "approved")), nil
 	}}
 }

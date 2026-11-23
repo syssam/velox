@@ -66,9 +66,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   It is ent's `sqljson.ValueContains` with `sqljson.Path` (ADR 0141).
 - A policy function, privacy rule or interceptor Filter is not applied
   to a statement made under its own ctx, so one that reads its own
-  entity ends instead of calling itself without end. One that reads
-  joins the statement's transaction with `velox.TxFrom(ctx, db)`, as an
-  ent rule uses `ent.TxFromContext` (ADR 0135).
+  entity ends instead of calling itself without end. An interceptor that
+  reads joins the statement's transaction with `velox.TxFrom(ctx, db)`,
+  as an ent rule uses `ent.TxFromContext` (ADR 0135); a policy reads
+  through the DB it is given (ADR 0148).
 - `velox.IsZero(p)` reports the zero `Pred` or `Predicate`: a helper with no
   condition returns it, and its caller tests it. A function, not a method,
   so a package pays only where it calls it (ADR 0137).
@@ -791,6 +792,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
   `GeneratedCodeIsVersion28`: regenerate, since code generated under
   compat=veloxe before sets only `Veloxe` (ADR 0150).
+- Every `velox.Policy` function is given the DB its statement runs on, the
+  transaction's inside `Tx`: `Read` and `Write` are
+  `func(ctx, db *velox.DB) (velox.Predicate, error)`, `Insert`
+  `func(ctx, db *velox.DB, r velox.Row) error`. `privacy.Query` and
+  `privacy.Mutation` have `DB() *velox.DB`. A policy that reads needs no
+  package-level DB and no `velox.TxFrom`; a statement made under it is
+  still not judged by it. `Policy` and the privacy rule types are declared
+  in the root (`velox.PrivacyQuery`, `velox.QueryPolicy`, …), and package
+  privacy aliases them (ADR 0148).
 - A `WithFilter` filter receives the entity as a `velox.FilterEntity`, not
   its name: `func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op)`.
   `e.Name()` is the name it was given, and `e.HasColumn(column)` reads

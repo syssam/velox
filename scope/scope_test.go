@@ -38,14 +38,14 @@ var org = scope.NewKey[int64]("org")
 // and Hooks return, for key and column.
 func keyPolicy[V comparable](key *scope.Key[V], column string) velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			v, err := key.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ(column, v), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			return key.Match(ctx, r.Value(column))
 		},
 	}
@@ -101,8 +101,8 @@ func (*ruled) VeloxMeta() *velox.Meta[ruled] { return ruledMeta.Load(ruledDescri
 
 func (*ruled) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("title", "ok"), nil },
-		Insert: func(_ context.Context, r velox.Row) error {
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("title", "ok"), nil },
+		Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 			if r.Value("title") == "banned" {
 				return errors.New("banned title")
 			}

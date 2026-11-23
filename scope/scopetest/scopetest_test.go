@@ -221,11 +221,11 @@ var (
 func openReadPolicy() velox.Policy {
 	p := fixture.OrgPolicy()
 	read := p.Read
-	p.Read = func(ctx context.Context) (velox.Predicate, error) {
+	p.Read = func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
 		if _, ok := testmodel.Org.From(ctx); !ok {
 			return velox.Allow(), nil
 		}
-		return read(ctx)
+		return read(ctx, db)
 	}
 	return p
 }
@@ -234,7 +234,7 @@ func openReadPolicy() velox.Policy {
 // context has a value, and not that the row is in it.
 func noInsertPolicy() velox.Policy {
 	p := fixture.OrgPolicy()
-	p.Insert = func(ctx context.Context, _ velox.Row) error {
+	p.Insert = func(ctx context.Context, _ *velox.DB, _ velox.Row) error {
 		if _, ok := testmodel.Org.From(ctx); !ok {
 			return scope.ErrNoScope
 		}
@@ -248,18 +248,18 @@ func noInsertPolicy() velox.Policy {
 func insertWithoutValuePolicy() velox.Policy {
 	p := fixture.OrgPolicy()
 	ins := p.Insert
-	p.Insert = func(ctx context.Context, r velox.Row) error {
+	p.Insert = func(ctx context.Context, db *velox.DB, r velox.Row) error {
 		if _, ok := testmodel.Org.From(ctx); !ok {
 			return nil
 		}
-		return ins(ctx, r)
+		return ins(ctx, db, r)
 	}
 	return p
 }
 
 // banned refuses the name "banned".
 func banned() velox.Policy {
-	return velox.Policy{Insert: func(_ context.Context, r velox.Row) error {
+	return velox.Policy{Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error {
 		if r.Value("name") == "banned" {
 			return velox.Deny("banned")
 		}
@@ -287,8 +287,8 @@ var (
 func hiddenPolicy() velox.Policy {
 	p := fixture.OrgPolicy()
 	read := p.Read
-	p.Read = func(ctx context.Context) (velox.Predicate, error) {
-		if _, err := read(ctx); err != nil {
+	p.Read = func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
+		if _, err := read(ctx, db); err != nil {
 			return velox.Predicate{}, err
 		}
 		return velox.FieldEQ("org_id", int64(-1)), nil

@@ -72,7 +72,7 @@ func ovReading(n int) context.Context {
 }
 
 func (*ovNote) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if vs, ok := ctx.Value(ovKey{}).([]any); ok {
 			ps := make([]velox.Predicate, len(vs))
 			for i, v := range vs {

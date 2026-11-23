@@ -10,17 +10,17 @@ import (
 
 // InOrg's policy names a column that Issue has and Project lacks.
 func (InOrg) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldEQ("author_id", 1), nil
 	}}
 }
 
 func (Issue) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Predicate, error) {
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 			return velox.Or(authoredBy(), velox.HasEdgeWith("project", velox.FieldEQ("title", "x"))), nil
 		},
-		Write: func(context.Context) (velox.Predicate, error) {
+		Write: func(context.Context, *velox.DB) (velox.Predicate, error) {
 			return velox.FieldEQ("project_id", "7"), nil
 		},
 	}

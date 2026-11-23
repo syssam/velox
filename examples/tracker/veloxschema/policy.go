@@ -14,7 +14,7 @@ import (
 // the statement.
 
 // member lets anyone logged in read.
-func member(ctx context.Context) (velox.Predicate, error) {
+func member(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 	if _, ok := principal.FromContext(ctx); !ok {
 		return velox.Predicate{}, velox.Deny("not logged in")
 	}
@@ -22,8 +22,8 @@ func member(ctx context.Context) (velox.Predicate, error) {
 }
 
 // authoredBy refuses a new row whose author is not the caller.
-func authoredBy(why string) func(context.Context, velox.Row) error {
-	return func(ctx context.Context, r velox.Row) error {
+func authoredBy(why string) func(context.Context, *velox.DB, velox.Row) error {
+	return func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 		if p, ok := principal.FromContext(ctx); !ok || r.Value("author_id") != p.UserID {
 			return velox.Deny(why)
 		}
@@ -35,13 +35,13 @@ func authoredBy(why string) func(context.Context, velox.Row) error {
 func (Project) Policy() velox.Policy {
 	return velox.Policy{
 		Read: member,
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			if p, ok := principal.FromContext(ctx); !ok || !p.Admin {
 				return velox.Predicate{}, velox.Deny("only an admin can change a project")
 			}
 			return velox.Allow(), nil
 		},
-		Insert: func(ctx context.Context, _ velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, _ velox.Row) error {
 			if p, ok := principal.FromContext(ctx); !ok || !p.Admin {
 				return velox.Deny("only an admin can create a project")
 			}
@@ -55,7 +55,7 @@ func (Project) Policy() velox.Policy {
 func (Issue) Policy() velox.Policy {
 	return velox.Policy{
 		Read: member,
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			p, ok := principal.FromContext(ctx)
 			switch {
 			case !ok:
@@ -74,7 +74,7 @@ func (Issue) Policy() velox.Policy {
 func (Comment) Policy() velox.Policy {
 	return velox.Policy{
 		Read: member,
-		Write: func(ctx context.Context) (velox.Predicate, error) {
+		Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			p, ok := principal.FromContext(ctx)
 			switch {
 			case !ok:

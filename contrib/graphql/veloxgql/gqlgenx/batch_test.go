@@ -104,14 +104,14 @@ func petDescriptor() velox.Descriptor[pet] {
 // OrgPolicy confines pets to the context's org, as an InOrg mixin would.
 func (*pet) OrgPolicy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			org, err := petOrg.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ("org_id", org), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error {
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error {
 			return petOrg.Match(ctx, r.Value("org_id"))
 		},
 	}
@@ -119,7 +119,7 @@ func (*pet) OrgPolicy() velox.Policy {
 
 // Policy hides the pets above the viewer's id.
 func (*pet) Policy() velox.Policy {
-	return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		if v, ok := ctx.Value(viewerKey{}).(int64); ok {
 			return velox.FieldLTE("id", v), nil
 		}

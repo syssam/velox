@@ -533,7 +533,7 @@ func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
 		"veloxschema/user_friend_policy.go": "package veloxschema\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox\"\n)\n\n" +
 			"// UserFriend is the join entity of User's friends, which has no schema.\ntype UserFriend struct{}\n\n" +
 			"func (UserFriend) Policy() velox.Policy {\n\treturn velox.Policy{\n\t\t" +
-			"Write: func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },\n\t}\n}\n",
+			"Write: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil },\n\t}\n}\n",
 	}, tempModule)
 	code, out, errs := runCLI(t, dir, "./veloxschema")
 	want := "velox-gen: veloxschema/user_friend_policy.go:14: UserFriend.Policy sets Read, Write, Query or Mutation: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
@@ -1259,14 +1259,14 @@ func (InOrg) Fields() []schema.Field { return []schema.Field{field.Int64("org_id
 
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			org, err := OrgKey.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ("org_id", org), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
 	}
 }
 
@@ -1586,7 +1586,7 @@ import (
 )
 
 func (User) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("name", "ann"), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("name", "ann"), nil }}
 }
 `})
 	if code, _, errs := runCLI(t, dir, "./veloxschema"); code != 0 {

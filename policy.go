@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"context"
 	"iter"
 	"slices"
 	"unsafe"
@@ -16,7 +17,7 @@ import (
 //
 //	func (Issue) Policy() velox.Policy {
 //		return velox.Policy{
-//			Write: func(ctx context.Context) (velox.Predicate, error) {
+//			Write: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 //				u, ok := UserFrom(ctx)
 //				if !ok {
 //					return velox.Predicate{}, velox.Deny("not logged in")
@@ -38,23 +39,26 @@ import (
 // path that forgot to return a condition never lets a caller through. Any
 // error they return denies the statement.
 //
-// A policy function decides from ctx and, for Insert, the row. Prefer a
-// condition that reads nothing itself, such as HasEdgeWith, which runs
-// inside the statement. A function that must read to decide, such as a
-// lookup of an organization's subtree, reads with ctx on the DB it was
-// given, joined to the statement's transaction, as an ent rule uses
-// ent.TxFromContext:
+// A policy function decides from ctx, db and, for Insert, the row. db is
+// the DB the statement runs on, never nil: inside Tx it is the
+// transaction's, as Mutation.DB is for a hook and the db a Filter gets.
+// Prefer a condition that reads nothing itself, such as HasEdgeWith, which
+// runs inside the statement. A function that must read to decide, such as
+// a lookup of an organization's subtree, reads through db with ctx, so it
+// gets the same answer inside a transaction and outside:
 //
-//	rdb, ok := velox.TxFrom(ctx, db)
-//	if !ok {
-//		rdb = db
-//	}
+//	Read: func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
+//		ids, err := subtree(ctx, db, OrgFrom(ctx))
+//		if err != nil {
+//			return velox.Predicate{}, err
+//		}
+//		return velox.FieldIn("org_id", ids...), nil
+//	},
 //
-// Inside Tx the DB alone fails with ErrOutsideTx. A statement made under a
-// policy function's ctx is not judged by that function, whatever DB it
-// runs on, so a policy that reads its own entity ends. A rule that refuses
-// a write after seeing other rows may also be a hook (Hook), which reads
-// through Mutation.DB.
+// A statement made under a policy function's ctx is not judged by that
+// function, so a policy that reads its own entity ends. A rule that
+// refuses a write after seeing other rows may also be a hook (Hook), which
+// reads through Mutation.DB.
 //
 // Read is ANDed into every SELECT, Count, With load and Has/HasWith
 // subquery on the entity, into every UPDATE, DELETE and Save, and into the
@@ -79,7 +83,43 @@ import (
 // privacy.AlwaysDenyRule(). Query's conditions apply to reads only, after
 // Read's; Mutation's rules judge inserted rows, after Insert, and narrow
 // updates and deletes, after Write.
-type Policy = engine.Policy
+type Policy struct {
+	Read     func(ctx context.Context, db *DB) (Predicate, error)
+	Write    func(ctx context.Context, db *DB) (Predicate, error)
+	Insert   func(ctx context.Context, db *DB, r Row) error
+	Query    QueryPolicy
+	Mutation MutationPolicy
+}
+
+// erase is p as the engine keeps it: each function given the engine's DB,
+// which a *DB is cast from (see DB), and each rule list given a query or
+// mutation that names the DB.
+func (p Policy) erase() engine.Policy {
+	var e engine.Policy
+	if f := p.Read; f != nil {
+		e.Read = func(ctx context.Context, db *engine.DB) (Predicate, error) { return f(ctx, dbOf(db)) }
+	}
+	if f := p.Write; f != nil {
+		e.Write = func(ctx context.Context, db *engine.DB) (Predicate, error) { return f(ctx, dbOf(db)) }
+	}
+	if f := p.Insert; f != nil {
+		e.Insert = func(ctx context.Context, db *engine.DB, r Row) error { return f(ctx, dbOf(db), r) }
+	}
+	if q := p.Query; len(q) > 0 {
+		e.Query = func(ctx context.Context, db *engine.DB, f PrivacyFilter) error {
+			return q.EvalQuery(ctx, privacyQuery{f, dbOf(db)})
+		}
+	}
+	if m := p.Mutation; len(m) > 0 {
+		e.Mutation = func(ctx context.Context, db *engine.DB, op Op, f PrivacyFilter, row *Row) error {
+			return m.EvalMutation(ctx, privacyMutation{op, f, row, dbOf(db)})
+		}
+	}
+	return e
+}
+
+// dbOf is db as a *DB: DB holds an engine.DB as its only field.
+func dbOf(db *engine.DB) *DB { return (*DB)(unsafe.Pointer(db)) }
 
 // Row is a row of an insert, by its columns' names: what a hook ranges over
 // in Mutation.Rows, and what Policy.Insert checks. It is a value, cheap to
@@ -302,9 +342,9 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // statement, as a policy's does. An error fails the statement and is not a
 // denial: errors.Is(err, ErrDenied) holds only when the error is a Deny.
 //
-// A Filter that reads joins the statement's transaction with TxFrom, as a
-// policy does (Policy); a statement made under its ctx is not narrowed by
-// it.
+// A Filter is given no DB: one that reads joins the statement's
+// transaction with TxFrom on a DB the application gave it. A statement
+// made under its ctx is not narrowed by it.
 //
 // A generated entity's interceptors are declared in the schema package, on
 // the entity's schema or a mixin, and bound by velox-gen. An entity written

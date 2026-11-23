@@ -4,7 +4,9 @@
   answer of [0142](0142-nextapp-projection-recipes.md) and
   [0137](0137-nextapp-port-helpers.md)'s `velox.HasColumn`; amends
   [0132](0132-filter-reads-through-the-statements-db.md)'s Filter
-  signature.
+  signature; supersedes [0135](0135-policies-read-through-the-transaction.md)'s
+  "no parameter" for policy functions and privacy rules, keeping its
+  recursion guard.
 
 ## Context
 
@@ -21,6 +23,13 @@ that fell short.
    was false for an entity not yet used, answered by name, so two
    packages' entities of one name were one, and took a lock per call. A
    Filter was given only the entity's name, so it had nothing better.
+3. A policy function took only ctx. One that read (an organization's
+   subtree) needed a package-level `var AppDB *velox.DB`, set after
+   Connect, and `velox.TxFrom(ctx, AppDB)` to join the statement's
+   transaction (0135). That is hidden state, and the schema compiled
+   without the variable set. 0135 rejected a parameter because the shapes
+   were fixed by existing and veloxe-ported schemas; before 1.0 nothing is
+   kept for compatibility, and a Filter already got the DB (0132).
 
 ## Decision
 
@@ -63,9 +72,58 @@ comment only, so no version change.
 The name `FilterEntity` was chosen over `EntityInfo` and `Meta`, which
 name other things, and over `Entity`, taken.
 
+### 3. Policy functions and privacy rules get the statement's DB
+
+```go
+type Policy struct {
+	Read     func(ctx context.Context, db *DB) (Predicate, error)
+	Write    func(ctx context.Context, db *DB) (Predicate, error)
+	Insert   func(ctx context.Context, db *DB, r Row) error
+	Query    QueryPolicy
+	Mutation MutationPolicy
+}
+type PrivacyQuery interface { Filter() PrivacyFilter; DB() *DB }
+type PrivacyMutation interface { Op() Op; Filter() PrivacyFilter; Value(name string) (any, bool); DB() *DB }
+```
+
+`db` is the DB the statement runs on, never nil: inside `Tx` the
+transaction's, as `Mutation.DB` is for a hook and the `db` a Filter gets.
+`privacy.Query` and `privacy.Mutation` are `PrivacyQuery` and
+`PrivacyMutation`, so a rule list reads through `q.DB()` or `m.DB()`.
+0135's guard stays: a statement made under a policy function's or rule
+list's ctx is not judged by it, whatever DB it runs on
+(`TestPolicyReadsThroughItsDB`, `TestPolicyGetsTheStatementsDB`,
+`TestPolicyReadsWithoutItself`).
+
+`Policy` was an alias of an engine struct; its functions now name the
+root's `DB`, which the engine cannot import, so `Policy` and the privacy
+rule types (`PrivacyQuery`, `PrivacyMutation`, `QueryRule`, `QueryPolicy`,
+`MutationRule`, `MutationPolicy`, and `PrivacyFilter`, an alias) are
+declared in the root, and package privacy aliases them as before. The
+root erases a Policy to `engine.Policy`, whose functions take
+`*engine.DB`, and casts the DB back, as `WithFilter` does.
+
+A generic `engine.Policy[D]` with `type Policy = engine.Policy[DB]` was
+built first and rejected: every package that names `velox.Policy`
+instantiated the rule types and their methods, and a Policy and three
+hooks grew an entity package by 177 KB, against 87 KB before. The root
+types cost nothing per package. One cost remains: `EntityPolicy`'s
+functions name `*DB`, so an entity package that uses no DB describes
+DB's methods (`entityDescriptor` 144550 to 169908 bytes); a package that
+uses a DB, as every program's does, already did (`entityDescUse` +386).
+
+An `Interceptor`'s `Filter` stays `func(ctx)`, ent's shape; one that reads
+still joins the transaction with `TxFrom` on a DB the application gave
+it. `TxFrom` stays for that and for helpers handed a DB and a ctx.
+velox-gen checks policy keys, not function types, so it is unchanged, and
+the generated code is unchanged: no version change.
+
 ## Consequences
 
 - A `Calc` that aggregates needs `Agg()`. Forgetting it on MySQL writes
   `ANY_VALUE(SUM(x))` in a grouped ordering, which MySQL refuses: a loud
   failure, not a wrong answer.
 - A Filter compares `e.Name()` where it compared `entity`.
+- Every Policy function gains a `db *velox.DB` parameter, `_` where it
+  reads nothing. A veloxe or ent port's privacy rules compile unchanged
+  unless they implement `privacy.Query` or `privacy.Mutation` themselves.

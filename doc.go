@@ -31,7 +31,7 @@
 //
 //	func (User) Policy() velox.Policy {
 //		return velox.Policy{
-//			Read: func(ctx context.Context) (velox.Predicate, error) {
+//			Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 //				return velox.FieldIsNull("deleted_at"), nil
 //			},
 //		}

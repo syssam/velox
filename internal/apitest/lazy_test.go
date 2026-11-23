@@ -59,7 +59,7 @@ func (*lzTask) VeloxMeta() *velox.Meta[lzTask] { return lzTaskMeta.Load(lzTaskDe
 
 func (*lzTask) Policy() velox.Policy {
 	open := velox.HasEdgeWith("project", velox.FieldEQ("done", false)) // built in the body
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return open, nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return open, nil }}
 }
 
 func (*lzTask) Hooks() []velox.Hook {
@@ -144,8 +144,8 @@ func (*lzRace) VeloxMeta() *velox.Meta[lzRace] { return lzRaceMeta.Load(lzRaceDe
 func (*lzRace) Policy() velox.Policy {
 	shared := velox.HasEdgeWith("project", velox.FieldEQ("done", false))
 	return velox.Policy{
-		Read:  func(context.Context) (velox.Predicate, error) { return shared, nil },
-		Write: func(context.Context) (velox.Predicate, error) { return shared, nil },
+		Read:  func(context.Context, *velox.DB) (velox.Predicate, error) { return shared, nil },
+		Write: func(context.Context, *velox.DB) (velox.Predicate, error) { return shared, nil },
 	}
 }
 

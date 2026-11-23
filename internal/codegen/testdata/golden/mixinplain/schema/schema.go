@@ -23,7 +23,7 @@ func (InOrg) Fields() []schema.Field {
 }
 
 func (InOrg) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("org_id", 1), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("org_id", 1), nil }}
 }
 
 // Memo is in an organization.

@@ -134,14 +134,14 @@ var Org = scope.NewKey[int64]("org")
 
 func (User) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			org, err := Org.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ("org_id", org), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error { return Org.Match(ctx, r.Value("org_id")) },
 	}
 }
 

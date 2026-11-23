@@ -149,7 +149,7 @@ func WithPolicyMode(ctx context.Context, m PolicyMode) context.Context {
 // writes; a context's PolicyMode can make Read deny or fail instead.
 func (*INote) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			switch m, _ := ctx.Value(policyModeKey{}).(PolicyMode); m {
 			case PolicyDeny:
 				return velox.Predicate{}, velox.Deny("notes are closed")
@@ -158,7 +158,9 @@ func (*INote) Policy() velox.Policy {
 			}
 			return velox.FieldNEQ("body", "secret"), nil
 		},
-		Write: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("body", "locked"), nil },
+		Write: func(context.Context, *velox.DB) (velox.Predicate, error) {
+			return velox.FieldNEQ("body", "locked"), nil
+		},
 	}
 }
 

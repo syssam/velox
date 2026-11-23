@@ -54,7 +54,7 @@
 //
 //	func (User) Policy() velox.Policy {
 //		return velox.Policy{
-//			Read: func(ctx context.Context) (velox.Predicate, error) {
+//			Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 //				return velox.FieldIsNull("deleted_at"), nil
 //			},
 //		}
@@ -83,7 +83,7 @@
 // same methods, which are not generic:
 //
 //	func (InOrg) Policy() velox.Policy {
-//		return velox.Policy{Read: func(ctx context.Context) (velox.Predicate, error) {
+//		return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 //			return velox.FieldEQ("org_id", orgOf(ctx)), nil
 //		}}
 //	}

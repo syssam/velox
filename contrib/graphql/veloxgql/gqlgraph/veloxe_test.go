@@ -270,7 +270,7 @@ func (*badge) VeloxMeta() *velox.Meta[badge] {
 		return velox.Descriptor[badge]{
 			Table: "badges", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
-				return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+				return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 					return untyped.TableOf[badge]().Pred(0, untyped.PredNEQ, int64(21)), nil
 				}}
 			}}},
@@ -284,7 +284,7 @@ func (*vault) VeloxMeta() *velox.Meta[vault] {
 		return velox.Descriptor[vault]{
 			Table: "vaults", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0},
 			Schema: fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
-				return velox.Policy{Read: func(context.Context) (velox.Predicate, error) {
+				return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) {
 					return velox.Predicate{}, velox.Deny("vaults are closed")
 				}}
 			}}},

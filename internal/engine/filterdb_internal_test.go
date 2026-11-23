@@ -11,7 +11,7 @@ import (
 // frame of its own, and under a call of itself it is skipped: a condition
 // adds none, an Insert passes. A nil function stays nil.
 func TestGuards(t *testing.T) {
-	if guardCond(nil, kindPolicy) != nil || guardWrite(nil) != nil || guardInsert(nil) != nil {
+	if guardCond(nil) != nil || guardPolicy(nil) != nil || guardWrite(nil) != nil || guardInsert(nil) != nil {
 		t.Fatal("a nil function: want nil")
 	}
 	ctx := context.Background()
@@ -25,20 +25,30 @@ func TestGuards(t *testing.T) {
 			t.Errorf("cond under itself: %+v, %v; want Allow", p.n, err)
 		}
 		return Predicate{Node{Op: OpEQ, Col: 1, V: int64(1)}}, nil
-	}, kindInterceptor)
-	var write func(context.Context, Op) (Predicate, error)
-	write = guardWrite(func(c context.Context, _ Op) (Predicate, error) {
+	})
+	var read func(context.Context, *DB) (Predicate, error)
+	read = guardPolicy(func(c context.Context, _ *DB) (Predicate, error) {
 		if !strings.HasSuffix(frameOf(c).String(), ".Policy") {
 			t.Errorf("the frame: %s", frameOf(c))
 		}
-		if p, err := write(c, OpUpdate); err != nil || p.n.Op != OpAllow {
+		if p, err := read(c, nil); err != nil || p.n.Op != OpAllow {
+			t.Errorf("read under itself: %+v, %v; want Allow", p.n, err)
+		}
+		return Predicate{Node{Op: OpEQ, Col: 3, V: int64(1)}}, nil
+	})
+	var write func(context.Context, *DB, Op) (Predicate, error)
+	write = guardWrite(func(c context.Context, _ *DB, _ Op) (Predicate, error) {
+		if !strings.HasSuffix(frameOf(c).String(), ".Policy") {
+			t.Errorf("the frame: %s", frameOf(c))
+		}
+		if p, err := write(c, nil, OpUpdate); err != nil || p.n.Op != OpAllow {
 			t.Errorf("write under itself: %+v, %v; want Allow", p.n, err)
 		}
 		return Predicate{Node{Op: OpEQ, Col: 2, V: int64(1)}}, nil
 	})
-	var insert func(context.Context, Row) error
-	insert = guardInsert(func(c context.Context, _ Row) error {
-		if err := insert(c, Row{}); err != nil {
+	var insert func(context.Context, *DB, Row) error
+	insert = guardInsert(func(c context.Context, _ *DB, _ Row) error {
+		if err := insert(c, nil, Row{}); err != nil {
 			t.Errorf("insert under itself: %v; want it to pass", err)
 		}
 		return refused
@@ -46,10 +56,13 @@ func TestGuards(t *testing.T) {
 	if p, err := cond(ctx); err != nil || p.n.Col != 1 {
 		t.Errorf("cond: %+v, %v", p.n, err)
 	}
-	if p, err := write(ctx, OpUpdate); err != nil || p.n.Col != 2 {
+	if p, err := read(ctx, nil); err != nil || p.n.Col != 3 {
+		t.Errorf("read: %+v, %v", p.n, err)
+	}
+	if p, err := write(ctx, nil, OpUpdate); err != nil || p.n.Col != 2 {
 		t.Errorf("write: %+v, %v", p.n, err)
 	}
-	if err := insert(ctx, Row{}); !errors.Is(err, refused) {
+	if err := insert(ctx, nil, Row{}); !errors.Is(err, refused) {
 		t.Errorf("insert: %v", err)
 	}
 }

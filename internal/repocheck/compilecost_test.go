@@ -126,9 +126,9 @@ func Use(ctx context.Context, db *velox.DB, e *E) error {
 var entityDescHooksSrc = strings.Replace(entityDescUseSrc, `var (
 	eID `, `func (*E) Policy() velox.Policy {
 	return velox.Policy{
-		Read:   func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("name", "r"), nil },
-		Write:  func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },
-		Insert: func(_ context.Context, r velox.Row) error { _ = r.Value("name"); return nil },
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("name", "r"), nil },
+		Write: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil },
+		Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error { _ = r.Value("name"); return nil },
 	}
 }
 
@@ -174,9 +174,9 @@ type M struct{ mixin.Schema }
 
 func (M) Policy() velox.Policy {
 	return velox.Policy{
-		Read:   func(context.Context) (velox.Predicate, error) { return velox.FieldEQ("name", "r"), nil },
-		Write:  func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil },
-		Insert: func(_ context.Context, r velox.Row) error { _ = r.Value("name"); return nil },
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldEQ("name", "r"), nil },
+		Write: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil },
+		Insert: func(_ context.Context, _ *velox.DB, r velox.Row) error { _ = r.Value("name"); return nil },
 	}
 }
 
@@ -302,7 +302,13 @@ var genericObjects = []struct {
 	// bytes, entityDescUse from 776890 to 781446, entityDescHooks from
 	// 861928 to 866786 and entityDescMixin to 912240, in the engine types an
 	// entity's package reaches; the upsert clause was 3.3 KB of it.
-	{"entityDescriptor", "", entityDescSrc, 146432}, // measured 144550
+	//
+	// A policy function given the statement's DB (ADR 0148) puts *DB in
+	// EntityPolicy, which EntityInfo holds, so an entity package that uses
+	// no DB describes DB's methods again: entityDescriptor took 169908
+	// bytes, up from 144550. One that uses a DB, as every program's does,
+	// described them already: entityDescUse grew from 796274 to 796660.
+	{"entityDescriptor", "", entityDescSrc, 172032}, // measured 169908
 	//
 	// Sum, Avg, Min and Max stay functions: a method of Query whose signature names
 	// NumberCol[E, V] puts that in the export data of every package that uses a
@@ -397,7 +403,7 @@ var genericObjects = []struct {
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.
-	{"entityDescHooks", "", entityDescHooksBound, 882176}, // measured 881170
+	{"entityDescHooks", "", entityDescHooksBound, 884736}, // measured 883256
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own

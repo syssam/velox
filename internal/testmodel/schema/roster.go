@@ -70,7 +70,7 @@ func (Roster) Edges() []schema.Edge {
 
 // Policy hides a captain's link from writes: Remove and Clear keep it.
 func (Roster) Policy() velox.Policy {
-	return velox.Policy{Write: func(context.Context) (velox.Predicate, error) {
+	return velox.Policy{Write: func(context.Context, *velox.DB) (velox.Predicate, error) {
 		return velox.FieldNEQ("role", "captain"), nil
 	}}
 }

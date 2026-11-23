@@ -267,13 +267,13 @@ func TestBidiDescriptorRefused(t *testing.T) {
 	if want := "velox: engine_test.dBidiArray: the join entity of a bidirectional edge has columns of type [2]interface {}, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("an array key of interfaces: %v, want %s", err, want)
 	}
-	allow := func(context.Context) (velox.Predicate, error) { return velox.Allow(), nil }
+	allow := func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.Allow(), nil }
 	if _, err := loadDescriptor(bidiDescriptor()); err != nil {
 		t.Fatalf("a valid Desc: %v", err)
 	}
 	ok := bidiDescriptor()
 	ok.Schema = fixture.Fns{Policy: []func() velox.Policy{func() velox.Policy {
-		return velox.Policy{Insert: func(context.Context, velox.Row) error { return nil }}
+		return velox.Policy{Insert: func(context.Context, *velox.DB, velox.Row) error { return nil }}
 	}}}
 	if _, err := loadDescriptor(ok); err != nil {
 		t.Fatalf("a Policy with Insert only: %v", err)

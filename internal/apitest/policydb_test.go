@@ -21,9 +21,9 @@ func resetPNote(t *testing.T) {
 	})
 }
 
-// joined is the DB a policy that captured db reads through: the
+// joined is the DB an interceptor that captured db reads through: the
 // transaction ctx belongs to, joined with TxFrom, or db outside one, as
-// ent's rules use ent.TxFromContext.
+// ent's rules use ent.TxFromContext. An interceptor is given no DB.
 func joined(ctx context.Context, db *velox.DB) *velox.DB {
 	if tx, ok := velox.TxFrom(ctx, db); ok {
 		return tx
@@ -31,11 +31,11 @@ func joined(ctx context.Context, db *velox.DB) *velox.DB {
 	return db
 }
 
-// ownerO2 looks up the owner "o2" through the DB read returns for ctx, as
-// a team lookup does. A lookup that fails is recorded in errs, and the
-// caller narrows to nothing, as nextapp's lookups do.
-func ownerO2(ctx context.Context, read func(context.Context) *velox.DB, errs *[]error) (int64, bool) {
-	os, err := read(ctx).Query[fixture.IOwner]().Where(fixture.IOwners.Name.EQ("o2")).Limit(1).All(ctx)
+// ownerO2 looks up the owner "o2" on db, as a team lookup does. A lookup
+// that fails is recorded in errs, and the caller narrows to nothing, as
+// nextapp's lookups do.
+func ownerO2(ctx context.Context, db *velox.DB, errs *[]error) (int64, bool) {
+	os, err := db.Query[fixture.IOwner]().Where(fixture.IOwners.Name.EQ("o2")).Limit(1).All(ctx)
 	if err != nil {
 		*errs = append(*errs, err)
 		return 0, false
@@ -44,47 +44,53 @@ func ownerO2(ctx context.Context, read func(context.Context) *velox.DB, errs *[]
 }
 
 // ownerCond is the condition of the notes of owner "o2", read as ownerO2.
-func ownerCond(ctx context.Context, read func(context.Context) *velox.DB, errs *[]error) velox.Predicate {
-	id, ok := ownerO2(ctx, read, errs)
+func ownerCond(ctx context.Context, db *velox.DB, errs *[]error) velox.Predicate {
+	id, ok := ownerO2(ctx, db, errs)
 	if !ok {
 		return velox.None()
 	}
 	return velox.FieldEQ("owner_id", id)
 }
 
-// TestPolicyReadsThroughTxFrom: a Read policy, a privacy Query rule and an
-// interceptor's Filter that read through the transaction TxFrom joins give
-// a statement the same rows inside a Tx and outside it, on SQLite's pool
-// of one connection. Each reading on the DB it captured, without TxFrom,
-// fails inside the Tx with ErrOutsideTx and narrows to nothing.
-func TestPolicyReadsThroughTxFrom(t *testing.T) {
+// TestPolicyReadsThroughItsDB: a Read policy and a privacy Query rule
+// that read through the DB they are given (the policy's db, the rule's
+// q.DB()) give a statement the same rows inside a Tx and outside it, on
+// SQLite's pool of one connection, with no package-level DB and no
+// TxFrom. An interceptor's Filter, given no DB, joins with TxFrom. Each
+// reading on a DB it captured fails inside the Tx with ErrOutsideTx and
+// narrows to nothing.
+func TestPolicyReadsThroughItsDB(t *testing.T) {
 	resetPNote(t)
 	o2 := context.Background()
 	var db *velox.DB
-	for _, read := range []struct {
-		name string
-		db   func(context.Context) *velox.DB
-	}{
-		{"TxFrom", func(ctx context.Context) *velox.DB { return joined(ctx, db) }},
-		{"captured", func(context.Context) *velox.DB { return db }},
-	} {
+	for _, given := range []bool{true, false} {
 		for _, kind := range []string{"Read", "Query", "Interceptor"} {
-			t.Run(read.name+"/"+kind, func(t *testing.T) {
+			name := map[bool]string{true: "given", false: "captured"}[given] + "/" + kind
+			t.Run(name, func(t *testing.T) {
 				var errs []error
+				pick := func(stmt *velox.DB) *velox.DB {
+					if given {
+						return stmt
+					}
+					return db
+				}
 				fixture.PNoteRead, fixture.PNoteQuery, fixture.PNoteFilter = nil, nil, nil
 				switch kind {
 				case "Read":
-					fixture.PNoteRead = func(ctx context.Context) (velox.Predicate, error) {
-						return ownerCond(ctx, read.db, &errs), nil
+					fixture.PNoteRead = func(ctx context.Context, stmt *velox.DB) (velox.Predicate, error) {
+						return ownerCond(ctx, pick(stmt), &errs), nil
 					}
 				case "Query":
-					fixture.PNoteQuery = func(ctx context.Context, f privacy.Filter) error {
-						f.Where(ownerCond(ctx, read.db, &errs))
+					fixture.PNoteQuery = func(ctx context.Context, q privacy.Query) error {
+						q.Filter().Where(ownerCond(ctx, pick(q.DB()), &errs))
 						return privacy.Skip
 					}
 				case "Interceptor":
 					fixture.PNoteFilter = func(ctx context.Context) (velox.Predicate, error) {
-						return ownerCond(ctx, read.db, &errs), nil
+						if given {
+							return ownerCond(ctx, joined(ctx, db), &errs), nil
+						}
+						return ownerCond(ctx, db, &errs), nil
 					}
 				}
 				db = interceptorDB(t)
@@ -104,7 +110,7 @@ func TestPolicyReadsThroughTxFrom(t *testing.T) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				if read.name == "TxFrom" {
+				if given {
 					if outside != 1 || inside != 1 || len(errs) != 0 {
 						t.Errorf("%d notes outside a Tx, %d inside, want 1 and 1; lookups failed: %v", outside, inside, errs)
 					}
@@ -118,15 +124,64 @@ func TestPolicyReadsThroughTxFrom(t *testing.T) {
 	}
 }
 
-// TestInsertPolicyReadsInTx: an Insert policy that reads through TxFrom
+// TestPolicyGetsTheStatementsDB: every policy function and rule is given
+// the DB its statement runs on: the transaction's inside Tx, never nil.
+func TestPolicyGetsTheStatementsDB(t *testing.T) {
+	resetPNote(t)
+	got := map[string]*velox.DB{}
+	fixture.PNoteRead = func(_ context.Context, db *velox.DB) (velox.Predicate, error) {
+		got["Read"] = db
+		return velox.Allow(), nil
+	}
+	fixture.PNoteWrite = func(_ context.Context, db *velox.DB) (velox.Predicate, error) {
+		got["Write"] = db
+		return velox.Allow(), nil
+	}
+	fixture.PNoteInsert = func(_ context.Context, db *velox.DB, _ velox.Row) error {
+		got["Insert"] = db
+		return nil
+	}
+	fixture.PNoteQuery = func(_ context.Context, q privacy.Query) error {
+		got["Query"] = q.DB()
+		return privacy.Skip
+	}
+	db := interceptorDB(t)
+	run := func(ctx context.Context, db *velox.DB, body string) {
+		t.Helper()
+		clear(got)
+		if _, err := db.Query[fixture.PNote]().Count(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Update[fixture.PNote]().Where(fixture.PNotes.ID.EQ(1)).Set(fixture.PNotes.Body.Set("changed")).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.Insert(&fixture.PNote{OwnerID: 1, Body: body}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, k := range []string{"Read", "Write", "Insert", "Query"} {
+			if got[k] != db {
+				t.Errorf("%s was given %p, want the statement's DB %p", k, got[k], db)
+			}
+		}
+	}
+	run(context.Background(), db, "outside")
+	if err := db.Tx(context.Background(), func(ctx context.Context, tx *velox.DB) error {
+		run(ctx, tx, "inside")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestInsertPolicyReadsInTx: an Insert policy that reads through its db
 // judges a row inside a Tx as outside it.
 func TestInsertPolicyReadsInTx(t *testing.T) {
 	resetPNote(t)
 	ctx := context.Background()
 	db := interceptorDB(t)
 	var errs []error
-	fixture.PNoteInsert = func(ctx context.Context, r velox.Row) error {
-		id, ok := ownerO2(ctx, func(ctx context.Context) *velox.DB { return joined(ctx, db) }, &errs)
+	fixture.PNoteInsert = func(ctx context.Context, db *velox.DB, r velox.Row) error {
+		id, ok := ownerO2(ctx, db, &errs)
 		if !ok || r.Value("owner_id") != id {
 			return velox.Deny("not o2's")
 		}
@@ -156,11 +211,11 @@ func TestBehaviourContextNames(t *testing.T) {
 			t.Errorf("%s's context is named %q, want the suffix %s", kind, s, suffix)
 		}
 	}
-	fixture.PNoteRead = func(ctx context.Context) (velox.Predicate, error) {
+	fixture.PNoteRead = func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		note("Read", ".Policy", ctx)
 		return velox.Allow(), nil
 	}
-	fixture.PNoteQuery = func(ctx context.Context, _ privacy.Filter) error {
+	fixture.PNoteQuery = func(ctx context.Context, _ privacy.Query) error {
 		note("Query", ".Policy", ctx)
 		return privacy.Skip
 	}
@@ -168,11 +223,11 @@ func TestBehaviourContextNames(t *testing.T) {
 		note("Interceptor", ".Interceptor", ctx)
 		return velox.Allow(), nil
 	}
-	fixture.PNoteWrite = func(ctx context.Context) (velox.Predicate, error) {
+	fixture.PNoteWrite = func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 		note("Write", ".Policy", ctx)
 		return velox.Allow(), nil
 	}
-	fixture.PNoteInsert = func(ctx context.Context, _ velox.Row) error {
+	fixture.PNoteInsert = func(ctx context.Context, _ *velox.DB, _ velox.Row) error {
 		note("Insert", ".Policy", ctx)
 		return nil
 	}
@@ -204,12 +259,12 @@ func TestPolicyReadsWithoutItself(t *testing.T) {
 	fixture.PNoteFilter = func(context.Context) (velox.Predicate, error) {
 		return velox.FieldEQ("hidden", false), nil
 	}
-	fixture.PNoteRead = func(ctx context.Context) (velox.Predicate, error) {
+	fixture.PNoteRead = func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
 		calls++
 		if calls > 10 {
 			return velox.Predicate{}, errors.New("the policy called itself without end")
 		}
-		ns, err := joined(ctx, db).Query[fixture.PNote]().OrderBy(fixture.PNotes.ID.Desc()).Limit(10).All(ctx)
+		ns, err := db.Query[fixture.PNote]().OrderBy(fixture.PNotes.ID.Desc()).Limit(10).All(ctx)
 		if err != nil {
 			return velox.Predicate{}, err
 		}

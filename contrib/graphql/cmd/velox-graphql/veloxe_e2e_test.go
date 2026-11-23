@@ -383,7 +383,7 @@ func (Memo) Fields() []schema.Field { return []schema.Field{field.String("title"
 // Policy hides the memos titled hidden.
 func (Memo) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Predicate, error) { return velox.FieldNEQ("title", "hidden"), nil },
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldNEQ("title", "hidden"), nil },
 	}
 }
 `

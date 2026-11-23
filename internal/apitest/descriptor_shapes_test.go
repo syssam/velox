@@ -52,7 +52,7 @@ type pcomment struct {
 
 func (*pcomment) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("note"), nil },
+		Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("note"), nil },
 	}
 }
 
@@ -95,11 +95,11 @@ type pcycB struct {
 }
 
 func (*pcycA) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("b"), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("b"), nil }}
 }
 
 func (*pcycB) Policy() velox.Policy {
-	return velox.Policy{Read: func(context.Context) (velox.Predicate, error) { return velox.HasEdge("a"), nil }}
+	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.HasEdge("a"), nil }}
 }
 
 var (

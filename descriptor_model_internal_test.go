@@ -140,8 +140,8 @@ func (*hooked) Hooks() []Hook {
 
 func (*hooked) Policy() Policy {
 	return Policy{
-		Read: func(context.Context) (Predicate, error) { return FieldEQ("title", "r"), nil },
-		Insert: func(_ context.Context, r Row) error {
+		Read: func(context.Context, *DB) (Predicate, error) { return FieldEQ("title", "r"), nil },
+		Insert: func(_ context.Context, _ *DB, r Row) error {
 			if r.Value("title") == "" {
 				return Deny("no title")
 			}

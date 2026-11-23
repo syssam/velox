@@ -86,6 +86,9 @@ func (*pvDoc) Policy() velox.Policy {
 			}),
 			privacy.QueryRuleFunc(func(ctx context.Context, q privacy.Query) error {
 				pvAfterAllow.Add(1)
+				if q.DB() == nil {
+					return errors.New("the query names no DB")
+				}
 				cc, ok := q.Filter().(interface{ HasColumn(string) bool })
 				if !ok || !cc.HasColumn("owner") || cc.HasColumn("nope") {
 					return errors.New("the filter does not report the entity's columns")
@@ -105,6 +108,9 @@ func (*pvDoc) Policy() velox.Policy {
 				return privacy.Skip
 			}), velox.OpDelete),
 			privacy.MutationRuleFunc(func(_ context.Context, m privacy.Mutation) error {
+				if m.DB() == nil {
+					return errors.New("the mutation names no DB")
+				}
 				if v, ok := m.Value("title"); ok && v == "forbidden" {
 					return privacy.Denyf("title %v", v)
 				}

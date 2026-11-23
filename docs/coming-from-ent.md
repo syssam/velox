@@ -297,7 +297,7 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
 | `privacy.Allow` | `privacy.Allow`; `velox.Allow()` is the condition that matches every row |
-| a privacy rule's or interceptor's `ent.TxFromContext(ctx)`, else the client | `rdb, ok := velox.TxFrom(ctx, db); if !ok { rdb = db }`; a read under the rule's ctx is not judged by that rule (decision 0135) |
+| a privacy rule's `ent.TxFromContext(ctx)`, else the client | a `velox.Policy` function's `db` parameter, a privacy rule's `q.DB()` or `m.DB()`: the statement's DB, the transaction's inside `Tx`; an interceptor's `rdb, ok := velox.TxFrom(ctx, db); if !ok { rdb = db }`; a read under the rule's ctx is not judged by that rule (decisions 0135, 0148) |
 
 A `velox.Predicate` is a `Pred` of no
 entity, so `And`, `Or` and `Not` take it, and `velox.Predicate(p)` turns a
@@ -349,14 +349,14 @@ func (InOrg) Fields() []velox.Field { return []velox.Field{field.Int64("org_id")
 
 func (InOrg) Policy() velox.Policy {
 	return velox.Policy{
-		Read: func(ctx context.Context) (velox.Predicate, error) {
+		Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
 			org, err := OrgKey.Require(ctx)
 			if err != nil {
 				return velox.Predicate{}, err
 			}
 			return velox.FieldEQ("org_id", org), nil
 		},
-		Insert: func(ctx context.Context, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
+		Insert: func(ctx context.Context, _ *velox.DB, r velox.Row) error { return OrgKey.Match(ctx, r.Value("org_id")) },
 	}
 }
 

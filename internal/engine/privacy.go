@@ -5,10 +5,12 @@ import (
 	"errors"
 )
 
-// This file is veloxe's privacy model, which Policy.Query and
-// Policy.Mutation accept so that a schema written for veloxe compiles and
-// behaves as it did there. Package privacy exports it; its doc says how a
-// rule list becomes velox's conditions.
+// This file is the engine's side of veloxe's privacy model, which the
+// root's Policy.Query and Policy.Mutation accept so that a schema written
+// for veloxe compiles and behaves as it did there. The rule types name the
+// root's DB, so the root declares them and hands the engine a QueryEval and
+// a MutationEval. Package privacy exports them; its doc says how a rule
+// list becomes velox's conditions.
 
 // Decision is the verdict of a privacy rule: PrivacyAllow, PrivacyDeny or
 // PrivacySkip, which a rule returns as an error, wrapped or not.
@@ -30,65 +32,30 @@ type PrivacyFilter interface {
 	Where(ps ...Predicate)
 }
 
-// PrivacyQuery is the read a QueryRule judges.
-type PrivacyQuery interface {
-	// Filter returns the read's filter.
-	Filter() PrivacyFilter
-}
+// QueryEval runs a read's rule list (the root's QueryPolicy) given the DB
+// the read runs on and the filter its rules narrow it with.
+type QueryEval func(ctx context.Context, db *DB, f PrivacyFilter) error
 
-// PrivacyMutation is the write a MutationRule judges.
-type PrivacyMutation interface {
-	// Op returns the write's kind: OpInsert, OpUpdate or OpDelete.
-	Op() Op
-	// Filter returns the write's filter. An update's or a delete's narrows
-	// the rows it changes; an insert's is ignored, as veloxe ignored it.
-	Filter() PrivacyFilter
-	// Value returns an inserted row's value of the column of the given
-	// name, as Row.Value does. It reports false for a column the entity
-	// lacks, and on an update or a delete, whose values a rule does not see.
-	Value(name string) (any, bool)
-}
+// MutationEval runs a write's rule list (the root's MutationPolicy) given
+// the DB the write runs on, its kind, its filter and, for an insert, the
+// row; row is nil for an update or a delete.
+type MutationEval func(ctx context.Context, db *DB, op Op, f PrivacyFilter, row *Row) error
 
-// QueryRule decides whether a read may run, and may narrow it through its
-// filter. It returns a Decision, nil (which is PrivacySkip), or another
-// error, which denies the read.
-type QueryRule interface {
-	EvalQuery(ctx context.Context, q PrivacyQuery) error
-}
+// PrivacyDecided reads a rule's result as veloxe did: nil and PrivacySkip
+// go on (false), PrivacyAllow ends with nil, anything else ends with
+// itself.
+func PrivacyDecided(err error) (bool, error) { return decided(err) }
 
-// QueryPolicy is a list of query rules, run in order.
-type QueryPolicy []QueryRule
-
-// MutationRule decides whether a write may run, and may narrow an update or
-// a delete through its filter, as QueryRule does a read.
-type MutationRule interface {
-	EvalMutation(ctx context.Context, m PrivacyMutation) error
-}
-
-// MutationPolicy is a list of mutation rules, run in order.
-type MutationPolicy []MutationRule
-
-// EvalQuery runs the rules in order: nil and PrivacySkip go on to the next
-// rule, PrivacyAllow ends the list with nil, and any other error ends it
-// with that error. A list that runs out returns nil. The conditions the
-// rules gave the filter before the end stay.
-func (p QueryPolicy) EvalQuery(ctx context.Context, q PrivacyQuery) error {
-	for _, r := range p {
-		if done, err := decided(r.EvalQuery(ctx, q)); done {
-			return err
-		}
+// RowLookup is r's value of the column of the given name, and false when
+// the entity has no such column. It records no misuse, as Value does.
+func RowLookup(r *Row, name string) (any, bool) {
+	if r == nil {
+		return nil, false
 	}
-	return nil
-}
-
-// EvalMutation runs the rules in order, as QueryPolicy.EvalQuery does.
-func (p MutationPolicy) EvalMutation(ctx context.Context, m PrivacyMutation) error {
-	for _, r := range p {
-		if done, err := decided(r.EvalMutation(ctx, m)); done {
-			return err
-		}
+	if _, ok := ColumnNamed(r.in, name); !ok {
+		return nil, false
 	}
-	return nil
+	return r.Value(name), true
 }
 
 // decided reads a rule's result as veloxe did: nil and Skip go on, Allow
@@ -151,32 +118,6 @@ func (f *privacyFilter) cond() Predicate {
 	return AndPredicates(f.where...)
 }
 
-// privacyQuery is the PrivacyQuery of one read.
-type privacyQuery struct{ f *privacyFilter }
-
-func (q privacyQuery) Filter() PrivacyFilter { return q.f }
-
-// privacyMutation is the PrivacyMutation of one write: an inserted row's
-// (row set) or an update's or a delete's.
-type privacyMutation struct {
-	op  Op
-	f   PrivacyFilter
-	row *Row
-}
-
-func (m privacyMutation) Op() Op                { return m.op }
-func (m privacyMutation) Filter() PrivacyFilter { return m.f }
-
-func (m privacyMutation) Value(name string) (any, bool) {
-	if m.row == nil {
-		return nil, false
-	}
-	if _, ok := m.row.in.Column(name); !ok {
-		return nil, false
-	}
-	return m.row.Value(name), true
-}
-
 // ignoredFilter is an insert's filter, which drops what it is given: an
 // insert has no rows to narrow, and veloxe ignored a rule's predicates on
 // one, so a rule written for both reads and writes, such as a tenant's,
@@ -187,49 +128,49 @@ func (ignoredFilter) Where(...Predicate) {}
 
 // HasColumn reports whether the entity has a column of the given name.
 func (f ignoredFilter) HasColumn(name string) bool {
-	_, ok := f.in.Column(name)
+	_, ok := ColumnNamed(f.in, name)
 	return ok
 }
 
-// queryCond is the condition QueryPolicy p gives a read of entity in: the
-// AND of what its rules gave the filter, or the error that denies the read.
-// A decision in the context replaces the rules.
-func queryCond(in *EntityInfo, p QueryPolicy) func(ctx context.Context) (Predicate, error) {
-	return func(ctx context.Context) (Predicate, error) {
+// queryCond is the condition the rule list eval gives a read of entity in:
+// the AND of what its rules gave the filter, or the error that denies the
+// read. A decision in the context replaces the rules.
+func queryCond(in *EntityInfo, eval QueryEval) func(ctx context.Context, db *DB) (Predicate, error) {
+	return func(ctx context.Context, db *DB) (Predicate, error) {
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return decisionCond(d)
 		}
 		f := &privacyFilter{in: in}
-		if err := p.EvalQuery(ctx, privacyQuery{f}); err != nil {
+		if err := eval(ctx, db, f); err != nil {
 			return Predicate{}, err
 		}
 		return f.cond(), nil
 	}
 }
 
-// mutationCond is the condition MutationPolicy p gives an update or a delete
-// (op) of entity in, as queryCond.
-func mutationCond(in *EntityInfo, p MutationPolicy) func(ctx context.Context, op Op) (Predicate, error) {
-	return func(ctx context.Context, op Op) (Predicate, error) {
+// mutationCond is the condition the rule list eval gives an update or a
+// delete (op) of entity in, as queryCond.
+func mutationCond(in *EntityInfo, eval MutationEval) func(ctx context.Context, db *DB, op Op) (Predicate, error) {
+	return func(ctx context.Context, db *DB, op Op) (Predicate, error) {
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return decisionCond(d)
 		}
 		f := &privacyFilter{in: in}
-		if err := p.EvalMutation(ctx, privacyMutation{op: op, f: f}); err != nil {
+		if err := eval(ctx, db, op, f, nil); err != nil {
 			return Predicate{}, err
 		}
 		return f.cond(), nil
 	}
 }
 
-// mutationInsert is MutationPolicy p as an Insert policy of entity in: it
-// judges each inserted row.
-func mutationInsert(in *EntityInfo, p MutationPolicy) func(ctx context.Context, r Row) error {
-	return func(ctx context.Context, r Row) error {
+// mutationInsert is the rule list eval as an Insert policy of entity in:
+// it judges each inserted row.
+func mutationInsert(in *EntityInfo, eval MutationEval) func(ctx context.Context, db *DB, r Row) error {
+	return func(ctx context.Context, db *DB, r Row) error {
 		if d, ok := PrivacyDecisionFromContext(ctx); ok {
 			return d
 		}
-		return p.EvalMutation(ctx, privacyMutation{op: OpInsert, f: ignoredFilter{in}, row: &r})
+		return eval(ctx, db, OpInsert, ignoredFilter{in}, &r)
 	}
 }
 
