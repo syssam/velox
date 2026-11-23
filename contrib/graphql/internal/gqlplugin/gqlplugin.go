@@ -25,8 +25,9 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // is the default. only=enums writes the same Go for either engine. It
 // refuses any other option, as the plugin protocol asks. It warns of each
 // many-to-many edge whose create or update input has no field that adds
-// links, as its edge schema has a column Add cannot fill (sdl.Surface's
-// Warnings).
+// links, as its edge schema has a column Add cannot fill, and under
+// compat=veloxe of each order it drops from a field of a type veloxe did not
+// order, such as a decimal (sdl.Surface's Warnings).
 func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	var cfg sdl.Config
 	for k, v := range req.Options {

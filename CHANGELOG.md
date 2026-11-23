@@ -29,6 +29,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - graphqlgo: `ScalarsOnly(names...)` binds only the named scalars of Time,
   UUID, Bytes and Uint64, for a schema that does not declare all four;
   graphql-go's `NewSchema` refuses `Scalars()` there.
+- velox-graphql: under compat=veloxe, a `graphql.OrderField` or
+  `graphql.OrderUnguarded` dropped from a field of a type veloxe did not
+  order (a decimal, a JSON field, a `Text`) is a warning naming the entity,
+  the field and the reason.
 - insert: `UpdateSet(setters...)` gives an upsert's update branch `Set`,
   `SetNull`, `Add`, `Sub` and `SetExpr`, and `velox.Excluded(c)` names the
   inserted row in it; `UpdateWhere`, `OnConflictWhere` (a partial index) and

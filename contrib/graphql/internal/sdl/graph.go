@@ -349,7 +349,10 @@ func (g *graph) fieldAnnotations(o *object, where string) ([]graphql.Annotation,
 			fa.WhereOps |= graphql.OpsDefault
 		}
 		if o.veloxe {
-			fa = veloxeAnnotation(o, i, fa)
+			var warning string
+			if fa, warning = veloxeAnnotation(o, i, fa); warning != "" {
+				g.warnings = append(g.warnings, warning)
+			}
 		}
 		if err := checkField(o.ent, i, fa, o.fks[f.Name], o.veloxe, fw); err != nil {
 			return nil, err

@@ -121,6 +121,39 @@ func TestVeloxeOrder(t *testing.T) {
 	}
 }
 
+// Under compat=veloxe an order on a field of a type veloxe does not order is
+// dropped, as veloxe dropped it, with a warning naming the entity, the field
+// and the reason; one dropped from a sensitive or a skipped field, which the
+// schema explains, warns of nothing. velox's own order warns of none.
+func TestVeloxeOrderDropWarns(t *testing.T) {
+	m := orderThing(t)
+	text := m.Entities[0].Fields[2] // body, a Text
+	text.Annotations = ann(t, graphql.OrderUnguarded())
+	_, s, err := RenderSurface(m, Config{Veloxe: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`Thing.body: graphql.OrderUnguarded() is dropped: compat=veloxe orders no field of type string of unbounded size (field.Text), as veloxe did not`,
+		`Thing.data: graphql.OrderField("DATA") is dropped: compat=veloxe orders no field of type json (map[string]any), as veloxe did not`,
+		`Thing.amount: graphql.OrderField("AMOUNT") is dropped: compat=veloxe orders no field of type other (decimal.Decimal), as veloxe did not`,
+	}
+	if !slices.Equal(s.Warnings, want) {
+		t.Errorf("warnings:\n got %q\nwant %q", s.Warnings, want)
+	}
+	m = orderThing(t)
+	m.Entities[0].Fields[10].Annotations = nil // data
+	m.Entities[0].Fields[11].Annotations = ann(t, graphql.Type("Decimal"))
+	m.Entities[0].Fields[14].Annotations = ann(t, graphql.OrderField("TAG"), graphql.OrderUnguarded(), sensitiveDir())
+	_, s, err = RenderSurface(m, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Warnings) != 0 {
+		t.Errorf("velox's order warns: %q, want nothing", s.Warnings)
+	}
+}
+
 // veloxeOrderName upper-snakes a name as veloxe's toSnakeCase did.
 func TestVeloxeOrderName(t *testing.T) {
 	for in, want := range map[string]string{"created_at": "CREATED_AT", "createdAt": "CREATED_AT", "name": "NAME", "URL": "U_R_L"} {

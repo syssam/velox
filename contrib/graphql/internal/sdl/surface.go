@@ -18,7 +18,10 @@ type Surface struct {
 	// Warnings say which M2M edges have a create or update input without
 	// the field that adds links, as their edge schema has a column Add
 	// cannot fill: "User.following: no add inputs; Follow.Note has no
-	// default", once per edge.
+	// default", once per edge. Under compat=veloxe they say too which
+	// field's order was dropped, as veloxe ordered no field of its type:
+	// "Thing.amount: graphql.OrderField("AMOUNT") is dropped: compat=veloxe
+	// orders no field of type other (decimal.Decimal), as veloxe did not".
 	Warnings []string
 }
 

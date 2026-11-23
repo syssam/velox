@@ -61,7 +61,10 @@ go tool velox-gen -out ./velox \
   predicates are named from the field (`customerId`, `customerIdIn`).
 - An `Optional` field is nullable in the type, and a `Required` unique
   edge is non-null.
-- The order enum lists the fields veloxe's listed.
+- The order enum lists the fields veloxe's listed. A `graphql.OrderField`
+  on a field of a type veloxe did not order, such as a decimal, a JSON
+  field or a `Text`, is dropped, as veloxe dropped it, and velox-graphql
+  warns of it, naming the entity and the field.
 - Every type with an ID implements `Node`, and the root query has
   `node(id:)` and `nodes(ids:)`. The application answers them with the
   generated `ResolveNode` and `ResolveNodes`.

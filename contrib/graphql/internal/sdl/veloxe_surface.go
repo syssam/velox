@@ -2,8 +2,10 @@ package sdl
 
 import (
 	"cmp"
+	"fmt"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -144,11 +146,22 @@ func veloxeEqualityDefault(name, kind string) bool {
 //     slice of scalars with a JSON array op.
 //   - A json field of a named Go type takes the type's name (veloxeJSONType)
 //     as graphql.Type would give it, unless graphql.Type gives one.
-func veloxeAnnotation(o *object, i int, a graphql.Annotation) graphql.Annotation {
+//
+// warning is "" or says that an order on a field of a type veloxe does not
+// order (a decimal, a json field, a Text) was dropped: the schema asked for
+// it, and nothing else tells its author. One dropped for a sensitive or a
+// skipped field says nothing: the schema says why there.
+func veloxeAnnotation(o *object, i int, a graphql.Annotation) (_ graphql.Annotation, warning string) {
 	f := o.ent.Fields[i]
 	pk := o.hasID && i == o.ent.PrimaryKey[0]
 	skipped := a.Skip&graphql.SkipType != 0
-	if f.Sensitive || skipped || a.Skip&graphql.SkipOrderField != 0 || !pk && !veloxeOrderable(f) {
+	switch {
+	case f.Sensitive || skipped || a.Skip&graphql.SkipOrderField != 0:
+		a.OrderField, a.OrderUnguarded = "", false
+	case !pk && !veloxeOrderable(f):
+		if a.OrderField != "" || a.OrderUnguarded {
+			warning = veloxeOrderWarning(o.ent.Name, f, a)
+		}
 		a.OrderField, a.OrderUnguarded = "", false
 	}
 	switch {
@@ -160,7 +173,27 @@ func veloxeAnnotation(o *object, i int, a graphql.Annotation) graphql.Annotation
 	if f.Type == "json" && a.Type == "" {
 		a.Type = veloxeJSONType(f)
 	}
-	return a
+	return a, warning
+}
+
+// veloxeOrderWarning is the warning that the order a asks for on f, a field
+// of the entity ent of a type veloxe does not order, is dropped:
+//
+//	Thing.amount: graphql.OrderField("AMOUNT") is dropped: compat=veloxe
+//	orders no field of type other (decimal.Decimal), as veloxe did not
+func veloxeOrderWarning(ent string, f *plugin.Field, a graphql.Annotation) string {
+	asked := "graphql.OrderUnguarded()"
+	if a.OrderField != "" {
+		asked = "graphql.OrderField(" + strconv.Quote(a.OrderField) + ")"
+	}
+	typ := f.Type
+	switch {
+	case f.Type == "string":
+		typ = "string of unbounded size (field.Text)"
+	case f.ElemType != "" && f.ElemType != f.Type:
+		typ += " (" + f.ElemType + ")"
+	}
+	return fmt.Sprintf("%s.%s: %s is dropped: compat=veloxe orders no field of type %s, as veloxe did not", ent, f.Name, asked, typ)
 }
 
 // veloxeOrder computes o's order as veloxe's generator made it, when o has a
