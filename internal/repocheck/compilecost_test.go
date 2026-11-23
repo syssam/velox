@@ -388,7 +388,12 @@ var genericObjects = []struct {
 	// instantiations (a package with five took the same 3 KB more). One
 	// method cost about 1.3 KB and each more about 0.4 KB; the engine's part
 	// of the change about 0.2 KB.
-	{"entityDescUse", "", entityDescUseSrc, 795136},       // measured 785828
+	//
+	// The report terms (ADR 0127) took entityDescUse to about 794500 bytes.
+	// Term.Equal and Term.Decimal (ADR 0127, 0131) took it to 795500,
+	// about 0.5 KB a method; entityDescHooks measured 880874 and
+	// entityDescMixin 926264, within their bounds.
+	{"entityDescUse", "", entityDescUseSrc, 796160},       // measured 795500
 	{"entityDescHooks", "", entityDescHooksBound, 881152}, // measured 871182
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name

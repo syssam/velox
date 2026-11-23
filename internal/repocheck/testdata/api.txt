@@ -697,6 +697,7 @@ func (t Term[E]) Avg[_ Lazy[E]]() Term[E]
 func (t Term[E]) Column[_ Lazy[E]]() (string, bool)
 func (t Term[E]) CountDistinct[_ Lazy[E]]() Term[E]
 func (t Term[E]) Count[_ Lazy[E]]() Term[E]
+func (t Term[E]) Decimal[_ Lazy[E]]() Term[E]
 func (t Term[E]) Desc[_ Lazy[E]]() Order[E]
 func (t Term[E]) Equal[_ Lazy[E]](o Term[E]) bool
 func (t Term[E]) Max[_ Lazy[E]]() Term[E]

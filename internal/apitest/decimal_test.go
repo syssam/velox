@@ -38,6 +38,53 @@ func TestDecimalAddSQL(t *testing.T) {
 	}
 }
 
+// TestDecimalTermSQL: on SQLite the SUM and AVG of an expression marked
+// Decimal are rounded as a decimal column's are; MIN, an unmarked
+// expression and the other dialects are not. Decimal on a term that is not
+// an expression fails the statement. The mark is in the render cache's key
+// and in Equal.
+func TestDecimalTermSQL(t *testing.T) {
+	L := testmodel.Ledgers
+	type led = testmodel.Ledger
+	net := func() velox.Term[led] { return velox.Calc[led]("? * ?", L.Amount, 3) }
+	const x = `("amount" * ?)`
+	for _, c := range []struct {
+		d    velox.Dialect
+		term velox.Term[led]
+		want string
+	}{
+		{velox.SQLite, net().Decimal().Sum().As("s"), `SELECT CASE WHEN typeof(SUM(` + x + `)) = 'real' THEN CAST(printf('%!.15g', SUM(` + x + `)) AS REAL) ELSE SUM(` + x + `) END AS "s" FROM "ledgers" LIMIT 1`},
+		{velox.SQLite, net().Decimal().As("n").Avg(), `SELECT CASE WHEN typeof(AVG(` + x + `)) = 'real' THEN CAST(printf('%!.15g', AVG(` + x + `)) AS REAL) ELSE AVG(` + x + `) END FROM "ledgers" LIMIT 1`},
+		{velox.SQLite, net().Sum(), `SELECT SUM(` + x + `) FROM "ledgers" LIMIT 1`},
+		{velox.SQLite, net().Decimal().Min(), `SELECT MIN(` + x + `) FROM "ledgers" LIMIT 1`},
+		{velox.Postgres, net().Decimal().Sum(), `SELECT SUM(("amount" * $1)) FROM "ledgers" LIMIT 1`},
+	} {
+		db := openFake(c.d, &fakeconn.Exec{})
+		// The marked and unmarked sums share a DB: the mark is in the key.
+		for range 2 {
+			for _, term := range []velox.Term[led]{net().Sum(), c.term} {
+				text, _, err := db.Query[led]().Select(term).Limit(1).SQL(ctx)
+				if term == c.term && (err != nil || text != c.want) {
+					t.Errorf("%v:\n got %s %v\nwant %s", c.d, text, err, c.want)
+				}
+			}
+		}
+	}
+	db := openFake(velox.SQLite, &fakeconn.Exec{})
+	for _, bad := range []velox.Term[led]{L.Amount.Sum().Decimal(), velox.CountAll[led]().Decimal()} {
+		if _, _, err := db.Query[led]().Select(bad).Limit(1).SQL(ctx); err == nil || !strings.Contains(err.Error(), "Decimal") {
+			t.Errorf("Decimal of a non-expression: %v", err)
+		}
+	}
+	// An invalid expression keeps its own error.
+	if _, _, err := db.Query[led]().Select(velox.Calc[led]("? * ?", L.Amount).Decimal().Sum()).Limit(1).SQL(ctx); err == nil || strings.Contains(err.Error(), "Decimal") {
+		t.Errorf("Decimal of an invalid Calc: %v", err)
+	}
+	if net().Decimal().Equal(net()) || !net().Decimal().Equal(net().Decimal()) {
+		t.Error("Equal ignores Decimal")
+	}
+}
+
 // TestDecimalSQLiteSQL: on SQLite the SUM and AVG of a decimal column are
 // rounded to 15 significant digits when they are a REAL, in Sum, SumBy and a
 // term, and a value of the column's Go type bound in an Expr is the number

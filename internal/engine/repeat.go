@@ -162,7 +162,7 @@ func SameTerm(a, b Term) bool { return sameTerm(a, b) }
 // their names aside. A relation's aggregate is never the same: GROUP BY
 // refuses one, and its conditions are not compared.
 func sameTerm(a, b Term) bool {
-	if a.kind != b.kind || a.fn != b.fn || a.col != b.col {
+	if a.kind != b.kind || a.fn != b.fn || a.col != b.col || a.dec != b.dec {
 		return false
 	}
 	switch a.kind {

@@ -24,6 +24,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `Term[E].Equal` reports whether two terms are the same: written alike,
   with equal bound values, their names aside. A report compares an
   ordering's `Term()` with its bucket by it (ADR 0127).
+- `Term[E].Decimal` marks an expression as holding decimals: on SQLite
+  its `Sum()` and `Avg()` are rounded to 15 significant digits as a
+  decimal column's are, so `Calc("? * ?", X.Qty, X.Price).Decimal().Sum()`
+  is exact there (ADR 0131).
 - velox-graphql: `sdlfiles=entity` writes the SDL as `velox.graphql`, with
   Query and the vocabulary, and one `velox_<label>.graphql` per entity.
   gqlc makes a package of each file, so `Query.salesOrderItems` and

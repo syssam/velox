@@ -65,7 +65,8 @@ Options considered for 2:
   - The scan gets a float64, as for any REAL column on SQLite. A decimal
     type's Scan already reads one there.
   - A sum of an expression, such as `Calc("? * ?", qty, price).Sum()`, is
-    not rounded. velox cannot tell that it is a decimal.
+    not rounded. velox cannot tell that it is a decimal; `Term.Decimal`
+    marks one (decision 0131).
 - On SQLite, an argument of an `Expr`, `Calc` or `SetExpr` whose Go type is
   that of a decimal column of the entity being written (or a non-nil pointer
   to it) is bound as `sqliteNumber` makes it:

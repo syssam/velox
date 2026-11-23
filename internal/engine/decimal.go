@@ -2,6 +2,7 @@ package engine
 
 import (
 	"database/sql/driver"
+	"errors"
 	"math"
 	"reflect"
 	"strconv"
@@ -144,6 +145,35 @@ func exponent(s string) bool {
 // decimal column.
 func decimalAgg(d Dialect, in *EntityInfo, sumOrAvg bool, col int32) bool {
 	return d == SQLite && sumOrAvg && col >= 0 && int(col) < len(in.Columns) && in.Columns[col].decimal[0] != 0
+}
+
+// decimalTermAgg reports whether fn of the term of is a SUM or AVG that
+// SQLite computes in floating point over decimals: of is a decimal column,
+// or an expression DecimalTerm marked (decision 0131).
+func decimalTermAgg(d Dialect, in *EntityInfo, fn TermFn, of Term) bool {
+	sumOrAvg := fn == TermSum || fn == TermAvg
+	switch of.kind {
+	case termColumn:
+		return decimalAgg(d, in, sumOrAvg, of.col)
+	case termExpr:
+		return d == SQLite && sumOrAvg && of.dec
+	}
+	return false
+}
+
+// DecimalTerm is t, an expression, marked as holding decimals: on SQLite
+// its SUM and AVG are rounded as a decimal column's are (decision 0131).
+// The mark changes nothing else. Any other term is an InvalidTerm: a
+// column is decimal by its descriptor, and an aggregate by its operand.
+func DecimalTerm(t Term) Term {
+	switch t.kind {
+	case termInvalid:
+		return t
+	case termExpr:
+		t.dec = true
+		return t.seal()
+	}
+	return InvalidTerm(errors.New("velox: Decimal marks an expression, such as a Calc, as holding decimals; a column is decimal by its schema, and an aggregate by what it aggregates"))
 }
 
 // sqliteDecimalAgg writes agg, a SUM or AVG of a decimal column on SQLite,

@@ -66,6 +66,7 @@ type Term struct {
 	err   error
 	r     *relAgg  // a termRel's relation
 	ext   *termExt // a termDate's or a termGrouping's
+	dec   bool     // a termExpr marked as holding decimals: DecimalTerm
 	shape string   // what shapes it in the render cache's key: see seal
 }
 
@@ -88,6 +89,7 @@ func (t Term) seal() Term {
 	b = binary.AppendUvarint(b, uint64(t.col+1))
 	switch t.kind {
 	case termExpr:
+		b = append(b, bit(t.dec))
 		b = append(b, t.x.shape...)
 	case termAgg:
 		if t.of != nil {
@@ -349,7 +351,7 @@ func (w *writer) term(t Term) {
 		}
 		w.jsonValue(t.col, *t.path)
 	case termAgg:
-		if t.of != nil && t.of.kind == termColumn && decimalAgg(w.d, w.in, t.fn == TermSum || t.fn == TermAvg, t.of.col) {
+		if t.of != nil && decimalTermAgg(w.d, w.in, t.fn, *t.of) {
 			w.sqliteDecimalAgg(func() { w.aggTerm(t) })
 			return
 		}

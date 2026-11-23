@@ -178,6 +178,26 @@ func TestDecimalSumExact(t *testing.T) {
 		if out := terms(velox.Expr[testmodel.Ledger]("? = ?", L.Amount.Sum(), testmodel.Dec("0.3"))); len(out) != 1 {
 			t.Errorf("HAVING SUM = 0.3: %q", out)
 		}
+
+		// An expression marked Decimal sums as a decimal column does: on
+		// SQLite 0.1*3 + 0.2*3 is 0.9000000000000001 in floating point.
+		tripled := velox.Calc[testmodel.Ledger]("? * ?", L.Amount, 3).Decimal()
+		for _, agg := range []struct {
+			name string
+			term velox.Term[testmodel.Ledger]
+			want testmodel.Dec
+		}{{"Sum", tripled.Sum(), "0.9"}, {"Avg", tripled.Avg(), "0.45"}} {
+			for r, err := range small.Select(agg.term).Limit(1).Rows(ctx) {
+				if err != nil {
+					t.Fatal(err)
+				}
+				var d testmodel.Dec
+				if err := r.Scan(&d); err != nil {
+					t.Fatal(err)
+				}
+				wantDec(t, "Decimal "+agg.name, d, string(agg.want))
+			}
+		}
 	})
 }
 

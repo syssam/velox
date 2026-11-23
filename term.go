@@ -87,6 +87,15 @@ func (t Term[E]) CountDistinct[_ Lazy[E]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCountDistinct, t.t)}
 }
 
+// Decimal marks t, an expression such as Calc("? * ?", X.Qty, X.Price), as
+// holding decimals. On SQLite, whose decimals are REALs, its Sum and Avg are
+// then rounded to 15 significant digits, as a decimal column's are: 0.1*3 +
+// 0.2*3 sums to 0.9, not 0.9000000000000001. velox does not infer it from
+// the operands. PostgreSQL and MySQL compute decimals exactly, so there it
+// changes nothing. Decimal of a term that is not an expression, such as an
+// aggregate, fails the statement: a column is decimal by its schema.
+func (t Term[E]) Decimal[_ Lazy[E]]() Term[E] { return Term[E]{engine.DecimalTerm(t.t)} }
+
 // As names t as a result column of Select: SELECT t AS name. Scan reads
 // the column into the field of that name. A name is a letter or an
 // underscore, then letters, digits and underscores, at most 63 of them; any
