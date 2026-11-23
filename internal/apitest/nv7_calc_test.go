@@ -10,7 +10,7 @@ import (
 )
 
 // TestCalcAgg: a Calc marked by Agg is an aggregate, as an aggregate Term
-// is (ADR 0148). MySQL then orders a grouped projection by it as written,
+// is (ADR 0151). MySQL then orders a grouped projection by it as written,
 // not by ANY_VALUE of it, which would nest an aggregate. velox does not read
 // the text: an unmarked Calc is a per-row value whatever it calls, so
 // SQLite's two-argument MAX(a, b) is a key, and a marked one is an

@@ -1,7 +1,7 @@
 # 0142. The nextapp port's projections: recipes, an aggregate in Calc's text, and dated non-edge joins
 
 - Status: accepted, 2026-11-23. The aggregate in Calc's text is superseded
-  by [0148](0148-explicit-aggregates-filter-entity-policy-db.md): `Agg()`
+  by [0151](0151-explicit-aggregates-filter-entity-policy-db.md): `Agg()`
   marks one, and velox does not read the text.
 
 ## Context

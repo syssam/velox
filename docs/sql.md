@@ -103,7 +103,7 @@ an expression cannot be paged with `After` or a cursor. See
 
 A `Calc` whose text aggregates, such as `SUM(?)` or a user's aggregate, is
 marked with `Agg()`, and velox then places it as an aggregate term. velox
-does not read the text to find one (ADR 0148).
+does not read the text to find one (ADR 0151).
 
 A `Calc` or `SelectRaw` may hold a window function: `COUNT(*) OVER ()`,
 `ROW_NUMBER() OVER (PARTITION BY ? ORDER BY ?)`, `RANK`, `DENSE_RANK`, and

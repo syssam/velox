@@ -69,7 +69,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   entity ends instead of calling itself without end. An interceptor that
   reads joins the statement's transaction with `velox.TxFrom(ctx, db)`,
   as an ent rule uses `ent.TxFromContext` (ADR 0135); a policy reads
-  through the DB it is given (ADR 0148).
+  through the DB it is given (ADR 0151).
 - `velox.IsZero(p)` reports the zero `Pred` or `Predicate`: a helper with no
   condition returns it, and its caller tests it. A function, not a method,
   so a package pays only where it calls it (ADR 0137).
@@ -800,23 +800,23 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   package-level DB and no `velox.TxFrom`; a statement made under it is
   still not judged by it. `Policy` and the privacy rule types are declared
   in the root (`velox.PrivacyQuery`, `velox.QueryPolicy`, …), and package
-  privacy aliases them (ADR 0148).
+  privacy aliases them (ADR 0151).
 - A `WithFilter` filter receives the entity as a `velox.FilterEntity`, not
   its name: `func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op)`.
   `e.Name()` is the name it was given, and `e.HasColumn(column)` reads
   that entity's own metadata. `velox.HasColumn(entity, column)` and its
   process-wide registry are removed: it was false before an entity's first
   use, could not tell two packages' entities of one name apart, and took a
-  lock per call (ADR 0148).
+  lock per call (ADR 0151).
 - An `Interceptor`'s `Filter` is `func(ctx, db *velox.DB)`: `db` is the
   statement's DB, the transaction's inside `Tx`, as a `Policy` function's
   and a `WithFilter` filter's are. A Filter that read joined with
-  `velox.TxFrom` reads through `db` (ADR 0148).
+  `velox.TxFrom` reads through `db` (ADR 0151).
 - A `Calc` that aggregates is marked with `velox.Agg` (`untyped.Agg`):
   velox no longer scans the text for SUM, MAX and the rest, which took
   SQLite's two-argument `MAX(a, b)` for an aggregate and missed
   `PERCENTILE_CONT` and user aggregates. `GroupBy` refuses an aggregate key.
-  `SetExpr` no longer refuses aggregate text; the database does (ADR 0148).
+  `SetExpr` no longer refuses aggregate text; the database does (ADR 0151).
 - `veloxtest.Open` on SQLite with an empty DSN, or one of a database in
   memory such as enttest's `file:ent?mode=memory&cache=shared&_fk=1`, gives
   each call a file of its own in `t.TempDir()`, a copy of the tables
@@ -1595,7 +1595,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `_pragma=foreign_keys(…)` counts as the DSN's own setting (ADR 0147).
 - A `Calc` marked `Agg()` is an aggregate: MySQL orders a grouped
   projection by it as written, not by `ANY_VALUE` of it, which nested one
-  aggregate in another (ADR 0142, ADR 0148).
+  aggregate in another (ADR 0142, ADR 0151).
 - A HAVING that tests a GROUP BY key written as an expression runs: on
   PostgreSQL a key with a bound value is written with the key's
   placeholders, where a copy failed with 42803; on MySQL the key is

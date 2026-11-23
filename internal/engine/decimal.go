@@ -179,7 +179,7 @@ func DecimalTerm(t Term) Term {
 // AggMarkTerm is t, an expression, marked as an aggregate: its text, such
 // as SUM(?) or PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ?), computes one
 // value of a group, so it is placed and refused as an aggregate Term is
-// (hasAgg). velox does not read the text to find one (decision 0148). Any
+// (hasAgg). velox does not read the text to find one (decision 0151). Any
 // other term, and a window function, is an InvalidTerm.
 func AggMarkTerm(t Term) Term {
 	switch {

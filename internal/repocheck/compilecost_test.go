@@ -394,7 +394,7 @@ var genericObjects = []struct {
 	// about 0.5 KB a method; entityDescHooks measured 880874 and
 	// entityDescMixin 926264, within their bounds.
 	//
-	// ADR 0148 keeps these bounds: velox.Agg is a function, not a Term
+	// ADR 0151 keeps these bounds: velox.Agg is a function, not a Term
 	// method (one cost 432 bytes); FilterEntity is the root's; and the
 	// policy functions EntityInfo reaches take the DB as engine.StmtDB, an
 	// any, since a *DB in them cost entityDescriptor 25 KB.

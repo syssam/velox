@@ -297,7 +297,7 @@ A condition is a `velox.Predicate`, built by ent's names:
 | `sqlgraph.HasNeighborsWith` (`user.HasPetsWith(...)`) | `velox.HasEdgeWith("pets", ps...)` |
 | `sql.AndPredicates`, `OrPredicates`, `NotPredicates` | `velox.And`, `velox.Or`, `velox.Not` |
 | `privacy.Allow` | `privacy.Allow`; `velox.Allow()` is the condition that matches every row |
-| a privacy rule's `ent.TxFromContext(ctx)`, else the client | a `velox.Policy` function's `db` parameter, a privacy rule's `q.DB()` or `m.DB()`, an Interceptor's Filter's `db`: the statement's DB, the transaction's inside `Tx`; a read under the rule's ctx is not judged by that rule (decisions 0135, 0148) |
+| a privacy rule's `ent.TxFromContext(ctx)`, else the client | a `velox.Policy` function's `db` parameter, a privacy rule's `q.DB()` or `m.DB()`, an Interceptor's Filter's `db`: the statement's DB, the transaction's inside `Tx`; a read under the rule's ctx is not judged by that rule (decisions 0135, 0151) |
 
 A `velox.Predicate` is a `Pred` of no
 entity, so `And`, `Or` and `Not` take it, and `velox.Predicate(p)` turns a

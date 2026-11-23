@@ -1043,7 +1043,7 @@ ordering as written. velox does not read the text to find an aggregate:
 `Calc("SUM(?)", x)` needs `Agg()` too, and SQLite's two-argument
 `MAX(?, ?)`, a value of each row, does not. `Agg()` of a window function
 or of a term that is not an expression fails the statement
-([ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
+([ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
 
 A `Calc` or `SelectRaw` may be a window function, such as `COUNT(*) OVER ()`
 beside a `GroupBy` and `Limit` for a page of groups and their total. It is
@@ -1721,7 +1721,7 @@ A statement made under a policy function's or an interceptor's ctx is not
 judged by that function, whatever DB it runs on, so a policy that reads
 its own entity ends; every other policy, interceptor and filter applies to
 it ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md),
-[ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
+[ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
 
 A helper that builds a condition and may have none to add returns the zero
 `velox.Predicate{}` (or `Pred[E]{}`), and its caller tests it with
@@ -1805,7 +1805,7 @@ db, err := velox.Connect("postgres", dsn, velox.WithFilter(
 `e.HasColumn(column)` reports whether the entity has a column of that
 name, as `FieldEQ` names one, so the filter needs no list of soft-deleted
 entities. It reads the entity's own metadata: nothing global, no lock
-([ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
+([ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
 
 It leaves writes alone for two reasons. ent's and veloxe's interceptors
 wrap queries only, so a port keeps their behaviour. And a restore must

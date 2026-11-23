@@ -1,4 +1,4 @@
-# 148. names= and filters= are options of their own; compat=veloxe presets them
+# 0150. names= and filters= are options of their own; compat=veloxe presets them
 
 - Status: accepted, 2026-11-24. Amends 0087 and 0088.
 

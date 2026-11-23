@@ -3,7 +3,7 @@
 - Status: accepted, 2026-11-23. Extends
   [0132](0132-filter-reads-through-the-statements-db.md); uses
   [0137](0137-nextapp-port-helpers.md)'s `TxFrom`. Superseded in part by
-  [0148](0148-explicit-aggregates-filter-entity-policy-db.md): a policy
+  [0151](0151-explicit-aggregates-filter-entity-policy-db.md): a policy
   function gets the statement's DB as a parameter and a privacy rule's
   Query and Mutation have `DB()`; the recursion guard stays, and an
   interceptor's Filter gets the statement's DB too.

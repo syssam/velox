@@ -1,4 +1,4 @@
-# 0148. An aggregate Calc is marked, a Filter reads its entity, a policy gets the DB
+# 0151. An aggregate Calc is marked, a Filter reads its entity, a policy gets the DB
 
 - Status: accepted, 2026-11-24. Supersedes the "aggregate in Calc's text"
   answer of [0142](0142-nextapp-projection-recipes.md) and

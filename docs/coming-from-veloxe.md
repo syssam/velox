@@ -434,7 +434,7 @@ These hold with or without compat:
   its `db` parameter. A read made under a rule's ctx is not judged by that
   rule's list, so a rule that reads its own entity ends
   ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md),
-  [ADR 0148](decisions/0148-explicit-aggregates-filter-entity-policy-db.md)).
+  [ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
 - `Optional` stays NOT NULL, and `Nillable` makes a column NULL-able
   ([ADR 0003](decisions/0003-nullability.md)).
 
