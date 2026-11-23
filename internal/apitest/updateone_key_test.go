@@ -87,7 +87,7 @@ func TestUpdateOneByKeyStatements(t *testing.T) {
 		[]any{int64(1), int64(7), "q"},
 		[]string{
 			`UPDATE "s_posts" SET "title" = $1 WHERE "id" = $2`,
-			`SELECT "id", "author_id", "title" FROM "s_posts" WHERE "id" = $1 LIMIT $2`,
+			`SELECT "id", "author_id", "title" FROM "s_posts" WHERE "id" = $1 LIMIT 2`,
 		},
 	}, {
 		"mysql", velox.MySQL,
@@ -98,7 +98,7 @@ func TestUpdateOneByKeyStatements(t *testing.T) {
 		[]any{int64(1), int64(7), "q"},
 		[]string{
 			"UPDATE `s_posts` SET `title` = ? WHERE `id` = ? AND `author_id` = ?",
-			"SELECT `id`, `author_id`, `title` FROM `s_posts` WHERE `id` = ? LIMIT ?",
+			"SELECT `id`, `author_id`, `title` FROM `s_posts` WHERE `id` = ? LIMIT 2",
 		},
 	}, {
 		"composite key", velox.Postgres,
@@ -112,7 +112,7 @@ func TestUpdateOneByKeyStatements(t *testing.T) {
 		[]any{int64(1), int64(3), nil},
 		[]string{
 			`UPDATE "pairs" SET "b" = $1 WHERE "a" = $2 AND "b" = $3`,
-			`SELECT "a", "b", "price" FROM "pairs" WHERE "a" = $1 AND "b" = $2 LIMIT $3`,
+			`SELECT "a", "b", "price" FROM "pairs" WHERE "a" = $1 AND "b" = $2 LIMIT 2`,
 		},
 	}}
 	for _, c := range cases {
@@ -144,7 +144,7 @@ func TestUpdateOneByKeyAffected(t *testing.T) {
 	}
 	want := []string{
 		`UPDATE "s_posts" SET "title" = $1 WHERE "id" = $2`,
-		`SELECT "id", "author_id", "title" FROM "s_posts" WHERE "id" = $1 LIMIT $2`,
+		`SELECT "id", "author_id", "title" FROM "s_posts" WHERE "id" = $1 LIMIT 2`,
 	}
 	if got := writes(e.Log); !slices.Equal(got, want) {
 		t.Errorf("statements: %q", got)

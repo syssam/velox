@@ -142,7 +142,7 @@ func TestLockInsideAndOutsideTx(t *testing.T) {
 		}
 		e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
 		db := openFake(velox.Postgres, e, opts...)
-		const one = `SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2 FOR UPDATE`
+		const one = `SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT 1 FOR UPDATE`
 		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			q := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1))
 			if got, err := q.Limit(1).ForUpdate().All(ctx); err != nil || len(got) != 1 || e.SQL != one {
@@ -151,14 +151,14 @@ func TestLockInsideAndOutsideTx(t *testing.T) {
 			if got, err := q.ForUpdate().First(ctx); err != nil || got.ID != 1 || e.SQL != one {
 				t.Errorf("First: %v, %v, %s", got, err, e.SQL)
 			}
-			if got, err := q.ForUpdate().One(ctx); err != nil || got.ID != 1 || !strings.HasSuffix(e.SQL, "LIMIT $2 FOR UPDATE") {
+			if got, err := q.ForUpdate().One(ctx); err != nil || got.ID != 1 || !strings.HasSuffix(e.SQL, "LIMIT 2 FOR UPDATE") {
 				t.Errorf("One: %v, %v, %s", got, err, e.SQL)
 			}
-			if ok, err := q.ForShare().NoWait().Exists(ctx); err != nil || !ok || e.SQL != `SELECT 1 FROM "invoices" WHERE "id" = $1 LIMIT $2 FOR SHARE NOWAIT` {
+			if ok, err := q.ForShare().NoWait().Exists(ctx); err != nil || !ok || e.SQL != `SELECT 1 FROM "invoices" WHERE "id" = $1 LIMIT 1 FOR SHARE NOWAIT` {
 				t.Errorf("Exists: %v, %v, %s", ok, err, e.SQL)
 			}
 			for _, err := range q.Limit(1).ForUpdate().SkipLocked().Iter(ctx) {
-				if err != nil || !strings.HasSuffix(e.SQL, "LIMIT $2 FOR UPDATE SKIP LOCKED") {
+				if err != nil || !strings.HasSuffix(e.SQL, "LIMIT 1 FOR UPDATE SKIP LOCKED") {
 					t.Errorf("Iter: %v, %s", err, e.SQL)
 				}
 			}
@@ -220,12 +220,12 @@ func TestLockLastWins(t *testing.T) {
 			q    velox.Query[testmodel.Invoice]
 			want string
 		}{
-			{q.ForShare().ForUpdate(), " LIMIT ? FOR UPDATE"},
-			{q.ForUpdate().ForShare(), " LIMIT ? FOR SHARE"},
+			{q.ForShare().ForUpdate(), " LIMIT 1 FOR UPDATE"},
+			{q.ForUpdate().ForShare(), " LIMIT 1 FOR SHARE"},
 			{q.ForUpdate().NoWait().SkipLocked(), " FOR UPDATE SKIP LOCKED"},
 			{q.ForUpdate().SkipLocked().NoWait(), " FOR UPDATE NOWAIT"},
 			{q.SkipLocked().ForShare(), " FOR SHARE SKIP LOCKED"},
-			{q.ForUpdate().Offset(5).ForUpdate(), " LIMIT ? OFFSET ? FOR UPDATE"},
+			{q.ForUpdate().Offset(5).ForUpdate(), " LIMIT 1 OFFSET ? FOR UPDATE"},
 			{tx.Query[testmodel.Invoice]().AllowUnbounded().Offset(5).ForShare(), " OFFSET ? FOR SHARE"},
 		} {
 			sql, _, err := c.q.SQL(ctx)

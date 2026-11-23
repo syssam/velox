@@ -39,11 +39,11 @@ func TestAllScansEveryColumn(t *testing.T) {
 		!got[1].PaidAt.Equal(t0) || got[1].Note != "" || string(got[1].Data) != "d" || !got[1].CreatedAt.Equal(t0) {
 		t.Fatalf("%+v", got)
 	}
-	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" LIMIT $2`
+	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" LIMIT 10`
 	if e.SQL != want {
 		t.Errorf("SQL\n got %s\nwant %s", e.SQL, want)
 	}
-	if !reflect.DeepEqual(e.Args, []any{int64(1), 10}) {
+	if !reflect.DeepEqual(e.Args, []any{int64(1)}) {
 		t.Errorf("args %#v", e.Args)
 	}
 }
@@ -55,7 +55,7 @@ func TestOne(t *testing.T) {
 	if err != nil || got.ID != 3 {
 		t.Fatalf("%+v, %v", got, err)
 	}
-	if !strings.HasSuffix(e.SQL, `WHERE "id" = $1 LIMIT $2`) || e.Args[1] != 2 {
+	if !strings.HasSuffix(e.SQL, `WHERE "id" = $1 LIMIT 2`) || len(e.Args) != 1 {
 		t.Errorf("One must ask for 2 rows: %s %v", e.SQL, e.Args)
 	}
 	e.Rows = nil
@@ -149,8 +149,8 @@ func TestSQLNeedsNoDatabase(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.MySQL, e)
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Number.HasPrefix("A")).Limit(3).SQL(ctx))
-	want := "SELECT `id`, `created_at`, `updated_at`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '!' LIMIT ?"
-	if text != want || !reflect.DeepEqual(args, []any{"A%", 3}) || e.Calls != 0 {
+	want := "SELECT `id`, `created_at`, `updated_at`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '!' LIMIT 3"
+	if text != want || !reflect.DeepEqual(args, []any{"A%"}) || e.Calls != 0 {
 		t.Errorf("%s %v calls %d", text, args, e.Calls)
 	}
 }
@@ -164,12 +164,12 @@ func TestQueryCanRunAgain(t *testing.T) {
 	}
 	db := openFake(velox.Postgres, e, velox.WithRewrite(scopeTo7))
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5)
-	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT $2`
+	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT 5`
 	for run := range 3 {
 		if _, err := q.All(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(7), 5}) {
+		if e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(7)}) {
 			t.Fatalf("run %d:\n got %s %v\nwant %s", run, e.SQL, e.Args, want)
 		}
 	}
@@ -303,8 +303,8 @@ func TestHasThroughTheAPI(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Items.HasWith(It.Qty.GT(2)), velox.Not(I.Items.Has())).Limit(5).SQL(ctx))
-	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT $2`
-	if text != want || len(args) != 2 {
+	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT 5`
+	if text != want || len(args) != 1 {
 		t.Errorf("\n got %s\nwant %s", text, want)
 	}
 	if _, err := db.Delete[testmodel.Invoice]().Where(I.Items.Has()).Exec(ctx); err != nil || !strings.Contains(e.SQL, `DELETE FROM "invoices" WHERE EXISTS`) {
@@ -395,11 +395,11 @@ func TestFirst(t *testing.T) {
 	if err != nil || got == nil || got.ID != 5 {
 		t.Fatalf("%+v, %v", got, err)
 	}
-	if want := `WHERE "paid" ORDER BY "id" DESC LIMIT $1`; !strings.HasSuffix(e.SQL, want) {
+	if want := `WHERE "paid" ORDER BY "id" DESC LIMIT 1`; !strings.HasSuffix(e.SQL, want) {
 		t.Errorf("SQL %s", e.SQL)
 	}
-	if want := []any{1}; !reflect.DeepEqual(e.Args, want) {
-		t.Errorf("args %v, want %v", e.Args, want)
+	if len(e.Args) != 0 {
+		t.Errorf("args %v, want none", e.Args)
 	}
 	e.Rows = nil
 	_, err = db.Query[testmodel.Invoice]().First(ctx)
@@ -426,11 +426,11 @@ func TestExists(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("%v, %v", ok, err)
 	}
-	if want := `SELECT 1 FROM "invoices" WHERE "paid" LIMIT $1`; e.SQL != want {
+	if want := `SELECT 1 FROM "invoices" WHERE "paid" LIMIT 1`; e.SQL != want {
 		t.Errorf("SQL %s", e.SQL)
 	}
-	if want := []any{1}; !reflect.DeepEqual(e.Args, want) {
-		t.Errorf("args %v, want %v", e.Args, want)
+	if len(e.Args) != 0 {
+		t.Errorf("args %v, want none", e.Args)
 	}
 	e.Rows = nil
 	if ok, err := q.Exists(ctx); err != nil || ok {

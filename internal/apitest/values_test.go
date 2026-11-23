@@ -28,7 +28,7 @@ func TestValuesUnderPolicyAndFilter(t *testing.T) {
 	if err != nil || !slices.Equal(titles, []string{"a", "b"}) {
 		t.Fatalf("%v, %v", titles, err)
 	}
-	wantSent(t, e, `SELECT "title" FROM "tickets" WHERE "invoice_id" = $1 AND NOT "done" AND "org_id" = $2 AND "owner" = $3 ORDER BY "title" LIMIT $4 OFFSET $5`, int64(9), int64(1), "ann", 5, 2)
+	wantSent(t, e, `SELECT "title" FROM "tickets" WHERE "invoice_id" = $1 AND NOT "done" AND "org_id" = $2 AND "owner" = $3 ORDER BY "title" LIMIT 5 OFFSET $4`, int64(9), int64(1), "ann", 2)
 
 	e.Rows = [][]any{{int64(4)}, {int64(7)}}
 	ids, err := velox.IDs[int64](asUser("ann"), db.Query[testmodel.Ticket]().AllowUnbounded())

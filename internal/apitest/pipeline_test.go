@@ -66,7 +66,7 @@ func TestHooksCannotChangeTheQuery(t *testing.T) {
 	db := openFake(velox.Postgres, e, velox.WithRewrite(scribble))
 	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Columns(I.ID, I.Number).OrderBy(I.ID.Asc()).Limit(5)
 	wantQuery, wantArgs := sqlOK(t)(q.SQL(ctx))
-	want := `SELECT "number", "id" FROM "invoices" WHERE "org_id" = $1 ORDER BY "total" DESC LIMIT $2`
+	want := `SELECT "number", "id" FROM "invoices" WHERE "org_id" = $1 ORDER BY "total" DESC LIMIT 5`
 	for run := range 2 {
 		e.Rows = [][]any{{"INV-1", int64(1)}}
 		if _, err := q.All(ctx); err != nil {

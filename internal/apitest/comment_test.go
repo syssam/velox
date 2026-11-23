@@ -20,7 +20,7 @@ func TestSQLCommentText(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Columns(I.ID).Where(I.Number.EQ("x")).Limit(1).All(c); err != nil {
 		t.Fatal(err)
 	}
-	want := `SELECT "id" FROM "invoices" WHERE "number" = $1 LIMIT $2 /*app='billing',caller='internal%2Fapitest%2Fcomment_test.go%3A` +
+	want := `SELECT "id" FROM "invoices" WHERE "number" = $1 LIMIT 1 /*app='billing',caller='internal%2Fapitest%2Fcomment_test.go%3A` +
 		strconv.Itoa(line) + `',route='GET%20%2Finvoices'*/`
 	if e.SQL != want {
 		t.Errorf("sent:\n%s\nwant:\n%s", e.SQL, want)
@@ -55,7 +55,7 @@ func TestCommentLeavesTheFingerprint(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Columns(I.ID).Where(I.Number.EQ("x")).Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if st.Fingerprint != "da95560fb97b3ada" || !strings.Contains(st.SQL, "/*app='billing',caller='internal%2Fapitest%2Fcomment_test.go%3A") || rewritten != "" {
+	if st.Fingerprint != "1166273723381200" || !strings.Contains(st.SQL, "/*app='billing',caller='internal%2Fapitest%2Fcomment_test.go%3A") || rewritten != "" {
 		t.Errorf("fingerprint %s, sent %s, the Rewrite hook saw %q", st.Fingerprint, st.SQL, rewritten)
 	}
 }

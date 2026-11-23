@@ -108,7 +108,7 @@ func TestRecordInsert(t *testing.T) {
 		},
 		oneLog: []string{
 			"INSERT INTO `ddefs` (`name`) VALUES (?)",
-			"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `id` = ? LIMIT ?",
+			"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `id` = ? LIMIT 2",
 		},
 		many: func() *fakeconn.Exec {
 			return &fakeconn.Exec{AffectedBy: func(sql string) int64 { return int64(strings.Count(sql, "(?")) }, LastID: 1, HasLastID: true,

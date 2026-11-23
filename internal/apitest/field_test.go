@@ -75,10 +75,10 @@ func TestMixinByName(t *testing.T) {
 	if _, err := db.Query[fNote]().Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "org_id", "title", "deleted_at" FROM "notes" WHERE "deleted_at" IS NULL AND "org_id" = $1 LIMIT $2`; e.SQL != want {
+	if want := `SELECT "id", "org_id", "title", "deleted_at" FROM "notes" WHERE "deleted_at" IS NULL AND "org_id" = $1 LIMIT 1`; e.SQL != want {
 		t.Errorf("SQL\n%s\nwant\n%s", e.SQL, want)
 	}
-	if want := "[7 1]"; fmt.Sprint(e.Args) != want {
+	if want := "[7]"; fmt.Sprint(e.Args) != want {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 	n := &fNote{ID: 1, Title: "a"}
@@ -105,7 +105,7 @@ func TestCondNullable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "org_id", "title", "deleted_at" FROM "notes" WHERE "deleted_at" IS NOT NULL AND "deleted_at" = $1 AND "title" IN ($2, $3) AND "deleted_at" IS NULL AND "org_id" = $4 LIMIT $5`; q != want {
+	if want := `SELECT "id", "org_id", "title", "deleted_at" FROM "notes" WHERE "deleted_at" IS NOT NULL AND "deleted_at" = $1 AND "title" IN ($2, $3) AND "deleted_at" IS NULL AND "org_id" = $4 LIMIT 1`; q != want {
 		t.Errorf("SQL\n%s\nwant\n%s", q, want)
 	}
 	if _, ok := args[0].(time.Time); !ok {

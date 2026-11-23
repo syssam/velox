@@ -110,8 +110,8 @@ func ExampleQuery_SQL() {
 	fmt.Println(text)
 	fmt.Println(args, err)
 	// Output:
-	// SELECT "id", "number" FROM "invoices" WHERE "total" > $1 AND NOT "paid" AND "org_id" = $2 ORDER BY "number" LIMIT $3
-	// [100 7 10] <nil>
+	// SELECT "id", "number" FROM "invoices" WHERE "total" > $1 AND NOT "paid" AND "org_id" = $2 ORDER BY "number" LIMIT 10
+	// [100 7] <nil>
 }
 
 // Select makes a subquery of one column, and InSelect tests another column
@@ -130,8 +130,8 @@ func ExampleNumberCol_InSelect() {
 	fmt.Println(text)
 	fmt.Println(args, err)
 	// Output:
-	// SELECT "id" FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" >= $1) AND "org_id" = $2 LIMIT $3
-	// [100 7 10] <nil>
+	// SELECT "id" FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" >= $1) AND "org_id" = $2 LIMIT 10
+	// [100 7] <nil>
 }
 
 // Text, Number and HasKey test a value inside a JSON column, at a path of
@@ -343,6 +343,6 @@ func ExampleCalc() {
 	fmt.Println(text)
 	fmt.Println(args, err)
 	// Output:
-	// SELECT "id", "number" FROM "invoices" WHERE NOT "paid" AND "org_id" = $1 ORDER BY (similarity("number", $2)) DESC LIMIT $3
-	// [7 INV-42 5] <nil>
+	// SELECT "id", "number" FROM "invoices" WHERE NOT "paid" AND "org_id" = $1 ORDER BY (similarity("number", $2)) DESC LIMIT 5
+	// [7 INV-42] <nil>
 }

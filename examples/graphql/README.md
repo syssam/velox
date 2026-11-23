@@ -345,7 +345,7 @@ Its statements, with `n` = 3 (placeholders shown as `?`; `TestNestedEdges` and
 
 ```sql
 -- the users page: n+1 rows, the columns asked for
-SELECT "id", "name", "joined_at" FROM "users" ORDER BY "name", "id" LIMIT ?
+SELECT "id", "name", "joined_at" FROM "users" ORDER BY "name", "id" LIMIT 4
 -- the posts page of every user at once: a window per author
 SELECT "id", "author_id", "title", "views", "org_id" FROM (
   SELECT "id", "author_id", "title", "views", "org_id",

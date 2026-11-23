@@ -371,7 +371,7 @@ func TestPredicateLogic(t *testing.T) {
 	} {
 		want, wargs, werr := db.Query[testmodel.Ticket]().Where(c.typed).Limit(1).SQL(ctx)
 		got, gargs, gerr := untyped.Query(db, tkTable).Where(c.untyped).Limit(1).SQL(ctx)
-		if got != want || !reflect.DeepEqual(gargs, wargs) || (gerr == nil) != (werr == nil) {
+		if got != want || len(gargs) != len(wargs) || len(wargs) > 0 && !reflect.DeepEqual(gargs, wargs) || (gerr == nil) != (werr == nil) {
 			t.Errorf("%s:\n got %s %v %v\nwant %s %v %v", name, got, gargs, gerr, want, wargs, werr)
 		}
 	}

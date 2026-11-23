@@ -648,6 +648,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A query's LIMIT is a literal in every dialect, as SQLite's already was and
+  as ent writes it; OFFSET stays a parameter. PostgreSQL's generic plan,
+  which pgx's statement cache reaches after five runs, guessed a tenth of the
+  table for a LIMIT parameter and picked a slower join: bench/compare's
+  WhereHasEdge ran 30% behind ent's. Each page size is a statement of its own
+  (ADR 0118).
 - `All` allocates the rows of a `Limit` up to 128 at once, a page's size,
   where it allocated 16 and grew: a `Limit(20)` read of 20 rows is one
   allocation, and the runtime benchmarks of 20-row pages allocate about 40%

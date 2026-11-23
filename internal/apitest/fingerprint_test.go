@@ -24,8 +24,8 @@ func lastStatement(st *velox.Statement) velox.Option {
 // release notes must say so.
 func TestFingerprintGolden(t *testing.T) {
 	for d, want := range map[velox.Dialect]struct{ sql, fp string }{
-		velox.Postgres: {`SELECT "id" FROM "invoices" WHERE "number" = $1 LIMIT $2`, "da95560fb97b3ada"},
-		velox.MySQL:    {"SELECT `id` FROM `invoices` WHERE `number` = ? LIMIT ?", "9ca18764b9e4f21a"},
+		velox.Postgres: {`SELECT "id" FROM "invoices" WHERE "number" = $1 LIMIT 1`, "1166273723381200"},
+		velox.MySQL:    {"SELECT `id` FROM `invoices` WHERE `number` = ? LIMIT 1", "425e1af864546977"},
 		velox.SQLite:   {`SELECT "id" FROM "invoices" WHERE "number" = ? LIMIT 1`, "5f05192b890f8000"},
 	} {
 		var st velox.Statement
@@ -43,7 +43,8 @@ func TestFingerprintGolden(t *testing.T) {
 
 // TestFingerprintIsTheShapes is Review Focus 4: every value of the arguments,
 // and a Rewrite hook's copy of the entity (rendered without the cache), give
-// the shape's one fingerprint; another shape gets another.
+// the shape's one fingerprint; another shape gets another. A Limit is in the
+// text, so another Limit is another shape.
 func TestFingerprintIsTheShapes(t *testing.T) {
 	var st velox.Statement
 	db := openFake(velox.Postgres, &fakeconn.Exec{}, lastStatement(&st))
@@ -55,11 +56,14 @@ func TestFingerprintIsTheShapes(t *testing.T) {
 		return st.Fingerprint
 	}
 	x := fp(db.Query[testmodel.Invoice]().Where(I.Number.EQ("x")).Limit(1))
-	if y := fp(db.Query[testmodel.Invoice]().Where(I.Number.EQ("y")).Limit(7)); y != x {
+	if y := fp(db.Query[testmodel.Invoice]().Where(I.Number.EQ("y")).Limit(1)); y != x {
 		t.Errorf("other values: %s, want %s", y, x)
 	}
 	if other := fp(db.Query[testmodel.Invoice]().Where(I.Number.EQ("x"), I.Paid.EQ(true)).Limit(1)); other == x {
 		t.Error("two shapes share a fingerprint")
+	}
+	if other := fp(db.Query[testmodel.Invoice]().Where(I.Number.EQ("x")).Limit(7)); other == x {
+		t.Error("two Limits share a fingerprint")
 	}
 	copied := openFake(velox.Postgres, &fakeconn.Exec{}, lastStatement(&st),
 		velox.WithRewrite(func(_ context.Context, s *velox.Statement) error {

@@ -49,11 +49,11 @@ func TestRelAggregateSQL(t *testing.T) {
 		{velox.Postgres, `SELECT "id", (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND "body" <> $1 AND NOT "hidden" AND "body" <> $2), ` +
 			`(SELECT COUNT(*) FROM "notes" AS "vx1" WHERE EXISTS (SELECT 1 FROM "owner_notes" AS "vx2" WHERE "vx2"."note_id" = "vx1"."id" AND "vx2"."owner_id" = "owners"."id") AND NOT "hidden" AND "body" <> $3), ` +
 			`(SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $4) FROM "owners" ` +
-			`ORDER BY (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $5) DESC, (SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $6), "id" LIMIT $7`},
+			`ORDER BY (SELECT COUNT(*) FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $5) DESC, (SELECT MAX("id") FROM "notes" AS "vx1" WHERE "vx1"."owner_id" = "owners"."id" AND NOT "hidden" AND "body" <> $6), "id" LIMIT 5`},
 		{velox.MySQL, "SELECT `id`, (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `body` <> ? AND `hidden` = 0 AND `body` <> ?), " +
 			"(SELECT COUNT(*) FROM `notes` AS `vx1` WHERE EXISTS (SELECT 1 FROM `owner_notes` AS `vx2` WHERE `vx2`.`note_id` = `vx1`.`id` AND `vx2`.`owner_id` = `owners`.`id`) AND `hidden` = 0 AND `body` <> ?), " +
 			"(SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) FROM `owners` " +
-			"ORDER BY (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) DESC, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) IS NULL, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?), `id` LIMIT ?"},
+			"ORDER BY (SELECT COUNT(*) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) DESC, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?) IS NULL, (SELECT MAX(`id`) FROM `notes` AS `vx1` WHERE `vx1`.`owner_id` = `owners`.`id` AND `hidden` = 0 AND `body` <> ?), `id` LIMIT 5"},
 	} {
 		db := openPolicied(tc.d, &fakeconn.Exec{})
 		text, args, err := db.Query[fixture.IOwner]().
@@ -62,7 +62,7 @@ func TestRelAggregateSQL(t *testing.T) {
 		if err != nil || text != tc.sql {
 			t.Errorf("%v:\n got %s %v\nwant %s", tc.d, text, err, tc.sql)
 		}
-		if len(args) == 0 || args[0] != "x" || args[len(args)-1] != 5 {
+		if len(args) == 0 || args[0] != "x" {
 			t.Errorf("%v: args %v", tc.d, args)
 		}
 	}

@@ -102,9 +102,9 @@ func TestUpdateOnePostgresStatements(t *testing.T) {
 		t.Fatalf("One: %+v, %v", p, err)
 	}
 	want := []string{
-		`SELECT "id" FROM "s_posts" WHERE "title" = $1 LIMIT $2 FOR UPDATE`,
+		`SELECT "id" FROM "s_posts" WHERE "title" = $1 LIMIT 2 FOR UPDATE`,
 		`UPDATE "s_posts" SET "title" = $1 WHERE "id" = $2`,
-		`SELECT "id", "author_id", "title" FROM "s_posts" WHERE "id" = $1 LIMIT $2`,
+		`SELECT "id", "author_id", "title" FROM "s_posts" WHERE "id" = $1 LIMIT 2`,
 	}
 	if got := slices.DeleteFunc(slices.Clone(e.Log), func(s string) bool { return !strings.HasPrefix(s, "SELECT") && !strings.HasPrefix(s, "UPDATE") }); !slices.Equal(got, want) {
 		t.Errorf("statements:\n%s\nwant:\n%s\nall: %q", strings.Join(got, "\n"), strings.Join(want, "\n"), e.Log)

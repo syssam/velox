@@ -157,15 +157,15 @@ func TestThroughHasRenders(t *testing.T) {
 		want string
 	}{
 		{fixture.DBooks.Tags.HasWith(fixture.DTags.Name.EQ("go")),
-			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1)) LIMIT $2`},
+			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1)) LIMIT 1`},
 		{fixture.DBooks.Tags.Has(),
-			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT $1`},
+			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT 1`},
 		// Nested: the tag's books correlate with the innermost alias, vx2.
 		{fixture.DBooks.Tags.HasWith(fixture.DTags.Books.HasWith(fixture.DBooks.Title.EQ("dune"))),
-			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "book_tags" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "books" AS "vx4" WHERE "vx4"."id" = "vx3"."book_id" AND "title" = $1)))) LIMIT $2`},
+			`SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "book_tags" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "books" AS "vx4" WHERE "vx4"."id" = "vx3"."book_id" AND "title" = $1)))) LIMIT 1`},
 		// After a many-to-many EXISTS, the outer table's conditions are its own again.
 		{velox.And(fixture.DBooks.Tags.Has(), fixture.DBooks.Title.EQ("dune")),
-			`SELECT "id", "author_id", "title" FROM "books" WHERE (EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) AND "title" = $1) LIMIT $2`},
+			`SELECT "id", "author_id", "title" FROM "books" WHERE (EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) AND "title" = $1) LIMIT 1`},
 	} {
 		got, _, err := db.Query[fixture.DBook]().Where(c.p).Limit(1).SQL(ctx)
 		if err != nil || got != c.want {
@@ -173,7 +173,7 @@ func TestThroughHasRenders(t *testing.T) {
 		}
 	}
 	got, _, err := openFake(velox.MySQL, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Books.Has()).Limit(1).SQL(ctx)
-	want := "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND EXISTS (SELECT 1 FROM `books` AS `vx2` WHERE `vx2`.`id` = `vx1`.`book_id`)) LIMIT ?"
+	want := "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND EXISTS (SELECT 1 FROM `books` AS `vx2` WHERE `vx2`.`id` = `vx1`.`book_id`)) LIMIT 1"
 	if err != nil || got != want {
 		t.Errorf("the other way, on MySQL:\n got %s, %v\nwant %s", got, err, want)
 	}
@@ -184,11 +184,11 @@ func TestThroughHasRenders(t *testing.T) {
 func TestThroughHasScopesTarget(t *testing.T) {
 	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
 	got, args, err := db.Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWith(fixture.DTags.Name.EQ("go"))).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(7)))
-	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1 AND "org_id" = $2)) LIMIT $3`
+	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND "name" = $1 AND "org_id" = $2)) LIMIT 1`
 	if err != nil || got != want {
 		t.Fatalf("got  %s, %v\nwant %s", got, err, want)
 	}
-	if !reflect.DeepEqual(args, []any{"go", int64(7), 1}) {
+	if !reflect.DeepEqual(args, []any{"go", int64(7)}) {
 		t.Errorf("args %v", args)
 	}
 }
@@ -218,18 +218,15 @@ func TestOfThroughRenders(t *testing.T) {
 		d    velox.Dialect
 		want string
 	}{
-		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($1, $2)) LIMIT $3`},
-		{velox.MySQL, "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `book_id` IN (?, ?)) LIMIT ?"},
+		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($1, $2)) LIMIT 5`},
+		{velox.MySQL, "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `book_id` IN (?, ?)) LIMIT 5"},
 		{velox.SQLite, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN (?, ?)) LIMIT 5`},
 	} {
 		got, args, err := openFake(c.d, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DBooks.Tags.Of(&b1, &b2)).Limit(5).SQL(ctx)
 		if err != nil || got != c.want {
 			t.Errorf("%v:\n got %s, %v\nwant %s", c.d, got, err, c.want)
 		}
-		want := []any{int64(1), int64(2), 5}
-		if c.d == velox.SQLite {
-			want = want[:2] // SQLite writes the Limit in the text
-		}
+		want := []any{int64(1), int64(2)}
 		if !reflect.DeepEqual(args, want) {
 			t.Errorf("%v: args %v, want %v", c.d, args, want)
 		}
@@ -237,17 +234,17 @@ func TestOfThroughRenders(t *testing.T) {
 	// The other way, with the target's org at the top, outside the EXISTS.
 	g := fixture.DTag{ID: 7}
 	got, args, err := openPolicied(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DTags.Books.Of(&g)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
-	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" IN ($1)) LIMIT $2`
-	if err != nil || got != want || !reflect.DeepEqual(args, []any{int64(7), 1}) {
+	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" IN ($1)) LIMIT 1`
+	if err != nil || got != want || !reflect.DeepEqual(args, []any{int64(7)}) {
 		t.Errorf("tag to books:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
 	got, args, err = openPolicied(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Name.EQ("go"), fixture.DBooks.Tags.Of(&b1)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
-	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($2)) AND "org_id" = $3 LIMIT $4`
-	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3), 1}) {
+	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($2)) AND "org_id" = $3 LIMIT 1`
+	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3)}) {
 		t.Errorf("org:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
 	got, _, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWith(fixture.DBooks.Picks.Of(&b2))).Limit(1).SQL(ctx)
-	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT $2`
+	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT 1`
 	if err != nil || got != want {
 		t.Errorf("nested:\n got %s, %v\nwant %s", got, err, want)
 	}
@@ -263,16 +260,13 @@ func TestOfSelfManyToMany(t *testing.T) {
 		d    velox.Dialect
 		want string
 	}{
-		{velox.Postgres, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN ($1, $2)) LIMIT $3`},
-		{velox.MySQL, "SELECT `id` FROM `peers` WHERE EXISTS (SELECT 1 FROM `friends` AS `vx1` WHERE `vx1`.`friend_id` = `peers`.`id` AND `peer_id` IN (?, ?)) LIMIT ?"},
+		{velox.Postgres, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN ($1, $2)) LIMIT 5`},
+		{velox.MySQL, "SELECT `id` FROM `peers` WHERE EXISTS (SELECT 1 FROM `friends` AS `vx1` WHERE `vx1`.`friend_id` = `peers`.`id` AND `peer_id` IN (?, ?)) LIMIT 5"},
 		{velox.SQLite, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN (?, ?)) LIMIT 5`},
 	} {
 		db := openFake(c.d, &fakeconn.Exec{})
 		got, args, err := db.Query[dPeer]().Where(dPeers.Friends.Of(&p1, &p2)).Limit(5).SQL(skip)
-		wantArgs := []any{int64(1), int64(2), 5}
-		if c.d == velox.SQLite {
-			wantArgs = wantArgs[:2] // SQLite writes the Limit in the text
-		}
+		wantArgs := []any{int64(1), int64(2)}
 		if err != nil || got != c.want || !reflect.DeepEqual(args, wantArgs) {
 			t.Errorf("%v:\n got %s %v, %v\nwant %s", c.d, got, args, err, c.want)
 		}
@@ -500,7 +494,7 @@ func TestThroughJoinEntityWithInsertPolicy(t *testing.T) {
 		t.Errorf("tags %v", got)
 	}
 	got, _, err := db.WithoutPolicy("velox tests").Query[dLinker]().Where(dLinkers.Tags.Has()).Limit(1).SQL(ctx)
-	if want := `SELECT "id" FROM "linkers" WHERE EXISTS (SELECT 1 FROM "links" AS "vx1" WHERE "vx1"."linker_id" = "linkers"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT $1`; err != nil || got != want {
+	if want := `SELECT "id" FROM "linkers" WHERE EXISTS (SELECT 1 FROM "links" AS "vx1" WHERE "vx1"."linker_id" = "linkers"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id")) LIMIT 1`; err != nil || got != want {
 		t.Errorf("got  %s, %v\nwant %s", got, err, want)
 	}
 	e2 := &fakeconn.Exec{Affected: 1}
@@ -725,11 +719,11 @@ func TestThroughTargetPolicy(t *testing.T) {
 		want string
 	}{
 		"direct": {db.Query[dPeer]().Limit(1),
-			`SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND "id" > $1)) LIMIT $2`},
+			`SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND "id" > $1)) LIMIT 1`},
 		// The Where's EXISTS on dPeer reuses dPeer's whole condition, whose
 		// own inner EXISTS on dPeer is cut.
 		"from an EXISTS": {db.Query[dPeer]().Where(dPeers.Friends.Has()).Limit(1),
-			`SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND EXISTS (SELECT 1 FROM "friends" AS "vx3" WHERE "vx3"."peer_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx4" WHERE "vx4"."id" = "vx3"."friend_id" AND "id" > $1)))) AND EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND "id" > $2)) LIMIT $3`},
+			`SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND EXISTS (SELECT 1 FROM "friends" AS "vx3" WHERE "vx3"."peer_id" = "vx2"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx4" WHERE "vx4"."id" = "vx3"."friend_id" AND "id" > $1)))) AND EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."peer_id" = "peers"."id" AND EXISTS (SELECT 1 FROM "peers" AS "vx2" WHERE "vx2"."id" = "vx1"."friend_id" AND "id" > $2)) LIMIT 1`},
 	} {
 		if got, _, err := c.q.SQL(cyc); err != nil || got != c.want {
 			t.Errorf("%s:\ngot  %s, %v\nwant %s", name, got, err, c.want)

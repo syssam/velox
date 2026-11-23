@@ -106,10 +106,10 @@ func TestPoliciesANDedInOrder(t *testing.T) {
 	if _, err := db.Query[lAnd]().Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "name" FROM "ands" WHERE "name" <> $1 AND "name" <> $2 AND "name" <> $3 AND "name" <> $4 LIMIT $5`; e.SQL != want {
+	if want := `SELECT "id", "name" FROM "ands" WHERE "name" <> $1 AND "name" <> $2 AND "name" <> $3 AND "name" <> $4 LIMIT 1`; e.SQL != want {
 		t.Errorf("SQL\n%s\nwant\n%s", e.SQL, want)
 	}
-	if want := "[f1 f2 a b 1]"; fmt.Sprint(e.Args) != want {
+	if want := "[f1 f2 a b]"; fmt.Sprint(e.Args) != want {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 
@@ -118,7 +118,7 @@ func TestPoliciesANDedInOrder(t *testing.T) {
 	if _, err := db.Query[lAnd]().Limit(1).All(lMode(ctx, "allow")); err != nil {
 		t.Fatal(err)
 	}
-	if want := "[f1 f2 b 1]"; fmt.Sprint(e.Args) != want {
+	if want := "[f1 f2 b]"; fmt.Sprint(e.Args) != want {
 		t.Errorf("args under the first policy's Allow %v, want %v", e.Args, want)
 	}
 
@@ -395,7 +395,7 @@ func TestInterceptorCycleIsCut(t *testing.T) {
 	e := &fakeconn.Exec{}
 	for _, db := range []*velox.DB{openPolicied(velox.Postgres, e), openFake(velox.Postgres, e)} {
 		got, _, err := db.Query[lCycA]().Limit(1).SQL(context.Background())
-		const want = `SELECT "id", "b_id" FROM "cyc_as" WHERE EXISTS (SELECT 1 FROM "cyc_bs" AS "vx1" WHERE "vx1"."id" = "cyc_as"."b_id" AND EXISTS (SELECT 1 FROM "cyc_as" AS "vx2" WHERE "vx2"."id" = "vx1"."a_id")) LIMIT $1`
+		const want = `SELECT "id", "b_id" FROM "cyc_as" WHERE EXISTS (SELECT 1 FROM "cyc_bs" AS "vx1" WHERE "vx1"."id" = "cyc_as"."b_id" AND EXISTS (SELECT 1 FROM "cyc_as" AS "vx2" WHERE "vx2"."id" = "vx1"."a_id")) LIMIT 1`
 		if err != nil || got != want {
 			t.Errorf("got  %s, %v\nwant %s", got, err, want)
 		}

@@ -48,7 +48,7 @@ func TestScopeIsAdded(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(testmodel.Org.With(bg, int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT $2`, int64(7), 5)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT 5`, int64(7))
 }
 
 func TestScopeOnEveryOperation(t *testing.T) {
@@ -106,7 +106,7 @@ func TestScopeOnBothPaths(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT $2`, int64(7), 5)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" AND "org_id" = $1 LIMIT 5`, int64(7))
 	if where != 1 {
 		t.Errorf("the Rewrite hook saw %d conditions, want the caller's 1", where)
 	}
@@ -158,7 +158,7 @@ func TestWithoutPolicyAddsNothing(t *testing.T) {
 	if _, err := db.WithoutPolicy("reason").Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" LIMIT $1`, 5)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "paid" LIMIT 5`)
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
@@ -214,8 +214,8 @@ func TestHasOnAScopedTarget(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Invoice.Has()).Limit(1).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $1) AND "org_id" = $2 LIMIT $3`,
-		int64(7), int64(7), 1)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "tickets"."invoice_id" AND "org_id" = $1) AND "org_id" = $2 LIMIT 1`,
+		int64(7), int64(7))
 }
 
 // TestHasOnAScopedTargetFromAnUnscopedEntity: the target's scope applies
@@ -231,8 +231,8 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 	if _, err := q.All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "qty" > $1 AND NOT (EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "items"."invoice_id" AND "paid" AND "org_id" = $2)) LIMIT $3`,
-		int64(0), int64(7), 1)
+	wantSent(t, e, `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "qty" > $1 AND NOT (EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "items"."invoice_id" AND "paid" AND "org_id" = $2)) LIMIT 1`,
+		int64(0), int64(7))
 
 	_, err := q.All(context.Background())
 	wantNoScope(t, err, "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: ")
@@ -259,8 +259,8 @@ func TestNestedHasIsScopedAtEveryLevel(t *testing.T) {
 	if _, err := q.All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "org_id" = $1) AND "org_id" = $2) AND "org_id" = $3 LIMIT $4`,
-		int64(7), int64(7), int64(7), 1)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "org_id" = $1) AND "org_id" = $2) AND "org_id" = $3 LIMIT 1`,
+		int64(7), int64(7), int64(7))
 }
 
 // TestScopeNeverChangesASharedQuery is Review Focus 1: the scope copies the
@@ -401,7 +401,7 @@ func TestScopeNeverAppendsIntoAHooksArray(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(scoped(7)); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "org_id" = $1 LIMIT $2`, int64(7), 1)
+	wantSent(t, e, `SELECT `+allCols+` FROM "invoices" WHERE "org_id" = $1 LIMIT 1`, int64(7))
 	if !reflect.ValueOf(shared[:1][0]).IsZero() {
 		t.Errorf("the scope appended into the hook's array: %v", shared[:1])
 	}
@@ -426,7 +426,7 @@ func TestScopeWithSharedDefaults(t *testing.T) {
 			var last []any
 			db := openPolicied(velox.Postgres, &fakeconn.Exec{}, setDefaults,
 				velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-					if len(st.Args) != 2 || st.Args[0] != id {
+					if len(st.Args) != 1 || st.Args[0] != id {
 						wrong, last = wrong+1, st.Args
 					}
 					return next(ctx)

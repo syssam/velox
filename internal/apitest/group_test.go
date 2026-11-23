@@ -127,7 +127,7 @@ func TestGroupsAreRowCapped(t *testing.T) {
 	if !errors.Is(err, velox.ErrTooManyRows) {
 		t.Errorf("past the cap: %v", err)
 	}
-	wantSent(t, e, `SELECT "org_id", COUNT(*) FROM "invoices" GROUP BY "org_id" ORDER BY "org_id" LIMIT $1`, 3)
+	wantSent(t, e, `SELECT "org_id", COUNT(*) FROM "invoices" GROUP BY "org_id" ORDER BY "org_id" LIMIT 3`)
 	if _, err := velox.MinBy(ctx, db.Query[testmodel.Item]().AllowUnbounded(), testmodel.Items.InvoiceID.Key(), testmodel.Items.Qty); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Errorf("MinBy past the cap: %v", err)
 	}

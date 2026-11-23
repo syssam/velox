@@ -35,7 +35,7 @@ func annIn7() context.Context {
 // sameAsSent fails t unless SQL(ctx)'s text and args are what e was sent.
 func sameAsSent(t *testing.T, what string, e *fakeconn.Exec, text string, args []any) {
 	t.Helper()
-	if text != e.SQL || !reflect.DeepEqual(args, e.Args) {
+	if text != e.SQL || (len(args) > 0 || len(e.Args) > 0) && !reflect.DeepEqual(args, e.Args) {
 		t.Errorf("%s: SQL(ctx)\n %s %#v\nsent\n %s %#v", what, text, args, e.SQL, e.Args)
 	}
 }
@@ -248,8 +248,8 @@ func TestScopedSQLGolden(t *testing.T) {
 		selectHas, count, update, del, upsert golden
 	}{
 		{d: velox.Postgres,
-			selectHas: golden{`SELECT ` + pgCols + ` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = $1 AND "owner" = $2) AND "org_id" = $3 AND "owner" = $4 LIMIT $5`,
-				[]any{int64(7), "ann", int64(7), "ann", 10}},
+			selectHas: golden{`SELECT ` + pgCols + ` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = $1 AND "owner" = $2) AND "org_id" = $3 AND "owner" = $4 LIMIT 10`,
+				[]any{int64(7), "ann", int64(7), "ann"}},
 			count: golden{`SELECT COUNT(*) FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2`,
 				[]any{int64(7), "ann"}},
 			update: golden{`UPDATE "tickets" SET "title" = $1 WHERE "id" = $2 AND "org_id" = $3 AND "owner" = $4 AND "owner" = $5`,
@@ -260,8 +260,8 @@ func TestScopedSQLGolden(t *testing.T) {
 				[]any{int64(1), "ann", int64(7), "ann", "t", false, int64(2), int64(7), "ann", "ann"}},
 		},
 		{d: velox.MySQL,
-			selectHas: golden{"SELECT " + mysqlCols + " FROM `tickets` WHERE EXISTS (SELECT 1 FROM `tickets` AS `vx1` WHERE `vx1`.`id` = `tickets`.`parent_id` AND `org_id` = ? AND `owner` = ?) AND `org_id` = ? AND `owner` = ? LIMIT ?",
-				[]any{int64(7), "ann", int64(7), "ann", 10}},
+			selectHas: golden{"SELECT " + mysqlCols + " FROM `tickets` WHERE EXISTS (SELECT 1 FROM `tickets` AS `vx1` WHERE `vx1`.`id` = `tickets`.`parent_id` AND `org_id` = ? AND `owner` = ?) AND `org_id` = ? AND `owner` = ? LIMIT 10",
+				[]any{int64(7), "ann", int64(7), "ann"}},
 			count: golden{"SELECT COUNT(*) FROM `tickets` WHERE `done` = 0 AND `org_id` = ? AND `owner` = ?",
 				[]any{int64(7), "ann"}},
 			update: golden{"UPDATE `tickets` SET `title` = ? WHERE `id` = ? AND `org_id` = ? AND `owner` = ? AND `owner` = ?",

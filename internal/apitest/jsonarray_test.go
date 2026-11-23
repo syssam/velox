@@ -26,12 +26,12 @@ func TestJSONArraySQL(t *testing.T) {
 	}{
 		{velox.Postgres,
 			`SELECT "id" FROM "j_docs" WHERE ((jsonb_typeof("tags") = 'array' AND "tags" @> $1::jsonb) AND ` +
-				`CASE WHEN jsonb_typeof("tags") = 'array' THEN jsonb_array_length("tags") = 0 WHEN "tags" IS NULL THEN NULL ELSE 1 = 0 END) LIMIT $2`,
-			[]any{`"a"`, 1}},
+				`CASE WHEN jsonb_typeof("tags") = 'array' THEN jsonb_array_length("tags") = 0 WHEN "tags" IS NULL THEN NULL ELSE 1 = 0 END) LIMIT 1`,
+			[]any{`"a"`}},
 		{velox.MySQL,
 			"SELECT `id` FROM `j_docs` WHERE ((JSON_TYPE(`tags`) = 'ARRAY' AND JSON_CONTAINS(`tags`, ?)) AND " +
-				"CASE WHEN JSON_TYPE(`tags`) = 'ARRAY' THEN JSON_LENGTH(`tags`) = 0 WHEN `tags` IS NULL THEN NULL ELSE 1 = 0 END) LIMIT ?",
-			[]any{`"a"`, 1}},
+				"CASE WHEN JSON_TYPE(`tags`) = 'ARRAY' THEN JSON_LENGTH(`tags`) = 0 WHEN `tags` IS NULL THEN NULL ELSE 1 = 0 END) LIMIT 1",
+			[]any{`"a"`}},
 		{velox.SQLite,
 			`SELECT "id" FROM "j_docs" WHERE (CASE WHEN json_type("tags") = 'array' THEN EXISTS (SELECT 1 FROM json_each("tags") AS je WHERE je.type = 'text' AND je.value = ?) ` +
 				`WHEN "tags" IS NULL THEN NULL ELSE 1 = 0 END AND ` +

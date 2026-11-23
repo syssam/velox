@@ -72,8 +72,8 @@ func TestWindowSQL(t *testing.T) {
 		d    velox.Dialect
 		want string
 	}{
-		{velox.Postgres, `SELECT "org_id", (COUNT(*) OVER ()), (RANK() OVER (ORDER BY SUM("total") DESC)) FROM "invoices" GROUP BY "org_id" ORDER BY (RANK() OVER (ORDER BY SUM("total") DESC)) LIMIT $1`},
-		{velox.MySQL, "SELECT `org_id`, (COUNT(*) OVER ()), (RANK() OVER (ORDER BY SUM(`total`) DESC)) FROM `invoices` GROUP BY `org_id` ORDER BY (RANK() OVER (ORDER BY SUM(`total`) DESC)) IS NULL, (RANK() OVER (ORDER BY SUM(`total`) DESC)) LIMIT ?"},
+		{velox.Postgres, `SELECT "org_id", (COUNT(*) OVER ()), (RANK() OVER (ORDER BY SUM("total") DESC)) FROM "invoices" GROUP BY "org_id" ORDER BY (RANK() OVER (ORDER BY SUM("total") DESC)) LIMIT 5`},
+		{velox.MySQL, "SELECT `org_id`, (COUNT(*) OVER ()), (RANK() OVER (ORDER BY SUM(`total`) DESC)) FROM `invoices` GROUP BY `org_id` ORDER BY (RANK() OVER (ORDER BY SUM(`total`) DESC)) IS NULL, (RANK() OVER (ORDER BY SUM(`total`) DESC)) LIMIT 5"},
 		{velox.SQLite, `SELECT "org_id", (COUNT(*) OVER ()), (RANK() OVER (ORDER BY SUM("total") DESC)) FROM "invoices" GROUP BY "org_id" ORDER BY (RANK() OVER (ORDER BY SUM("total") DESC)) IS NULL, (RANK() OVER (ORDER BY SUM("total") DESC)) LIMIT 5`},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})

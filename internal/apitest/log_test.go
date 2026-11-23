@@ -125,8 +125,8 @@ func TestWithLogNeverPrintsASensitiveArgument(t *testing.T) {
 	if !slices.Contains(ins, any("<sensitive>")) || !slices.Contains(ins, any("cy")) || !slices.Contains(ins, any(float64(7))) {
 		t.Errorf("insert: %v", ins)
 	}
-	check(2, "<sensitive>", "t", float64(3))
-	check(3, "<hidden>", float64(1))
+	check(2, "<sensitive>", "t")
+	check(3, "<hidden>")
 	check(4, "<hidden>", "<hidden>")
 }
 
@@ -144,7 +144,7 @@ func TestWithLogHidesArgumentsAHookChanged(t *testing.T) {
 	if _, err := db.Query[fixture.DAuthor]().Where(DA.Name.EQ("ada")).Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := argsOf(t, records()[0]); !slices.Equal(got, []any{"<hidden>", "<hidden>"}) {
+	if got := argsOf(t, records()[0]); !slices.Equal(got, []any{"<hidden>"}) {
 		t.Errorf("got %v", got)
 	}
 }

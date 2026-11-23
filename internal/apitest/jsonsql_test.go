@@ -122,12 +122,12 @@ func TestJSONLenSQL(t *testing.T) {
 	}{
 		{velox.Postgres,
 			`SELECT "id" FROM "j_docs" WHERE (CASE WHEN jsonb_typeof("tags") = 'array' THEN (jsonb_array_length("tags"))::numeric END > $1 AND ` +
-				`CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $2, $3)) = 'array' THEN (jsonb_array_length(jsonb_extract_path("attrs", $4, $5)))::numeric END = $6) LIMIT $7`,
-			[]any{1.0, "a", "b", "a", "b", 2.0, 1}},
+				`CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $2, $3)) = 'array' THEN (jsonb_array_length(jsonb_extract_path("attrs", $4, $5)))::numeric END = $6) LIMIT 1`,
+			[]any{1.0, "a", "b", "a", "b", 2.0}},
 		{velox.MySQL,
 			"SELECT `id` FROM `j_docs` WHERE (CASE WHEN JSON_TYPE(JSON_EXTRACT(`tags`, ?)) = 'ARRAY' THEN JSON_LENGTH(`tags`, ?) END > ? AND " +
-				"CASE WHEN JSON_TYPE(JSON_EXTRACT(`attrs`, ?)) = 'ARRAY' THEN JSON_LENGTH(`attrs`, ?) END = ?) LIMIT ?",
-			[]any{"$", "$", 1.0, `$."a"."b"`, `$."a"."b"`, 2.0, 1}},
+				"CASE WHEN JSON_TYPE(JSON_EXTRACT(`attrs`, ?)) = 'ARRAY' THEN JSON_LENGTH(`attrs`, ?) END = ?) LIMIT 1",
+			[]any{"$", "$", 1.0, `$."a"."b"`, `$."a"."b"`, 2.0}},
 		{velox.SQLite,
 			`SELECT "id" FROM "j_docs" WHERE (CASE WHEN json_type("tags", ?) = 'array' THEN json_array_length("tags", ?) END > ? AND ` +
 				`CASE WHEN json_type("attrs", ?) = 'array' THEN json_array_length("attrs", ?) END = ?) LIMIT 1`,
@@ -192,7 +192,7 @@ func TestJSONOrderAndSelectSQL(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	text, _, err := db.Query[fixture.JDoc]().Columns(J.ID).OrderBy(J.Attrs.Number("n").Desc(), J.Attrs.Text("s").Asc()).Limit(1).SQL(ctx)
 	want := `SELECT "id" FROM "j_docs" ORDER BY CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $1)) = 'number' THEN (jsonb_extract_path_text("attrs", $2))::numeric END DESC, ` +
-		`CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $3)) = 'string' THEN jsonb_extract_path_text("attrs", $4) END LIMIT $5`
+		`CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $3)) = 'string' THEN jsonb_extract_path_text("attrs", $4) END LIMIT 1`
 	if err != nil || text != want {
 		t.Errorf("order:\n got %s %v\nwant %s", text, err, want)
 	}

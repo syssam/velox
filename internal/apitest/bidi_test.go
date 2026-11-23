@@ -342,7 +342,7 @@ func TestBidiOne(t *testing.T) {
 		upd    = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2`
 		unlink = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2`
 		link   = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL`
-		probe  = `SELECT 1 FROM "bspouses" WHERE "id" = $1 LIMIT $2`
+		probe  = `SELECT 1 FROM "bspouses" WHERE "id" = $1 LIMIT 1`
 		ins    = `INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2)`
 		// A key left nil in the only row is the literal NULL, with no argument.
 		insNull = `INSERT INTO "bspouses" ("id") VALUES ($1)` // a nil spouse_id is left out (ADR 0093)
@@ -424,7 +424,7 @@ func TestBidiOne(t *testing.T) {
 		if ce, ok := errors.AsType[*velox.ConstraintError](err); !ok || ce.Kind != velox.ConstraintUnique || ce.Constraint != "spouse_id" || err.Error() != want {
 			t.Fatalf("err = %v,\nwant a unique ConstraintError: %s", err, want)
 		}
-		sent(t, e, append(slices.Clone(linked[:4]), stmt{probe, []any{int64(3), 1}}, stmt{"ROLLBACK", nil})...)
+		sent(t, e, append(slices.Clone(linked[:4]), stmt{probe, []any{int64(3)}}, stmt{"ROLLBACK", nil})...)
 	}
 	t.Run("taken partner", func(t *testing.T) {
 		taken(t, true, "velox: apitest.bspouse: unique constraint spouse_id violated: row 3 already has a spouse; clear it first")
@@ -850,7 +850,7 @@ func TestBidiOneScope(t *testing.T) {
 		upd    = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "org_id" = $3`
 		unlink = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2`
 		link   = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "org_id" = $3`
-		probe  = `SELECT 1 FROM "btspouses" WHERE "id" = $1 AND "org_id" = $2 LIMIT $3`
+		probe  = `SELECT 1 FROM "btspouses" WHERE "id" = $1 AND "org_id" = $2 LIMIT 1`
 		reason = "velox: clearing the old partner of a bidirectional one-to-one edge"
 	)
 	type seen struct{ sql, policyBypass string }

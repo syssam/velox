@@ -63,7 +63,7 @@ db.Query[veloxgen.Invoice]().
 ```
 
 ```sql
-SELECT … FROM "invoices" WHERE (LOWER("customer") = LOWER($1)) AND "org_id" = $2 LIMIT $3
+SELECT … FROM "invoices" WHERE (LOWER("customer") = LOWER($1)) AND "org_id" = $2 LIMIT 20
 ```
 
 It is one more condition, ANDed with the policy, the scope and the
@@ -82,7 +82,7 @@ db.Query[veloxgen.Invoice]().
 ```
 
 ```sql
-SELECT … FROM "invoices" WHERE "org_id" = $1 ORDER BY (similarity("customer", $2)) DESC LIMIT $3
+SELECT … FROM "invoices" WHERE "org_id" = $1 ORDER BY (similarity("customer", $2)) DESC LIMIT 10
 ```
 
 `SelectRaw(text, args...)` is `Select(Calc(text, args...))`:

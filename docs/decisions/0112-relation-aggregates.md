@@ -1,4 +1,4 @@
-# 111. A relation's aggregates are terms of each row
+# 112. A relation's aggregates are terms of each row
 
 Status: accepted, 2026-11-22.
 

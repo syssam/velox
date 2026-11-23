@@ -5,6 +5,7 @@ import (
 	"errors"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -55,12 +56,17 @@ func TestMaxRowsBelowTwoPanics(t *testing.T) {
 	velox.WithMaxRows(1)
 }
 
-// limitArg returns the argument of the LIMIT that sql ends with, or 0.
-func limitArg(sql string, args []any) int {
-	if !regexp.MustCompile(`LIMIT \$\d+$`).MatchString(sql) {
+var limitAtEnd = regexp.MustCompile(`LIMIT (\d+)$`)
+
+// sentLimit returns the LIMIT that sql ends with, or 0. The LIMIT is a
+// literal in the text, not an argument.
+func sentLimit(sql string) int {
+	m := limitAtEnd.FindStringSubmatch(sql)
+	if m == nil {
 		return 0
 	}
-	return args[len(args)-1].(int)
+	n, _ := strconv.Atoi(m[1])
+	return n
 }
 
 // TestRowCapIsSentAsALimit: under a cap of n, velox sends LIMIT n+1, so the
@@ -94,7 +100,7 @@ func TestRowCapIsSentAsALimit(t *testing.T) {
 			if _, err := c.q.All(ctx); err != nil {
 				t.Fatalf("%s: %v", c.name, err)
 			}
-			if got := limitArg(e.SQL, e.Args); got != c.want {
+			if got := sentLimit(e.SQL); got != c.want {
 				t.Errorf("%s: sent %s %v, want LIMIT %d", c.name, e.SQL, e.Args, c.want)
 			}
 		}
@@ -107,14 +113,14 @@ func TestRowCapIsSentAsALimit(t *testing.T) {
 	}
 	for range db.Query[testmodel.Invoice]().AllowUnbounded().Iter(ctx) {
 	}
-	if got := limitArg(e.SQL, e.Args); got != 4 {
+	if got := sentLimit(e.SQL); got != 4 {
 		t.Errorf("Iter: sent %s %v", e.SQL, e.Args)
 	}
 	e.Results = [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 1)}}
 	if _, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := limitArg(e.SQL, e.Args); !strings.Contains(e.SQL, `"items"`) || got != 4 {
+	if got := sentLimit(e.SQL); !strings.Contains(e.SQL, `"items"`) || got != 4 {
 		t.Errorf("With load: sent %s %v", e.SQL, e.Args)
 	}
 	e.Rows = [][]any{{int64(1)}}
@@ -183,8 +189,8 @@ func TestRowCapCoversRelationLoads(t *testing.T) {
 
 // TestRowCapAcrossNestedWith: the cap covers a load inside a load. The error
 // names the inner load only: the outer "loading items" context is lost
-// (recorded for after 1.0). The statements' last arguments are the owner
-// query's own LIMIT 1, then each load's cap+1.
+// (recorded for after 1.0). The statements' LIMITs are the owner query's
+// own 1, then each load's cap+1.
 func TestRowCapAcrossNestedWith(t *testing.T) {
 	results := func() [][][]any {
 		return [][][]any{
@@ -193,12 +199,12 @@ func TestRowCapAcrossNestedWith(t *testing.T) {
 			{invoiceRow(1), invoiceRow(2), invoiceRow(3)},
 		}
 	}
-	lastArgs := func(e *fakeconn.Exec) []any {
-		var last []any
-		for _, args := range e.ArgLog {
-			last = append(last, args[len(args)-1])
+	limits := func(e *fakeconn.Exec) []int {
+		var out []int
+		for _, sql := range e.Log {
+			out = append(out, sentLimit(sql))
 		}
-		return last
+		return out
 	}
 	query := func(db *velox.DB) velox.Query[testmodel.Invoice] {
 		return db.Query[testmodel.Invoice]().With(I.Items.With(It.Invoice)).Limit(1)
@@ -210,8 +216,8 @@ func TestRowCapAcrossNestedWith(t *testing.T) {
 	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
 		t.Errorf("%v, want %q", err, want)
 	}
-	if got := lastArgs(e); !slices.Equal(got, []any{1, 3, 3}) {
-		t.Errorf("last arguments %v, want [1 3 3]", got)
+	if got := limits(e); !slices.Equal(got, []int{1, 3, 3}) {
+		t.Errorf("LIMITs %v, want [1 3 3]", got)
 	}
 	e = &fakeconn.Exec{Results: results()}
 	db = openFake(velox.Postgres, e, velox.WithMaxRows(2))
@@ -219,8 +225,8 @@ func TestRowCapAcrossNestedWith(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Errorf("MaxRows(10): %d rows, %v", len(got), err)
 	}
-	if got := lastArgs(e); len(got) != 3 || got[1] != 11 || got[2] != 11 {
-		t.Errorf("MaxRows(10): last arguments %v, want the loads' to be 11", got)
+	if got := limits(e); len(got) != 3 || got[1] != 11 || got[2] != 11 {
+		t.Errorf("MaxRows(10): LIMITs %v, want the loads' to be 11", got)
 	}
 }
 
@@ -237,7 +243,7 @@ func TestRowCapFromARewrite(t *testing.T) {
 	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
 		t.Errorf("%v, want %q", err, want)
 	}
-	if !strings.HasSuffix(e.SQL, ` FROM "invoices" LIMIT $1`) || !slices.Equal(e.Args, []any{3}) {
-		t.Errorf("sent %s %v, want ... FROM \"invoices\" LIMIT $1 [3]", e.SQL, e.Args)
+	if !strings.HasSuffix(e.SQL, ` FROM "invoices" LIMIT 3`) || len(e.Args) != 0 {
+		t.Errorf("sent %s %v, want ... FROM \"invoices\" LIMIT 3 and no argument", e.SQL, e.Args)
 	}
 }

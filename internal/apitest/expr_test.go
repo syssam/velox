@@ -20,8 +20,8 @@ func TestExprKeepsPolicy(t *testing.T) {
 	if _, err := q.All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE (LOWER("title") = LOWER($1)) AND "org_id" = $2 AND "owner" = $3 LIMIT $4`,
-		"Fix", int64(1), "ann", 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE (LOWER("title") = LOWER($1)) AND "org_id" = $2 AND "owner" = $3 LIMIT 5`,
+		"Fix", int64(1), "ann")
 
 	// Inside Or and Not, and with the policy's own error for no user.
 	or := velox.Or(
@@ -31,8 +31,8 @@ func TestExprKeepsPolicy(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Where(or).Limit(1).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE ((LENGTH("title") > $1) OR NOT (("owner" IS NULL))) AND "org_id" = $2 AND "owner" = $3 LIMIT $4`,
-		10, int64(1), "ann", 1)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE ((LENGTH("title") > $1) OR NOT (("owner" IS NULL))) AND "org_id" = $2 AND "owner" = $3 LIMIT 1`,
+		10, int64(1), "ann")
 
 	calls := e.Calls
 	if _, err := db.Query[testmodel.Ticket]().Where(velox.Expr[testmodel.Ticket]("? = ?", Tk.Title, "x")).Limit(1).All(asUser("")); err == nil {

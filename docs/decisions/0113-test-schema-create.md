@@ -1,4 +1,4 @@
-# 111. A test's or a development database gets its tables without migrations
+# 113. A test's or a development database gets its tables without migrations
 
 Status: accepted, 2026-11-22.
 

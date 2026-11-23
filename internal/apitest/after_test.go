@@ -14,10 +14,10 @@ func TestAfter(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	last := &testmodel.Invoice{ID: 7, Total: 2.5}
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().OrderBy(I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL(ctx))
-	if !strings.HasSuffix(text, ` WHERE ("total" < $1 OR ("total" = $2 AND "id" > $3)) ORDER BY "total" DESC, "id" LIMIT $4`) {
+	if !strings.HasSuffix(text, ` WHERE ("total" < $1 OR ("total" = $2 AND "id" > $3)) ORDER BY "total" DESC, "id" LIMIT 10`) {
 		t.Errorf("%s", text)
 	}
-	if len(args) != 4 || args[0] != 2.5 || args[1] != 2.5 || args[2] != int64(7) {
+	if len(args) != 3 || args[0] != 2.5 || args[1] != 2.5 || args[2] != int64(7) {
 		t.Errorf("%v", args)
 	}
 	text, _ = sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(last).Limit(10).SQL(ctx))
@@ -60,15 +60,15 @@ func TestAfterNullable(t *testing.T) {
 		want string
 	}{
 		"asc from a value": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7, PaidAt: &at}),
-			` WHERE ("paid_at" > $1 OR "paid_at" IS NULL OR ("paid_at" = $2 AND "id" > $3)) ORDER BY "paid_at", "id" LIMIT $4`},
+			` WHERE ("paid_at" > $1 OR "paid_at" IS NULL OR ("paid_at" = $2 AND "id" > $3)) ORDER BY "paid_at", "id" LIMIT 10`},
 		"asc from NULL": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7}),
-			` WHERE (("paid_at" IS NULL AND "id" > $1)) ORDER BY "paid_at", "id" LIMIT $2`},
+			` WHERE (("paid_at" IS NULL AND "id" > $1)) ORDER BY "paid_at", "id" LIMIT 10`},
 		"desc from a value": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Desc(), I.ID.Desc()).After(&testmodel.Invoice{ID: 7, PaidAt: &at}),
-			` WHERE ("paid_at" < $1 OR ("paid_at" = $2 AND "id" < $3)) ORDER BY "paid_at" DESC, "id" DESC LIMIT $4`},
+			` WHERE ("paid_at" < $1 OR ("paid_at" = $2 AND "id" < $3)) ORDER BY "paid_at" DESC, "id" DESC LIMIT 10`},
 		"desc from NULL": {db.Query[testmodel.Invoice]().OrderBy(I.PaidAt.Desc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7}),
-			` WHERE ("paid_at" IS NOT NULL OR ("paid_at" IS NULL AND "id" > $1)) ORDER BY "paid_at" DESC, "id" LIMIT $2`},
+			` WHERE ("paid_at" IS NOT NULL OR ("paid_at" IS NULL AND "id" > $1)) ORDER BY "paid_at" DESC, "id" LIMIT 10`},
 		"second term": {db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.PaidAt.Asc(), I.ID.Asc()).After(&testmodel.Invoice{ID: 7, OrgID: 2, PaidAt: &at}),
-			` WHERE ("org_id" > $1 OR ("org_id" = $2 AND ("paid_at" > $3 OR "paid_at" IS NULL)) OR ("org_id" = $4 AND "paid_at" = $5 AND "id" > $6)) ORDER BY "org_id", "paid_at", "id" LIMIT $7`},
+			` WHERE ("org_id" > $1 OR ("org_id" = $2 AND ("paid_at" > $3 OR "paid_at" IS NULL)) OR ("org_id" = $4 AND "paid_at" = $5 AND "id" > $6)) ORDER BY "org_id", "paid_at", "id" LIMIT 10`},
 	} {
 		text, _ := sqlOK(t)(c.q.Limit(10).SQL(ctx))
 		if !strings.HasSuffix(text, c.want) {
@@ -120,11 +120,11 @@ func TestAfterMixedDirections(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	last := &testmodel.Invoice{ID: 7, OrgID: 3, Total: 2.5}
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().OrderBy(I.OrgID.Asc(), I.Total.Desc(), I.ID.Asc()).After(last).Limit(10).SQL(ctx))
-	want := ` WHERE ("org_id" > $1 OR ("org_id" = $2 AND "total" < $3) OR ("org_id" = $4 AND "total" = $5 AND "id" > $6)) ORDER BY "org_id", "total" DESC, "id" LIMIT $7`
+	want := ` WHERE ("org_id" > $1 OR ("org_id" = $2 AND "total" < $3) OR ("org_id" = $4 AND "total" = $5 AND "id" > $6)) ORDER BY "org_id", "total" DESC, "id" LIMIT 10`
 	if !strings.HasSuffix(text, want) {
 		t.Errorf("%s", text)
 	}
-	wantArgs := []any{int64(3), int64(3), 2.5, int64(3), 2.5, int64(7), 10}
+	wantArgs := []any{int64(3), int64(3), 2.5, int64(3), 2.5, int64(7)}
 	if !reflect.DeepEqual(args, wantArgs) {
 		t.Errorf("%#v", args)
 	}
@@ -133,7 +133,7 @@ func TestAfterMixedDirections(t *testing.T) {
 func TestAfterSecondCaseArgs(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	_, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).After(&testmodel.Invoice{ID: 7}).Limit(10).SQL(ctx))
-	if !reflect.DeepEqual(args, []any{int64(7), 10}) {
+	if !reflect.DeepEqual(args, []any{int64(7)}) {
 		t.Errorf("%#v", args)
 	}
 }

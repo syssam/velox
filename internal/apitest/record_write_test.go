@@ -187,7 +187,7 @@ func TestRecordUpdateOne(t *testing.T) {
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
 		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
-		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2`,
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT 2`,
 		"COMMIT",
 	}}, {velox.SQLite, []string{
 		"BEGIN",
@@ -200,7 +200,7 @@ func TestRecordUpdateOne(t *testing.T) {
 		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` = ? ORDER BY `id` FOR UPDATE",
 		"UPDATE `invoices` SET `total` = ?, `updated_at` = ? WHERE `id` = ? AND `id` IN (?)",
 		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` IN (?)",
-		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` = ? LIMIT ?",
+		"SELECT " + allColsMy + " FROM `invoices` WHERE `id` = ? LIMIT 2",
 		"COMMIT",
 	}}} {
 		t.Run(c.d.String(), func(t *testing.T) {

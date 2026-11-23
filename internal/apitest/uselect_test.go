@@ -130,7 +130,7 @@ func TestUntypedSelectKeepsPolicy(t *testing.T) {
 	for row, err := range q.Rows(asUser("ann")) {
 		_, _ = row, err
 	}
-	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 GROUP BY "owner" LIMIT $3`, int64(1), "ann", 10)
+	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 GROUP BY "owner" LIMIT 10`, int64(1), "ann")
 	calls := e.Calls
 	var got error
 	for _, err := range q.Rows(asUser("")) {

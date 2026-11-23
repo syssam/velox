@@ -22,7 +22,7 @@ func TestParameterLimit(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e, params(3))
 	_, err := db.Query[testmodel.Invoice]().Where(I.ID.In(1, 2, 3, 4)).Limit(1).All(ctx)
-	if err == nil || !strings.Contains(err.Error(), "the statement has 5 parameters; postgres allows 3") || e.Calls != 0 {
+	if err == nil || !strings.Contains(err.Error(), "the statement has 4 parameters; postgres allows 3") || e.Calls != 0 {
 		t.Errorf("%v, calls %d", err, e.Calls)
 	}
 }
@@ -284,7 +284,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 				t.Errorf("owner %d: notes %v", o.ID, got)
 			}
 		}
-		checkSent(t, e, s, []int{1, 96, 96, 96, 82}) // the owners' LIMIT, then the notes'
+		checkSent(t, e, s, []int{0, 96, 96, 96, 82}) // the owners' LIMIT is a literal, then the notes'
 		// Without hooks, exec's check splits the chunk the same way.
 		e = &fakeconn.Exec{Results: [][][]any{ovOwnerRows(50), notes(1, 16), notes(17, 32), notes(33, 48), notes(49, 50)}}
 		for _, o := range owners(t, openPolicied(velox.Postgres, e, params(100)), ovOwners.Notes) {
@@ -322,7 +322,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 			}
 		}
 		// The join rows have no policy: 32 keys, then 18 padded to 32.
-		checkSent(t, e, s, []int{1, 32, 32, 96, 96, 96, 96, 96, 96, 84})
+		checkSent(t, e, s, []int{0, 32, 32, 96, 96, 96, 96, 96, 96, 84})
 	})
 	t.Run("many-to-many with LimitEach", func(t *testing.T) {
 		// The limit is a parameter too: 113, 13 too many, 16 keys a chunk.
@@ -339,7 +339,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 				t.Errorf("owner %d: picks %v", o.ID, got)
 			}
 		}
-		checkSent(t, e, s, []int{1, 97, 97, 97, 83})
+		checkSent(t, e, s, []int{0, 97, 97, 97, 83})
 	})
 	// picksOf are owner o's n picks, notes 100o+1 to 100o+n: its join rows
 	// (links) and its targets (notes).
@@ -371,7 +371,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		if err == nil || err.Error() != want {
 			t.Errorf("err = %v,\nwant %s", err, want)
 		}
-		checkSent(t, e, s, []int{1, 4, 86})
+		checkSent(t, e, s, []int{0, 4, 86})
 	})
 	t.Run("many-to-many, an owner too many for the smaller chunks", func(t *testing.T) {
 		// Owner 1's 32 picks overflow by 2 with the policy's 70 values:
@@ -382,7 +382,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		if err == nil || err.Error() != want {
 			t.Errorf("err = %v,\nwant %s", err, want)
 		}
-		checkSent(t, e, s, []int{1, 1})
+		checkSent(t, e, s, []int{0, 1})
 	})
 	t.Run("many-to-many, one key cannot fit", func(t *testing.T) {
 		// One pick an owner: the chunks shrink to one key, which still
@@ -393,7 +393,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		if err == nil || !strings.HasPrefix(err.Error(), "velox: engine_test.ovOwner: loading Picks: ") || !strings.Contains(err.Error(), "the statement has 101 parameters; postgres allows 100") {
 			t.Errorf("%v", err)
 		}
-		checkSent(t, e, s, []int{1, 2})
+		checkSent(t, e, s, []int{0, 2})
 	})
 	t.Run("one key cannot fit", func(t *testing.T) {
 		db, e, s := ovRun([][][]any{ovOwnerRows(50)}, params(100))
@@ -408,14 +408,14 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 }
 
 // TestOfOverTheParameterLimit: each owner is a parameter (3 owners, an IN
-// list padded to 4, and the Limit), and a statement
-// over the dialect's limit is refused before it is sent.
+// list padded to 4), and a statement over the dialect's limit is refused
+// before it is sent. The Limit is a literal and counts for none.
 func TestOfOverTheParameterLimit(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e, params(3))
 	invs := []testmodel.Invoice{{ID: 1}, {ID: 2}, {ID: 3}}
 	_, err := db.Query[testmodel.Item]().Where(I.Items.Of(&invs[0], &invs[1], &invs[2])).Limit(10).All(ctx)
-	if err == nil || err.Error() != "velox: testmodel.Item: the statement has 5 parameters; postgres allows 3" || e.Calls != 0 {
+	if err == nil || err.Error() != "velox: testmodel.Item: the statement has 4 parameters; postgres allows 3" || e.Calls != 0 {
 		t.Errorf("%v, %d sent", err, e.Calls)
 	}
 }

@@ -34,13 +34,13 @@ func TestPolicyReadPredicate(t *testing.T) {
 	if _, err := q.All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 LIMIT $3`, int64(1), "ann", 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 LIMIT 5`, int64(1), "ann")
 
 	// Allow adds nothing.
 	if _, err := q.All(asUser("admin")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 LIMIT $2`, int64(1), 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 LIMIT 5`, int64(1))
 
 	calls := e.Calls
 	_, err := q.All(asUser(""))
@@ -128,7 +128,7 @@ func TestPolicyOnBothPaths(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 LIMIT $3`, int64(1), "ann", 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 LIMIT 5`, int64(1), "ann")
 	if where != 1 {
 		t.Errorf("the Rewrite hook saw %d conditions, want the caller's 1", where)
 	}
@@ -140,8 +140,8 @@ func TestPolicyInsideHas(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).Limit(1).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = $1 AND "owner" = $2) AND "org_id" = $3 AND "owner" = $4 LIMIT $5`,
-		int64(1), "ann", int64(1), "ann", 1)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = $1 AND "owner" = $2) AND "org_id" = $3 AND "owner" = $4 LIMIT 1`,
+		int64(1), "ann", int64(1), "ann")
 }
 
 // TestPolicyInsideHasOfAnEntityWithout: the target's Read policy applies
@@ -157,8 +157,8 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 	if _, err := q.All(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE NOT (EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND "locked" AND "owner" = $1)) LIMIT $2`,
-		"ann", 1)
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE NOT (EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND "locked" AND "owner" = $1)) LIMIT 1`,
+		"ann")
 
 	// A delete reads the target: only its Read policy applies.
 	if _, err := db.Delete[pbox]().Where(pboxNote.Has()).Exec(context.Background()); err != nil {
@@ -241,8 +241,8 @@ func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	if _, err := q.All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "pnotes"."invoice_id" AND "paid" AND "org_id" = $1) LIMIT $2`,
-		int64(7), 1)
+	wantSent(t, e, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "invoices" AS "vx1" WHERE "vx1"."id" = "pnotes"."invoice_id" AND "paid" AND "org_id" = $1) LIMIT 1`,
+		int64(7))
 	_, err := q.All(ctx)
 	wantNoScope(t, err, "velox: fixture.Pnote: in the EXISTS on testmodel.Invoice: ")
 	// The same condition as an EXISTS target's Read: the error names the
@@ -252,8 +252,8 @@ func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	if _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(testmodel.Org.With(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "paid" AND "org_id" = $1)) LIMIT $2`,
-		int64(7), 1)
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "invoices" AS "vx2" WHERE "vx2"."id" = "vx1"."invoice_id" AND "paid" AND "org_id" = $1)) LIMIT 1`,
+		int64(7))
 
 	calls := e.Calls
 	_, err = q.All(pnoteReading(velox.Or(velox.FieldEQ("owner", "ann"), velox.Predicate{}), nil))
@@ -292,7 +292,7 @@ func TestSkipPolicy(t *testing.T) {
 	if _, err := db.WithoutPolicy("support").Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(asUser("")); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" LIMIT $1`, 5)
+	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE NOT "done" LIMIT 5`)
 	if _, err := db.Query[testmodel.Ticket]().Limit(5).All(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
@@ -350,8 +350,8 @@ func TestPolicyIsInherited(t *testing.T) {
 	if _, err := db.Query[pcomment]().Where(pcommentNote.HasWith(fixture.Pn.Locked.EQ(true))).Limit(1).All(bg); err != nil {
 		t.Fatal(err)
 	}
-	wantSent(t, e, `SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "locked" AND "owner" = $1) AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "owner" = $2) LIMIT $3`,
-		"ann", "ann", 1)
+	wantSent(t, e, `SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "locked" AND "owner" = $1) AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND "owner" = $2) LIMIT 1`,
+		"ann", "ann")
 	if n := fixture.PnoteReads.Load(); n != 1 {
 		t.Errorf("pnote's Read called %d times", n)
 	}
@@ -377,11 +377,11 @@ func TestPolicyCycleIsCut(t *testing.T) {
 		want string
 	}{
 		"direct": {func() (string, []any, error) { return db.Query[fixture.Pnote]().Limit(1).SQL(self) },
-			`SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND NOT "locked") LIMIT $1`},
+			`SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND NOT "locked") LIMIT 1`},
 		"from an EXISTS": {func() (string, []any, error) { return db.Query[pbox]().Where(pboxNote.Has()).Limit(1).SQL(self) },
-			`SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND NOT "locked")) LIMIT $1`},
+			`SELECT "id", "note_id" FROM "pboxes" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pboxes"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND NOT "locked")) LIMIT 1`},
 		"from another policy": {func() (string, []any, error) { return db.Query[pcomment]().Limit(1).SQL(self) },
-			`SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND NOT "locked")) LIMIT $1`},
+			`SELECT "id", "note_id" FROM "pcomments" WHERE EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pcomments"."note_id" AND EXISTS (SELECT 1 FROM "pnotes" AS "vx2" WHERE "vx2"."id" = "vx1"."parent_id" AND NOT "locked")) LIMIT 1`},
 		"on an update": {func() (string, []any, error) {
 			return db.Update[fixture.Pnote]().Set(fixture.Pn.InvoiceID.Set(2)).Where(fixture.Pn.ID.EQ(1)).SQL(self)
 		}, `UPDATE "pnotes" SET "invoice_id" = $1 WHERE "id" = $2 AND EXISTS (SELECT 1 FROM "pnotes" AS "vx1" WHERE "vx1"."id" = "pnotes"."parent_id" AND NOT "locked") AND NOT "locked"`},
@@ -402,11 +402,11 @@ func TestPolicyMutualCycleIsCut(t *testing.T) {
 	db := openPolicied(velox.Postgres, e)
 	bg := context.Background()
 	got, _, err := db.Query[pcycA]().Limit(1).SQL(bg)
-	if want := `SELECT "id", "b_id" FROM "pcyc_as" WHERE EXISTS (SELECT 1 FROM "pcyc_bs" AS "vx1" WHERE "vx1"."id" = "pcyc_as"."b_id" AND EXISTS (SELECT 1 FROM "pcyc_as" AS "vx2" WHERE "vx2"."id" = "vx1"."a_id")) LIMIT $1`; err != nil || got != want {
+	if want := `SELECT "id", "b_id" FROM "pcyc_as" WHERE EXISTS (SELECT 1 FROM "pcyc_bs" AS "vx1" WHERE "vx1"."id" = "pcyc_as"."b_id" AND EXISTS (SELECT 1 FROM "pcyc_as" AS "vx2" WHERE "vx2"."id" = "vx1"."a_id")) LIMIT 1`; err != nil || got != want {
 		t.Errorf("A:\ngot  %s, %v\nwant %s", got, err, want)
 	}
 	got, _, err = db.Query[pcycB]().Limit(1).SQL(bg)
-	if want := `SELECT "id", "a_id" FROM "pcyc_bs" WHERE EXISTS (SELECT 1 FROM "pcyc_as" AS "vx1" WHERE "vx1"."id" = "pcyc_bs"."a_id" AND EXISTS (SELECT 1 FROM "pcyc_bs" AS "vx2" WHERE "vx2"."id" = "vx1"."b_id")) LIMIT $1`; err != nil || got != want {
+	if want := `SELECT "id", "a_id" FROM "pcyc_bs" WHERE EXISTS (SELECT 1 FROM "pcyc_as" AS "vx1" WHERE "vx1"."id" = "pcyc_bs"."a_id" AND EXISTS (SELECT 1 FROM "pcyc_bs" AS "vx2" WHERE "vx2"."id" = "vx1"."b_id")) LIMIT 1`; err != nil || got != want {
 		t.Errorf("B:\ngot  %s, %v\nwant %s", got, err, want)
 	}
 }
@@ -594,7 +594,7 @@ func TestAllowComposes(t *testing.T) {
 		t.Errorf("Or(Allow, an unknown column): %v", err)
 	}
 
-	if s, _ := sql(velox.Not(allow)); !strings.HasSuffix(s, `WHERE NOT (1 = 1) LIMIT $1`) {
+	if s, _ := sql(velox.Not(allow)); !strings.HasSuffix(s, `WHERE NOT (1 = 1) LIMIT 1`) {
 		t.Errorf("Not(Allow): %s", s)
 	}
 
@@ -692,8 +692,8 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 		d    velox.Dialect
 		want string
 	}{
-		{velox.Postgres, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > $1 LIMIT $2`},
-		{velox.MySQL, "SELECT `id`, `owner`, `locked`, `parent_id`, `invoice_id` FROM `pnotes` WHERE `id` > ? LIMIT ?"},
+		{velox.Postgres, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > $1 LIMIT 3`},
+		{velox.MySQL, "SELECT `id`, `owner`, `locked`, `parent_id`, `invoice_id` FROM `pnotes` WHERE `id` > ? LIMIT 3"},
 		{velox.SQLite, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > ? LIMIT 3`},
 	} {
 		db := openPolicied(c.d, &fakeconn.Exec{})
@@ -703,10 +703,7 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 			t.Errorf("%v: unscoped\n got %s, %v\nwant %s", c.d, unscoped, err, c.want)
 		}
 		got, args, err := q.SQL(pnoteReading(velox.Allow(), nil))
-		wantArgs := []any{int64(0), 3}
-		if c.d == velox.SQLite {
-			wantArgs = wantArgs[:1] // SQLite writes the Limit in the text
-		}
+		wantArgs := []any{int64(0)}
 		if err != nil || got != c.want || !slices.Equal(args, uargs) || !slices.Equal(args, wantArgs) {
 			t.Errorf("%v: Allow\n got %s %v, %v\nwant %s %v", c.d, got, args, err, c.want, uargs)
 		}

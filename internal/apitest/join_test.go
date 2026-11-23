@@ -40,7 +40,7 @@ func TestJoinToOneFillsTheRelationInOneStatement(t *testing.T) {
 	want := `SELECT "items"."id", "items"."invoice_id", "items"."sku", "items"."qty", ` +
 		`"vxj1"."id", "vxj1"."created_at", "vxj1"."updated_at", "vxj1"."org_id", "vxj1"."number", "vxj1"."total", "vxj1"."paid", "vxj1"."paid_at", "vxj1"."note", "vxj1"."data" ` +
 		`FROM "items" JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id" ` +
-		`WHERE "items"."qty" > $1 AND "vxj1"."paid" ORDER BY "vxj1"."number" DESC LIMIT $2`
+		`WHERE "items"."qty" > $1 AND "vxj1"."paid" ORDER BY "vxj1"."number" DESC LIMIT 10`
 	if e.Log[0] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[0], want)
 	}
@@ -313,11 +313,11 @@ func TestJoinAfterPagesOverAJoinedColumn(t *testing.T) {
 		`"vxj1"."id", "vxj1"."created_at", "vxj1"."updated_at", "vxj1"."org_id", "vxj1"."number", "vxj1"."total", "vxj1"."paid", "vxj1"."paid_at", "vxj1"."note", "vxj1"."data" ` +
 		`FROM "items" JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id" ` +
 		`WHERE ("vxj1"."number" < $1 OR ("vxj1"."number" = $2 AND "items"."id" > $3)) ` +
-		`ORDER BY "vxj1"."number" DESC, "items"."id" LIMIT $4`
+		`ORDER BY "vxj1"."number" DESC, "items"."id" LIMIT 2`
 	if e.Log[1] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
-	if got := fmt.Sprint(e.ArgLog[1]); got != "[INV-2 INV-2 11 2]" {
+	if got := fmt.Sprint(e.ArgLog[1]); got != "[INV-2 INV-2 11]" {
 		t.Errorf("args %s", got)
 	}
 }
@@ -368,7 +368,7 @@ func TestJoinFillBuildsTheRowAfterPagesFrom(t *testing.T) {
 	if _, err := q.After(after).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := fmt.Sprint(e.ArgLog[0]); got != "[INV-2 INV-2 11 2]" {
+	if got := fmt.Sprint(e.ArgLog[0]); got != "[INV-2 INV-2 11]" {
 		t.Errorf("args %s", got)
 	}
 	if v, loaded := after.Edges.Invoice.Get(); !loaded || v.Number != "INV-2" {

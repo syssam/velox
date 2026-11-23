@@ -171,7 +171,7 @@ func TestInsertDatabaseDefaultsMySQL(t *testing.T) {
 	}
 	want := []string{
 		"INSERT INTO `ddefs` (`name`) VALUES (?)",
-		"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `id` = ? LIMIT ?",
+		"SELECT `status`, `score`, `note` FROM `ddefs` WHERE `id` = ? LIMIT 2",
 	}
 	if !slices.Equal(e.Log, want) {
 		t.Errorf("statements:\n%s\nwant:\n%s", strings.Join(e.Log, "\n"), strings.Join(want, "\n"))
@@ -412,7 +412,7 @@ func TestInsertAllEmptyUsesDefaults(t *testing.T) {
 	if err := openFake(velox.MySQL, e).Insert(&m).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"INSERT INTO `dalls` () VALUES ()", "SELECT `status` FROM `dalls` WHERE `id` = ? LIMIT ?"}
+	want := []string{"INSERT INTO `dalls` () VALUES ()", "SELECT `status` FROM `dalls` WHERE `id` = ? LIMIT 2"}
 	if !slices.Equal(e.Log, want) || m.ID != 9 || m.Status != "new" {
 		t.Errorf("MySQL: %q, %+v", e.Log, m)
 	}
@@ -573,7 +573,7 @@ func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
 	want := []string{
 		"BEGIN",
 		"INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
-		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT 2",
 		"COMMIT",
 	}
 	if !slices.Equal(e.Log, want) {
@@ -591,7 +591,7 @@ func TestMySQLUpsertReadsBackDefaults(t *testing.T) {
 	if err := openFake(velox.MySQL, e).Insert(&b).OnConflict(dDefs.Name).Update(dDefs.Name).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Log) != 4 || e.Log[2] != "SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?" || b.Status != "done" || b.ID != 5 {
+	if len(e.Log) != 4 || e.Log[2] != "SELECT `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT 2" || b.Status != "done" || b.ID != 5 {
 		t.Errorf("caller's key: %q, %+v", e.Log, b)
 	}
 }
@@ -611,7 +611,7 @@ func TestMySQLUpsertSetsKey(t *testing.T) {
 	wantLog(t, e, []string{
 		"BEGIN",
 		"INSERT INTO `ddefs` (`name`, `status`, `score`, `note`) VALUES (?, ?, ?, ?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
-		"SELECT `id` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"SELECT `id` FROM `ddefs` WHERE `name` = ? LIMIT 2",
 		"COMMIT",
 	})
 	if a.ID != 42 {
@@ -629,7 +629,7 @@ func TestMySQLUpsertSetsKey(t *testing.T) {
 	wantLog(t, e, []string{
 		"BEGIN",
 		"INSERT INTO `ddefs` (`name`, `status`, `score`, `note`) VALUES (?, ?, ?, ?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
-		"SELECT `id` FROM `ddefs` WHERE `name` = ? LIMIT ?",
+		"SELECT `id` FROM `ddefs` WHERE `name` = ? LIMIT 2",
 		"COMMIT",
 	})
 	if b.ID != 43 {
@@ -657,7 +657,7 @@ func TestRecordedMySQLUpsertReadsBackDefaults(t *testing.T) {
 		"BEGIN",
 		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?) FOR UPDATE",
 		"INSERT INTO `ddefs` (`name`) VALUES (?) AS new ON DUPLICATE KEY UPDATE `name` = new.`name`",
-		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT ?", // by the conflict values
+		"SELECT `id`, `status`, `score`, `note` FROM `ddefs` WHERE `name` = ? LIMIT 2", // by the conflict values
 		"SELECT `id`, `name`, `status`, `score`, `note`, `tag` FROM `ddefs` WHERE `name` IN (?)",
 		"COMMIT",
 	})

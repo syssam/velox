@@ -34,7 +34,7 @@ func TestShownArgsUnknown(t *testing.T) {
 		t.Errorf("raw: %v", s)
 	}
 	in := &EntityInfo{Name: "T", Table: "t", Columns: []ColumnInfo{{Name: "id"}, {Name: "pw", Sensitive: true}}, PrimaryKey: []int{0}}
-	st := &Statement{Op: OpSelect, Entity: in, Where: []Predicate{NewPredicate(Node{Op: OpEQ, Col: 1, V: "s"})}, Limit: 2}
+	st := &Statement{Op: OpSelect, Entity: in, Where: []Predicate{NewPredicate(Node{Op: OpEQ, Col: 1, V: "s"})}, Limit: 2, Offset: 2}
 	_, args, err := RenderStmt(Postgres, st)
 	if err != nil {
 		t.Fatal(err)

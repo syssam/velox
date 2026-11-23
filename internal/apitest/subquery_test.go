@@ -19,8 +19,8 @@ func TestInSelectSQL(t *testing.T) {
 	db := openFake(velox.Postgres, e)
 	big := It.InvoiceID.Select(It.Qty.GT(2))
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.ID.InSelect(big), I.ID.NotInSelect(It.InvoiceID.Select())).Limit(5).SQL(ctx))
-	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT $2`
-	if text != want || len(args) != 2 {
+	want := `SELECT ` + allCols + ` FROM "invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "qty" > $1) AND NOT (EXISTS (SELECT 1 FROM "items" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id")) LIMIT 5`
+	if text != want || len(args) != 1 {
 		t.Errorf("\n got %s\nwant %s", text, want)
 	}
 	// The other way: items whose invoice is paid, a subquery on a column

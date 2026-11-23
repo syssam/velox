@@ -19,11 +19,11 @@ func TestDistinct(t *testing.T) {
 		values, project string
 	}{
 		{velox.Postgres,
-			`SELECT DISTINCT "title" FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 LIMIT $3`,
-			`SELECT DISTINCT "title", "done" FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 LIMIT $3`},
+			`SELECT DISTINCT "title" FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 LIMIT 10`,
+			`SELECT DISTINCT "title", "done" FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 LIMIT 10`},
 		{velox.MySQL,
-			"SELECT DISTINCT `title` FROM `tickets` WHERE `org_id` = ? AND `owner` = ? LIMIT ?",
-			"SELECT DISTINCT `title`, `done` FROM `tickets` WHERE `org_id` = ? AND `owner` = ? LIMIT ?"},
+			"SELECT DISTINCT `title` FROM `tickets` WHERE `org_id` = ? AND `owner` = ? LIMIT 10",
+			"SELECT DISTINCT `title`, `done` FROM `tickets` WHERE `org_id` = ? AND `owner` = ? LIMIT 10"},
 		{velox.SQLite,
 			`SELECT DISTINCT "title" FROM "tickets" WHERE "org_id" = ? AND "owner" = ? LIMIT 10`,
 			`SELECT DISTINCT "title", "done" FROM "tickets" WHERE "org_id" = ? AND "owner" = ? LIMIT 10`},

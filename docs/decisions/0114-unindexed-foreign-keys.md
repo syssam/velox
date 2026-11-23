@@ -1,4 +1,4 @@
-# 112. A foreign key no index leads is a review finding
+# 114. A foreign key no index leads is a review finding
 
 Status: accepted, 2026-11-22.
 

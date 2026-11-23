@@ -37,11 +37,11 @@ func TestSelectSQL(t *testing.T) {
 		args []any
 	}{
 		{velox.Postgres,
-			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" GROUP BY "org_id" HAVING (SUM("total") > $1) ORDER BY SUM("total") DESC LIMIT $2`,
-			[]any{100, 10}},
+			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" GROUP BY "org_id" HAVING (SUM("total") > $1) ORDER BY SUM("total") DESC LIMIT 10`,
+			[]any{100}},
 		{velox.MySQL,
-			"SELECT `org_id`, SUM(`total`), COUNT(*) FROM `invoices` WHERE `paid` = 1 GROUP BY `org_id` HAVING (SUM(`total`) > ?) ORDER BY SUM(`total`) IS NULL DESC, SUM(`total`) DESC LIMIT ?",
-			[]any{100, 10}},
+			"SELECT `org_id`, SUM(`total`), COUNT(*) FROM `invoices` WHERE `paid` = 1 GROUP BY `org_id` HAVING (SUM(`total`) > ?) ORDER BY SUM(`total`) IS NULL DESC, SUM(`total`) DESC LIMIT 10",
+			[]any{100}},
 		{velox.SQLite,
 			`SELECT "org_id", SUM("total"), COUNT(*) FROM "invoices" WHERE "paid" = 1 GROUP BY "org_id" HAVING (SUM("total") > ?) ORDER BY SUM("total") IS NULL DESC, SUM("total") DESC LIMIT 10`,
 			[]any{100}},
@@ -92,11 +92,11 @@ func TestSelectTerms(t *testing.T) {
 		GroupBy(month).
 		Limit(5).SQL(ctx)
 	want := `SELECT (EXTRACT(MONTH FROM "created_at")), SUM(("total" * $1)), COUNT(DISTINCT "org_id"), COUNT("note"), AVG(("total" * $2)), MIN("total"), MAX("total") ` +
-		`FROM "invoices" GROUP BY (EXTRACT(MONTH FROM "created_at")) LIMIT $3`
+		`FROM "invoices" GROUP BY (EXTRACT(MONTH FROM "created_at")) LIMIT 5`
 	if err != nil || text != want {
 		t.Errorf("\n got %s %v\nwant %s", text, err, want)
 	}
-	if len(args) != 3 || args[0] != 0.9 || args[1] != 0.9 || args[2] != 5 {
+	if len(args) != 2 || args[0] != 0.9 || args[1] != 0.9 {
 		t.Errorf("args %v", args)
 	}
 }
@@ -108,8 +108,8 @@ func TestOrderByExpression(t *testing.T) {
 		d   velox.Dialect
 		sql string
 	}{
-		{velox.Postgres, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")), "id" DESC LIMIT $1`},
-		{velox.MySQL, "SELECT `id` FROM `invoices` ORDER BY (LOWER(`number`)) IS NULL, (LOWER(`number`)), `id` DESC LIMIT ?"},
+		{velox.Postgres, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")), "id" DESC LIMIT 5`},
+		{velox.MySQL, "SELECT `id` FROM `invoices` ORDER BY (LOWER(`number`)) IS NULL, (LOWER(`number`)), `id` DESC LIMIT 5"},
 		{velox.SQLite, `SELECT "id" FROM "invoices" ORDER BY (LOWER("number")) IS NULL, (LOWER("number")), "id" DESC LIMIT 5`},
 	} {
 		db := openFake(tc.d, &fakeconn.Exec{})
@@ -140,7 +140,7 @@ func TestSelectKeepsPolicy(t *testing.T) {
 	for row, err := range q.Rows(asUser("ann")) {
 		_, _ = row, err
 	}
-	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 GROUP BY "owner" LIMIT $3`, int64(1), "ann", 10)
+	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2 GROUP BY "owner" LIMIT 10`, int64(1), "ann")
 
 	calls := e.Calls
 	var got error
@@ -335,7 +335,7 @@ func TestSelectHandleAggregates(t *testing.T) {
 		I.ID, I.Total.Sum(), I.Total.Avg(), I.Total.Min(), I.Number.Max(),
 		I.Paid.Count(), I.Number.CountDistinct(), I.PaidAt.Max(), I.PaidAt.Count(),
 	).SQL(ctx)
-	want := `SELECT "id", SUM("total"), AVG("total"), MIN("total"), MAX("number"), COUNT("paid"), COUNT(DISTINCT "number"), MAX("paid_at"), COUNT("paid_at") FROM "invoices" LIMIT $1`
+	want := `SELECT "id", SUM("total"), AVG("total"), MIN("total"), MAX("number"), COUNT("paid"), COUNT(DISTINCT "number"), MAX("paid_at"), COUNT("paid_at") FROM "invoices" LIMIT 1`
 	if err != nil || text != want {
 		t.Errorf("got %s %v\nwant %s", text, err, want)
 	}
@@ -347,13 +347,13 @@ func TestSelectRaw(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	got, _, err := db.Query[inv]().Where(I.Paid.EQ(true)).Limit(3).
 		SelectRaw("LOWER(?) || ?", I.Number, "!").SQL(ctx)
-	want := `SELECT (LOWER("number") || $1) FROM "invoices" WHERE "paid" LIMIT $2`
+	want := `SELECT (LOWER("number") || $1) FROM "invoices" WHERE "paid" LIMIT 3`
 	if err != nil || got != want {
 		t.Errorf("got %s %v\nwant %s", got, err, want)
 	}
 	// With Select before it, it adds a term.
 	got, _, err = db.Query[inv]().Limit(3).Select(I.ID).SelectRaw("? * 2", I.Total).SQL(ctx)
-	want = `SELECT "id", ("total" * 2) FROM "invoices" LIMIT $1`
+	want = `SELECT "id", ("total" * 2) FROM "invoices" LIMIT 3`
 	if err != nil || got != want {
 		t.Errorf("got %s %v\nwant %s", got, err, want)
 	}

@@ -1,4 +1,4 @@
-# 113. Statement counting finds an N+1 in a test
+# 117. Statement counting finds an N+1 in a test
 
 Status: accepted, 2026-11-22.
 

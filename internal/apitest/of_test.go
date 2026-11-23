@@ -25,10 +25,10 @@ func TestOfDirect(t *testing.T) {
 	if _, err := db.Query[testmodel.Item]().Where(p).Limit(10).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT ` + itemCols + ` FROM "items" WHERE "invoice_id" IN ($1, $2) LIMIT $3`; e.SQL != want {
+	if want := `SELECT ` + itemCols + ` FROM "items" WHERE "invoice_id" IN ($1, $2) LIMIT 10`; e.SQL != want {
 		t.Errorf("\n got %s\nwant %s", e.SQL, want)
 	}
-	if want := []any{int64(1), int64(2), 10}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{int64(1), int64(2)}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 
@@ -36,10 +36,10 @@ func TestOfDirect(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Where(It.Invoice.Of(&item)).Limit(10).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT ` + allCols + ` FROM "invoices" WHERE "id" IN ($1) LIMIT $2`; e.SQL != want {
+	if want := `SELECT ` + allCols + ` FROM "invoices" WHERE "id" IN ($1) LIMIT 10`; e.SQL != want {
 		t.Errorf("\n got %s\nwant %s", e.SQL, want)
 	}
-	if want := []any{int64(2), 10}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{int64(2)}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 }
@@ -66,7 +66,7 @@ func TestOfEdgeCases(t *testing.T) {
 	if err != nil || len(got) != 0 {
 		t.Fatalf("NULL key: %v, %v", got, err)
 	}
-	if !strings.HasSuffix(e.SQL, ` FROM "tickets" WHERE 1 = 0 LIMIT $1`) || !reflect.DeepEqual(e.Args, []any{10}) {
+	if !strings.HasSuffix(e.SQL, ` FROM "tickets" WHERE 1 = 0 LIMIT 10`) || len(e.Args) != 0 {
 		t.Errorf("NULL key: %s %v", e.SQL, e.Args)
 	}
 
@@ -74,7 +74,7 @@ func TestOfEdgeCases(t *testing.T) {
 	if err != nil || len(items) != 0 {
 		t.Fatalf("no owners: %v, %v", items, err)
 	}
-	if want := `SELECT ` + itemCols + ` FROM "items" WHERE 1 = 0 LIMIT $1`; e.SQL != want {
+	if want := `SELECT ` + itemCols + ` FROM "items" WHERE 1 = 0 LIMIT 10`; e.SQL != want {
 		t.Errorf("no owners: %s", e.SQL)
 	}
 	n, err := db.Update[testmodel.Item]().Set(It.Qty.Set(1)).Where(I.Items.Of()).Exec(ctx)
@@ -88,7 +88,7 @@ func TestOfEdgeCases(t *testing.T) {
 	if _, err := db.Query[testmodel.Item]().Where(I.Items.Of(&inv1, &inv1)).Limit(10).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT ` + itemCols + ` FROM "items" WHERE "invoice_id" IN ($1, $2) LIMIT $3`; e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(1), int64(1), 10}) {
+	if want := `SELECT ` + itemCols + ` FROM "items" WHERE "invoice_id" IN ($1, $2) LIMIT 10`; e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(1), int64(1)}) {
 		t.Errorf("repeated owner: %s %v", e.SQL, e.Args)
 	}
 }
@@ -101,10 +101,10 @@ func TestOfWhere(t *testing.T) {
 	if _, err := db.Query[testmodel.Item]().Where(I.Items.Where(It.Qty.GT(0)).OrderBy(It.SKU.Desc()).Of(&inv1)).Limit(10).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT ` + itemCols + ` FROM "items" WHERE ("invoice_id" IN ($1) AND "qty" > $2) LIMIT $3`; e.SQL != want {
+	if want := `SELECT ` + itemCols + ` FROM "items" WHERE ("invoice_id" IN ($1) AND "qty" > $2) LIMIT 10`; e.SQL != want {
 		t.Errorf("\n got %s\nwant %s", e.SQL, want)
 	}
-	if want := []any{int64(1), int64(0), 10}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{int64(1), int64(0)}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("args %v, want %v", e.Args, want)
 	}
 }

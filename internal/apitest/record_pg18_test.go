@@ -132,7 +132,7 @@ func TestRecordPG18UpdateOne(t *testing.T) {
 		showVersion,
 		"BEGIN",
 		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 RETURNING ` + oldNew(allCols),
-		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2`,
+		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT 2`,
 		"COMMIT",
 	})
 	if rec.Len() != 1 || !slices.Equal(at, []int{len(e.Log) - 1}) {
