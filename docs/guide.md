@@ -472,6 +472,12 @@ func TestPosts(t *testing.T) {
 }
 ```
 
+On SQLite an empty DSN, or one of a database in memory such as enttest's
+`file:ent?mode=memory&cache=shared&_fk=1`, gives each call a file of its
+own in `t.TempDir()`: a copy of the tables `migrate.Create` made once for
+the test binary, so an Open costs a file copy, not the schema's DDL
+([ADR 0147](decisions/0147-sqlite-memory-and-fast-test-databases.md)).
+
 `migrate.Create(ctx, velox.Pool(db), s)` is the same step for a
 development server: it makes the tables in an empty database, does
 nothing when the database already holds them as the schema says, and

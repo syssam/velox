@@ -74,6 +74,42 @@ func TestOpenSameFile(t *testing.T) {
 	}
 }
 
+// TestOpenInMemoryDSN: enttest's DSN, and :memory:, give each call a
+// database of its own, a file in the test's directory with the tables, its
+// journal in memory, no syncs, and foreign keys on: modernc.org/sqlite
+// ignores the DSN's _fk=1, and velox turns them on.
+func TestOpenInMemoryDSN(t *testing.T) {
+	ctx := context.Background()
+	for _, dsn := range []string{"file:ent?mode=memory&cache=shared&_fk=1", ":memory:"} {
+		t.Run(dsn, func(t *testing.T) {
+			db := veloxtest.Open(t, "sqlite", dsn, schemas)
+			if err := db.Insert(&testmodel.Sample{Name: "a", Status: "new", When: time.Now(), Blob: []byte("b")}).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Insert(&testmodel.Line{SampleID: 999}).Exec(ctx); err == nil {
+				t.Error("a line of no sample inserted: foreign keys are off")
+			}
+			pool := velox.Pool(db)
+			var file, journal string
+			var sync int
+			if err := pool.QueryRow(`SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&file); err != nil || filepath.Base(file) != "velox.db" {
+				t.Errorf("the database is %q, %v; want a file", file, err)
+			}
+			if err := pool.QueryRow(`PRAGMA journal_mode`).Scan(&journal); err != nil || journal != "memory" {
+				t.Errorf("journal_mode %q, %v", journal, err)
+			}
+			if err := pool.QueryRow(`PRAGMA synchronous`).Scan(&sync); err != nil || sync != 0 {
+				t.Errorf("synchronous %d, %v", sync, err)
+			}
+
+			other := veloxtest.Open(t, "sqlite", dsn, schemas)
+			if n, err := other.Query[testmodel.Sample]().Count(ctx); err != nil || n != 0 {
+				t.Errorf("a second Open of %q sees %d samples, %v; want its own empty database", dsn, n, err)
+			}
+		})
+	}
+}
+
 // TestSchemaRefusals: no schema, a nil one, schemas of two packages and a
 // relation to a schema left out are refused.
 func TestSchemaRefusals(t *testing.T) {

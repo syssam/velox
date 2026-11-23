@@ -17,11 +17,14 @@ package veloxtest
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -87,18 +90,19 @@ func Schema(d velox.Dialect, schemas ...schema.Interface) (*migrate.Schema, erro
 // the tests of one package build them once.
 var built sync.Map // string → *migrate.Schema
 
-// cached is Schema, built once per dialect and schema values.
-func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, error) {
+// cached is Schema, built once per dialect and schema values, and the key
+// it is kept by.
+func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, string, error) {
 	key := fmt.Sprintf("%d %#v", d, schemas)
 	if s, ok := built.Load(key); ok {
-		return s.(*migrate.Schema), nil
+		return s.(*migrate.Schema), key, nil
 	}
 	s, err := Schema(d, schemas...)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	built.Store(key, s)
-	return s, nil
+	return s, key, nil
 }
 
 // Open opens a database with velox.Connect(driver, dsn, opts...), makes the
@@ -107,23 +111,41 @@ func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, error
 // Connect. The DB counts statements (velox.WithStatementCounting) for
 // NoNPlusOne and Budget, before opts' Around hooks.
 //
-// On SQLite ("sqlite" or "sqlite3") an empty dsn is a new file in
-// t.TempDir(), so each call has a database of its own. Create cannot use
-// :memory:, which is a database per connection. On PostgreSQL and MySQL the
-// dsn names a database, and each test should have its own: Create makes the
-// tables in an empty database, accepts one that holds them as the schema
-// says, rows and all, and refuses any other.
+// On SQLite ("sqlite" or "sqlite3") an empty dsn, or one of a database in
+// memory, as enttest's "file:ent?mode=memory&cache=shared&_fk=1", is a
+// database of the call's own: a file in t.TempDir() that is a copy of the
+// tables Create made once for the test binary, opened with the dsn's other
+// parameters, and with journal_mode = MEMORY and synchronous = OFF, which
+// a database the test throws away does without. Two calls with one such dsn
+// never share a database. A dsn naming a file is opened as it is.
+//
+// On PostgreSQL and MySQL the dsn names a database, and each test should
+// have its own. On every dialect, for a dsn opened as it is, Create makes
+// the tables in an empty database, accepts one that holds them as the
+// schema says, rows and all, and refuses any other.
 func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...velox.Option) *velox.DB {
 	t.Helper()
-	if dsn == "" && (driver == "sqlite" || driver == "sqlite3") {
-		dsn = filepath.Join(t.TempDir(), "velox.db")
+	return open(t, driver, dsn, func(d velox.Dialect) (*migrate.Schema, string, error) { return cached(d, schemas) }, opts)
+}
+
+// open is Open of the tables that tables gives for a dialect, with the key
+// they are kept by.
+func open(t testing.TB, driver, dsn string, tables func(velox.Dialect) (*migrate.Schema, string, error), opts []velox.Option) *velox.DB {
+	t.Helper()
+	opts = append([]velox.Option{velox.WithStatementCounting()}, opts...)
+	if isSQLite(driver) && (dsn == "" || inMemory(dsn)) {
+		s, key, err := tables(velox.SQLite)
+		if err != nil {
+			t.Fatalf("veloxtest: the schema's tables: %v", err)
+		}
+		return openCopy(t, driver, dsn, key, s, opts)
 	}
-	db, err := velox.Connect(driver, dsn, append([]velox.Option{velox.WithStatementCounting()}, opts...)...)
+	db, err := velox.Connect(driver, dsn, opts...)
 	if err != nil {
 		t.Fatalf("veloxtest: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	s, err := cached(db.Dialect(), schemas)
+	s, _, err := tables(db.Dialect())
 	if err != nil {
 		t.Fatalf("veloxtest: the schema's tables: %v", err)
 	}
@@ -131,6 +153,113 @@ func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...
 		t.Fatalf("veloxtest: %v", err)
 	}
 	return db
+}
+
+// isSQLite reports whether driver is a SQLite driver's usual name.
+func isSQLite(driver string) bool { return driver == "sqlite" || driver == "sqlite3" }
+
+// inMemory reports whether a SQLite dsn names a database in memory:
+// ":memory:", "file::memory:…", or a URI of mode=memory or vfs=memdb.
+func inMemory(dsn string) bool {
+	if dsn == ":memory:" || strings.HasPrefix(dsn, "file::memory:") {
+		return true
+	}
+	_, query, _ := strings.Cut(dsn, "?")
+	for p := range strings.SplitSeq(strings.ToLower(query), "&") {
+		if p == "mode=memory" || p == "vfs=memdb" {
+			return true
+		}
+	}
+	return false
+}
+
+// fileParams is the query of a dsn in memory, as "?…", without what makes
+// it one (mode, cache, vfs); "" when nothing is left.
+func fileParams(dsn string) string {
+	_, query, _ := strings.Cut(dsn, "?")
+	var kept []string
+	for p := range strings.SplitSeq(query, "&") {
+		name, _, _ := strings.Cut(strings.ToLower(p), "=")
+		if p != "" && name != "mode" && name != "cache" && name != "vfs" {
+			kept = append(kept, p)
+		}
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	return "?" + strings.Join(kept, "&")
+}
+
+// An image is a SQLite database file holding a schema's tables, made once.
+type image struct {
+	once sync.Once
+	data []byte
+	err  error
+}
+
+// images holds the images openCopy made, by driver and schema key.
+var images sync.Map // string → *image
+
+// openCopy opens, for t alone, a file in t.TempDir() that is a copy of the
+// image of s, the tables kept by key, for driver.
+func openCopy(t testing.TB, driver, dsn, key string, s *migrate.Schema, opts []velox.Option) *velox.DB {
+	t.Helper()
+	v, _ := images.LoadOrStore(driver+"\x00"+key, new(image))
+	img := v.(*image)
+	img.once.Do(func() { img.data, img.err = makeImage(context.WithoutCancel(t.Context()), driver, s) })
+	if img.err != nil {
+		t.Fatalf("veloxtest: making the schema's tables: %v", img.err)
+	}
+	path := filepath.Join(t.TempDir(), "velox.db")
+	if err := os.WriteFile(path, img.data, 0o600); err != nil {
+		t.Fatalf("veloxtest: %v", err)
+	}
+	db, err := velox.Connect(driver, path+fileParams(dsn), opts...)
+	if err != nil {
+		t.Fatalf("veloxtest: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := throwaway(t.Context(), velox.Pool(db)); err != nil {
+		t.Fatalf("veloxtest: %v", err)
+	}
+	return db
+}
+
+// throwaway sets db, a SQLite pool of one connection, for a database no
+// one keeps: its journal in memory, and no syncs.
+func throwaway(ctx context.Context, db *sql.DB) error {
+	for _, q := range []string{"PRAGMA journal_mode = MEMORY", "PRAGMA synchronous = OFF"} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("%s: %w", q, err)
+		}
+	}
+	return nil
+}
+
+// makeImage makes s's tables with migrate.Create in a new file of driver's,
+// and returns the file.
+func makeImage(ctx context.Context, driver string, s *migrate.Schema) ([]byte, error) {
+	dir, err := os.MkdirTemp("", "veloxtest-")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	path := filepath.Join(dir, "velox.db")
+	db, err := velox.Connect(driver, path)
+	if err != nil {
+		return nil, err
+	}
+	err = throwaway(ctx, velox.Pool(db))
+	if err == nil {
+		err = migrate.Create(ctx, velox.Pool(db), s)
+	}
+	if cerr := db.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path)
 }
 
 // Budget returns ctx with a velox.StatementCounter, and fails t when the

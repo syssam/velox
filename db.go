@@ -50,9 +50,13 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // velox.Pool(db).SetMaxOpenConns on a file that takes concurrent reads, with a
 // busy_timeout in the dsn. SQLite enforces foreign keys only on a connection
 // that turns them on, so Connect runs PRAGMA foreign_keys = ON on each new
-// connection, unless the dsn sets foreign_keys itself (_pragma=foreign_keys(0)
-// for modernc.org/sqlite, _foreign_keys or _fk for mattn/go-sqlite3), which it
-// obeys. For PostgreSQL, veloxpgx.Open is faster.
+// connection, unless the dsn sets foreign_keys itself as its driver reads it
+// (_pragma=foreign_keys(0) for modernc.org/sqlite, "sqlite"; _foreign_keys or
+// _fk for mattn/go-sqlite3, "sqlite3"), which it obeys. An _fk given to
+// "sqlite", which modernc.org/sqlite ignores, does not count. A database in
+// memory lasts as long as the pool's one connection, which the pool keeps
+// open unless told to close idle ones, and migrate.Create makes a schema's
+// tables in it. For PostgreSQL, veloxpgx.Open is faster.
 func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 	e, err := engine.Connect(driver, dsn, opts)
 	if err != nil {

@@ -228,7 +228,9 @@
 // [Create] makes a schema's tables in a new database without a migration
 // directory, as ent's client.Schema.Create does: for a test, or a
 // development database. It writes no history, and it never alters a table:
-// it refuses a database that holds the schema otherwise. Package veloxtest
+// it refuses a database that holds the schema otherwise. On SQLite it makes
+// them in a database in memory of a pool of one connection, as
+// velox.Connect opens one, and hands the connection back. Package veloxtest
 // opens a database with the schema package's tables made by Create. A
 // production database keeps versioned migrations.
 //

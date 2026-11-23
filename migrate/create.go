@@ -26,9 +26,13 @@ import (
 // alters one.
 //
 // Like Up, Create uses one connection of db and closes it after. On SQLite
-// db must be a file, or a shared-cache database in a pool of two or more
-// connections: each connection to :memory: is a database of its own, and
-// Create refuses one with Code "session". A nil db or schema is Code "nil";
+// a database in memory is a connection's own, and ends with it. In a pool
+// of one connection, as velox.Connect opens SQLite, Create hands that
+// connection back as it found it, and the tables last as long as the pool
+// keeps it open; Create checks it did. In a larger pool, the database must
+// be a shared-cache one (file:x?mode=memory&cache=shared), which Create
+// keeps open with a second connection while it runs; another is refused
+// with Code "session". A nil db or schema is Code "nil";
 // a schema of no dialect migrate knows is Code "dialect".
 func Create(ctx context.Context, db *sql.DB, schema *Schema) error {
 	switch {
@@ -47,7 +51,17 @@ func Create(ctx context.Context, db *sql.DB, schema *Schema) error {
 	if err != nil {
 		return err
 	}
-	defer s.close()
+	err = s.create(ctx, plan, schema)
+	held := s.held
+	s.close()
+	if err == nil && held {
+		err = stillHeld(ctx, db, schema)
+	}
+	return err
+}
+
+// create is Create on the session.
+func (s *session) create(ctx context.Context, plan *Plan, schema *Schema) error {
 	if err := s.lasting(ctx, "Create"); err != nil {
 		return err
 	}
@@ -62,6 +76,26 @@ func Create(ctx context.Context, db *sql.DB, schema *Schema) error {
 		if err := s.runScript(ctx, sc); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// stillHeld checks that the pool of one kept the connection that holds its
+// database in memory, after Create handed it back: a pool told to close
+// idle connections (SetMaxIdleConns(0), SetConnMaxIdleTime,
+// SetConnMaxLifetime) ends the database with it.
+func stillHeld(ctx context.Context, db *sql.DB, schema *Schema) error {
+	if len(schema.Tables) == 0 {
+		return nil
+	}
+	var n int
+	err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = ?", schema.Tables[0].Name).Scan(&n)
+	if err != nil {
+		return wrap(ctx, "looking for the tables made", err)
+	}
+	if n == 0 {
+		return refuseSession("the SQLite database is in memory, and its pool closed its one connection after Create made the tables, which went with it; " +
+			"keep the connection open: no SetMaxIdleConns(0), SetConnMaxIdleTime or SetConnMaxLifetime")
 	}
 	return nil
 }

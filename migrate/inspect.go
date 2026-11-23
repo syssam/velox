@@ -22,8 +22,10 @@ import (
 // main, and constraint names and checks come from the table's CREATE TABLE
 // text: where it cannot be read, a table has no checks and its foreign keys
 // are unnamed; Inspect waits up to 5 minutes for a writer to finish. Inspect
-// only reads, on one connection of db that it closes after, never returning
-// it to the pool.
+// only reads, on one connection of db. It closes the connection after,
+// never returning it to the pool, but on SQLite, where it hands it back
+// with busy_timeout as it was: a database in memory of a pool of one ends
+// with that connection.
 func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, error) {
 	s, _, err := inspect(ctx, db, d, tables)
 	return s, err
@@ -116,9 +118,34 @@ func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums
 	if err != nil {
 		return nil, nil, wrap(ctx, "inspect", err)
 	}
+	if d == velox.SQLite {
+		return inspectSQLiteKept(ctx, conn, tables)
+	}
 	// The settings change only this connection, which is closed after.
 	defer discard(conn)
 	return inspectConn(ctx, conn, d, tables, enums)
+}
+
+// inspectSQLiteKept is inspectConn on conn, a SQLite connection, which goes
+// back to the pool with busy_timeout as it was, the one setting the
+// inspection changes. A database in memory of a pool of one is that
+// connection's, and would end with it. When busy_timeout cannot be read or
+// set back, conn is discarded.
+func inspectSQLiteKept(ctx context.Context, conn *sql.Conn, tables []TableRef) (*Schema, []note, error) {
+	var was int64
+	if err := conn.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&was); err != nil {
+		discard(conn)
+		return nil, nil, wrap(ctx, "inspect", err)
+	}
+	s, notes, err := inspectConn(ctx, conn, velox.SQLite, tables, nil)
+	c, cancel := cleanup(ctx)
+	defer cancel()
+	if _, rerr := conn.ExecContext(c, fmt.Sprintf("PRAGMA busy_timeout = %d", was)); rerr != nil {
+		discard(conn)
+	} else {
+		_ = conn.Close()
+	}
+	return s, notes, err
 }
 
 // inspectConn is inspectWith on conn, whose settings it changes.

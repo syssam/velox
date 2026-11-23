@@ -773,6 +773,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `veloxtest.Open` on SQLite with an empty DSN, or one of a database in
+  memory such as enttest's `file:ent?mode=memory&cache=shared&_fk=1`, gives
+  each call a file of its own in `t.TempDir()`, a copy of the tables
+  `migrate.Create` made once for the test binary, with `journal_mode =
+  MEMORY` and `synchronous = OFF`. An Open of 500 entities costs tens of
+  milliseconds, not a second or more of DDL (ADR 0147).
+- `migrate.Create` makes the tables in a SQLite database in memory of a
+  pool of one connection, as `velox.Connect` opens one, and hands the
+  connection back; it refused one. `migrate.Inspect` and `Drift` hand a
+  SQLite connection back with its `busy_timeout` as it was, rather than
+  closing it, which ended such a database. Up still refuses one, and its
+  message no longer recommends what `velox.Connect` cannot open
+  (ADR 0147).
 - A column given more than one setter in an UPDATE keeps the last, as
   ent's mutation does, instead of failing "assigned twice"; a Set edge
   setter and its foreign key's setter replace each other the same way. A
@@ -1533,6 +1546,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- `velox.Connect("sqlite", dsn)` turns foreign keys on when the DSN holds
+  `_fk=1`, which modernc.org/sqlite ignores: on the "sqlite" driver only
+  `_pragma=foreign_keys(…)` counts as the DSN's own setting (ADR 0147).
 - An expression whose text calls an aggregate function, such as
   `Calc("SUM(?)", x)`, is an aggregate: MySQL orders a grouped projection
   by it as written, not by `ANY_VALUE` of it, which nested one aggregate in

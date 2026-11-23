@@ -87,7 +87,8 @@ func TestCreatePartial(t *testing.T) {
 }
 
 // TestCreateRefusals: a nil database or schema, an unknown dialect and a
-// SQLite database in memory are refused with their codes.
+// SQLite database in memory of each connection of a pool of two are refused
+// with their codes, the last saying what works.
 func TestCreateRefusals(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -108,9 +109,88 @@ func TestCreateRefusals(t *testing.T) {
 		}
 	}
 	mem := openDB(t, "sqlite", ":memory:")
-	mem.SetMaxOpenConns(1)
-	if e := createErr(t, migrate.Create(ctx, mem, model)); e.Code != "session" || !strings.Contains(e.Reason, "Create would leave nothing") {
-		t.Errorf("in memory: %v; want Code session", e)
+	mem.SetMaxOpenConns(2)
+	const want = "the SQLite database is in memory and no other connection of the pool shares it, so Create would make the tables in one connection's database, which the application may never see; " +
+		"name a file, use a shared-cache database (file:x?mode=memory&cache=shared), or give the pool one connection: velox.Connect's SQLite pool has one, or call db.SetMaxOpenConns(1)"
+	if e := createErr(t, migrate.Create(ctx, mem, model)); e.Code != "session" || e.Reason != want {
+		t.Errorf("in memory: %v; want Code session, %q", e, want)
+	}
+}
+
+// TestCreateInMemoryPoolOfOne: Create makes the tables in a database in
+// memory of a pool of one connection, as velox.Connect opens SQLite, and
+// hands the connection back as it found it, so the tables stay; a second
+// Create finds them. A pool told to close idle connections ends the
+// database, and Create says so.
+func TestCreateInMemoryPoolOfOne(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	model := mustTables(velox.SQLite, nil)
+	for _, dsn := range []string{":memory:", "file::memory:", "file:create_one?mode=memory&cache=shared&_fk=1"} {
+		t.Run(dsn, func(t *testing.T) {
+			vdb, err := velox.Connect("sqlite", dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = vdb.Close() })
+			db := velox.Pool(vdb)
+			mustExec(t, db, "PRAGMA busy_timeout = 1234")
+			mustExec(t, db, "CREATE TABLE mine (x integer)")
+			mustExec(t, db, "INSERT INTO mine VALUES (1)")
+			t.Cleanup(func() {
+				// Neither Create nor Drift closed the connection, which
+				// holds the database.
+				if count(t, db, "mine") != 1 {
+					t.Error("the database in memory is gone")
+				}
+			})
+			if err := migrate.Create(ctx, db, model); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			noChanges(t, db, model)
+			if err := migrate.Create(ctx, db, model); err != nil {
+				t.Errorf("a second Create: %v", err)
+			}
+			var busy int
+			if err := db.QueryRow("PRAGMA busy_timeout").Scan(&busy); err != nil || busy != 1234 {
+				t.Errorf("busy_timeout %d, %v; want 1234, as it was", busy, err)
+			}
+			if s := db.Stats(); s.OpenConnections != 1 {
+				t.Errorf("%d connections open", s.OpenConnections)
+			}
+		})
+	}
+
+	// A Create that fails rolls back, and the connection goes back with the
+	// database, which the next Create makes the tables in.
+	vdb, err := velox.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = vdb.Close() })
+	db := velox.Pool(vdb)
+	mustExec(t, db, "CREATE TABLE mine (x integer)")
+	bad := mustTables(velox.SQLite, nil)
+	table(bad, "users").Columns[1].Type = "no such(type"
+	if err := migrate.Create(ctx, db, bad); err == nil {
+		t.Fatal("Create of a bad type succeeded")
+	}
+	if err := migrate.Create(ctx, db, model); err != nil {
+		t.Fatalf("Create after a failed one: %v", err)
+	}
+	_ = count(t, db, "mine") // fails t when the database is gone
+
+	vdb, err = velox.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = vdb.Close() })
+	db = velox.Pool(vdb)
+	db.SetMaxIdleConns(0)
+	const want = "the SQLite database is in memory, and its pool closed its one connection after Create made the tables, which went with it; " +
+		"keep the connection open: no SetMaxIdleConns(0), SetConnMaxIdleTime or SetConnMaxLifetime"
+	if e := createErr(t, migrate.Create(ctx, db, model)); e.Code != "session" || e.Reason != want {
+		t.Errorf("no idle connection: %v; want Code session, %q", e, want)
 	}
 }
 

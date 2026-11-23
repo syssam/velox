@@ -118,7 +118,12 @@ velox has no auto-migration at deploy ([ADR 0006](decisions/0006-own-migrate-and
 A test or a development database gets its tables from `veloxtest.Open` or
 `migrate.Create`, which make them in an empty database and never alter one
 ([ADR 0113](decisions/0113-test-schema-create.md)).
-It writes numbered SQL files from the schema, which you read and commit,
+`enttest.Open(t, "sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")`
+becomes `veloxtest.Open(t, "sqlite", dsn, schemas)`, the DSN as it was or
+`""`: each call gets a database of its own, a copy of tables made once
+per test binary, with foreign keys on
+([ADR 0147](decisions/0147-sqlite-memory-and-fast-test-databases.md)).
+velox's migrations write numbered SQL files from the schema, which you read and commit,
 and applies them in order. The database is adopted once, then each schema
 change is one file.
 

@@ -418,7 +418,7 @@ databases it has the bootstrap ent's tests use
 
 | ent | velox |
 |---|---|
-| `enttest.Open(t, "sqlite3", dsn)` | `veloxtest.Open(t, "sqlite", "", schemas)`, a new file in `t.TempDir()`, with `schemas` every schema value of the package |
+| `enttest.Open(t, "sqlite3", dsn)` | `veloxtest.Open(t, "sqlite", dsn, schemas)`, with `schemas` every schema value of the package; an empty or in-memory `dsn` is a file of the call's own in `t.TempDir()`, a copy of tables made once per test binary (ADR 0147) |
 | `client.Schema.Create(ctx)` in a test or a development server | `migrate.Create(ctx, velox.Pool(db), s)`, with `s` from `veloxtest.Schema(dialect, schemas...)`: it makes the tables in an empty database, does nothing when they are there as the schema says, and refuses any other database |
 | `client.Schema.Create(ctx)` at deploy | `migrate diff`, then `migrate apply` or `migrate.Up` |
 | `migrate.WithDropColumn`, `WithDropIndex` | `migrate diff -allow drop-column=t.c`; `Create` never alters a table |

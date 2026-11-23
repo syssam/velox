@@ -27,8 +27,11 @@ func TestUpRefusesMemoryDatabase(t *testing.T) {
 			db.SetMaxOpenConns(1)
 			mustExec(t, db, "CREATE TABLE mine (x integer)")
 			_, err = migrate.Up(context.Background(), db, fsys)
-			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" || !strings.Contains(err.Error(), "in memory") {
-				t.Fatalf("Up: %v", err)
+			const want = "the SQLite database is in memory, which ends with this connection, so Up would leave nothing; " +
+				"name a file, or open a shared-cache database (file:x?mode=memory&cache=shared) with sql.Open and velox.Open, in a pool of two or more connections " +
+				"(velox.Connect's SQLite pool has one); migrate.Create makes a schema's tables in a pool of one"
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "session" || e.Reason != want {
+				t.Fatalf("Up: %v; want %q", err, want)
 			}
 			if count(t, db, "mine") != 0 {
 				t.Error("the table is gone")

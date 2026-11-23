@@ -67,8 +67,18 @@ func TestFKConnector(t *testing.T) {
 		"a.db": false, "a.db?_pragma=busy_timeout(1)": false, "a.db?_pragma=foreign_keys(0)": true,
 		"a.db?_foreign_keys=1": true, "a.db?_FK=0": true, "foreign_keys.db": false,
 	} {
-		if namesForeignKeys(dsn) != want {
-			t.Errorf("namesForeignKeys(%q) = %t", dsn, !want)
+		if namesForeignKeys("sqlite3", dsn) != want {
+			t.Errorf("namesForeignKeys(sqlite3, %q) = %t", dsn, !want)
+		}
+	}
+	// modernc.org/sqlite reads _pragma alone: enttest's _fk=1 turns nothing on.
+	for dsn, want := range map[string]bool{
+		"a.db?_pragma=foreign_keys(0)": true, "a.db?cache=shared&_pragma=foreign_keys(1)": true,
+		"file:ent?mode=memory&cache=shared&_fk=1": false, "a.db?_foreign_keys=1": false,
+		"a.db?_pragma=busy_timeout(1)": false,
+	} {
+		if namesForeignKeys("sqlite", dsn) != want {
+			t.Errorf("namesForeignKeys(sqlite, %q) = %t", dsn, !want)
 		}
 	}
 }

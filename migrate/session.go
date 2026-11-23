@@ -38,6 +38,7 @@ type session struct {
 	given    pgSession     // PostgreSQL: the session as open was given it
 	keeper   *sql.Conn     // SQLite: what keeps a shared database in memory open past conn
 	tidy     bool          // conn goes back to the pool: Up refused it untouched, and its database is that connection
+	held     bool          // SQLite: conn is a pool of one's, its database in memory, and goes back to the pool set as open found it
 	notify   func(string)  // Up's: passes on what stops nothing
 }
 
@@ -347,7 +348,19 @@ func (s *session) checkModes(files []File) error {
 // change any setting of the session, and a failed clean-up may leave the
 // lock or the run's settings on it, so none of it reaches the application's
 // other connections.
+//
+// A held connection, the one connection of a pool whose database is in
+// memory, goes back to the pool instead: closing it would end the database.
+// Create alone holds one, and runs only its own statements on it, so what it
+// set back is all that changed: no transaction, and busy_timeout as open
+// found it.
 func (s *session) close() {
+	if s.held {
+		s.undo(context.Background(), "ROLLBACK") // fails, as it should, with no transaction
+		s.undo(context.Background(), fmt.Sprintf("PRAGMA busy_timeout = %d", s.busyWas))
+		_ = s.conn.Close()
+		return
+	}
 	if s.tidy {
 		_ = s.conn.Close()
 		return
@@ -363,9 +376,15 @@ const probeTable = "velox_migrate_memory_probe"
 
 // lasting refuses a SQLite database in memory that ends with the session's
 // connection: who, Up or Create, would apply to it, report success and
-// leave nothing. A second connection of the pool that sees a table made on the first shares the database,
-// a shared-cache one, and is held to the end of the run. The pool's connection,
-// which may hold the application's only copy, goes back untouched.
+// leave nothing. A second connection of the pool that sees a table made on
+// the first shares the database, a shared-cache one, and is held to the end
+// of the run. The pool's connection, which may hold the application's only
+// copy, goes back untouched.
+//
+// Create accepts a pool of one connection, as velox.Connect opens SQLite:
+// the database is that connection's, and Create hands it back to the pool
+// (held) rather than closing it. Up, which runs files that may change the
+// connection in any way, does not.
 func (s *session) lasting(ctx context.Context, who string) error {
 	if s.d != velox.SQLite {
 		return nil
@@ -380,9 +399,13 @@ func (s *session) lasting(ctx context.Context, who string) error {
 	refuse := func() error {
 		s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", s.busyWas))
 		s.tidy = true
-		return refuseSession("the SQLite database is in memory, which ends with this connection, so %s would leave nothing; name a file, or a shared-cache database (file:x?mode=memory&cache=shared) in a pool of two or more connections", who)
+		return refuseSession("%s", memoryRefusal(who))
 	}
 	if s.pool.Stats().MaxOpenConnections == 1 {
+		if who == "Create" {
+			s.held = true
+			return nil
+		}
 		return refuse()
 	}
 	c, cancel := context.WithTimeout(ctx, time.Second)
@@ -413,6 +436,18 @@ func (s *session) lasting(ctx context.Context, who string) error {
 	}
 	s.keeper = other
 	return nil
+}
+
+// memoryRefusal is lasting's reason for refusing a database in memory to
+// who, Up or Create.
+func memoryRefusal(who string) string {
+	if who == "Create" {
+		return "the SQLite database is in memory and no other connection of the pool shares it, so Create would make the tables in one connection's database, which the application may never see; " +
+			"name a file, use a shared-cache database (file:x?mode=memory&cache=shared), or give the pool one connection: velox.Connect's SQLite pool has one, or call db.SetMaxOpenConns(1)"
+	}
+	return "the SQLite database is in memory, which ends with this connection, so Up would leave nothing; " +
+		"name a file, or open a shared-cache database (file:x?mode=memory&cache=shared) with sql.Open and velox.Open, in a pool of two or more connections " +
+		"(velox.Connect's SQLite pool has one); migrate.Create makes a schema's tables in a pool of one"
 }
 
 // discard closes conn so that it never returns to the pool.

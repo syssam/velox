@@ -12,12 +12,13 @@ import (
 // openSQLite is Connect's sql.Open for SQLite. SQLite enforces foreign keys
 // only on a connection that turned them on, and a dsn without the pragma
 // stores a reference to a missing row without a word. Unless the dsn names
-// foreign_keys itself (modernc.org/sqlite's _pragma=foreign_keys(…),
-// mattn/go-sqlite3's _foreign_keys or _fk), every connection the pool opens
-// runs PRAGMA foreign_keys = ON first.
+// foreign_keys itself, as its driver reads it (modernc.org/sqlite, "sqlite":
+// _pragma=foreign_keys(…); mattn/go-sqlite3, "sqlite3": _foreign_keys or
+// _fk), every connection the pool opens runs PRAGMA foreign_keys = ON first.
+// modernc.org/sqlite ignores _fk, which enttest's DSN holds.
 func openSQLite(driverName, dsn string) (*sql.DB, error) {
 	db, err := sql.Open(driverName, dsn)
-	if err != nil || namesForeignKeys(dsn) {
+	if err != nil || namesForeignKeys(driverName, dsn) {
 		return db, err
 	}
 	d := db.Driver()
@@ -27,10 +28,19 @@ func openSQLite(driverName, dsn string) (*sql.DB, error) {
 	return sql.OpenDB(fkConnector{d: d, dsn: dsn}), nil
 }
 
-// namesForeignKeys reports whether a SQLite dsn sets foreign_keys itself.
-func namesForeignKeys(dsn string) bool {
+// namesForeignKeys reports whether a SQLite dsn sets foreign_keys itself,
+// as driver reads it: "sqlite", modernc.org/sqlite, by _pragma alone.
+func namesForeignKeys(driver, dsn string) bool {
 	_, query, _ := strings.Cut(dsn, "?")
 	query = strings.ToLower(query)
+	if driver == "sqlite" {
+		for p := range strings.SplitSeq(query, "&") {
+			if strings.HasPrefix(p, "_pragma=foreign_keys") {
+				return true
+			}
+		}
+		return false
+	}
 	return strings.Contains(query, "foreign_keys") || strings.Contains(query, "_fk=")
 }
 

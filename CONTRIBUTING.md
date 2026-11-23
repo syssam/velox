@@ -367,6 +367,12 @@ check from the script.
 (with the database variables set) measures the read path on every database;
 `docs/decisions/0018-pgx-stdlib-scan-wrapper.md` has its before and after.
 
+`go test -run '^$' -bench BenchmarkCreateSQLite -benchtime 5x ./migrate` and
+`go test -run '^$' -bench BenchmarkOpenSQLite -benchtime 20x ./veloxtest`
+measure `migrate.Create` and `veloxtest.Open` on SQLite at bench/scale's 500
+schemas (`internal/benchschema`); `docs/decisions/0147-sqlite-memory-and-fast-test-databases.md`
+has the figures.
+
 `bash bench/compare/run.sh` measures velox, veloxe and ent. It takes hours,
 starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 `docs/history/reviews/2026-10-29-perf-comparison.md`.
