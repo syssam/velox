@@ -1545,7 +1545,7 @@ SELECT "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "cust
   FROM "invoices" WHERE "total_cents" < $1 AND "deleted_at" IS NULL AND "org_id" = $2
   ORDER BY "id" FOR UPDATE
 UPDATE "invoices" SET "total_cents" = "total_cents" + $1, "updated_at" = $2
-  WHERE "total_cents" < $3 AND "id" IN ($4, $5) AND "deleted_at" IS NULL AND "org_id" = $6
+  WHERE "total_cents" < $3 AND "id" = ANY($4) AND "deleted_at" IS NULL AND "org_id" = $5
   RETURNING "id", "created_at", "updated_at", "org_id", "deleted_at", "number", "customer", "status", "total_cents"
 INSERT INTO "audit_logs" … VALUES (…), (…)  -- the sink, once for the write
 RELEASE SAVEPOINT velox_1
@@ -1556,8 +1556,9 @@ Outside `Tx` the same write sends the same statements in a transaction of
 velox's own, with no SAVEPOINT: the SHOW, BEGIN, the read, the UPDATE, the
 sink's INSERT, COMMIT. A sink error rolls the write back in both.
 
-SQLite sends the same without `FOR UPDATE` and the SHOW, and with its
-guard against integer overflow in the Add: `"total_cents" = CASE WHEN
+SQLite sends the same without `FOR UPDATE` and the SHOW, with the keys
+as an IN list (`"id" IN (?, ?)`), and with its guard against integer
+overflow in the Add: `"total_cents" = CASE WHEN
 typeof("total_cents" + ?) = 'real' THEN abs(-9223372036854775808) ELSE
 "total_cents" + ? END`. MySQL has no
 RETURNING, so after the UPDATE it reads the new rows with

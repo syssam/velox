@@ -9,7 +9,8 @@ import (
 
 // DefaultMaxShapes bounds a cache whose MaxShapes is 0: the number of
 // shapes it holds, across all entities. Programs have a fixed set of query
-// shapes, and In lists are padded to a few lengths (inLen). Both bounds
+// shapes, and In lists are padded to a few lengths (inLen), or on
+// PostgreSQL are one array of any length (arrayIn). Both bounds
 // apply; past either, a new shape replaces shapes chosen at random.
 const DefaultMaxShapes = 4096
 
@@ -194,7 +195,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Where)))
 	for _, p := range st.Where {
-		k = nodeKey(k, p.n)
+		k = nodeKey(k, d, p.n)
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.OrderBy)))
 	for _, o := range st.OrderBy {
@@ -207,7 +208,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		}
 	}
 	if st.Project != nil {
-		k = projectionKey(k, st.Project)
+		k = projectionKey(k, d, st.Project)
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Joins)))
 	for _, j := range st.Joins {
@@ -215,7 +216,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = append(k, bit(j.Left))
 		k = binary.AppendUvarint(k, uint64(len(j.On)))
 		for _, p := range j.On {
-			k = nodeKey(k, p.n)
+			k = nodeKey(k, d, p.n)
 		}
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Set)))
@@ -242,7 +243,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = appendInts(k, cf.Update)
 		k = binary.AppendUvarint(k, uint64(len(cf.Where)))
 		for _, p := range cf.Where {
-			k = nodeKey(k, p.n)
+			k = nodeKey(k, d, p.n)
 		}
 		k = binary.AppendUvarint(k, uint64(len(cf.Set)))
 		for _, a := range cf.Set {
@@ -254,7 +255,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 		}
 		k = binary.AppendUvarint(k, uint64(len(cf.TargetWhere)))
 		for _, p := range cf.TargetWhere {
-			k = nodeKey(k, p.n)
+			k = nodeKey(k, d, p.n)
 		}
 		k = binary.AppendUvarint(k, uint64(len(cf.Constraint)))
 		k = append(k, cf.Constraint...)
@@ -263,7 +264,7 @@ func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	}
 	k = appendInts(k, st.Returning)
 	k = append(k, bit(st.returnOld)|bit(st.recorded)<<1) // a delete renders RETURNING only when recorded
-	return eachKey(k, st.Each)
+	return eachKey(k, d, st.Each)
 }
 
 // nullsKey encodes which columns of an INSERT are written as the literal NULL
@@ -287,16 +288,16 @@ func nullsKey(k []byte, st *Statement) []byte {
 }
 
 // eachKey encodes a statement's Each: its presence, its columns, whether it
-// has a Limit, the number of its keys (an In list's length, as nodeKey keys
-// it) and its join entity, by name, schema and table as nodeKey keys an
-// OpThrough's. The keys and the Limit are arguments.
-func eachKey(k []byte, c *EachClause) []byte {
+// has a Limit, its keys' form as inKey keys an In list's, and its join
+// entity, by name, schema and table as nodeKey keys an OpThrough's. The
+// keys and the Limit are arguments.
+func eachKey(k []byte, d Dialect, c *EachClause) []byte {
 	if c == nil {
 		return append(k, 0)
 	}
 	k = append(k, 1, bit(c.Limit > 0))
 	k = binary.AppendUvarint(k, uint64(c.Column))
-	k = binary.AppendUvarint(k, uint64(inLen(len(c.Keys))))
+	k = inKey(k, d, c.Keys)
 	if j := c.Join; j != nil {
 		k = append(k, 1)
 		for _, s := range [...]string{j.Name, j.Schema, j.Table} {
@@ -326,8 +327,10 @@ func appendInts(k []byte, xs []int) []byte {
 // target and both columns. An OpThrough names its join entity, which the outer
 // entity does not fix: two relations to one target may go through different
 // joins. The entity's Name is its Go type without the package path, so its
-// schema and table are keyed too.
-func nodeKey(k []byte, n Node) []byte {
+// schema and table are keyed too. d is the dialect, or 0 when the key must
+// hold for every dialect (a Term's shape, made before any statement), and
+// for the conditions inside a JSON path, which write no array (arrayIn).
+func nodeKey(k []byte, d Dialect, n Node) []byte {
 	k = append(k, byte(n.Op))
 	k = binary.AppendUvarint(k, uint64(n.Col))
 	switch n.Op {
@@ -345,7 +348,7 @@ func nodeKey(k []byte, n Node) []byte {
 		}
 		k = append(k, v)
 	case OpIn, OpNotIn:
-		k = binary.AppendUvarint(k, uint64(inLen(len(n.V.([]any)))))
+		k = inKey(k, d, n.V.([]any))
 	case OpJSON:
 		// The keys are arguments; the kind and their number shape the text.
 		p := n.V.(JSONPath)
@@ -384,8 +387,27 @@ func nodeKey(k []byte, n Node) []byte {
 		k = binary.AppendUvarint(k, uint64(n.W.(int)))
 	}
 	k = binary.AppendUvarint(k, uint64(len(n.Kids)))
+	if n.Op == OpJSON {
+		d = 0
+	}
 	for _, c := range n.Kids {
-		k = nodeKey(k, c)
+		k = nodeKey(k, d, c)
+	}
+	return k
+}
+
+// inKey encodes an In list of the values vs on dialect d: on PostgreSQL,
+// whether it is an array (arrayElems), and for a list that is not, its
+// written length (inLen); on MySQL and SQLite, its written length. A dialect
+// of 0 keys both, which holds wherever the list is written.
+func inKey(k []byte, d Dialect, vs []any) []byte {
+	arr := false
+	if d == Postgres || d == 0 {
+		arr = arrayElems(vs)
+		k = append(k, bit(arr))
+	}
+	if !arr || d != Postgres {
+		k = binary.AppendUvarint(k, uint64(inLen(len(vs))))
 	}
 	return k
 }

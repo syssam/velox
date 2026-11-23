@@ -27,7 +27,7 @@ func TestRecordSoftDelete(t *testing.T) {
 	pg := []string{
 		"BEGIN",
 		`SELECT ` + cols + ` FROM "s_docs" WHERE "id" = $1 AND "deleted_at" IS NULL ORDER BY "id" FOR UPDATE`,
-		`UPDATE "s_docs" SET "deleted_at" = $1 WHERE "id" = $2 AND "id" IN ($3) AND "deleted_at" IS NULL RETURNING ` + cols,
+		`UPDATE "s_docs" SET "deleted_at" = $1 WHERE "id" = $2 AND "id" = ANY($3) AND "deleted_at" IS NULL RETURNING ` + cols,
 		"COMMIT",
 	}
 	for _, c := range []struct {
@@ -84,7 +84,7 @@ func TestRecordSoftDelete(t *testing.T) {
 		wantLog(t, e, []string{
 			"BEGIN",
 			`SELECT ` + cols + ` FROM "s_docs" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-			`DELETE FROM "s_docs" WHERE "id" = $1 AND "id" IN ($2) RETURNING "id"`,
+			`DELETE FROM "s_docs" WHERE "id" = $1 AND "id" = ANY($2) RETURNING "id"`,
 			"COMMIT",
 		})
 		cs := slices.Collect(rec.All())
@@ -132,11 +132,11 @@ func TestRecordBidiRepoint(t *testing.T) {
 	pgSQL := []string{
 		"BEGIN",
 		`SELECT ` + cols + ` FROM "bspouses" WHERE "id" = $1 ORDER BY "id"` + lock,
-		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "id" IN ($3) RETURNING ` + cols,
+		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "id" = ANY($3) RETURNING ` + cols,
 		`SELECT ` + cols + ` FROM "bspouses" WHERE "spouse_id" = $1 ORDER BY "id"` + lock,
-		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2 AND "id" IN ($3) RETURNING ` + cols,
+		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2 AND "id" = ANY($3) RETURNING ` + cols,
 		`SELECT ` + cols + ` FROM "bspouses" WHERE "id" = $1 AND "spouse_id" IS NULL ORDER BY "id"` + lock,
-		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "id" IN ($3) RETURNING ` + cols,
+		`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "id" = ANY($3) RETURNING ` + cols,
 		"COMMIT",
 	}
 	sqlite := make([]string, len(pgSQL))
@@ -145,7 +145,8 @@ func TestRecordBidiRepoint(t *testing.T) {
 		for n := 3; n >= 1; n-- {
 			q = strings.ReplaceAll(q, fmt.Sprintf("$%d", n), "?")
 		}
-		sqlite[i] = q
+		// SQLite writes an In list where PostgreSQL writes an array.
+		sqlite[i] = strings.ReplaceAll(q, " = ANY(?)", " IN (?)")
 	}
 	mysql := []string{
 		"BEGIN",
@@ -209,7 +210,7 @@ func TestRecordBidiRepoint(t *testing.T) {
 			"BEGIN",
 			`INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2) RETURNING ` + cols,
 			`SELECT ` + cols + ` FROM "bspouses" WHERE "id" = $1 AND "spouse_id" IS NULL ORDER BY "id"` + lock,
-			`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "id" IN ($3) RETURNING ` + cols,
+			`UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "id" = ANY($3) RETURNING ` + cols,
 			"COMMIT",
 		})
 		if got, want := spouses(&rec), []string{"insert 6 0->1", "update 1 0->6"}; !slices.Equal(got, want) {
@@ -264,16 +265,16 @@ func TestRecordM2M(t *testing.T) {
 	}{{velox.Postgres, []string{
 		"BEGIN",
 		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
-		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT 1`,
+		`SELECT "id" FROM "bnodes" WHERE "id" = ANY($1) LIMIT 1`,
 		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE ("node_id", "friend_id") IN (($1, $2), ($3, $4)) FOR UPDATE`,
 		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + fcols,
 		"COMMIT",
 	}, []string{
 		"BEGIN",
 		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
-		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT 1`,
-		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2)) OR ("friend_id" = $3 AND "node_id" IN ($4))) ORDER BY "node_id", "friend_id" FOR UPDATE`,
-		`DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2)) OR ("friend_id" = $3 AND "node_id" IN ($4))) AND (("node_id" = $5 AND "friend_id" = $6) OR ("node_id" = $7 AND "friend_id" = $8)) RETURNING ` + fcols,
+		`SELECT "id" FROM "bnodes" WHERE "id" = ANY($1) LIMIT 1`,
+		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" = ANY($2)) OR ("friend_id" = $3 AND "node_id" = ANY($4))) ORDER BY "node_id", "friend_id" FOR UPDATE`,
+		`DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" = ANY($2)) OR ("friend_id" = $3 AND "node_id" = ANY($4))) AND (("node_id" = $5 AND "friend_id" = $6) OR ("node_id" = $7 AND "friend_id" = $8)) RETURNING ` + fcols,
 		"COMMIT",
 	}}, {velox.SQLite, []string{
 		"BEGIN",
@@ -375,7 +376,7 @@ func TestRecordEdgeWriteOneSavepoint(t *testing.T) {
 		"BEGIN",
 		"SAVEPOINT velox_1",
 		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
-		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT 1`,
+		`SELECT "id" FROM "bnodes" WHERE "id" = ANY($1) LIMIT 1`,
 		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE ("node_id", "friend_id") IN (($1, $2), ($3, $4)) FOR UPDATE`,
 		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + fcols,
 		"RELEASE SAVEPOINT velox_1",
@@ -420,7 +421,7 @@ func TestRecordEdgeWriteVersionInTx(t *testing.T) {
 		"RELEASE SAVEPOINT velox_1",
 		"SAVEPOINT velox_2",
 		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
-		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT 1`,
+		`SELECT "id" FROM "bnodes" WHERE "id" = ANY($1) LIMIT 1`,
 		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + oldNew(fcols),
 		"RELEASE SAVEPOINT velox_2",
 		"COMMIT",
@@ -439,7 +440,7 @@ func TestRecordEdgeWriteVersionInTx(t *testing.T) {
 		"RELEASE SAVEPOINT velox_1",
 		"SAVEPOINT velox_2",
 		`SELECT "id" FROM "bnodes" WHERE "id" = $1 FOR UPDATE`,
-		`SELECT "id" FROM "bnodes" WHERE "id" IN ($1) LIMIT 1`,
+		`SELECT "id" FROM "bnodes" WHERE "id" = ANY($1) LIMIT 1`,
 		`SELECT ` + fcols + ` FROM "bnode_friends" WHERE ("node_id", "friend_id") IN (($1, $2), ($3, $4)) FOR UPDATE`,
 		`INSERT INTO "bnode_friends" (` + fcols + `) VALUES ($1, $2), ($3, $4) ON CONFLICT ("node_id", "friend_id") DO NOTHING RETURNING ` + fcols,
 		"RELEASE SAVEPOINT velox_2",

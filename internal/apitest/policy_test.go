@@ -277,7 +277,7 @@ func TestPolicyOnWithLoad(t *testing.T) {
 	if len(e.Log) != 2 {
 		t.Fatalf("%d statements: %v", len(e.Log), e.Log)
 	}
-	if !strings.Contains(e.Log[1], `WHERE "id" IN ($1) AND "org_id" = $2 AND "owner" = $3 `) || e.Args[2] != "ann" {
+	if !strings.Contains(e.Log[1], `WHERE "id" = ANY($1) AND "org_id" = $2 AND "owner" = $3 `) || e.Args[2] != "ann" {
 		t.Errorf("the parent load ignores the policy: %s %v", e.Log[1], e.Args)
 	}
 }

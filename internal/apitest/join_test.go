@@ -257,7 +257,7 @@ func TestJoinLoadsTheJoinedEntitiesRelations(t *testing.T) {
 		t.Fatalf("%d statements, want 2: %v", len(e.Log), e.Log)
 	}
 	// Invoice 1 is joined to two items: it is read twice and loaded once.
-	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" IN ($1, $2) ORDER BY "id"`; e.Log[1] != want {
+	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" = ANY($1) ORDER BY "id"`; e.Log[1] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 	skus := func(i int) (out []string) {

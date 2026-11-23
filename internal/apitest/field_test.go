@@ -105,7 +105,7 @@ func TestCondNullable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "org_id", "title", "deleted_at" FROM "notes" WHERE "deleted_at" IS NOT NULL AND "deleted_at" = $1 AND "title" IN ($2, $3) AND "deleted_at" IS NULL AND "org_id" = $4 LIMIT 1`; q != want {
+	if want := `SELECT "id", "org_id", "title", "deleted_at" FROM "notes" WHERE "deleted_at" IS NOT NULL AND "deleted_at" = $1 AND "title" = ANY($2) AND "deleted_at" IS NULL AND "org_id" = $3 LIMIT 1`; q != want {
 		t.Errorf("SQL\n%s\nwant\n%s", q, want)
 	}
 	if _, ok := args[0].(time.Time); !ok {

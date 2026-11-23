@@ -99,7 +99,7 @@ func (t Term) seal() Term {
 		b = binary.AppendUvarint(b, uint64(len(t.path.Keys)))
 	case termRel:
 		b = append(b, bit(t.r.bound))
-		b = nodeKey(b, t.r.n)
+		b = nodeKey(b, 0, t.r.n) // no dialect yet: the key holds for each
 		b = append(b, t.of.shape...)
 	}
 	b = binary.AppendUvarint(b, uint64(len(t.name)))
@@ -528,7 +528,7 @@ func termKey(k []byte, t Term) []byte { return append(k, t.shape...) }
 
 // projectionKey appends a Projection's shape to the render cache's key; the
 // key's flags say whether a statement has one.
-func projectionKey(k []byte, p *Projection) []byte {
+func projectionKey(k []byte, d Dialect, p *Projection) []byte {
 	k = binary.AppendUvarint(k, uint64(len(p.Terms)))
 	for _, t := range p.Terms {
 		k = termKey(k, t)
@@ -539,7 +539,7 @@ func projectionKey(k []byte, p *Projection) []byte {
 	}
 	k = binary.AppendUvarint(k, uint64(len(p.Having)))
 	for _, h := range p.Having {
-		k = nodeKey(k, h.n)
+		k = nodeKey(k, d, h.n)
 	}
 	return k
 }

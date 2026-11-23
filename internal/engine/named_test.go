@@ -118,7 +118,13 @@ func nmDocDescriptor() velox.Descriptor[nmDoc] {
 // nmSQL renders a SELECT of nmDoc with the conditions ps.
 func nmSQL(t *testing.T, ps ...velox.Predicate) (string, []any, error) {
 	t.Helper()
-	db := velox.OpenConn(velox.Postgres, fakeConn(nil))
+	return nmSQLOn(t, velox.Postgres, ps...)
+}
+
+// nmSQLOn renders a SELECT of nmDoc with the conditions ps on dialect d.
+func nmSQLOn(t *testing.T, d velox.Dialect, ps ...velox.Predicate) (string, []any, error) {
+	t.Helper()
+	db := velox.OpenConn(d, fakeConn(nil))
 	return untyped.Query(db, untyped.TableOf[nmDoc]()).Where(ps...).Limit(1).SQL(ctx)
 }
 
@@ -135,36 +141,44 @@ func TestResolveByName(t *testing.T) {
 		sql  string
 		args []any
 		err  string
+		d    velox.Dialect // 0 is PostgreSQL
 	}{
-		{"own type", engine.FieldEQ("org_id", int64(7)), `"org_id" = $1`, []any{int64(7)}, ""},
-		{"converted", engine.FieldGT("org_id", 7), `"org_id" > $1`, []any{int64(7)}, ""},
-		{"enum", engine.FieldNEQ("status", "draft"), `"status" <> $1`, []any{nmStatus("draft")}, ""},
-		{"nullable value", engine.FieldEQ("note", "x"), `"note" = $1`, []any{"x"}, ""},
-		{"in", engine.FieldIn("rank", 1, int64(2)), `"rank" IN ($1, $2)`, []any{int8(1), int8(2)}, ""},
-		{"in none", engine.FieldIn("rank"), `1 = 0`, nil, ""},
-		{"not in", engine.FieldNotIn("rank", 3), `"rank" NOT IN ($1)`, []any{int8(3)}, ""},
-		{"lte", engine.FieldLTE("score", 1.5), `"score" <= $1`, []any{1.5}, ""},
-		{"gte", engine.FieldGTE("at", t0), `"at" >= $1`, []any{t0}, ""},
-		{"lt", engine.FieldLT("rank", int8(3)), `"rank" < $1`, []any{int8(3)}, ""},
-		{"contains", engine.FieldContains("title", "a%"), `"title" LIKE $1 ESCAPE '!'`, []any{"%a!%%"}, ""},
-		{"prefix", engine.FieldHasPrefix("title", "a"), `"title" LIKE $1 ESCAPE '!'`, []any{"a%"}, ""},
-		{"suffix", engine.FieldHasSuffix("status", "t"), `"status" LIKE $1 ESCAPE '!'`, []any{"%t"}, ""},
-		{"is null", engine.FieldIsNull("note"), `"note" IS NULL`, nil, ""},
-		{"not null", engine.FieldNotNull("peer_id"), `"peer_id" IS NOT NULL`, nil, ""},
-		{"unknown column", engine.FieldEQ("authr_id", 1), "", nil, `velox: engine_test.nmDoc: no column "authr_id"`},
-		{"out of range", engine.FieldEQ("rank", 300), "", nil, "300 for rank, an int8: value out of"},
-		{"wrong kind", engine.FieldEQ("org_id", "7"), "", nil, "velox: engine_test.nmDoc: org_id is an int64, not a string"},
-		{"wrong kind in", engine.FieldIn("org_id", 1, "7"), "", nil, "org_id is an int64, not a string"},
-		{"nil in", engine.FieldIn("org_id", nil), "", nil, "a FieldIn or FieldNotIn of nil on org_id: use FieldIsNull or FieldNotNull"},
-		{"eq nil", engine.FieldEQ("note", nil), "", nil, "a comparison of note with nil: use IsNull or NotNull"},
-		{"is null on not null", engine.FieldIsNull("title"), "", nil, "title is not nullable"},
-		{"text on a number", engine.FieldContains("rank", "1"), "", nil, "rank is not a text column"},
-		{"fold on a number", engine.FieldContainsFold("rank", "1"), "", nil, "rank is not a text column"},
-		{"in a group", velox.And(engine.FieldEQ("rank", 1), velox.Or(engine.FieldEQ("title", "a"), engine.FieldEQ("nope", 1))), "", nil, `no column "nope"`},
-		{"not", velox.Not(engine.FieldEQ("visible", true)), `NOT ("visible")`, nil, ""},
+		{"own type", engine.FieldEQ("org_id", int64(7)), `"org_id" = $1`, []any{int64(7)}, "", 0},
+		{"converted", engine.FieldGT("org_id", 7), `"org_id" > $1`, []any{int64(7)}, "", 0},
+		{"enum", engine.FieldNEQ("status", "draft"), `"status" <> $1`, []any{nmStatus("draft")}, "", 0},
+		{"nullable value", engine.FieldEQ("note", "x"), `"note" = $1`, []any{"x"}, "", 0},
+		// MySQL binds each value of an In list, so its type shows.
+		{"in", engine.FieldIn("rank", 1, int64(2)), "`rank` IN (?, ?)", []any{int8(1), int8(2)}, "", velox.MySQL},
+		{"in none", engine.FieldIn("rank"), `1 = 0`, nil, "", 0},
+		{"not in", engine.FieldNotIn("rank", 3), "`rank` NOT IN (?)", []any{int8(3)}, "", velox.MySQL},
+		{"in array", engine.FieldIn("rank", 1, int64(2)), `"rank" = ANY($1)`, []any{"{1,2}"}, "", 0},
+		{"not in array", engine.FieldNotIn("status", "draft", `a"b`), `"status" <> ALL($1)`, []any{`{"draft","a\"b"}`}, "", 0},
+		{"lte", engine.FieldLTE("score", 1.5), `"score" <= $1`, []any{1.5}, "", 0},
+		{"gte", engine.FieldGTE("at", t0), `"at" >= $1`, []any{t0}, "", 0},
+		{"lt", engine.FieldLT("rank", int8(3)), `"rank" < $1`, []any{int8(3)}, "", 0},
+		{"contains", engine.FieldContains("title", "a%"), `"title" LIKE $1 ESCAPE '!'`, []any{"%a!%%"}, "", 0},
+		{"prefix", engine.FieldHasPrefix("title", "a"), `"title" LIKE $1 ESCAPE '!'`, []any{"a%"}, "", 0},
+		{"suffix", engine.FieldHasSuffix("status", "t"), `"status" LIKE $1 ESCAPE '!'`, []any{"%t"}, "", 0},
+		{"is null", engine.FieldIsNull("note"), `"note" IS NULL`, nil, "", 0},
+		{"not null", engine.FieldNotNull("peer_id"), `"peer_id" IS NOT NULL`, nil, "", 0},
+		{"unknown column", engine.FieldEQ("authr_id", 1), "", nil, `velox: engine_test.nmDoc: no column "authr_id"`, 0},
+		{"out of range", engine.FieldEQ("rank", 300), "", nil, "300 for rank, an int8: value out of", 0},
+		{"wrong kind", engine.FieldEQ("org_id", "7"), "", nil, "velox: engine_test.nmDoc: org_id is an int64, not a string", 0},
+		{"wrong kind in", engine.FieldIn("org_id", 1, "7"), "", nil, "org_id is an int64, not a string", 0},
+		{"nil in", engine.FieldIn("org_id", nil), "", nil, "a FieldIn or FieldNotIn of nil on org_id: use FieldIsNull or FieldNotNull", 0},
+		{"eq nil", engine.FieldEQ("note", nil), "", nil, "a comparison of note with nil: use IsNull or NotNull", 0},
+		{"is null on not null", engine.FieldIsNull("title"), "", nil, "title is not nullable", 0},
+		{"text on a number", engine.FieldContains("rank", "1"), "", nil, "rank is not a text column", 0},
+		{"fold on a number", engine.FieldContainsFold("rank", "1"), "", nil, "rank is not a text column", 0},
+		{"in a group", velox.And(engine.FieldEQ("rank", 1), velox.Or(engine.FieldEQ("title", "a"), engine.FieldEQ("nope", 1))), "", nil, `no column "nope"`, 0},
+		{"not", velox.Not(engine.FieldEQ("visible", true)), `NOT ("visible")`, nil, "", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sql, args, err := nmSQL(t, cond(tc.c))
+			d := tc.d
+			if d == 0 {
+				d = velox.Postgres
+			}
+			sql, args, err := nmSQLOn(t, d, cond(tc.c))
 			if tc.err != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.err) {
 					t.Fatalf("err %v, want %q", err, tc.err)

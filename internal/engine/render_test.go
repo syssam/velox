@@ -167,6 +167,26 @@ type renderCase struct {
 	args []any
 }
 
+// renderPGArgs are a render case's arguments on PostgreSQL, by its name,
+// where they differ from its args: an In list is one array (arrayIn).
+var renderPGArgs = map[string][]any{
+	"in and not in":                                           {"{1,2,3}", `{"x","y","z","w","v"}`},
+	"each: window":                                            {"{1,2}", "x", 2},
+	"each: keyed by the target key":                           {"{1,2}", "x"},
+	"each: through":                                           {"{1,2}", int64(7), 1},
+	"each: through, no limit":                                 {"{1,2}", int64(7)},
+	"each: through, a condition with EXISTS":                  {"{1,2}", "hi", 2},
+	"each: through, schema-qualified":                         {"{1,2}", int64(7), 1},
+	"each: schema-qualified":                                  {"{1,2}", "x", 2},
+	"each: through links that may repeat":                     {"{1,2}", int64(7), 1},
+	"count each":                                              {"{1,2}", "x"},
+	"count each: through":                                     {"{1,2}", int64(7)},
+	"count each: through links that may repeat":               {"{1,2}", int64(7)},
+	"count each: through links that may repeat, no condition": {"{1,2}"},
+	"delete":            {"{1,2}"},
+	"of through a join": {int64(1), "{7,8}"},
+}
+
 func renderCases() []renderCase {
 	return []renderCase{
 		{"eq nil", func() *velox.Statement {
@@ -194,7 +214,7 @@ func renderCases() []renderCase {
 		// A list is padded to a power of two, its last value repeated
 		// (inLen), so that lists of many lengths share a few shapes.
 		{"in and not in", func() *velox.Statement { return stmt(hID.In(1, 2, 3), hNumber.NotIn("x", "y", "z", "w", "v")) }, map[velox.Dialect]string{
-			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN ($1, $2, $3, $4) AND "number" NOT IN ($5, $6, $7, $8, $9, $10, $11, $12)`,
+			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" = ANY($1) AND "number" <> ALL($2)`,
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `id` IN (?, ?, ?, ?) AND `number` NOT IN (?, ?, ?, ?, ?, ?, ?, ?)",
 			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN (?, ?, ?, ?) AND "number" NOT IN (?, ?, ?, ?, ?, ?, ?, ?)`,
 		}, []any{int64(1), int64(2), int64(3), int64(3), "x", "y", "z", "w", "v", "v", "v", "v"}},
@@ -330,26 +350,26 @@ func renderCases() []renderCase {
 			velox.SQLite:   `UPDATE "invoices" SET "total" = "total" + ?, "paid_at" = ?, "number" = "number" - ? WHERE "org_id" = ?`,
 		}, []any{2.0, nil, "x", int64(7)}},
 		{"each: window", func() *velox.Statement { return eachItems(1, 2) }, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "items" WHERE "invoice_id" IN ($1, $2) AND "sku" <> $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			velox.Postgres: `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "items" WHERE "invoice_id" = ANY($1) AND "sku" <> $2) AS "vx" WHERE "vx_rn" <= $3 ORDER BY "vx_rn"`,
 			velox.MySQL:    "SELECT `id`, `invoice_id`, `sku` FROM (SELECT `id`, `invoice_id`, `sku`, ROW_NUMBER() OVER (PARTITION BY `invoice_id` ORDER BY `sku` DESC, `id`) AS `vx_rn` FROM `items` WHERE `invoice_id` IN (?, ?) AND `sku` <> ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			velox.SQLite:   `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "items" WHERE "invoice_id" IN (?, ?) AND "sku" <> ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), "x", 2}},
 		{"each: keyed by the target key", func() *velox.Statement { return eachItems(0, 1) }, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "invoice_id", "sku" FROM "items" WHERE "id" IN ($1, $2) AND "sku" <> $3 ORDER BY "sku" DESC, "id"`,
+			velox.Postgres: `SELECT "id", "invoice_id", "sku" FROM "items" WHERE "id" = ANY($1) AND "sku" <> $2 ORDER BY "sku" DESC, "id"`,
 			velox.MySQL:    "SELECT `id`, `invoice_id`, `sku` FROM `items` WHERE `id` IN (?, ?) AND `sku` <> ? ORDER BY `sku` DESC, `id`",
 			velox.SQLite:   `SELECT "id", "invoice_id", "sku" FROM "items" WHERE "id" IN (?, ?) AND "sku" <> ? ORDER BY "sku" DESC, "id"`,
 		}, []any{int64(1), int64(2), "x"}},
 		{"each: through", func() *velox.Statement {
 			return eachTags(1, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" = ANY($1) AND "tags"."org_id" = $2) AS "vx" WHERE "vx_rn" <= $3 ORDER BY "vx_rn"`,
 			velox.MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			velox.SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), int64(7), 1}},
 		{"each: through, no limit", func() *velox.Statement {
 			return eachTags(0, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3 ORDER BY "tags"."name", "tags"."id"`,
+			velox.Postgres: `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" = ANY($1) AND "tags"."org_id" = $2 ORDER BY "tags"."name", "tags"."id"`,
 			velox.MySQL:    "SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ? ORDER BY `tags`.`name`, `tags`.`id`",
 			velox.SQLite:   `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ? ORDER BY "tags"."name", "tags"."id"`,
 		}, []any{int64(1), int64(2), int64(7)}},
@@ -357,7 +377,7 @@ func renderCases() []renderCase {
 			notes := engine.Link{Target: noteInfo, OwnerCol: 0, TargetCol: 1}
 			return eachTags(2, engine.NewPredicate(engine.Node{Op: engine.OpExists, V: notes, Kids: []engine.Node{{Op: engine.OpEQ, Col: 2, V: "hi"}}}))
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = $3)) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" = ANY($1) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = $2)) AS "vx" WHERE "vx_rn" <= $3 ORDER BY "vx_rn"`,
 			velox.MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND EXISTS (SELECT 1 FROM `notes` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `body` = ?)) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			velox.SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = ?)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), "hi", 2}},
@@ -366,7 +386,7 @@ func renderCases() []renderCase {
 			st.Entity, st.Each.Join = inSchema(tagInfo, "billing"), inSchema(bookTagInfo, "billing")
 			return st
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "billing"."tags"."id", "billing"."tags"."org_id", "billing"."tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "billing"."tags"."name", "billing"."tags"."id") AS "vx_rn" FROM "billing"."tags" JOIN "billing"."book_tags" AS "vx_j" ON "vx_j"."tag_id" = "billing"."tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "billing"."tags"."org_id" = $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "billing"."tags"."id", "billing"."tags"."org_id", "billing"."tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "billing"."tags"."name", "billing"."tags"."id") AS "vx_rn" FROM "billing"."tags" JOIN "billing"."book_tags" AS "vx_j" ON "vx_j"."tag_id" = "billing"."tags"."id" WHERE "vx_j"."book_id" = ANY($1) AND "billing"."tags"."org_id" = $2) AS "vx" WHERE "vx_rn" <= $3 ORDER BY "vx_rn"`,
 			velox.MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `billing`.`tags`.`id`, `billing`.`tags`.`org_id`, `billing`.`tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `billing`.`tags`.`name`, `billing`.`tags`.`id`) AS `vx_rn` FROM `billing`.`tags` JOIN `billing`.`book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `billing`.`tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `billing`.`tags`.`org_id` = ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			velox.SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "billing"."tags"."id", "billing"."tags"."org_id", "billing"."tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "billing"."tags"."name", "billing"."tags"."id") AS "vx_rn" FROM "billing"."tags" JOIN "billing"."book_tags" AS "vx_j" ON "vx_j"."tag_id" = "billing"."tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "billing"."tags"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), int64(7), 1}},
@@ -375,7 +395,7 @@ func renderCases() []renderCase {
 			st.Entity = inSchema(itemInfo, "billing")
 			return st
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "billing"."items" WHERE "invoice_id" IN ($1, $2) AND "sku" <> $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			velox.Postgres: `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "billing"."items" WHERE "invoice_id" = ANY($1) AND "sku" <> $2) AS "vx" WHERE "vx_rn" <= $3 ORDER BY "vx_rn"`,
 			velox.MySQL:    "SELECT `id`, `invoice_id`, `sku` FROM (SELECT `id`, `invoice_id`, `sku`, ROW_NUMBER() OVER (PARTITION BY `invoice_id` ORDER BY `sku` DESC, `id`) AS `vx_rn` FROM `billing`.`items` WHERE `invoice_id` IN (?, ?) AND `sku` <> ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			velox.SQLite:   `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "billing"."items" WHERE "invoice_id" IN (?, ?) AND "sku" <> ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), "x", 2}},
@@ -384,22 +404,22 @@ func renderCases() []renderCase {
 			st.Each.Join, st.Each.JoinOwner, st.Each.JoinTarget = linkInfo, 1, 2
 			return st
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" IN ($1, $2)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "tags"."org_id" = $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			velox.Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" = ANY($1)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "tags"."org_id" = $2) AS "vx" WHERE "vx_rn" <= $3 ORDER BY "vx_rn"`,
 			velox.MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN (SELECT DISTINCT `book_id`, `tag_id` FROM `links` WHERE `book_id` IN (?, ?)) AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `tags`.`org_id` = ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			velox.SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" IN (?, ?)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "tags"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), int64(7), 1}},
 		{"count each", countItems, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "invoice_id", COUNT(*) FROM "items" WHERE "invoice_id" IN ($1, $2) AND "sku" <> $3 GROUP BY "invoice_id"`,
+			velox.Postgres: `SELECT "invoice_id", COUNT(*) FROM "items" WHERE "invoice_id" = ANY($1) AND "sku" <> $2 GROUP BY "invoice_id"`,
 			velox.MySQL:    "SELECT `invoice_id`, COUNT(*) FROM `items` WHERE `invoice_id` IN (?, ?) AND `sku` <> ? GROUP BY `invoice_id`",
 			velox.SQLite:   `SELECT "invoice_id", COUNT(*) FROM "items" WHERE "invoice_id" IN (?, ?) AND "sku" <> ? GROUP BY "invoice_id"`,
 		}, []any{int64(1), int64(2), "x"}},
 		{"count each: through", func() *velox.Statement { return countTags(bookTagInfo, 0, 1) }, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3 GROUP BY "vx_j"."book_id"`,
+			velox.Postgres: `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" = ANY($1) AND "tags"."org_id" = $2 GROUP BY "vx_j"."book_id"`,
 			velox.MySQL:    "SELECT `vx_j`.`book_id`, COUNT(*) FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ? GROUP BY `vx_j`.`book_id`",
 			velox.SQLite:   `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ? GROUP BY "vx_j"."book_id"`,
 		}, []any{int64(1), int64(2), int64(7)}},
 		{"count each: through links that may repeat", func() *velox.Statement { return countTags(linkInfo, 1, 2) }, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" IN ($1, $2)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "tags"."org_id" = $3 GROUP BY "vx_j"."book_id"`,
+			velox.Postgres: `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" = ANY($1)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "tags"."org_id" = $2 GROUP BY "vx_j"."book_id"`,
 			velox.MySQL:    "SELECT `vx_j`.`book_id`, COUNT(*) FROM `tags` JOIN (SELECT DISTINCT `book_id`, `tag_id` FROM `links` WHERE `book_id` IN (?, ?)) AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `tags`.`org_id` = ? GROUP BY `vx_j`.`book_id`",
 			velox.SQLite:   `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" IN (?, ?)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "tags"."org_id" = ? GROUP BY "vx_j"."book_id"`,
 		}, []any{int64(1), int64(2), int64(7)}},
@@ -408,7 +428,7 @@ func renderCases() []renderCase {
 			st.Where = nil
 			return st
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" IN ($1, $2)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" GROUP BY "vx_j"."book_id"`,
+			velox.Postgres: `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" = ANY($1)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" GROUP BY "vx_j"."book_id"`,
 			velox.MySQL:    "SELECT `vx_j`.`book_id`, COUNT(*) FROM `tags` JOIN (SELECT DISTINCT `book_id`, `tag_id` FROM `links` WHERE `book_id` IN (?, ?)) AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` GROUP BY `vx_j`.`book_id`",
 			velox.SQLite:   `SELECT "vx_j"."book_id", COUNT(*) FROM "tags" JOIN (SELECT DISTINCT "book_id", "tag_id" FROM "links" WHERE "book_id" IN (?, ?)) AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" GROUP BY "vx_j"."book_id"`,
 		}, []any{int64(1), int64(2)}},
@@ -417,7 +437,7 @@ func renderCases() []renderCase {
 			st.Op = velox.OpDelete
 			return st
 		}, map[velox.Dialect]string{
-			velox.Postgres: `DELETE FROM "invoices" WHERE "id" IN ($1, $2)`,
+			velox.Postgres: `DELETE FROM "invoices" WHERE "id" = ANY($1)`,
 			velox.MySQL:    "DELETE FROM `invoices` WHERE `id` IN (?, ?)",
 			velox.SQLite:   `DELETE FROM "invoices" WHERE "id" IN (?, ?)`,
 		}, []any{int64(1), int64(2)}},
@@ -457,7 +477,11 @@ func TestRender(t *testing.T) {
 			if got != want {
 				t.Errorf("%s, %v:\n got %s\nwant %s", c.name, d, got, want)
 			}
-			if wantArgs := c.args; !argsEqual(args, wantArgs) {
+			wantArgs := c.args
+			if pg, ok := renderPGArgs[c.name]; ok && d == velox.Postgres {
+				wantArgs = pg
+			}
+			if !argsEqual(args, wantArgs) {
 				t.Errorf("%s, %v: args %#v, want %#v", c.name, d, args, wantArgs)
 			}
 		}
@@ -559,7 +583,7 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 			st.Limit = 5
 			return st
 		}, map[velox.Dialect]string{
-			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN ($2, $3)) LIMIT 5`,
+			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" = ANY($2)) LIMIT 5`,
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `org_id` = ? AND EXISTS (SELECT 1 FROM `joins` AS `vx1` WHERE `vx1`.`inv_id` = `invoices`.`id` AND `tag_id` IN (?, ?)) LIMIT 5",
 			velox.SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN (?, ?)) LIMIT 5`,
 		}, []any{int64(1), int64(7), int64(8)}},
@@ -587,7 +611,11 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 				t.Errorf("%s, %v: the guard refuses it: %v", c.name, d, err)
 			}
 			got, args := render(d, c.st())
-			if wantArgs := c.args; got != want || !argsEqual(args, wantArgs) {
+			wantArgs := c.args
+			if pg, ok := renderPGArgs[c.name]; ok && d == velox.Postgres {
+				wantArgs = pg
+			}
+			if got != want || !argsEqual(args, wantArgs) {
 				t.Errorf("%s, %v:\n got %s %#v\nwant %s %#v", c.name, d, got, args, want, wantArgs)
 			}
 		}

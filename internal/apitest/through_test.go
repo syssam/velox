@@ -48,13 +48,13 @@ func TestThroughLoadSharedAndEmpty(t *testing.T) {
 	if tags, ok := bs[2].Tags.Get(); !ok || tags == nil || len(tags) != 0 {
 		t.Errorf("book 3: %v %v", tags, ok)
 	}
-	if want := `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" IN ($1, $2, $3, $4) ORDER BY "book_id", "tag_id"`; e.Log[1] != want {
+	if want := `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" = ANY($1) ORDER BY "book_id", "tag_id"`; e.Log[1] != want {
 		t.Errorf("join SQL %s", e.Log[1])
 	}
-	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" IN ($1, $2) ORDER BY "id"`; e.Log[2] != want {
+	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" = ANY($1) ORDER BY "id"`; e.Log[2] != want {
 		t.Errorf("target SQL %s", e.Log[2])
 	}
-	if want := []any{int64(1), int64(2)}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{"{1,2}"}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("target args %v, want %v", e.Args, want)
 	}
 }
@@ -101,10 +101,10 @@ func TestThroughLoadAppliesTheOptions(t *testing.T) {
 	if got := tagNames(t, bs[0].Tags); !reflect.DeepEqual(got, []string{"go", "db"}) {
 		t.Errorf("tags %v", got)
 	}
-	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" IN ($1, $2) AND "name" <> $3 ORDER BY "name" DESC`; e.Log[2] != want {
+	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" = ANY($1) AND "name" <> $2 ORDER BY "name" DESC`; e.Log[2] != want {
 		t.Errorf("target SQL %s", e.Log[2])
 	}
-	if want := []any{int64(1), int64(2), "x"}; !reflect.DeepEqual(e.Args, want) {
+	if want := []any{"{1,2}", "x"}; !reflect.DeepEqual(e.Args, want) {
 		t.Errorf("target args %v", e.Args)
 	}
 }
@@ -145,7 +145,7 @@ func TestThroughLoadNested(t *testing.T) {
 	if !ok || len(books) != 2 || books[1].Title != "b" {
 		t.Fatalf("the tag's books %+v %v", books, ok)
 	}
-	if want := `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "tag_id" IN ($1) ORDER BY "book_id", "tag_id"`; e.Log[3] != want {
+	if want := `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "tag_id" = ANY($1) ORDER BY "book_id", "tag_id"`; e.Log[3] != want {
 		t.Errorf("nested join SQL %s", e.Log[3])
 	}
 }
@@ -218,7 +218,7 @@ func TestOfThroughRenders(t *testing.T) {
 		d    velox.Dialect
 		want string
 	}{
-		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($1, $2)) LIMIT 5`},
+		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" = ANY($1)) LIMIT 5`},
 		{velox.MySQL, "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `book_id` IN (?, ?)) LIMIT 5"},
 		{velox.SQLite, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN (?, ?)) LIMIT 5`},
 	} {
@@ -227,6 +227,9 @@ func TestOfThroughRenders(t *testing.T) {
 			t.Errorf("%v:\n got %s, %v\nwant %s", c.d, got, err, c.want)
 		}
 		want := []any{int64(1), int64(2)}
+		if c.d == velox.Postgres {
+			want = []any{"{1,2}"}
+		}
 		if !reflect.DeepEqual(args, want) {
 			t.Errorf("%v: args %v, want %v", c.d, args, want)
 		}
@@ -234,17 +237,17 @@ func TestOfThroughRenders(t *testing.T) {
 	// The other way, with the target's org at the top, outside the EXISTS.
 	g := fixture.DTag{ID: 7}
 	got, args, err := openPolicied(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DTags.Books.Of(&g)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
-	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" IN ($1)) LIMIT 1`
-	if err != nil || got != want || !reflect.DeepEqual(args, []any{int64(7)}) {
+	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" = ANY($1)) LIMIT 1`
+	if err != nil || got != want || !reflect.DeepEqual(args, []any{"{7}"}) {
 		t.Errorf("tag to books:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
 	got, args, err = openPolicied(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DTag]().Where(fixture.DTags.Name.EQ("go"), fixture.DBooks.Tags.Of(&b1)).Limit(1).SQL(testmodel.Org.With(context.Background(), int64(3)))
-	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($2)) AND "org_id" = $3 LIMIT 1`
-	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3)}) {
+	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" = ANY($2)) AND "org_id" = $3 LIMIT 1`
+	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", "{1}", int64(3)}) {
 		t.Errorf("org:\n got %s %v, %v\nwant %s", got, args, err, want)
 	}
 	got, _, err = openFake(velox.Postgres, &fakeconn.Exec{}).Query[fixture.DBook]().Where(fixture.DBooks.Tags.HasWith(fixture.DBooks.Picks.Of(&b2))).Limit(1).SQL(ctx)
-	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT 1`
+	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" = ANY($1)))) LIMIT 1`
 	if err != nil || got != want {
 		t.Errorf("nested:\n got %s, %v\nwant %s", got, err, want)
 	}
@@ -260,20 +263,24 @@ func TestOfSelfManyToMany(t *testing.T) {
 		d    velox.Dialect
 		want string
 	}{
-		{velox.Postgres, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN ($1, $2)) LIMIT 5`},
+		{velox.Postgres, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" = ANY($1)) LIMIT 5`},
 		{velox.MySQL, "SELECT `id` FROM `peers` WHERE EXISTS (SELECT 1 FROM `friends` AS `vx1` WHERE `vx1`.`friend_id` = `peers`.`id` AND `peer_id` IN (?, ?)) LIMIT 5"},
 		{velox.SQLite, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN (?, ?)) LIMIT 5`},
 	} {
 		db := openFake(c.d, &fakeconn.Exec{})
 		got, args, err := db.Query[dPeer]().Where(dPeers.Friends.Of(&p1, &p2)).Limit(5).SQL(skip)
 		wantArgs := []any{int64(1), int64(2)}
+		if c.d == velox.Postgres {
+			wantArgs = []any{"{1,2}"}
+		}
 		if err != nil || got != c.want || !reflect.DeepEqual(args, wantArgs) {
 			t.Errorf("%v:\n got %s %v, %v\nwant %s", c.d, got, args, err, c.want)
 		}
-		// One owner is another shape from two, through the same cache.
+		// One owner is another shape from two, through the same cache; on
+		// PostgreSQL, whose owners are one array, the same shape.
 		one, _, err := db.Query[dPeer]().Where(dPeers.Friends.Of(&p1)).Limit(5).SQL(skip)
-		if err != nil || one == got {
-			t.Errorf("%v: one owner renders as two: %s, %v", c.d, one, err)
+		if err != nil || (one == got) != (c.d == velox.Postgres) {
+			t.Errorf("%v: one owner renders as %s, two as %s: %v", c.d, one, got, err)
 		}
 	}
 }
@@ -613,7 +620,7 @@ func TestThroughNullableKeys(t *testing.T) {
 			t.Errorf("note %d: %v %v, want %v", n.ID, got, ok, want[i])
 		}
 	}
-	if !reflect.DeepEqual(e.Args, []any{int64(1)}) || e.Log[1] != `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" IN ($1) ORDER BY "book_id", "tag_id"` {
+	if !reflect.DeepEqual(e.Args, []any{"{1}"}) || e.Log[1] != `SELECT "book_id", "tag_id" FROM "book_tags" WHERE "book_id" = ANY($1) ORDER BY "book_id", "tag_id"` {
 		t.Errorf("%q %v", e.Log, e.Args)
 	}
 }

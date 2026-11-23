@@ -422,7 +422,7 @@ func TestRecordUpsertOneColumnInTx(t *testing.T) {
 	wantLog(t, e, []string{
 		"BEGIN",
 		"SAVEPOINT velox_1",
-		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "id" IN ($1) FOR UPDATE`,
+		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "id" = ANY($1) FOR UPDATE`,
 		`INSERT INTO "ddefs" ("id", "name") VALUES ($1, $2) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name" RETURNING ` + dDefCols,
 		"RELEASE SAVEPOINT velox_1",
 		"COMMIT",
@@ -481,7 +481,7 @@ func TestRecordUpsertDoNothingGenerated(t *testing.T) {
 	}
 	wantLog(t, e, []string{
 		"BEGIN",
-		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "name" IN ($1, $2, $3, $4) FOR UPDATE`,
+		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "name" = ANY($1) FOR UPDATE`,
 		`INSERT INTO "ddefs" ("name") VALUES ($1), ($2), ($3) ON CONFLICT ("name") DO NOTHING RETURNING ` + dDefCols,
 		"COMMIT",
 	})
@@ -578,9 +578,9 @@ func TestRecordUpsertInOwnTx(t *testing.T) {
 	ins := `INSERT INTO "ddefs" ("id", "name", "score") VALUES ($1, $2, $3) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "score" = EXCLUDED."score" RETURNING ` + dDefCols
 	wantLog(t, e, []string{
 		"BEGIN",
-		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "id" IN ($1) FOR UPDATE`,
+		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "id" = ANY($1) FOR UPDATE`,
 		ins,
-		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "id" IN ($1) FOR UPDATE`,
+		`SELECT ` + dDefCols + ` FROM "ddefs" WHERE "id" = ANY($1) FOR UPDATE`,
 		ins,
 		"COMMIT",
 	})

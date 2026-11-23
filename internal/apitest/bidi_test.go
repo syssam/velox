@@ -191,8 +191,8 @@ func TestBidiLinks(t *testing.T) {
 		if _, err := openPolicied(velox.Postgres, e).Delete[bnodeFriend]().Where(F.NodeID.EQ(1), F.FriendID.In(2, 3)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		sent(t, e, `DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" IN ($2, $3)) OR ("friend_id" = $4 AND "node_id" IN ($5, $6)))`,
-			int64(1), int64(2), int64(3), int64(1), int64(2), int64(3))
+		sent(t, e, `DELETE FROM "bnode_friends" WHERE (("node_id" = $1 AND "friend_id" = ANY($2)) OR ("friend_id" = $3 AND "node_id" = ANY($4)))`,
+			int64(1), "{2,3}", int64(1), "{2,3}")
 	})
 	t.Run("delete, nested", func(t *testing.T) {
 		e := &fakeconn.Exec{}
@@ -222,7 +222,7 @@ func TestBidiLinks(t *testing.T) {
 				t.Errorf("node %d: friends %+v, want %d", ns[i].ID, fs, want)
 			}
 		}
-		if want := `SELECT "node_id", "friend_id" FROM "bnode_friends" WHERE "node_id" IN ($1, $2) ORDER BY "node_id", "friend_id"`; e.Log[1] != want {
+		if want := `SELECT "node_id", "friend_id" FROM "bnode_friends" WHERE "node_id" = ANY($1) ORDER BY "node_id", "friend_id"`; e.Log[1] != want {
 			t.Errorf("join SQL %s", e.Log[1])
 		}
 	})

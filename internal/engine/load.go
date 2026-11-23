@@ -613,7 +613,8 @@ func throughChunks(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r
 plan:
 	for len(rest) > 0 {
 		// A chunk's keys are an IN list, written padded (inLen): plan
-		// lists that pad to at most per.
+		// lists that pad to at most per. On PostgreSQL integer and string
+		// keys are one array parameter (arrayIn), and the plan errs small.
 		chunks, n := throughPlan(rest, byOwner, inFit(per))
 		if n > 0 {
 			err := fmt.Errorf("velox: %s: relation %s: an owner has %d related rows, more than one statement can load in order", owner.Name, r.Name, n)
@@ -732,7 +733,8 @@ func fetchPlan(db *DB, t *EntityInfo, sp LoadSpec) ([]OrderTerm, int) {
 // one key is read again, from lo, in chunks smaller by the excess, and the rest
 // use the smaller size; with one key, the error is returned. Each chunk's keys
 // are an IN list, which is written padded (inLen), so per is first lowered
-// to a length that pads to at most per (inFit).
+// to a length that pads to at most per (inFit). On PostgreSQL integer and
+// string keys are one array parameter (arrayIn), and the chunks err small.
 func byChunks(n, per int, read func(lo, hi int) error) error {
 	per = inFit(per)
 	for lo := 0; lo < n; {

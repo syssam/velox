@@ -657,6 +657,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   it made 21. On a 496-entity schema with velox-graphql, a run takes
   2.8 s, where it took 6.0 s; velox-graphql alone takes 0.6 s, where it
   took 1.2 s.
+- On PostgreSQL an In list of integers or strings is `col = ANY($1)`, and a
+  NotIn `col <> ALL($1)`, with one argument: the list's array literal, such
+  as `{1,2,3}`. PostgreSQL's generic plan cannot fold `IN ($1, …, $n)` into a
+  constant array and tests each parameter on every row; bench/compare's
+  EagerO2M100 on database/sql ran 6% behind ent's. Every length of a list is
+  now one statement. Other values, and MySQL and SQLite, keep the IN list
+  (ADR 0120).
 - A query's LIMIT is a literal in every dialect, as SQLite's already was and
   as ent writes it; OFFSET stays a parameter. PostgreSQL's generic plan,
   which pgx's statement cache reaches after five runs, guessed a tenth of the

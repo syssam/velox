@@ -65,7 +65,7 @@ func TestRecordPG18UpdateSQL(t *testing.T) {
 	locked := []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 AND "org_id" = $2 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 AND "org_id" = $4 AND "id" IN ($5) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 AND "org_id" = $4 AND "id" = ANY($5) RETURNING ` + allCols,
 		"COMMIT",
 	}
 	for _, c := range []struct {
@@ -232,7 +232,7 @@ func TestRecordPG18Delete(t *testing.T) {
 		showVersion,
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" FOR UPDATE`,
-		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" IN ($2, $3) RETURNING "id"`,
+		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" = ANY($2) RETURNING "id"`,
 		"COMMIT",
 	}}} {
 		t.Run(strconv.Itoa(c.version), func(t *testing.T) {
@@ -430,7 +430,7 @@ func TestRecordVersionReadOnce(t *testing.T) {
 		showVersion,
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-		upd + ` AND "id" IN ($4) RETURNING ` + allCols,
+		upd + ` AND "id" = ANY($4) RETURNING ` + allCols,
 		"COMMIT",
 		showVersion,
 		"BEGIN",
@@ -527,7 +527,7 @@ func TestRecordVersionFailsInCallersTx(t *testing.T) {
 		"RELEASE SAVEPOINT velox_1",
 		"SAVEPOINT velox_2",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "id" = $3 AND "id" = ANY($4) RETURNING ` + allCols,
 		"RELEASE SAVEPOINT velox_2",
 		`SELECT COUNT(*) FROM "invoices"`,
 		"COMMIT",
@@ -554,7 +554,7 @@ func TestRecordVersionFailsBeforeOwnTx(t *testing.T) {
 		showVersion,
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "org_id" = $3 AND "id" IN ($4, $5) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "org_id" = $3 AND "id" = ANY($4) RETURNING ` + allCols,
 		"COMMIT",
 	})
 	if rec.Len() != 2 {

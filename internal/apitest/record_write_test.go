@@ -48,7 +48,7 @@ func TestRecordUpdateSQL(t *testing.T) {
 	}{{velox.Postgres, []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "total" < $1 AND "org_id" = $2 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "total" < $3 AND "org_id" = $4 AND "id" IN ($5, $6) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = "total" + $1, "updated_at" = $2 WHERE "total" < $3 AND "org_id" = $4 AND "id" = ANY($5) RETURNING ` + allCols,
 		"COMMIT",
 	}}, {velox.SQLite, []string{
 		"BEGIN",
@@ -112,7 +112,7 @@ func TestRecordDeleteSQL(t *testing.T) {
 	}{{velox.Postgres, []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" FOR UPDATE`,
-		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" IN ($2, $3) RETURNING "id"`,
+		`DELETE FROM "invoices" WHERE "org_id" = $1 AND "id" = ANY($2) RETURNING "id"`,
 		"COMMIT",
 	}}, {velox.SQLite, []string{
 		"BEGIN",
@@ -168,7 +168,7 @@ func TestRecordPinnedUpdateOutsideTx(t *testing.T) {
 	wantLog(t, e, []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" = ANY($4) RETURNING ` + allCols,
 		"COMMIT",
 	})
 	if !slices.Equal(at, []int{3}) {
@@ -186,7 +186,7 @@ func TestRecordUpdateOne(t *testing.T) {
 	}{{velox.Postgres, []string{
 		"BEGIN",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" = ANY($4) RETURNING ` + allCols,
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 LIMIT 2`,
 		"COMMIT",
 	}}, {velox.SQLite, []string{

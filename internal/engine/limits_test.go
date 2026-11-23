@@ -20,10 +20,16 @@ import (
 
 func TestParameterLimit(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e, params(3))
+	db := openFake(velox.MySQL, e, params(3))
 	_, err := db.Query[testmodel.Invoice]().Where(I.ID.In(1, 2, 3, 4)).Limit(1).All(ctx)
-	if err == nil || !strings.Contains(err.Error(), "the statement has 4 parameters; postgres allows 3") || e.Calls != 0 {
+	if err == nil || !strings.Contains(err.Error(), "the statement has 4 parameters; mysql allows 3") || e.Calls != 0 {
 		t.Errorf("%v, calls %d", err, e.Calls)
+	}
+	// On PostgreSQL the list is one array parameter (arrayIn).
+	e = &fakeconn.Exec{}
+	db = openFake(velox.Postgres, e, params(3))
+	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.In(1, 2, 3, 4)).Limit(1).All(ctx); err != nil || e.Calls != 1 {
+		t.Errorf("postgres: %v, calls %d", err, e.Calls)
 	}
 }
 
@@ -222,12 +228,12 @@ func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 		{itemRow(11, 1, "B", 1), itemRow(10, 1, "A", 1), itemRow(12, 2, "C", 1)},
 		{itemRow(13, 3, "D", 1)},
 	}}
-	db := openFake(velox.Postgres, e, params(64+3))
+	db := openFake(velox.MySQL, e, params(64+3))
 	invs, err := db.Query[testmodel.Invoice]().With(I.Items.Where(It.Qty.GT(0))).Limit(10).All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Log) != 3 || !strings.Contains(e.Log[1], "IN ($1, $2)") || !strings.Contains(e.Log[2], "IN ($1)") {
+	if len(e.Log) != 3 || !strings.Contains(e.Log[1], "IN (?, ?)") || !strings.Contains(e.Log[2], "IN (?)") {
 		t.Fatalf("%q", e.Log)
 	}
 	var got []string
@@ -287,7 +293,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		checkSent(t, e, s, []int{0, 96, 96, 96, 82}) // the owners' LIMIT is a literal, then the notes'
 		// Without hooks, exec's check splits the chunk the same way.
 		e = &fakeconn.Exec{Results: [][][]any{ovOwnerRows(50), notes(1, 16), notes(17, 32), notes(33, 48), notes(49, 50)}}
-		for _, o := range owners(t, openPolicied(velox.Postgres, e, params(100)), ovOwners.Notes) {
+		for _, o := range owners(t, openPolicied(velox.MySQL, e, params(100)), ovOwners.Notes) {
 			if got := ids(t, o, o.Notes); !reflect.DeepEqual(got, []int64{1000 + o.ID}) {
 				t.Errorf("without hooks: owner %d: notes %v", o.ID, got)
 			}
@@ -367,7 +373,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		join := slices.Concat(links(1, 16), links(2, 20), links(3, 10))
 		db, e, s := ovRun([][][]any{ovOwnerRows(3), join, notes(1, 16)}, params(100))
 		_, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Picks).Limit(3).All(ovReading(70))
-		const want = "velox: engine_test.ovOwner: relation Picks: an owner has 20 related rows, more than one statement can load in order: velox: engine_test.ovNote: the statement has 102 parameters; postgres allows 100"
+		const want = "velox: engine_test.ovOwner: relation Picks: an owner has 20 related rows, more than one statement can load in order: velox: engine_test.ovNote: the statement has 102 parameters; mysql allows 100"
 		if err == nil || err.Error() != want {
 			t.Errorf("err = %v,\nwant %s", err, want)
 		}
@@ -378,7 +384,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		// 30 keys a chunk cannot hold them, and the error says why.
 		db, e, s := ovRun([][][]any{ovOwnerRows(1), links(1, 32)}, params(100))
 		_, err := db.Query[ovOwner]().With(ovOwners.Picks).Limit(1).All(ovReading(70))
-		const want = "velox: engine_test.ovOwner: relation Picks: an owner has 32 related rows, more than one statement can load in order: velox: engine_test.ovNote: the statement has 102 parameters; postgres allows 100"
+		const want = "velox: engine_test.ovOwner: relation Picks: an owner has 32 related rows, more than one statement can load in order: velox: engine_test.ovNote: the statement has 102 parameters; mysql allows 100"
 		if err == nil || err.Error() != want {
 			t.Errorf("err = %v,\nwant %s", err, want)
 		}
@@ -390,7 +396,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		join := slices.Concat(links(1, 1), links(2, 1))
 		db, e, s := ovRun([][][]any{ovOwnerRows(2), join}, params(100))
 		_, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Picks).Limit(2).All(ovReading(100))
-		if err == nil || !strings.HasPrefix(err.Error(), "velox: engine_test.ovOwner: loading Picks: ") || !strings.Contains(err.Error(), "the statement has 101 parameters; postgres allows 100") {
+		if err == nil || !strings.HasPrefix(err.Error(), "velox: engine_test.ovOwner: loading Picks: ") || !strings.Contains(err.Error(), "the statement has 101 parameters; mysql allows 100") {
 			t.Errorf("%v", err)
 		}
 		checkSent(t, e, s, []int{0, 2})
@@ -398,7 +404,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 	t.Run("one key cannot fit", func(t *testing.T) {
 		db, e, s := ovRun([][][]any{ovOwnerRows(50)}, params(100))
 		_, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Notes).Limit(50).All(ovReading(100))
-		if err == nil || !strings.Contains(err.Error(), "the statement has 101 parameters; postgres allows 100") {
+		if err == nil || !strings.Contains(err.Error(), "the statement has 101 parameters; mysql allows 100") {
 			t.Errorf("%v", err)
 		}
 		if e.Calls != 1 || len(s.args) != 1 {
@@ -407,15 +413,15 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 	})
 }
 
-// TestOfOverTheParameterLimit: each owner is a parameter (3 owners, an IN
-// list padded to 4), and a statement over the dialect's limit is refused
+// TestOfOverTheParameterLimit: on MySQL each owner is a parameter (3 owners,
+// an IN list padded to 4), and a statement over the dialect's limit is refused
 // before it is sent. The Limit is a literal and counts for none.
 func TestOfOverTheParameterLimit(t *testing.T) {
 	e := &fakeconn.Exec{}
-	db := openFake(velox.Postgres, e, params(3))
+	db := openFake(velox.MySQL, e, params(3))
 	invs := []testmodel.Invoice{{ID: 1}, {ID: 2}, {ID: 3}}
 	_, err := db.Query[testmodel.Item]().Where(I.Items.Of(&invs[0], &invs[1], &invs[2])).Limit(10).All(ctx)
-	if err == nil || err.Error() != "velox: testmodel.Item: the statement has 4 parameters; postgres allows 3" || e.Calls != 0 {
+	if err == nil || err.Error() != "velox: testmodel.Item: the statement has 4 parameters; mysql allows 3" || e.Calls != 0 {
 		t.Errorf("%v, %d sent", err, e.Calls)
 	}
 }
@@ -489,7 +495,7 @@ func TestThroughLoadChunksByOwner(t *testing.T) {
 		{{int64(2), int64(7), "b"}, {int64(1), int64(7), "a"}}, // tags 1 and 2, for book 1
 		{{int64(3), int64(7), "c"}, {int64(2), int64(7), "b"}}, // tags 2 and 3, for books 2 and 3
 	}}
-	db := openFake(velox.Postgres, e, params(66))
+	db := openFake(velox.MySQL, e, params(66))
 	bs, err := db.Query[fixture.DBook]().With(fixture.DBooks.Tags.OrderBy(fixture.DTags.Name.Desc())).Limit(3).All(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -503,7 +509,7 @@ func TestThroughLoadChunksByOwner(t *testing.T) {
 	if len(e.Log) != 5 || !reflect.DeepEqual(e.Args, []any{int64(2), int64(3)}) {
 		t.Errorf("queries %q, last args %v", e.Log, e.Args)
 	}
-	if want := `SELECT "id", "org_id", "name" FROM "tags" WHERE "id" IN ($1, $2) ORDER BY "name" DESC`; e.Log[3] != want {
+	if want := "SELECT `id`, `org_id`, `name` FROM `tags` WHERE `id` IN (?, ?) ORDER BY `name` DESC"; e.Log[3] != want {
 		t.Errorf("target SQL %s", e.Log[3])
 	}
 
@@ -511,7 +517,7 @@ func TestThroughLoadChunksByOwner(t *testing.T) {
 		{{int64(1), int64(1), "a"}},
 		{{int64(1), int64(1)}, {int64(1), int64(2)}, {int64(1), int64(3)}},
 	}}
-	_, err = openFake(velox.Postgres, e, params(66)).Query[fixture.DBook]().With(fixture.DBooks.Tags).Limit(1).All(ctx)
+	_, err = openFake(velox.MySQL, e, params(66)).Query[fixture.DBook]().With(fixture.DBooks.Tags).Limit(1).All(ctx)
 	if want := "velox: fixture.DBook: relation tags: an owner has 3 related rows, more than one statement can load in order"; err == nil || err.Error() != want {
 		t.Errorf("got %v", err)
 	}

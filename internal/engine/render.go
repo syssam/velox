@@ -638,13 +638,26 @@ func (w *writer) eachFrom(st *Statement) {
 }
 
 // eachKeys writes the condition that a row is an owner's: the column key
-// writes IN the owners' keys, or 1 = 0 when there are none.
+// writes IN the owners' keys, or = ANY of their array (arrayIn), or 1 = 0
+// when there are none.
 func (w *writer) eachKeys(c *EachClause, key func()) {
 	if len(c.Keys) == 0 {
 		w.str("1 = 0")
 		return
 	}
 	key()
+	if w.arrayIn(c.Keys) {
+		// The owners' keys are values of the join entity's owner column, or
+		// of the statement's entity's column c.Column.
+		var col *ColumnInfo
+		if c.Join != nil {
+			col = &c.Join.Columns[c.JoinOwner]
+		} else {
+			col = &w.in.Columns[c.Column]
+		}
+		w.arrayArg(false, c.Keys, col)
+		return
+	}
 	w.str(" IN (")
 	for i := range inLen(len(c.Keys)) {
 		k := c.Keys[min(i, len(c.Keys)-1)]
@@ -708,7 +721,8 @@ func (w *writer) eachKey(c *EachClause) {
 // 16384, the last value repeated, so that lists of many lengths share a few
 // shapes in the render cache. A repeated value changes neither IN nor NOT
 // IN. A longer list, such as a load's chunk under the dialect's parameter
-// limit, is written as it is.
+// limit, is written as it is. On PostgreSQL a list of integers or strings
+// is an array instead (arrayIn).
 func inLen(n int) int {
 	switch {
 	case n <= 1 || n > 16384:
@@ -776,6 +790,10 @@ func (w *writer) pred(n Node) {
 			return
 		}
 		w.predCol(n.Col)
+		if w.arrayIn(vs) {
+			w.arrayArg(n.Op == OpNotIn, vs, &w.in.Columns[n.Col])
+			return
+		}
 		if n.Op == OpNotIn {
 			w.str(" NOT IN (")
 		} else {

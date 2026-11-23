@@ -26,7 +26,7 @@ func TestDescriptorQueriesAndLoads(t *testing.T) {
 	if !ok || len(books) != 2 || books[1].Title != "more" {
 		t.Fatalf("books %+v %v", books, ok)
 	}
-	if want := `SELECT "id", "author_id", "title" FROM "books" WHERE "author_id" IN ($1) ORDER BY "id"`; e.Log[1] != want {
+	if want := `SELECT "id", "author_id", "title" FROM "books" WHERE "author_id" = ANY($1) ORDER BY "id"`; e.Log[1] != want {
 		t.Fatalf("relation SQL %s", e.Log[1])
 	}
 }
@@ -47,7 +47,7 @@ func TestDescriptorLoadsOne(t *testing.T) {
 	if !ok || a == nil || a.Name != "ada" {
 		t.Fatalf("author %+v %v", a, ok)
 	}
-	if want := `SELECT "id", "org_id", "name", "email", "created_at" FROM "authors" WHERE "id" IN ($1)`; !strings.HasPrefix(e.Log[1], want) {
+	if want := `SELECT "id", "org_id", "name", "email", "created_at" FROM "authors" WHERE "id" = ANY($1)`; !strings.HasPrefix(e.Log[1], want) {
 		t.Fatalf("relation SQL %s", e.Log[1])
 	}
 }

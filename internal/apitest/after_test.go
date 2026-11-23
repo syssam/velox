@@ -180,7 +180,7 @@ func TestAfterWithRelations(t *testing.T) {
 	if len(e.Log) != 2 || !strings.Contains(e.Log[0], ` WHERE ("id" > $1) ORDER BY "id"`) {
 		t.Fatalf("%q", e.Log)
 	}
-	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" IN ($1) ORDER BY "id"`; e.Log[1] != want {
+	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" = ANY($1) ORDER BY "id"`; e.Log[1] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 }

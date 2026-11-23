@@ -426,7 +426,9 @@ func TestExistsAllocationBudget(t *testing.T) {
 // TestLoadAllocationBudgets pins, on the path where no statement overflows
 // the parameter limit, the allocations of a cached All with one With load,
 // of LoadEach and of CountEach, at the numbers measured when the budgets were
-// set: a load's allocations grow only by a decision to let them.
+// set: a load's allocations grow only by a decision to let them. Decision
+// 0120 added two to each: on PostgreSQL the keys are one argument, an array
+// literal, whose bytes and whose string in an any are allocated.
 func TestLoadAllocationBudgets(t *testing.T) {
 	measure := func(name string, budget float64, run func() error) {
 		t.Helper()
@@ -444,18 +446,18 @@ func TestLoadAllocationBudgets(t *testing.T) {
 		}
 	}
 	samples := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{sampleRow(1, int64(1))}}) // its own parent
-	measure("an All with one With load", 40, func() error {
+	measure("an All with one With load", 42, func() error {
 		_, err := samples.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
 		return err
 	})
 	owners := []*testmodel.Invoice{{ID: 1}, {ID: 2}}
 	items := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)}})
-	measure("LoadEach", 30, func() error {
+	measure("LoadEach", 32, func() error {
 		_, err := velox.LoadEach(ctx, items.Query[testmodel.Item](), I.Items, owners)
 		return err
 	})
 	counts := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{{int64(1), int64(3)}, {int64(2), int64(1)}}})
-	measure("CountEach", 23, func() error {
+	measure("CountEach", 25, func() error {
 		_, err := velox.CountEach(ctx, counts.Query[testmodel.Item](), I.Items, owners)
 		return err
 	})

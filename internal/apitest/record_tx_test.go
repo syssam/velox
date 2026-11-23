@@ -36,7 +36,7 @@ func TestRecordPinnedUpdateInTx(t *testing.T) {
 		"BEGIN",
 		"SAVEPOINT velox_1",
 		`SELECT ` + allCols + ` FROM "invoices" WHERE "id" = $1 ORDER BY "id" FOR UPDATE`,
-		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" IN ($4) RETURNING ` + allCols,
+		`UPDATE "invoices" SET "total" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" = ANY($4) RETURNING ` + allCols,
 		"RELEASE SAVEPOINT velox_1",
 		"COMMIT",
 	})

@@ -122,12 +122,13 @@ func (s *ovSent) around(ctx context.Context, st *velox.Statement, next func(cont
 	return next(ctx)
 }
 
-// ovRun opens a fake PostgreSQL database answering with results, whose
-// Around hook records into the ovSent returned.
+// ovRun opens a fake MySQL database answering with results, whose Around
+// hook records into the ovSent returned. MySQL writes each key of an In
+// list as a parameter; PostgreSQL writes them as one (arrayIn).
 func ovRun(results [][][]any, opts ...velox.Option) (*velox.DB, *fakeconn.Exec, *ovSent) {
 	e := &fakeconn.Exec{Results: results}
 	s := &ovSent{}
-	return openPolicied(velox.Postgres, e, append([]velox.Option{velox.WithAround(s.around)}, opts...)...), e, s
+	return openPolicied(velox.MySQL, e, append([]velox.Option{velox.WithAround(s.around)}, opts...)...), e, s
 }
 
 // ovOwnerRows are owners 1–n.

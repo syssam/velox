@@ -91,7 +91,7 @@ func TestWithLogNeverPrintsASensitiveArgument(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e, velox.WithLog(l, velox.LogArgs()))
 
-	if _, err := db.Update[fixture.DAuthor]().Set(DA.Email.Set("new-secret@x")).Where(DA.Email.EQ("old-secret@x"), DA.Name.In("ada", "bo")).Exec(ctx); err != nil {
+	if _, err := db.Update[fixture.DAuthor]().Set(DA.Email.Set("new-secret@x")).Where(DA.Email.EQ("old-secret@x"), DA.Name.In("ada", "bo"), DA.Email.In("in-secret@x", "in2-secret@x")).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Insert(&fixture.DAuthor{OrgID: 7, Name: "cy", Email: new("ins-secret@x")}).Exec(ctx); err != nil {
@@ -120,7 +120,9 @@ func TestWithLogNeverPrintsASensitiveArgument(t *testing.T) {
 			t.Errorf("record %d (%s):\n got %v\nwant %v", i, rs[i]["sql"], got, want)
 		}
 	}
-	check(0, "<sensitive>", "<sensitive>", "ada", "bo")
+	// On PostgreSQL an In list is one argument, its array (decision 0120),
+	// shown when the column's values are.
+	check(0, "<sensitive>", "<sensitive>", `{"ada","bo"}`, "<sensitive>")
 	ins := argsOf(t, rs[1])
 	if !slices.Contains(ins, any("<sensitive>")) || !slices.Contains(ins, any("cy")) || !slices.Contains(ins, any(float64(7))) {
 		t.Errorf("insert: %v", ins)

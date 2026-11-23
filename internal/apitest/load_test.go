@@ -38,7 +38,7 @@ func TestWithAttachesToOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" IN ($1, $2, $3, $4) ORDER BY "id"`; e.Log[1] != want {
+	if want := `SELECT "id", "invoice_id", "sku", "qty" FROM "items" WHERE "invoice_id" = ANY($1) ORDER BY "id"`; e.Log[1] != want {
 		t.Errorf("\n got %s\nwant %s", e.Log[1], want)
 	}
 	skus := func(i int) []string {
@@ -72,7 +72,7 @@ func TestWithBelongsToSharesAndSkipsNil(t *testing.T) {
 	if !okA || !okB || a == nil || a != b || a.ID != 1 {
 		t.Errorf("%v %v %v %v", a, b, okA, okB)
 	}
-	if !strings.Contains(e.Log[1], `WHERE "id" IN ($1)`) {
+	if !strings.Contains(e.Log[1], `WHERE "id" = ANY($1)`) {
 		t.Errorf("keys not deduplicated: %s", e.Log[1])
 	}
 }
@@ -351,7 +351,7 @@ func TestWithMixedNilKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(e.Log[1], `WHERE "id" IN ($1)`) || !reflect.DeepEqual(e.Args, []any{int64(1)}) {
+	if !strings.Contains(e.Log[1], `WHERE "id" = ANY($1)`) || !reflect.DeepEqual(e.Args, []any{"{1}"}) {
 		t.Errorf("one key expected: %s %v", e.Log[1], e.Args)
 	}
 	if p, loaded := ss[0].Edges.Parent.Get(); !loaded || p != nil {

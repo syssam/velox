@@ -32,8 +32,8 @@ func TestCacheRendersLikeRender(t *testing.T) {
 
 func TestCacheKeepsShapesApart(t *testing.T) {
 	var c engine.RenderCache
-	one, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(1)))
-	two, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(1, 2)))
+	one, _ := cachedRender(&c, velox.SQLite, stmt(hID.In(1)))
+	two, _ := cachedRender(&c, velox.SQLite, stmt(hID.In(1, 2)))
 	if one == two {
 		t.Error("In lists of different lengths share SQL")
 	}
@@ -102,14 +102,14 @@ func TestCacheKeepsNilApartFromAValue(t *testing.T) {
 // TestCacheIsSafeForConcurrentUse is Review Focus 5; run it with -race.
 func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 	var c engine.RenderCache
-	want := `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND "number" IN ($2, $3)`
+	want := `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND "number" = ANY($2)`
 	var wg sync.WaitGroup
 	for g := range 8 {
 		wg.Go(func() {
 			for i := range 200 {
 				v := int64(g*1000 + i)
 				text, args := cachedRender(&c, velox.Postgres, stmt(hOrg.EQ(v), hNumber.In("a", "b")))
-				if text != want || args[0] != v || args[2] != "b" {
+				if text != want || args[0] != v || args[1] != `{"a","b"}` {
 					t.Errorf("goroutine %d: %s %v", g, text, args)
 					return
 				}
@@ -120,7 +120,7 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 }
 
 // TestCacheEvicts: a full cache stays within its bound and keeps adding
-// shapes, replacing others at random: the newest shape is always held, where
+// shapes (In lists of SQLite, whose lengths are shapes), replacing others at random: the newest shape is always held, where
 // a cache that stopped growing would render it, and every later one, each
 // time.
 func TestCacheEvicts(t *testing.T) {
@@ -128,11 +128,11 @@ func TestCacheEvicts(t *testing.T) {
 	var buf [256]byte
 	for n := 1; n <= 1024; n *= 2 { // 11 shapes
 		vs := make([]int64, n)
-		want, _ := render(velox.Postgres, stmt(hID.In(vs...)))
-		if got, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(vs...))); got != want {
+		want, _ := render(velox.SQLite, stmt(hID.In(vs...)))
+		if got, _ := cachedRender(&c, velox.SQLite, stmt(hID.In(vs...))); got != want {
 			t.Fatalf("n=%d: %s", n, got)
 		}
-		if _, ok := c.M[invInfo][string(engine.ShapeKey(buf[:0], velox.Postgres, stmt(hID.In(vs...))))]; !ok {
+		if _, ok := c.M[invInfo][string(engine.ShapeKey(buf[:0], velox.SQLite, stmt(hID.In(vs...))))]; !ok {
 			t.Errorf("n=%d: the newest shape is not held", n)
 		}
 		held := 0
@@ -247,8 +247,9 @@ func TestCacheBoundedInBytes(t *testing.T) {
 	}
 }
 
-// inShape is a SELECT whose In list has n values: each length inLen pads
-// to is a shape of its own, so n = 1, 2, 4, 8… are each one.
+// inShape is a SELECT whose In list has n values: on MySQL and SQLite, each
+// length inLen pads to is a shape of its own, so n = 1, 2, 4, 8… are each
+// one.
 func inShape(n int) *velox.Statement {
 	vs := make([]any, n)
 	for i := range vs {
@@ -264,7 +265,7 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	const shapes = 11 // 1, 2, 4, … 1024
 	var c engine.RenderCache
 	for n := 1; n <= 1024; n++ {
-		cachedRender(&c, velox.Postgres, inShape(n))
+		cachedRender(&c, velox.SQLite, inShape(n))
 	}
 	sum, held := 0, 0
 	for _, byKey := range c.M {
@@ -286,10 +287,10 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	// A bound one byte short evicts a shape to hold the last.
 	tight := engine.RenderCache{MaxBytes: sum - 1}
 	for n := 1; n <= 1024; n *= 2 {
-		cachedRender(&tight, velox.Postgres, inShape(n))
+		cachedRender(&tight, velox.SQLite, inShape(n))
 	}
 	var buf [256]byte
-	last := engine.ShapeKey(buf[:0], velox.Postgres, inShape(1024))
+	last := engine.ShapeKey(buf[:0], velox.SQLite, inShape(1024))
 	if _, ok := tight.M[invInfo][string(last)]; !ok {
 		t.Error("the last shape is not held")
 	}
@@ -298,7 +299,7 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	}
 	// A shape larger than the bound is not held.
 	small := engine.RenderCache{MaxBytes: 8}
-	cachedRender(&small, velox.Postgres, inShape(1))
+	cachedRender(&small, velox.SQLite, inShape(1))
 	if small.Size() != 0 || small.Bytes != 0 {
 		t.Errorf("a cache of 8 bytes holds %d shapes, %d bytes", small.Size(), small.Bytes)
 	}
