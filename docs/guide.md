@@ -589,6 +589,21 @@ adds `IsNull`, `NotNull` and `SetNull`. An Other field is a number when its
 `SchemaType` names `numeric` or `decimal` (MySQL also `dec` and `fixed`) for
 every dialect it lists.
 
+SQLite has no decimal type. Its NUMERIC column stores a whole number as an
+INTEGER and any other decimal as the nearest double, which keeps 15
+significant digits. velox makes the rest behave as on PostgreSQL and MySQL:
+
+- `Sum`, `Avg`, `SumBy`, `AvgBy` and a decimal column's `Sum()` and `Avg()`
+  terms are rounded to 15 significant digits. So 0.1 + 0.2 is 0.3, not
+  0.30000000000000004. A sum of whole numbers stays an exact integer. A sum
+  that needs more than 15 digits is not exact.
+- In an `Expr`, `Calc` or `SetExpr`, a value of a decimal column's Go type,
+  such as a `decimal.Decimal`, is bound as a number. It compares with an
+  aggregate or an arithmetic expression as a number, so
+  `velox.Expr[E]("? > ?", X.Amount.Sum(), decimal.NewFromInt(1))` holds for
+  the groups it should. The type must be that of a decimal column of the
+  query's entity.
+
 ### Every read needs a Limit
 
 A query that reads rows must say how many it may read. Without `Limit`,

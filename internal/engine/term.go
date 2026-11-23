@@ -349,18 +349,11 @@ func (w *writer) term(t Term) {
 		}
 		w.jsonValue(t.col, *t.path)
 	case termAgg:
-		w.str(termFnSQL[t.fn])
-		w.str("(")
-		switch t.fn {
-		case TermCountAll:
-			w.str("*")
-		default:
-			if t.fn == TermCountDistinct {
-				w.str("DISTINCT ")
-			}
-			w.term(*t.of)
+		if t.of != nil && t.of.kind == termColumn && decimalAgg(w.d, w.in, t.fn == TermSum || t.fn == TermAvg, t.of.col) {
+			w.sqliteDecimalAgg(func() { w.aggTerm(t) })
+			return
 		}
-		w.str(")")
+		w.aggTerm(t)
 	case termRel:
 		w.relTerm(t)
 	case termDate:
@@ -370,6 +363,22 @@ func (w *writer) term(t Term) {
 	default:
 		w.fail(t.problem())
 	}
+}
+
+// aggTerm writes the termAgg t as FN(x).
+func (w *writer) aggTerm(t Term) {
+	w.str(termFnSQL[t.fn])
+	w.str("(")
+	switch t.fn {
+	case TermCountAll:
+		w.str("*")
+	default:
+		if t.fn == TermCountDistinct {
+			w.str("DISTINCT ")
+		}
+		w.term(*t.of)
+	}
+	w.str(")")
 }
 
 // relTerm writes the termRel t: a subquery on the relation's target, aliased

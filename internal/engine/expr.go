@@ -298,7 +298,7 @@ func (w *writer) exprBody(d *exprData) {
 			}
 			w.predCol(s.Col)
 		default:
-			w.arg(d.args[next])
+			w.arg(w.exprArg(d.args[next]))
 			next++
 		}
 	}

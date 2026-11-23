@@ -112,3 +112,126 @@ func TestDecimalNumberCol(t *testing.T) {
 		wantDec(t, "Add of 18 digits", got.Amount, "12345678901234.5679")
 	})
 }
+
+// TestDecimalSumExact: the sum and average of a decimal column are the
+// decimal ones on every dialect. SQLite stores such a value as a REAL and
+// sums in floating point, where 0.1 + 0.2 is 0.30000000000000004; velox
+// rounds its sum and average of a decimal column to 15 significant digits,
+// the digits a double keeps of any decimal, so they come back 0.3 and 0.15,
+// in Sum, SumBy, Avg, a projection's term and a HAVING that compares them.
+func TestDecimalSumExact(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		tg.exec(t, "DROP TABLE IF EXISTS ledgers")
+		tg.exec(t, ledgerDDL(tg.d))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS ledgers") })
+
+		L := testmodel.Ledgers
+		one := testmodel.Dec("1")
+		rows := []testmodel.Ledger{{Amount: "0.1", Fee: &one}, {Amount: "0.2", Fee: &one}, {Amount: "7"}, {Amount: "8"}}
+		if err := tg.db.InsertAll(rows).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		small := tg.db.Query[testmodel.Ledger]().Where(L.Amount.LT("1"))
+		sum, err := velox.Sum(ctx, small, L.Amount)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantDec(t, "Sum", sum, "0.3")
+		if avg, ok, err := velox.Avg(ctx, small, L.Amount); err != nil || !ok || avg != 0.15 {
+			t.Errorf("Avg: %v, %v, %v", avg, ok, err)
+		}
+		// A sum of integers stays an exact integer.
+		ints, err := velox.Sum(ctx, tg.db.Query[testmodel.Ledger]().Where(L.Amount.GT("1")), L.Amount)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantDec(t, "Sum of integers", ints, "15")
+
+		groups, err := velox.SumBy(ctx, tg.db.Query[testmodel.Ledger]().AllowUnbounded(), L.Fee.Key(), L.Amount)
+		if err != nil || len(groups) != 2 || groups[0].Key == nil || groups[1].Key != nil {
+			t.Fatalf("SumBy: %v %v", groups, err)
+		}
+		wantDec(t, "SumBy", groups[0].Value, "0.3")
+		wantDec(t, "SumBy of integers", groups[1].Value, "15")
+
+		// A projection's term, and a HAVING comparing it.
+		terms := func(h ...velox.Pred[testmodel.Ledger]) []testmodel.Dec {
+			t.Helper()
+			var out []testmodel.Dec
+			for r, err := range small.Select(L.Amount.Sum()).GroupBy(L.Fee).Having(h...).Limit(5).Rows(ctx) {
+				if err != nil {
+					t.Fatal(err)
+				}
+				var d testmodel.Dec
+				if err := r.Scan(&d); err != nil {
+					t.Fatal(err)
+				}
+				out = append(out, d)
+			}
+			return out
+		}
+		if out := terms(); len(out) != 1 {
+			t.Errorf("Sum term: %q", out)
+		} else {
+			wantDec(t, "Sum term", out[0], "0.3")
+		}
+		if out := terms(velox.Expr[testmodel.Ledger]("? = ?", L.Amount.Sum(), testmodel.Dec("0.3"))); len(out) != 1 {
+			t.Errorf("HAVING SUM = 0.3: %q", out)
+		}
+	})
+}
+
+// TestDecimalExprArgument: a decimal value bound in an Expr compares with
+// an aggregate as a number. SQLite binds a decimal.Decimal, a Valuer of
+// text, as TEXT, and an aggregate has no affinity to convert it, so
+// SUM(x) > '1' was false for every group; velox binds a value of a decimal
+// column's Go type in an Expr as the number it writes there.
+func TestDecimalExprArgument(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		tg.exec(t, "DROP TABLE IF EXISTS ledgers")
+		tg.exec(t, ledgerDDL(tg.d))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS ledgers") })
+
+		L := testmodel.Ledgers
+		if err := tg.db.InsertAll([]testmodel.Ledger{{Amount: "1.25"}, {Amount: "100.5"}}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		groups := func(text string, arg any) int {
+			t.Helper()
+			n := 0
+			for _, err := range tg.db.Query[testmodel.Ledger]().Select(L.Amount.Sum()).GroupBy(L.ID).
+				Having(velox.Expr[testmodel.Ledger](text, L.Amount.Sum(), arg)).Limit(5).Rows(ctx) {
+				if err != nil {
+					t.Fatal(err)
+				}
+				n++
+			}
+			return n
+		}
+		for _, c := range []struct {
+			text string
+			arg  any
+			want int
+		}{
+			{"? > ?", testmodel.Dec("10"), 1},
+			{"? > ?", testmodel.Dec("1.2"), 2},
+			{"? < ?", testmodel.Dec("100.6"), 2},
+			{"? = ?", testmodel.Dec("1.25"), 1},
+			{"? > ?", 10, 1},
+		} {
+			if n := groups(c.text, c.arg); n != c.want {
+				t.Errorf("%s with %v: %d groups, want %d", c.text, c.arg, n, c.want)
+			}
+		}
+		// An Expr on the column itself, and the handle's own comparison.
+		for i, p := range []velox.Pred[testmodel.Ledger]{
+			velox.Expr[testmodel.Ledger]("? > ?", L.Amount, testmodel.Dec("10")),
+			velox.Expr[testmodel.Ledger]("? * 2 > ?", L.Amount, testmodel.Dec("200")),
+			L.Amount.GT("10"),
+		} {
+			if c, err := tg.db.Query[testmodel.Ledger]().Where(p).Count(ctx); err != nil || c != 1 {
+				t.Errorf("Where %d: %d %v", i, c, err)
+			}
+		}
+	})
+}

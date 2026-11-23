@@ -182,14 +182,22 @@ func (w *writer) selectStmt(st *Statement) {
 	case st.Exists:
 		w.str("1")
 	case st.Aggregate != 0:
-		w.str(aggregateSQL[st.Aggregate])
-		w.str("(")
 		if len(st.Columns) != 1 {
 			w.fail(fmt.Errorf("velox: %s: an aggregate reads one column, not %d", w.in.Name, len(st.Columns)))
-		} else {
-			w.col(int32(st.Columns[0]))
+			break
 		}
-		w.str(")")
+		c := int32(st.Columns[0])
+		agg := func() {
+			w.str(aggregateSQL[st.Aggregate])
+			w.str("(")
+			w.col(c)
+			w.str(")")
+		}
+		if decimalAgg(w.d, w.in, st.Aggregate == AggregateSum || st.Aggregate == AggregateAvg, c) {
+			w.sqliteDecimalAgg(agg)
+		} else {
+			agg()
+		}
 	default:
 		if st.Distinct {
 			w.str("DISTINCT ")

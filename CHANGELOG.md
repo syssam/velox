@@ -1428,6 +1428,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- sqlite: the sum and average of a decimal column are rounded to 15
+  significant digits, the digits SQLite stores of a decimal, so 0.1 + 0.2
+  is 0.3 in `Sum`, `SumBy`, `Avg` and a `Sum()` term, not
+  0.30000000000000004; a sum of integers stays exact (ADR 0126).
+- sqlite: a value of a decimal column's Go type, such as a
+  `decimal.Decimal`, bound in an `Expr`, `Calc` or `SetExpr` is a number,
+  so `Expr("? > ?", X.Amount.Sum(), decimal.NewFromInt(1))` compares as
+  one; it was text, false for every group (ADR 0126).
 - An insert's `SetNull()` of a nullable column with a default stores
   NULL. Before, the insert left the nil column out and the column's
   `DEFAULT` (a constant `Default`'s, or a declared one) was stored. A nil

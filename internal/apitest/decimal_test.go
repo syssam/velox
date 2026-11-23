@@ -38,6 +38,86 @@ func TestDecimalAddSQL(t *testing.T) {
 	}
 }
 
+// TestDecimalSQLiteSQL: on SQLite the SUM and AVG of a decimal column are
+// rounded to 15 significant digits when they are a REAL, in Sum, SumBy and a
+// term, and a value of the column's Go type bound in an Expr is the number
+// SQLite's NUMERIC affinity would store. PostgreSQL and MySQL send what they
+// always sent.
+func TestDecimalSQLiteSQL(t *testing.T) {
+	L := testmodel.Ledgers
+	const sum = `CASE WHEN typeof(SUM("amount")) = 'real' THEN CAST(printf('%!.15g', SUM("amount")) AS REAL) ELSE SUM("amount") END`
+	for _, c := range []struct {
+		d    velox.Dialect
+		want []string
+		args []any
+	}{
+		{velox.SQLite, []string{
+			`SELECT ` + sum + ` FROM "ledgers"`,
+			`SELECT CASE WHEN typeof(AVG("amount")) = 'real' THEN CAST(printf('%!.15g', AVG("amount")) AS REAL) ELSE AVG("amount") END FROM "ledgers"`,
+			`SELECT "id", ` + sum + ` FROM "ledgers" GROUP BY "id" ORDER BY "id"`,
+			`SELECT ` + sum + `, SUM("id"), MIN("amount") FROM "ledgers" GROUP BY "fee" HAVING (` + sum + ` > ?) AND ("amount" * 2 > ?) AND ("fee" = ?) LIMIT 5`,
+		}, []any{int64(10), 1.5, "x"}},
+		{velox.Postgres, []string{
+			`SELECT SUM("amount") FROM "ledgers"`,
+			`SELECT AVG("amount") FROM "ledgers"`,
+			`SELECT "id", SUM("amount") FROM "ledgers" GROUP BY "id" ORDER BY "id"`,
+			`SELECT SUM("amount"), SUM("id"), MIN("amount") FROM "ledgers" GROUP BY "fee" HAVING (SUM("amount") > $1) AND ("amount" * 2 > $2) AND ("fee" = $3) LIMIT 5`,
+		}, []any{testmodel.Dec("10"), testmodel.Dec("1.5"), "x"}},
+	} {
+		t.Run(c.d.String(), func(t *testing.T) {
+			e := &fakeconn.Exec{}
+			db := openFake(c.d, e)
+			q := db.Query[testmodel.Ledger]()
+			if _, err := velox.Sum(ctx, q, L.Amount); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := velox.Avg(ctx, q, L.Amount); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := velox.SumBy(ctx, q.AllowUnbounded(), L.ID.Key(), L.Amount); err != nil {
+				t.Fatal(err)
+			}
+			for _, err := range q.Select(L.Amount.Sum(), L.ID.Sum(), L.Amount.Min()).GroupBy(L.Fee).Having(
+				velox.Expr[testmodel.Ledger]("? > ?", L.Amount.Sum(), testmodel.Dec("10")),
+				velox.Expr[testmodel.Ledger]("? * 2 > ?", L.Amount, testmodel.Dec("1.5")),
+				// A string is no decimal column's type: bound as it is.
+				velox.Expr[testmodel.Ledger]("? = ?", L.Fee, "x"),
+			).Limit(5).Rows(ctx) {
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			wantLog(t, e, c.want)
+			if !reflect.DeepEqual(e.Args, c.args) {
+				t.Errorf("args %#v, want %#v", e.Args, c.args)
+			}
+		})
+	}
+}
+
+// TestSQLiteNumber: the decimal text SQLite would store as an INTEGER is an
+// int64, other numbers' text a float64, and anything else is left as it is.
+func TestSQLiteNumber(t *testing.T) {
+	for _, c := range []struct {
+		in   testmodel.Dec
+		want any
+	}{
+		{"10", int64(10)}, {"-3", int64(-3)}, {"1.5", 1.5}, {"-0.25", -0.25}, {"1e3", 1000.0}, {".5", 0.5},
+		{"12345678901234567890", 12345678901234567890.0},
+		{"abc", testmodel.Dec("abc")}, {"0x10", testmodel.Dec("0x10")}, {"Inf", testmodel.Dec("Inf")},
+		{"NaN", testmodel.Dec("NaN")}, {"1e", testmodel.Dec("1e")}, {"1_0", testmodel.Dec("1_0")}, {"", testmodel.Dec("")},
+	} {
+		e := &fakeconn.Exec{}
+		db := openFake(velox.SQLite, e)
+		if _, err := db.Query[testmodel.Ledger]().Where(velox.Expr[testmodel.Ledger]("? = ?", testmodel.Ledgers.Amount, c.in)).Count(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if len(e.Args) != 1 || e.Args[0] != c.want {
+			t.Errorf("%q: %#v, want %#v", c.in, e.Args, c.want)
+		}
+	}
+}
+
 // A Decimal MySQL's decimal cannot hold is refused with the descriptor.
 func TestDecimalDescriptorRefused(t *testing.T) {
 	for _, dec := range [][2]uint8{{0, 2}, {66, 2}, {40, 31}, {4, 5}} {
