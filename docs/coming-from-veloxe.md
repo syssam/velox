@@ -71,7 +71,8 @@ go tool velox-gen -out ./velox \
 
 Under `engine=graphql-go`, the generated code serves graphql-go through
 `veloxgql/graphqlgo`: `graphqlgo.With(db)` as an executor option,
-`graphqlgo.Scalars()` and `graphqlgo.ErrorPresenter`.
+`graphqlgo.Scalars()` and `graphqlgo.ErrorPresenter`. veloxe's `Paginate` ran in any context;
+velox's runs outside a request only under `veloxgql.Service(ctx, db)`.
 
 ### generate.go
 

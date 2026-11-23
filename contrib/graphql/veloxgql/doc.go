@@ -22,6 +22,15 @@
 // made fails with ErrNoSelectionSource, and ErrNoDB: it never falls back to
 // reading every column and batching nothing.
 //
+// Outside a request, a service asks for that fallback with Service (or
+// ServiceWithLimits): its context holds the DB, the limits and a source
+// that selects nothing, so generated code there reads every column, and
+// each edge alone. A service's list method, a call from another service
+// and a test page through it:
+//
+//	ctx = veloxgql.Service(ctx, db)
+//	conn, err := db.Query[veloxgen.Post]().Paginate(ctx, nil, &first, nil, nil)
+//
 // # IDs
 //
 // A GraphQL ID is the entity's primary key, in the key's own Go type, as in
@@ -44,8 +53,10 @@
 // Generated code runs its queries on the DB that DBFromContext reads from the
 // request's context, where the adapter puts it with the limits for every
 // operation; LimitsFromContext reads those. gqlgenx.Extension runs a
-// mutation operation in one transaction, and its NewContext puts the DB in a
-// context for generated code called outside a server, in a job or a test.
+// mutation operation in one transaction. Outside a server, in a job, a
+// service or a test, Service puts the DB in a context for generated code,
+// whichever engine serves the schema; gqlgenx.Extension's NewContext does
+// so with the extension's limits.
 //
 // # Cursors
 //

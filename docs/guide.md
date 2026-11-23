@@ -2034,7 +2034,10 @@ runtime `veloxgql` and its package `gqlgraph`; gqlgen's adapter is
 a request's size, depth and cost, and `gqlgenx.ErrorPresenter` keeps
 database and velox error text away from clients. A connection or an edge
 read in a context no adapter made fails with
-`veloxgql.ErrNoSelectionSource`. GraphQL reads and
+`veloxgql.ErrNoSelectionSource`. A service that pages outside a request,
+in its own list method, a call from another service or a test, asks for
+it with `ctx = veloxgql.Service(ctx, db)`: there generated code reads
+every column, and each edge one row at a time. GraphQL reads and
 writes run through the same velox runtime, so policies and scopes apply to
 them too. The
 [graphql example](../examples/graphql) is a complete server, and its README

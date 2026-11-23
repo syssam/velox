@@ -17,13 +17,14 @@ func selected(ctx context.Context, typ string) (fields []string, ok bool) {
 }
 
 // needSource fails with veloxgql.ErrNoSelectionSource, and ErrNoDB, when ctx
-// holds no adapter's state: a read of generated code outside an adapter's
-// operation would read every column and batch nothing, so it fails instead.
+// holds no adapter's state and no veloxgql.Service's: a read of generated
+// code outside an operation would read every column and batch nothing, so
+// it fails unless the caller asked for that.
 func needSource(ctx context.Context) error {
 	if gqlcore.Source(ctx) != nil {
 		return nil
 	}
-	return fmt.Errorf("veloxgql: %w, and %w: serve the schema through gqlgenx.NewExtension or graphqlgo.With, which puts both in each request's context", veloxgql.ErrNoDB, veloxgql.ErrNoSelectionSource)
+	return fmt.Errorf("veloxgql: %w, and %w: serve the schema through gqlgenx.NewExtension or graphqlgo.With, which puts both in each request's context, or, outside a request, call veloxgql.Service", veloxgql.ErrNoDB, veloxgql.ErrNoSelectionSource)
 }
 
 // narrow returns q reading only those of cols, column indexes, that q

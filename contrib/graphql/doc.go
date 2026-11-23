@@ -505,6 +505,11 @@
 // subscription's event starts new ones, and outside a gqlgen field there is no
 // batch, so a row read alone resolves its edges one row at a time.
 //
+// Outside any request, generated code reads only in a context
+// veloxgql.Service(ctx, db) made, for a service's own list methods, calls
+// between services and tests; there it reads every column, and each edge
+// one row at a time. Elsewhere it fails with veloxgql.ErrNoSelectionSource.
+//
 // A generated many-to-many edge reads the join table inside the target's
 // statement, so the join entity's hooks and policy do not see the edge's
 // reads.

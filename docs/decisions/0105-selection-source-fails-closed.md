@@ -1,6 +1,7 @@
 # 105. The selection source, fail closed
 
-Status: accepted, 2026-11-22.
+Status: accepted, 2026-11-22. Amended by 0121: `veloxgql.Service` is the
+explicit way in for a service outside a request.
 
 ## Context
 

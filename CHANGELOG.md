@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- veloxgql: `Service(ctx, db)` and `ServiceWithLimits(ctx, db, l)` let a
+  service page through generated code outside a GraphQL request:
+  `Paginate`, edge connections, `EdgeOne` and `EdgeList` read every column,
+  each edge alone. Without it, or an adapter, they still fail with
+  `ErrNoSelectionSource`, whose text now names `Service` (ADR 0121).
 - insert: `UpdateSet(setters...)` gives an upsert's update branch `Set`,
   `SetNull`, `Add`, `Sub` and `SetExpr`, and `velox.Excluded(c)` names the
   inserted row in it; `UpdateWhere`, `OnConflictWhere` (a partial index) and

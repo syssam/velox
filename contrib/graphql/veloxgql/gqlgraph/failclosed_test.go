@@ -16,7 +16,8 @@ import (
 // ErrNoSelectionSource, and ErrNoDB, in a context no adapter made, and sends
 // no statement: a connection of a query, though the query has its own DB,
 // a connection of an edge, a to-one edge and a list edge. Nothing falls
-// back to reading every column alone. A context an adapter made reads.
+// back to reading every column alone. A context an adapter made reads, and
+// so does one veloxgql.Service made.
 func TestNoSelectionSource(t *testing.T) {
 	db, _, log := edgeDB(t)
 	bare := context.Background()
@@ -49,6 +50,7 @@ func TestNoSelectionSource(t *testing.T) {
 		},
 	}
 	adapted := gqlgenx.NewExtension(db).NewContext(bare)
+	service := veloxgql.Service(bare, db)
 	for name, read := range reads {
 		log.take("")
 		err := read(bare)
@@ -60,6 +62,9 @@ func TestNoSelectionSource(t *testing.T) {
 		}
 		if err := read(adapted); err != nil {
 			t.Errorf("%s in an adapter's context: %v", name, err)
+		}
+		if err := read(service); err != nil {
+			t.Errorf("%s in veloxgql.Service's context: %v", name, err)
 		}
 	}
 }

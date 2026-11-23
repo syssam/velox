@@ -1705,6 +1705,8 @@ func DefaultLimits() Limits
 func EncodeCursor(c Cursor) (string, error)
 func LimitsFromContext(ctx context.Context) Limits
 func Present(err error) (code, msg string)
+func Service(ctx context.Context, db *velox.DB) context.Context
+func ServiceWithLimits(ctx context.Context, db *velox.DB, l Limits) context.Context
 type Bytes []byte
 type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }

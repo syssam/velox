@@ -65,6 +65,8 @@ var publicAPI = []string{
 	"OrderDirectionDesc",
 	"PageInfo",
 	"Present",
+	"Service",
+	"ServiceWithLimits",
 	"Time",
 	"Time.MarshalGQL",
 	"Time.UnmarshalGQL",
