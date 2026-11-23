@@ -125,23 +125,21 @@ func newTyped[B, V any](c *common[B]) typed[B, V] { return typed[B, V]{c: c} }
 
 // Default sets the value a new row gets when the field is not set. It never
 // changes the Go type. A field that is not a pointer is unset when it holds its
-// zero value, so velox-gen refuses a Default on a bool or number that is not
-// Nillable, which could then never store false or 0, unless the Default is the
-// zero value itself, as Default(false) or Default(0): make the field Nillable,
-// or give it a zero Default, or drop it. A number whose built-in checks refuse
-// 0 (Positive, Negative, a Min above 0, a Max below 0, a Range that excludes
-// it) may have any Default: it could not store 0 anyway, so reading 0 as unset
-// loses nothing, as in field.Int("seats").Positive().Default(100). A bool is
-// refused whatever its checks. On a string that is not Nillable, "" is unset and takes
-// the Default: Insert cannot store it, though Update can. A Default that the
-// field's own built-in checks refuse is an error: every row that left the field
-// unset would fail to insert. A custom validator is not called on it.
+// zero value, so a struct's false, 0 or "" takes the Default. An insert fills
+// the Default before its setters and hooks, so a setter's zero is stored over
+// it, as in Insert(&x).Set(Xs.Active.Set(false)), unless the field also has
+// a database default (sqlschema.Default), to which an insert leaves every
+// zero; velox-gen warns of that when the default is not zero. A constant
+// Default of a bool, number, string or enum is also the column's DEFAULT. A
+// Default that the field's own built-in checks refuse is an error: every row
+// that left the field unset would fail to insert. A custom validator is not
+// called on it.
 func (t typed[B, V]) Default(v V) B { t.c.d.Default = v; return t.c.self }
 
 // DefaultFunc sets a func() returning the field's Go type, called when a new
 // row does not set the field. As with Default, a field that is not a pointer
-// is unset when it holds its zero value, so velox-gen refuses a DefaultFunc on
-// a bool or number that is not Nillable.
+// is unset when it holds its zero value, and a setter's zero is stored over
+// it.
 func (t typed[B, V]) DefaultFunc(fn any) B { t.c.d.DefaultFunc = fn; return t.c.self }
 
 // UpdateDefault sets a func() returning the field's Go type, called on every

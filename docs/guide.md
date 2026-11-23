@@ -164,12 +164,23 @@ A zero left to the database skips the field's validators, so an enum whose
 zero, `""`, is none of its values inserts and stores its default. A value
 given is validated, and so is a column an upsert's conflict clause writes.
 
-To store the zero itself in such a column, make the field Nillable and set a
-pointer to the zero: a non-nil value is always written. velox-gen warns of a
-field that is not Nillable whose database default is a non-zero literal,
-such as `field.Bool("active").Annotations(sqlschema.Default("true"))`: no `Insert`
-can store its `false`, a setter's included. A decimal Other field with a
-non-zero default, such as `"1.00"`, is warned of the same way.
+velox-gen warns of a field that is not Nillable whose database default is a
+non-zero literal, such as
+`field.Bool("active").Annotations(sqlschema.Default("true"))`: "the zero
+value cannot be stored through Insert". No `Insert` stores its `false`. A
+setter's zero is left to the database too, since velox reads the value, not
+who set it. A Go `Default` beside the database default does not change
+that. A decimal Other field with a non-zero default, such as an
+exchange rate's `"1"`, is warned of the same way. To store the zero:
+
+- Insert, then update. `Update` writes every value it sets, the zero
+  included:
+  `db.Update[veloxgen.Order]().Where(O.ID.EQ(o.ID)).Set(O.Rate.Set(r)).Exec(ctx)`.
+- Make the field Nillable and set a pointer to the zero: a non-nil value is
+  always written. The column becomes NULL-able.
+- Drop the database default and keep a Go `Default`. Then a setter's zero is
+  stored over it, as in the table above. A constant `Default` of a bool,
+  number, string or enum is still the column's `DEFAULT`.
 
 The zero is the Go zero value, as `reflect.Value.IsZero` sees it. So
 `decimal.Decimal{}` is left to the default, while a decimal zero that holds
@@ -1085,6 +1096,49 @@ columns, written as `Expr`'s text is, and keeps the policies:
 `UpdateQuery.One(ctx)` updates exactly one row and returns it, read back by
 its key ([ADR 0048](decisions/0048-update-one.md)).
 
+### One row by key
+
+A row is named by its key column's handle, `I.ID.EQ(id)`, whether the key is
+an int64 or a UUID. `One` on each builder then works on exactly one row:
+
+```go
+inv, err := db.Query[veloxgen.Invoice]().Where(I.ID.EQ(id)).One(ctx)            // ent: Get(ctx, id)
+inv, err = db.Update[veloxgen.Invoice]().Where(I.ID.EQ(id)).
+	Set(I.Customer.Set("Initech"), I.Status.Set(veloxgen.InvoiceStatusSent)).One(ctx) // ent: UpdateOneID(id).SetX().Save(ctx)
+err = db.Delete[veloxgen.Invoice]().Where(I.ID.EQ(id)).One(ctx)                     // ent: DeleteOneID(id).Exec(ctx)
+```
+
+ent's `ClearX()` is `X.SetNull()` on a Nillable field's handle.
+
+Each fails with an error that matches `velox.ErrNotFound`
+(`velox.IsNotFound`) when no row has the key. A row the policies or an
+interceptor hide is not found either, a soft-deleted one included: each
+runs the statement `Where(I.ID.EQ(id))` would run with `All` or `Exec`.
+
+- `Query.One` reads with `LIMIT 2`, so a condition that matches more rows
+  fails with `ErrNotSingular`.
+- `UpdateQuery.One` by key sends the UPDATE and reads the row back, in one
+  transaction ([ADR 0092](decisions/0092-update-one-by-key.md)). It returns
+  the row as written.
+- `DeleteQuery.One` by key is one DELETE. When its conditions do not pin the
+  key, it runs in a transaction, a savepoint inside one, and rolls back with
+  `ErrNotSingular` when more than one row matches. A hook that skips the
+  delete without `SetAffected` makes it not found
+  ([ADR 0121](decisions/0121-one-row-by-key.md)).
+
+For an entity you already hold, `Save` writes the columns you name by its
+key, and is also `ErrNotFound` when the row is gone
+([Save](#save)). ent's `UpdateOneID(id).SetA(a).ClearB().Save(ctx)` is
+either `Update…One` above, or, with the entity in hand:
+
+```go
+inv.Customer, inv.Status = "Initech", veloxgen.InvoiceStatusSent
+err := db.Save(&inv, I.Customer, I.Status).Exec(ctx)
+```
+
+`Save` writes the struct's values, so a nil pointer field writes NULL: that
+is ent's `ClearX()`. It returns no row; the struct holds what was written.
+
 ### Optional values and UpdateDefault
 
 Every handle with `Set` has `SetPtr(p)`, ent's `SetNillableX`. A nil `p`
@@ -1850,7 +1904,7 @@ transaction's own writes. `velox.Pool(db)` is nil on a transaction's DB.
 `ForUpdate()` and `ForShare()` lock the rows a query reads until the
 transaction ends; `SkipLocked()` and `NoWait()` change what happens when
 another transaction holds a row. Locking reads run inside `Tx` only, on
-PostgreSQL and MySQL. A job queue, for a `Job` entity with a `state` enum,
+PostgreSQL and MySQL, and on SQLite under the option below. A job queue, for a `Job` entity with a `state` enum,
 looks like this:
 
 ```go
@@ -1869,6 +1923,31 @@ err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 
 On MySQL a locking read locks every row it scans, so give its filter an
 index.
+
+SQLite has no row locks, and a locking read there fails by default. The
+option `velox.WithSQLiteLockingReads()` runs it without the lock clause, as
+ent does, so code written for PostgreSQL runs on SQLite in tests. Every
+other check still holds: the read needs a `Tx`, and `Count` cannot lock.
+`SkipLocked` then skips nothing, and `NoWait` does not stop a wait.
+
+What stands in for the lock is SQLite's one writer at a time
+([ADR 0122](decisions/0122-sqlite-locking-reads-opt-in.md)):
+
+- On `velox.Connect`'s one connection, transactions in the process take
+  turns, so a read-modify-write is never interleaved.
+- On several connections, or several processes, a `Tx` begins DEFERRED, as
+  the driver's plain `BEGIN` does: it takes the write lock at its first
+  write. Two transactions can read the same row. When one has written it,
+  the other's write fails with SQLITE_BUSY. No update is lost, and
+  `velox.TxRetrySerializable(n)` runs the loser again.
+- With `_txlock=immediate` in the DSN, every `Tx` takes the write lock at
+  its `BEGIN`. A second one waits, up to the busy timeout, and then reads
+  what the first wrote, as it would behind a row lock.
+
+```go
+db, err := velox.Connect("sqlite", "app.db?_txlock=immediate&_pragma=busy_timeout(5000)",
+	velox.WithSQLiteLockingReads())
+```
 
 ## Deadlines
 

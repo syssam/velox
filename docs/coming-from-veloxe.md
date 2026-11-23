@@ -180,6 +180,8 @@ veloxe's own, or differ in a veloxe port:
 | `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
+| `client.User.Get(ctx, id)`, `UpdateOneID(id)…Save(ctx)`, `DeleteOneID(id).Exec(ctx)` | `Where(U.ID.EQ(id))` and `One(ctx)` on `db.Query`, `db.Update` and `db.Delete`, or `db.Save(&u, cols...)` for an entity in hand ([guide](guide.md#one-row-by-key), [ADR 0121](decisions/0121-one-row-by-key.md)) |
+| `ForUpdate()` on SQLite, which veloxe ran without the clause | the same, under the option `velox.WithSQLiteLockingReads()`; without it the read fails ([guide](guide.md#row-locks), [ADR 0122](decisions/0122-sqlite-locking-reads-opt-in.md)) |
 | `SkipDefault(user.FieldUpdatedAt)` | `KeepDefaults(U.UpdatedAt)` |
 | `SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))` |
 | the generated package's `IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` |
@@ -250,6 +252,19 @@ when that edge is loaded, with `With` on the child's query
 `UpdateDefault` fires, so `updated_at` stays. veloxe's `UpdateOne` with
 nothing set still ran its hooks and set `updated_at`
 ([ADR 0099](decisions/0099-keep-defaults-and-set-ptr.md)).
+
+**A zero over a database default needs an update.** A field such as
+`exchange_rate`, with a Go `Default` and `sqlschema.Default("1")`, makes
+velox-gen warn that "the zero value cannot be stored through Insert". An
+insert leaves the Go zero of a column with a database default to the
+database, a setter's zero included, so the row takes the default
+([ADR 0093](decisions/0093-lean-inserts.md)). To store the zero, update the row after the insert,
+make the field Nillable, or drop the database default and keep the Go
+`Default`, whose zero a setter stores
+([ADR 0082](decisions/0082-defaults-before-setters.md)). A
+`decimal.Decimal` that holds a non-nil `*big.Int`, such as `decimal.Zero`,
+is not the Go zero and is written
+([guide](guide.md#fields)).
 
 **A self one-to-one reads from the right end.** With the key on the assoc
 edge, as in `reversed_by`/`reversal_of`, the inverse edge now returns the

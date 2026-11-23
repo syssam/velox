@@ -227,7 +227,9 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Create().SetName("a").Save(ctx)` | `db.Insert(&veloxgen.User{Name: "a"}).Exec(ctx)` |
 | `client.User.Query().All(ctx)` | `db.Query[veloxgen.User]().AllowUnbounded().All(ctx)`, or with a `Limit` |
 | `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
-| `client.User.UpdateOneID(id).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3)).One(ctx)`, the row as written |
+| `client.User.Get(ctx, id)` | `db.Query[veloxgen.User]().Where(U.ID.EQ(id)).One(ctx)` |
+| `client.User.UpdateOneID(id).SetAge(3).ClearNick().Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3), U.Nick.SetNull()).One(ctx)`, the row as written; or, with the user in hand, `db.Save(&u, U.Age, U.Nick).Exec(ctx)` |
+| `client.User.DeleteOneID(id).Exec(ctx)` | `db.Delete[veloxgen.User]().Where(U.ID.EQ(id)).One(ctx)`: `ErrNotFound` when no row went (decision 0121) |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 | `client.User.Create().OnConflict(...).UpdateNewValues()` | `db.Insert(&u).OnConflict(U.Email).UpdateAll().Exec(ctx)` |
 | `.OnConflict(...).UpdateAge()`, `.AddAge(1)`, `.SetAge(3)` on the upsert | `.OnConflict(U.Email).Update(U.Age)`, `.UpdateSet(U.Age.Add(1))`, `.UpdateSet(U.Age.Set(3))` |
@@ -377,6 +379,12 @@ with the chain. A schema compiles before `veloxgen` exists, so no
 On SQLite, `velox.Connect` turns foreign keys on for every connection. A
 `*sql.DB` you pass to `velox.Open` is used as it is, so put
 `_pragma=foreign_keys(1)` in its DSN.
+
+On SQLite, `ForUpdate` and `ForShare` fail, where ent drops the clause. The
+option `velox.WithSQLiteLockingReads()` drops it as ent does. SQLite's one
+writer stands in for the lock; the guide's
+[Row locks](guide.md#row-locks) says what that guarantees under DEFERRED
+and IMMEDIATE transactions.
 
 On SQLite a time field is a `datetime(9)` column, where ent's is `datetime`.
 velox writes every time as UTC text with nine fractional digits and parses it
