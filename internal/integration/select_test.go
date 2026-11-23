@@ -62,13 +62,10 @@ func wantRows(t *testing.T, name string, got, want []string) {
 // matches a GROUP BY expression by its text, so the same term written with
 // $1 in the select list and $2 in GROUP BY failed with 42803 ("must appear
 // in the GROUP BY clause"); velox writes the repeat with the placeholders of
-// the first. MySQL is skipped: its ? cannot be repeated, and under
-// only_full_group_by its prepared statement still fails with error 1055.
+// the first. On MySQL, whose ? cannot be repeated, the copies failed with
+// error 1055 under only_full_group_by; velox writes them as ANY_VALUE.
 func TestSelectRepeatedBoundTerm(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
-		if tg.d == velox.MySQL {
-			t.Skip("MySQL still fails with 1055: ? cannot be repeated")
-		}
 		type inv = testmodel.Invoice
 		bucket := velox.Calc[inv]("? * ?", I.OrgID, 10)
 		wantRows(t, "bucket", rowsOf(t, ctx, tg.db.Query[inv]().
@@ -83,10 +80,15 @@ func TestSelectRepeatedBoundTerm(t *testing.T) {
 		wantRows(t, "other value", rowsOf(t, ctx, tg.db.Query[inv]().
 			Select(bucket, velox.CountAll[inv]()).GroupBy(bucket, other).OrderBy(bucket.Asc()).Limit(10), 2),
 			[]string{"10 4", "20 1"})
-		if tg.d != velox.Postgres {
+		var month velox.Term[inv]
+		switch tg.d {
+		case velox.Postgres:
+			month = velox.Calc[inv]("date_trunc('month', ? AT TIME ZONE ?)", I.CreatedAt, "Asia/Hong_Kong")
+		case velox.MySQL:
+			month = velox.Calc[inv]("date_format(?, ?)", I.CreatedAt, "%Y-%m")
+		default:
 			return
 		}
-		month := velox.Calc[inv]("date_trunc('month', ? AT TIME ZONE ?)", I.CreatedAt, "Asia/Hong_Kong")
 		n := 0
 		for _, err := range tg.db.Query[inv]().Select(month, velox.CountAll[inv]()).GroupBy(month).OrderBy(month.Asc()).Limit(10).Rows(ctx) {
 			if err != nil {

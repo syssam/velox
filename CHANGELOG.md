@@ -1434,6 +1434,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- mysql: a term with a bound value that is selected or ordered by and
+  repeats a GROUP BY key is written as `ANY_VALUE` of it, so
+  only_full_group_by takes it; it failed with error 1055. Under
+  `WITH ROLLUP` such a statement fails before it is sent (ADR 0129).
 - sqlite: the sum and average of a decimal column are rounded to 15
   significant digits, the digits SQLite stores of a decimal, so 0.1 + 0.2
   is 0.3 in `Sum`, `SumBy`, `Avg` and a `Sum()` term, not

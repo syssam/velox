@@ -53,6 +53,10 @@ type writer struct {
 	// one: the repeat of a span is being written.
 	spans []termSpan
 	reuse int
+	// keys is the grouped projection being written on MySQL, whose result
+	// and ordering terms that repeat a GROUP BY key are written as
+	// ANY_VALUE of it (anyKey); nil elsewhere.
+	keys *Projection
 }
 
 func (w *writer) fail(err error) {

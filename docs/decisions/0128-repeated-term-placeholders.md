@@ -1,6 +1,6 @@
 # 0128. On PostgreSQL a repeated projection term reuses its placeholders
 
-- Status: accepted, 2026-11-23.
+- Status: accepted, 2026-11-23. MySQL's case is decision 0129.
 
 ## Context
 

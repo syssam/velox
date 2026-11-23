@@ -176,8 +176,6 @@ func TestSelectRepeatedTermPlaceholders(t *testing.T) {
 	}{
 		{velox.Postgres, []velox.Selectable[inv]{velox.Rollup[inv](net, I.OrgID)},
 			`SELECT ("total" * $1), COUNT(*) FROM "invoices" GROUP BY ROLLUP(("total" * $1), "org_id") ORDER BY ("total" * $1) LIMIT 5`, 1},
-		{velox.MySQL, []velox.Selectable[inv]{velox.Rollup[inv](net, I.OrgID)},
-			"SELECT (`total` * ?), COUNT(*) FROM `invoices` GROUP BY (`total` * ?), `org_id` WITH ROLLUP ORDER BY ANY_VALUE((`total` * ?)) IS NULL, (`total` * ?) LIMIT 5", 4},
 	} {
 		text, args, err := openFake(tc.d, &fakeconn.Exec{}).Query[inv]().Select(net, velox.CountAll[inv]()).
 			GroupBy(tc.keys...).OrderBy(net.Asc()).Limit(5).SQL(ctx)
@@ -188,6 +186,84 @@ func TestSelectRepeatedTermPlaceholders(t *testing.T) {
 	text, args, err = db.Query[inv]().Select(day, velox.CountAll[inv]()).GroupBy(day).OrderBy(day.Asc()).Limit(5).SQL(ctx)
 	if err != nil || len(args) != 1 || strings.Count(text, "$1") != 3 || strings.Contains(text, "$2") {
 		t.Errorf("DateTrunc: %s %v %v", text, args, err)
+	}
+}
+
+// TestSelectRepeatedTermMySQL: on MySQL a selected or ordered term with a
+// bound value that repeats a GROUP BY key is written as ANY_VALUE of it
+// (decision 0129). MySQL's ? cannot be repeated, so the copies are other
+// expressions to only_full_group_by; ANY_VALUE of a key is the group's
+// value. A term that repeats no key, or binds nothing, is written as it is.
+func TestSelectRepeatedTermMySQL(t *testing.T) {
+	bucket := func(n int) velox.Term[inv] { return velox.Calc[inv]("? * ?", I.OrgID, n) }
+	const b = "(`org_id` * ?)"
+	for _, tc := range []struct {
+		name string
+		q    func(velox.Query[inv]) velox.Query[inv]
+		sql  string
+		n    int
+	}{
+		{"selected", func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10).As("b"), velox.CountAll[inv]()).GroupBy(bucket(10)).OrderBy(bucket(10).Desc())
+		}, "SELECT ANY_VALUE(" + b + ") AS `b`, COUNT(*) FROM `invoices` GROUP BY " + b +
+			" ORDER BY ANY_VALUE(" + b + ") IS NULL DESC, ANY_VALUE(" + b + ") DESC LIMIT 10", 4},
+		{"unselected", func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(velox.CountAll[inv]()).GroupBy(bucket(10)).OrderBy(bucket(10).Asc())
+		}, "SELECT COUNT(*) FROM `invoices` GROUP BY " + b +
+			" ORDER BY ANY_VALUE(" + b + ") IS NULL, ANY_VALUE(" + b + ") LIMIT 10", 3},
+		{"second key", func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10), velox.CountAll[inv]()).GroupBy(bucket(100), bucket(10)).OrderBy(bucket(10).Asc())
+		}, "SELECT ANY_VALUE(" + b + "), COUNT(*) FROM `invoices` GROUP BY " + b + ", " + b +
+			" ORDER BY ANY_VALUE(" + b + ") IS NULL, ANY_VALUE(" + b + ") LIMIT 10", 5},
+		{"other value", func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10), velox.CountAll[inv]()).GroupBy(bucket(100)).OrderBy(bucket(10).Asc())
+		}, "SELECT " + b + ", COUNT(*) FROM `invoices` GROUP BY " + b +
+			" ORDER BY ANY_VALUE(" + b + ") IS NULL, " + b + " LIMIT 10", 4},
+		{"no value", func(q velox.Query[inv]) velox.Query[inv] {
+			lower := velox.Calc[inv]("LOWER(?)", I.Number)
+			return q.Select(lower, I.OrgID.Sum()).GroupBy(lower).OrderBy(lower.Asc())
+		}, "SELECT (LOWER(`number`)), SUM(`org_id`) FROM `invoices` GROUP BY (LOWER(`number`))" +
+			" ORDER BY ANY_VALUE((LOWER(`number`))) IS NULL, (LOWER(`number`)) LIMIT 10", 0},
+		{"ungrouped", func(q velox.Query[inv]) velox.Query[inv] {
+			return q.Select(bucket(10)).OrderBy(bucket(10).Asc())
+		}, "SELECT " + b + " FROM `invoices` ORDER BY " + b + " IS NULL, " + b + " LIMIT 10", 3},
+	} {
+		// Each twice on one DB: the second is a cache hit.
+		db := openFake(velox.MySQL, &fakeconn.Exec{})
+		for range 2 {
+			text, args, err := tc.q(db.Query[inv]().Limit(10)).SQL(ctx)
+			if err != nil || text != tc.sql || len(args) != tc.n {
+				t.Errorf("%s:\n got %s %v %v\nwant %s", tc.name, text, args, err, tc.sql)
+			}
+		}
+	}
+	// One DB renders both shapes of one text key, each from the cache the
+	// second time.
+	db := openFake(velox.MySQL, &fakeconn.Exec{})
+	for range 2 {
+		for _, n := range []int{10, 100} {
+			text, _, err := db.Query[inv]().Select(bucket(10), velox.CountAll[inv]()).GroupBy(bucket(n)).Limit(10).SQL(ctx)
+			if wrapped := strings.HasPrefix(text, "SELECT ANY_VALUE("); err != nil || wrapped != (n == 10) {
+				t.Errorf("shared cache, %d: %s %v", n, text, err)
+			}
+		}
+	}
+	// WITH ROLLUP makes a rolled-up key NULL only where a term is the key
+	// as GROUP BY writes it; ANY_VALUE of a copy could show a row's value in
+	// a subtotal row, so the statement fails.
+	net := velox.Calc[inv]("? * ?", I.Total, 2)
+	for _, q := range []velox.Query[inv]{
+		db.Query[inv]().Select(net, velox.CountAll[inv]()).GroupBy(velox.Rollup[inv](net, I.OrgID)),
+		db.Query[inv]().Select(velox.CountAll[inv]()).GroupBy(velox.Rollup[inv](net)).OrderBy(net.Asc()),
+	} {
+		if _, _, err := q.Limit(5).SQL(ctx); err == nil || !strings.Contains(err.Error(), "WITH ROLLUP") {
+			t.Errorf("rollup: %v", err)
+		}
+	}
+	// A Rollup of keys that bind nothing is as before.
+	text, _, err := db.Query[inv]().Select(I.OrgID, velox.CountAll[inv]()).GroupBy(velox.Rollup[inv](I.OrgID)).Limit(5).SQL(ctx)
+	if want := "SELECT `org_id`, COUNT(*) FROM `invoices` GROUP BY `org_id` WITH ROLLUP LIMIT 5"; err != nil || text != want {
+		t.Errorf("plain rollup:\n got %s %v\nwant %s", text, err, want)
 	}
 }
 

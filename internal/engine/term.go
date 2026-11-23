@@ -477,6 +477,9 @@ func (w *writer) terms(ts []Term) {
 // projectStmt writes a SELECT of st's Projection.
 func (w *writer) projectStmt(st *Statement) {
 	p := st.Project
+	if w.d == MySQL && len(p.GroupBy) > 0 {
+		w.keys = p
+	}
 	w.str("SELECT ")
 	if st.Distinct {
 		w.str("DISTINCT ")
@@ -504,6 +507,7 @@ func (w *writer) projectStmt(st *Statement) {
 	w.grouped = len(p.GroupBy) > 0
 	w.orderBy(st.OrderBy, false)
 	w.grouped = false
+	w.keys = nil
 	w.qualify = false
 	w.selectTail(st)
 }
@@ -513,9 +517,12 @@ func (w *writer) projectStmt(st *Statement) {
 // stored, for velox.Scan to decode, unless the read is DISTINCT, which would
 // compare its encodings.
 func (w *writer) resultTerm(t Term, distinct bool) {
-	if t.kind == termColumn && w.in.Columns[t.col].Codec && !distinct {
+	switch {
+	case t.kind == termColumn && w.in.Columns[t.col].Codec && !distinct:
 		w.predCol(t.col)
-	} else {
+	case w.anyKey(t):
+		w.anyValue(t)
+	default:
 		w.term(t)
 	}
 	if t.name != "" {
@@ -535,16 +542,17 @@ func (w *writer) orderTerm(o OrderTerm) {
 	// MySQL's ONLY_FULL_GROUP_BY takes an expression of the GROUP BY keys
 	// only as GROUP BY writes it: x IS NULL is refused where the key is x.
 	// ANY_VALUE of a key is the group's value, and lifts the check.
-	anyValue := w.d == MySQL && w.grouped && !hasAgg(t)
+	// A term with a bound value that repeats a GROUP BY key is a copy whose
+	// ? is another parameter: it is ANY_VALUE of it as well (anyKey).
+	nullAny := w.d == MySQL && w.grouped && !hasAgg(t)
+	key := w.anyKey(t)
 	for k := range 2 {
 		if k == 0 && !null {
 			continue
 		}
 		switch {
-		case k == 0 && anyValue:
-			w.str("ANY_VALUE(")
-			w.term(t)
-			w.str(")")
+		case k == 0 && nullAny, k == 1 && key:
+			w.anyValue(t)
 		case null || !w.repeatSpan(t): // PostgreSQL writes the term once
 			w.term(t)
 		}

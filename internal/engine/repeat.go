@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/binary"
+	"fmt"
 	"reflect"
 	"slices"
 )
@@ -222,4 +223,66 @@ func sameValue(a, b any) bool {
 		return false
 	}
 	return a == b
+}
+
+// On MySQL a projection's result or ordering term with a bound value that
+// repeats a GROUP BY key is written as ANY_VALUE of it (decision 0129).
+// MySQL's ? cannot be repeated, so the copy binds its own parameter, and
+// only_full_group_by, which matches a grouped expression as it is
+// written, refused it with error 1055. Every row of a group has the key's
+// value, so ANY_VALUE of the key is that value. Under WITH ROLLUP a
+// subtotal row's key is NULL only where it is written as GROUP BY writes
+// it; ANY_VALUE of a copy could be a row's value there, so such a statement
+// fails. The render cache keys which terms are wrapped (keyRepeatKey).
+
+// anyKey reports whether t, a result or ordering term of the grouped MySQL
+// projection being written, is to be written as ANY_VALUE of it. Under a
+// Rollup it fails the statement in place.
+func (w *writer) anyKey(t Term) bool {
+	if w.keys == nil || !keyRepeat(w.keys, t) {
+		return false
+	}
+	if slices.ContainsFunc(w.keys.GroupBy, func(g Term) bool { return g.kind == termGrouping }) {
+		w.fail(fmt.Errorf("velox: %s: on MySQL a term with a bound value cannot repeat a key of WITH ROLLUP in the select list or an ordering, as its ? is another parameter; write the value into the text, or use PostgreSQL", w.in.Name))
+		return false
+	}
+	return true
+}
+
+// anyValue writes ANY_VALUE(t).
+func (w *writer) anyValue(t Term) {
+	w.str("ANY_VALUE(")
+	w.term(t)
+	w.str(")")
+}
+
+// keyRepeat reports whether t binds a value and is the same as a GROUP BY
+// key of p, a Rollup's keys among them.
+func keyRepeat(p *Projection, t Term) bool {
+	if !termArgs(t) {
+		return false
+	}
+	found := false
+	groupKeys(p, func(_ int, k Term) bool {
+		found = sameTerm(k, t)
+		return !found
+	})
+	return found
+}
+
+// keyRepeatKey appends to a grouped MySQL projection's key, for each result
+// term and each ordering by a term, whether it repeats a GROUP BY key.
+func keyRepeatKey(k []byte, p *Projection, order []OrderTerm) []byte {
+	if len(p.GroupBy) == 0 {
+		return k
+	}
+	for _, t := range p.Terms {
+		k = append(k, bit(keyRepeat(p, t)))
+	}
+	for _, o := range order {
+		if t, ok := o.Expr.(Term); ok {
+			k = append(k, bit(keyRepeat(p, t)))
+		}
+	}
+	return k
 }
