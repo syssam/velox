@@ -133,7 +133,7 @@ const EdgeClear
 const EdgePage
 const EdgeRemove
 const EdgeSet
-const GeneratedCodeIsVersion27
+const GeneratedCodeIsVersion28
 const LockForShare
 const LockForUpdate
 const LockNoWait

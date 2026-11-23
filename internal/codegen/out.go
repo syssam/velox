@@ -41,11 +41,17 @@ type Bound struct {
 // Out is everything Render writes: the Graph lowered to Go names, types,
 // handle kinds, enums, join entities and the code of defaults and checks.
 type Out struct {
-	Package    string
-	Entities   []*OutEntity // the graph's, then the join entities, each sorted by Name
-	Enums      []*OutEnum   // sorted by type name
-	NeedsSch   bool         // some entity reads the schema package
-	SchemaPath string       // the schema package's import path
+	Package  string
+	Entities []*OutEntity // the graph's, then the join entities, each sorted by Name
+	Enums    []*OutEnum   // sorted by type name
+	// Checks are the enum validators more than one entity calls, which
+	// velox.go declares, sorted by name.
+	Checks []*OutCheck
+	// Imports are the import paths velox.go needs for Checks: errors and
+	// the Go types' packages. Sorted.
+	Imports    []string
+	NeedsSch   bool   // some entity reads the schema package
+	SchemaPath string // the schema package's import path
 	// SchemaName is the name the generated code gives the schema package:
 	// its own, unless the generated code uses that name for another.
 	SchemaName string
@@ -93,6 +99,9 @@ type OutEntity struct {
 	// its schema nor a mixin it lists declares any.
 	Schema string
 
+	// Checks are the enum validators only this entity calls, which its
+	// file declares, sorted by name.
+	Checks     []*OutCheck
 	CheckCode  string // the cases of Check's switch on the column, "" when none
 	CheckSetup string // statements run once inside Descriptor before the literal (regexps, validator funcs, descriptor reads), "" when none
 }
@@ -148,6 +157,18 @@ type OutEnum struct {
 	Consts []string // e.g. "UserRoleViewer"
 	Values []string // stored values, in declaration order
 	Of     string   // the field that declares it, e.g. "User's role field"
+	// Owner is the one entity with a field of the type, whose file declares
+	// it; "" when several share it (decision 0086), and velox.go declares it.
+	Owner string
+}
+
+// OutCheck is the validator of an enum field's Go type, the application's,
+// which the Check of every field of the type calls.
+type OutCheck struct {
+	Func   string   // e.g. "veloxCheckCurrency"
+	Type   string   // the Go type, e.g. "money.Currency"
+	Values []string // the quoted values
+	Msg    string   // the quoted error message
 }
 
 // veloxPkg is velox's import path.
@@ -160,4 +181,4 @@ const privacyPkg = "github.com/syssam/velox/privacy"
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
 // testdata/golden/shape.txt records it with a hash of the golden code's
 // shape, and a test fails when the shape changes and it does not.
-const GeneratedCodeVersion = 27
+const GeneratedCodeVersion = 28

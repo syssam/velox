@@ -300,3 +300,28 @@ func (u User) String() string {
 
 // GoString is String, so that %#v does not print them either.
 func (u User) GoString() string { return u.String() }
+
+// UserRole is the type of User's role field.
+type UserRole string
+
+// The values of UserRole.
+const (
+	UserRoleAdmin  UserRole = "admin"
+	UserRoleEditor UserRole = "editor"
+	UserRoleViewer UserRole = "viewer"
+)
+
+// Values returns the values of UserRole in declaration order.
+func (e UserRole) Values() []string { return []string{"admin", "editor", "viewer"} }
+
+// String returns the stored value of e.
+func (e UserRole) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of UserRole.
+func (e UserRole) IsValid() bool {
+	switch e {
+	case UserRoleAdmin, UserRoleEditor, UserRoleViewer:
+		return true
+	}
+	return false
+}

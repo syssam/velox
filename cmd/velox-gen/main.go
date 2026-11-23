@@ -5,8 +5,10 @@
 // through embedding at any depth, by value or through a pointer, as ent's
 // rule has it; what looks like a schema and is not one is refused at its
 // line. It writes the veloxgen package: one file, <entity>.go, for every entity
-// and for every join entity of a many-to-many relation, and velox.go, which
-// holds the enums. An entity whose <entity>.go go build would leave out of
+// and for every join entity of a many-to-many relation, and velox.go. An
+// enum type, and the validator of an application's enum type, is in the
+// file of the entity that uses it, or in velox.go when several entities
+// share it. An entity whose <entity>.go go build would leave out of
 // some builds, such as ab_test.go or server_linux.go, or that is velox.go,
 // gets <entity>_velox.go instead.
 //

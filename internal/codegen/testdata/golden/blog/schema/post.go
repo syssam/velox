@@ -26,6 +26,7 @@ func (Post) Fields() []schema.Field {
 		field.Time("published_at").Optional().Nillable(),
 		field.Strings("tags").Default([]string{"new"}),
 		field.Int("views").Min(0),
+		field.EnumOf[Visibility]("visibility"),
 	}
 }
 

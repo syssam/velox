@@ -23,8 +23,9 @@ type Post struct {
 	Status      PostStatus `json:"status"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	// An insert of the zero value stores the default, []string{"new"}.
-	Tags  []string `json:"tags,omitempty"`
-	Views int      `json:"views"`
+	Tags       []string          `json:"tags,omitempty"`
+	Views      int               `json:"views"`
+	Visibility schema.Visibility `json:"visibility"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
 }
@@ -45,6 +46,7 @@ const (
 	postColPublishedAt
 	postColTags
 	postColViews
+	postColVisibility
 )
 
 // The positions of Post's edges.
@@ -72,6 +74,8 @@ type PostHandles struct {
 	Tags velox.JSONCol[Post, []string]
 	// Views is the column views.
 	Views velox.NumberCol[Post, int]
+	// Visibility is the column visibility.
+	Visibility velox.Col[Post, schema.Visibility]
 	// Author is the edge author, to User: With loads it, Has and HasWith test it, and Set writes it.
 	Author velox.Rel[Post, User]
 }
@@ -86,6 +90,7 @@ var Posts = PostHandles{
 	PublishedAt: velox.NullTimeCol[Post, time.Time]{I: postColPublishedAt},
 	Tags:        velox.JSONCol[Post, []string]{I: postColTags},
 	Views:       velox.NumberCol[Post, int]{I: postColViews},
+	Visibility:  velox.Col[Post, schema.Visibility]{I: postColVisibility},
 	Author:      velox.Rel[Post, User]{I: postEdgeAuthor},
 }
 
@@ -115,6 +120,7 @@ func postDescriptor() velox.Descriptor[Post] {
 				Decode:      json.Unmarshal,
 			},
 			{Field: "Views", Name: "views"},
+			{Field: "Visibility", Name: "visibility"},
 		},
 		PrimaryKey: []int{postColID},
 		Edges: []velox.EdgeDescriptor{
@@ -140,6 +146,8 @@ func postDescriptor() velox.Descriptor[Post] {
 				return &x.Tags
 			case postColViews:
 				return &x.Views
+			case postColVisibility:
+				return &x.Visibility
 			}
 			return nil
 		},
@@ -172,6 +180,11 @@ func postDescriptor() velox.Descriptor[Post] {
 				if x < 0 {
 					return errors.New("is less than 0")
 				}
+			case postColVisibility:
+				x := v.(schema.Visibility)
+				if err := veloxCheckVisibility(x); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -182,11 +195,35 @@ func postDescriptor() velox.Descriptor[Post] {
 func (p Post) String() string {
 	return fmt.Sprintf("Post("+
 		"ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, "+
-		"PublishedAt=%v, Tags=%v, Views=%v)",
+		"PublishedAt=%v, Tags=%v, Views=%v, Visibility=%v)",
 		p.ID, p.AuthorID, p.Title, p.Slug, p.Status,
-		velox.Show(p.PublishedAt), p.Tags, p.Views,
+		velox.Show(p.PublishedAt), p.Tags, p.Views, p.Visibility,
 	)
 }
 
 // GoString is String, so that %#v prints the same text.
 func (p Post) GoString() string { return p.String() }
+
+// PostStatus is the type of Post's status field.
+type PostStatus string
+
+// The values of PostStatus.
+const (
+	PostStatusDraft     PostStatus = "draft"
+	PostStatusPublished PostStatus = "published"
+)
+
+// Values returns the values of PostStatus in declaration order.
+func (e PostStatus) Values() []string { return []string{"draft", "published"} }
+
+// String returns the stored value of e.
+func (e PostStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of PostStatus.
+func (e PostStatus) IsValid() bool {
+	switch e {
+	case PostStatusDraft, PostStatusPublished:
+		return true
+	}
+	return false
+}

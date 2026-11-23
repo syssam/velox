@@ -115,6 +115,24 @@
           "go_type": "string",
           "elem_type": "string",
           "has_default": true
+        },
+        {
+          "name": "visibility",
+          "go_name": "Visibility",
+          "column": "visibility",
+          "type": "enum",
+          "go_type": "schema.Visibility",
+          "elem_type": "schema.Visibility",
+          "pkg_path": "example.com/tmp/schema",
+          "imports": [
+            "example.com/tmp/schema"
+          ],
+          "kind": "string",
+          "enum": "Visibility",
+          "enum_values": [
+            "public",
+            "private"
+          ]
         }
       ],
       "edges": [
@@ -231,6 +249,24 @@
                 0
               ]
             }
+          ]
+        },
+        {
+          "name": "visibility",
+          "go_name": "Visibility",
+          "column": "visibility",
+          "type": "enum",
+          "go_type": "schema.Visibility",
+          "elem_type": "schema.Visibility",
+          "pkg_path": "example.com/tmp/schema",
+          "imports": [
+            "example.com/tmp/schema"
+          ],
+          "kind": "string",
+          "enum": "Visibility",
+          "enum_values": [
+            "public",
+            "private"
           ]
         }
       ],

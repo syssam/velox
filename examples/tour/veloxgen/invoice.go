@@ -189,3 +189,28 @@ func (i Invoice) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (i Invoice) GoString() string { return i.String() }
+
+// InvoiceStatus is the type of Invoice's status field.
+type InvoiceStatus string
+
+// The values of InvoiceStatus.
+const (
+	InvoiceStatusDraft InvoiceStatus = "draft"
+	InvoiceStatusSent  InvoiceStatus = "sent"
+	InvoiceStatusPaid  InvoiceStatus = "paid"
+)
+
+// Values returns the values of InvoiceStatus in declaration order.
+func (e InvoiceStatus) Values() []string { return []string{"draft", "sent", "paid"} }
+
+// String returns the stored value of e.
+func (e InvoiceStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of InvoiceStatus.
+func (e InvoiceStatus) IsValid() bool {
+	switch e {
+	case InvoiceStatusDraft, InvoiceStatusSent, InvoiceStatusPaid:
+		return true
+	}
+	return false
+}

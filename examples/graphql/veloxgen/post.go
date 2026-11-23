@@ -194,3 +194,27 @@ func (p Post) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (p Post) GoString() string { return p.String() }
+
+// PostStatus is the type of Post's status field.
+type PostStatus string
+
+// The values of PostStatus.
+const (
+	PostStatusDraft     PostStatus = "draft"
+	PostStatusPublished PostStatus = "published"
+)
+
+// Values returns the values of PostStatus in declaration order.
+func (e PostStatus) Values() []string { return []string{"draft", "published"} }
+
+// String returns the stored value of e.
+func (e PostStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of PostStatus.
+func (e PostStatus) IsValid() bool {
+	switch e {
+	case PostStatusDraft, PostStatusPublished:
+		return true
+	}
+	return false
+}

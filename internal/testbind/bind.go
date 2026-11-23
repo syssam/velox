@@ -288,10 +288,8 @@ func bindDescriptor() velox.Descriptor[Bind] {
 				}
 			case bindColLevel:
 				x := v.(bindtype.Level)
-				switch x {
-				case "low", "high":
-				default:
-					return errors.New("is not one of low, high")
+				if err := veloxCheckLevel(x); err != nil {
+					return err
 				}
 			case bindColShortData:
 				x := v.([]byte)
@@ -321,3 +319,36 @@ func (b Bind) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (b Bind) GoString() string { return b.String() }
+
+// BindKind is the type of Bind's kind field.
+type BindKind string
+
+// The values of BindKind.
+const (
+	BindKindA BindKind = "a"
+	BindKindB BindKind = "b"
+)
+
+// Values returns the values of BindKind in declaration order.
+func (e BindKind) Values() []string { return []string{"a", "b"} }
+
+// String returns the stored value of e.
+func (e BindKind) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of BindKind.
+func (e BindKind) IsValid() bool {
+	switch e {
+	case BindKindA, BindKindB:
+		return true
+	}
+	return false
+}
+
+// veloxCheckLevel returns an error unless x is a value of bindtype.Level.
+func veloxCheckLevel(x bindtype.Level) error {
+	switch x {
+	case "low", "high":
+		return nil
+	}
+	return errors.New("is not one of low, high")
+}

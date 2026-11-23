@@ -243,3 +243,27 @@ func (i Issue) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (i Issue) GoString() string { return i.String() }
+
+// IssueStatus is the type of Issue's status field.
+type IssueStatus string
+
+// The values of IssueStatus.
+const (
+	IssueStatusOpen   IssueStatus = "open"
+	IssueStatusClosed IssueStatus = "closed"
+)
+
+// Values returns the values of IssueStatus in declaration order.
+func (e IssueStatus) Values() []string { return []string{"open", "closed"} }
+
+// String returns the stored value of e.
+func (e IssueStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of IssueStatus.
+func (e IssueStatus) IsValid() bool {
+	switch e {
+	case IssueStatusOpen, IssueStatusClosed:
+		return true
+	}
+	return false
+}

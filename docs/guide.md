@@ -394,7 +394,7 @@ A `//go:generate go run generate.go` line in another file of the package
 runs it.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion27`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion28`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 

@@ -15,7 +15,8 @@ type Group struct {
 	ID   int64  `json:"id"`
 	Name string `json:"name"`
 	// An insert of the zero value stores the value of its default function.
-	Token string `json:"token"`
+	Token      string            `json:"token"`
+	Visibility schema.Visibility `json:"visibility"`
 	// Edges holds Group's relations, filled by With.
 	Edges GroupEdges `json:"edges,omitzero"`
 }
@@ -31,6 +32,7 @@ const (
 	groupColID = iota
 	groupColName
 	groupColToken
+	groupColVisibility
 )
 
 // The positions of Group's edges.
@@ -47,16 +49,19 @@ type GroupHandles struct {
 	// Token is the column token.
 	// An insert of the zero value stores the value of its default function.
 	Token velox.StringCol[Group, string]
+	// Visibility is the column visibility.
+	Visibility velox.Col[Group, schema.Visibility]
 	// Users is the edge users, to User: With loads it, Has and HasWith test it, and Add, Remove and Clear write it.
 	Users velox.Rel[Group, User]
 }
 
 // Groups holds the typed handles of Group's columns and relations.
 var Groups = GroupHandles{
-	ID:    velox.NumberCol[Group, int64]{I: groupColID},
-	Name:  velox.StringCol[Group, string]{I: groupColName},
-	Token: velox.StringCol[Group, string]{I: groupColToken},
-	Users: velox.Rel[Group, User]{I: groupEdgeUsers},
+	ID:         velox.NumberCol[Group, int64]{I: groupColID},
+	Name:       velox.StringCol[Group, string]{I: groupColName},
+	Token:      velox.StringCol[Group, string]{I: groupColToken},
+	Visibility: velox.Col[Group, schema.Visibility]{I: groupColVisibility},
+	Users:      velox.Rel[Group, User]{I: groupEdgeUsers},
 }
 
 var groupMeta velox.MetaOnce[Group]
@@ -64,7 +69,7 @@ var groupMeta velox.MetaOnce[Group]
 // VeloxMeta is called by velox, not by applications.
 func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
 
-// groupDescriptor describes Group to velox: its table, columns and edges.
+// groupDescriptor describes Group to velox: its table, columns, edges and checks.
 func groupDescriptor() velox.Descriptor[Group] {
 	fds := veloxschema.FieldDescriptors(&schema.Group{}, "token")
 	d0 := fds[0].DefaultFunc.(func() string)
@@ -74,6 +79,7 @@ func groupDescriptor() velox.Descriptor[Group] {
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
 			{Field: "Token", Name: "token", DefaultFunc: func() any { return d0() }},
+			{Field: "Visibility", Name: "visibility"},
 		},
 		PrimaryKey: []int{groupColID},
 		Edges: []velox.EdgeDescriptor{
@@ -88,6 +94,8 @@ func groupDescriptor() velox.Descriptor[Group] {
 				return &x.Name
 			case groupColToken:
 				return &x.Token
+			case groupColVisibility:
+				return &x.Visibility
 			}
 			return nil
 		},
@@ -98,12 +106,22 @@ func groupDescriptor() velox.Descriptor[Group] {
 			}
 			return nil
 		},
+		Check: func(col int, v any) error {
+			switch col {
+			case groupColVisibility:
+				x := v.(schema.Visibility)
+				if err := veloxCheckVisibility(x); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 	}
 }
 
 // String returns the entity's fields.
 func (g Group) String() string {
-	return fmt.Sprintf("Group(ID=%v, Name=%v, Token=%v)", g.ID, g.Name, g.Token)
+	return fmt.Sprintf("Group(ID=%v, Name=%v, Token=%v, Visibility=%v)", g.ID, g.Name, g.Token, g.Visibility)
 }
 
 // GoString is String, so that %#v prints the same text.

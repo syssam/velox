@@ -654,6 +654,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   table for a LIMIT parameter and picked a slower join: bench/compare's
   WhereHasEdge ran 30% behind ent's. Each page size is a statement of its own
   (ADR 0118).
+- velox-gen: an enum type that one entity uses is declared in that
+  entity's file, and only the enum types several entities share stay in
+  `velox.go`. An enum field of an application's Go type is checked by one
+  `veloxCheck<Type>` function per type, where every Check held a copy of
+  its `switch`. A field whose default replaces its zero value in an insert
+  says so on its struct field and handle (decision 0119). Regenerate:
+  `velox.GeneratedCodeIsVersion28` replaces Version27.
 - `All` allocates the rows of a `Limit` up to 128 at once, a page's size,
   where it allocated 16 and grew: a `Limit(20)` read of 20 rows is one
   allocation, and the runtime benchmarks of 20-row pages allocate about 40%

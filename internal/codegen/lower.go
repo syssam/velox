@@ -154,6 +154,11 @@ type lowerer struct {
 	joins map[string]*join     // by join table
 	owned map[string]string    // the package names the generated code uses, with their paths
 	enums []*enumDecl
+	// enumChecks are the validators of the enum fields' Go types, by
+	// enumCheckKey, and checkList the same in the order of their first
+	// field.
+	enumChecks map[string]*enumCheck
+	checkList  []*enumCheck
 	// vschema is the name the generated code gives velox's schema package.
 	vschema string
 }
@@ -170,7 +175,18 @@ type join struct {
 type enumDecl struct {
 	enum   *OutEnum
 	schema string
-	at     loc // the field
+	at     loc             // the field
+	users  map[string]bool // the entities with a field of the type
+}
+
+// enumCheck is the validator of an enum field's Go type, which every Check
+// of a field of the type calls, with the entities that call it.
+type enumCheck struct {
+	check  *OutCheck
+	schema string
+	at     loc // the first field
+	users  map[string]bool
+	paths  []string // the import paths of the Go type
 }
 
 // entState is the state of lowering one entity.
@@ -548,10 +564,11 @@ func (s *entState) elemType(f *Field, at loc) (elem, kind string) {
 		// veloxe did; with other values, checkDeclared reports the clash.
 		for _, d := range s.l.enums {
 			if d.enum.Type == t && sameEnum(d.enum, en) {
+				d.users[s.name] = true
 				return t, "string"
 			}
 		}
-		s.l.enums = append(s.l.enums, &enumDecl{enum: en, schema: s.name, at: at})
+		s.l.enums = append(s.l.enums, &enumDecl{enum: en, schema: s.name, at: at, users: map[string]bool{s.name: true}})
 		return t, "string"
 	}
 	s.fail(at, "a field of type %s needs a Go type", f.Type)
@@ -1004,14 +1021,60 @@ func (w *checkWriter) enum() {
 		w.line(1, "if !x.IsValid() {")
 		w.line(2, "return errors.New(%s)", msg)
 		w.line(1, "}")
-	} else {
-		w.line(1, "switch x {")
-		w.line(1, "case %s:", strings.Join(vals, ", "))
-		w.line(1, "default:")
-		w.line(1, "\treturn errors.New(%s)", msg)
-		w.line(1, "}")
+		w.s.useStd("errors", w.at)
+		return
 	}
-	w.s.useStd("errors", w.at)
+	// The Go type is the application's: one validator per type and values,
+	// which every Check of a field of it calls.
+	c := w.s.l.enumCheck(w.s, f, vals, msg, w.at)
+	w.line(1, "if err := %s(x); err != nil {", c.Func)
+	w.line(2, "return err")
+	w.line(1, "}")
+}
+
+// enumCheckKey identifies the validator of the Go type ident with the
+// quoted values vals.
+func enumCheckKey(ident string, vals []string) string {
+	return ident + "\x00" + strings.Join(vals, "\x00")
+}
+
+// enumCheck returns the validator of f's Go type with the quoted values
+// vals, which fails with the quoted message msg, making it on the first
+// field of the type and values. It is named veloxCheck and the type's name,
+// with its package's name too when another type of that name has one.
+func (l *lowerer) enumCheck(s *entState, f *Field, vals []string, msg string, at loc) *OutCheck {
+	key := enumCheckKey(f.GoType.Ident, vals)
+	if c, ok := l.enumChecks[key]; ok {
+		c.users[s.name] = true
+		return c.check
+	}
+	if l.enumChecks == nil {
+		l.enumChecks = map[string]*enumCheck{}
+	}
+	qual, name, ok := strings.Cut(f.GoType.Ident, ".")
+	if !ok {
+		qual, name = "", qual
+	}
+	fn := "veloxCheck" + plugin.GoName(name)
+	taken := func(n string) bool {
+		return slices.ContainsFunc(l.checkList, func(c *enumCheck) bool { return c.check.Func == n })
+	}
+	if taken(fn) {
+		fn = "veloxCheck" + plugin.GoName(qual) + plugin.GoName(name)
+	}
+	for i, base := 2, fn; taken(fn); i++ {
+		fn = base + strconv.Itoa(i)
+	}
+	c := &enumCheck{
+		check:  &OutCheck{Func: fn, Type: f.GoType.Ident, Values: vals, Msg: msg},
+		schema: s.name, at: at, users: map[string]bool{s.name: true},
+	}
+	for _, p := range importNames(f.GoType) {
+		c.paths = append(c.paths, p.path)
+	}
+	l.enumChecks[key] = c
+	l.checkList = append(l.checkList, c)
+	return c.check
 }
 
 // check writes the comparison of the check c, or reports why it cannot.
@@ -1366,6 +1429,7 @@ func unfilled(es *Entity, jo, jt int) []int {
 // finish completes the entities' files, adds the join entities, and checks
 // that the generated names are distinct.
 func (l *lowerer) finish() {
+	l.placeChecks()
 	for _, e := range l.g.Entities {
 		l.complete(l.state[e.Name])
 	}
@@ -1380,11 +1444,37 @@ func (l *lowerer) finish() {
 	}
 	slices.SortFunc(l.enums, func(a, b *enumDecl) int { return cmp.Compare(a.enum.Type, b.enum.Type) })
 	for _, d := range l.enums {
+		if len(d.users) == 1 {
+			// One entity has fields of it: its file declares it.
+			d.enum.Owner = d.schema
+		}
 		l.out.Enums = append(l.out.Enums, d.enum)
 	}
 	l.checkDeclared(joins)
 	l.checkJoinTables(joins)
 	l.checkLabels()
+}
+
+// placeChecks gives each enum validator to the file that declares it: the
+// file of the one entity whose Check calls it, which then imports errors,
+// or else velox.go, which then imports errors and the Go type's packages.
+func (l *lowerer) placeChecks() {
+	slices.SortFunc(l.checkList, func(a, b *enumCheck) int { return cmp.Compare(a.check.Func, b.check.Func) })
+	for _, c := range l.checkList {
+		if len(c.users) == 1 {
+			s := l.state[c.schema]
+			s.out.Checks = append(s.out.Checks, c.check)
+			s.useStd("errors", c.at)
+			continue
+		}
+		l.out.Checks = append(l.out.Checks, c.check)
+		l.out.Imports = append(l.out.Imports, c.paths...)
+	}
+	if len(l.out.Checks) > 0 {
+		l.out.Imports = append(l.out.Imports, "errors")
+	}
+	slices.Sort(l.out.Imports)
+	l.out.Imports = slices.Compact(l.out.Imports)
 }
 
 // checkDeclared reports each name the package declares at its top level
@@ -1407,6 +1497,9 @@ func (l *lowerer) checkDeclared(joins []*join) {
 	joinOK := make([]bool, len(joins))
 	for i, j := range joins {
 		joinOK[i] = add(j.ent.Name, "join entity", j.owner, j.at)
+	}
+	for _, c := range l.checkList {
+		add(c.check.Func, "enum validator", c.schema, c.at)
 	}
 	enumOK := make([]bool, len(l.enums))
 	for i, d := range l.enums {

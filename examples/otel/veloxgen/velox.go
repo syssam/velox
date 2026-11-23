@@ -5,28 +5,4 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion27
-
-// InvoiceStatus is the type of Invoice's status field.
-type InvoiceStatus string
-
-// The values of InvoiceStatus.
-const (
-	InvoiceStatusSent InvoiceStatus = "sent"
-	InvoiceStatusPaid InvoiceStatus = "paid"
-)
-
-// Values returns the values of InvoiceStatus in declaration order.
-func (e InvoiceStatus) Values() []string { return []string{"sent", "paid"} }
-
-// String returns the stored value of e.
-func (e InvoiceStatus) String() string { return string(e) }
-
-// IsValid reports whether e is one of the values of InvoiceStatus.
-func (e InvoiceStatus) IsValid() bool {
-	switch e {
-	case InvoiceStatusSent, InvoiceStatusPaid:
-		return true
-	}
-	return false
-}
+const _ = velox.GeneratedCodeIsVersion28

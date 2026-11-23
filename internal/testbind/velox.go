@@ -4,28 +4,4 @@ package testbind
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion27
-
-// BindKind is the type of Bind's kind field.
-type BindKind string
-
-// The values of BindKind.
-const (
-	BindKindA BindKind = "a"
-	BindKindB BindKind = "b"
-)
-
-// Values returns the values of BindKind in declaration order.
-func (e BindKind) Values() []string { return []string{"a", "b"} }
-
-// String returns the stored value of e.
-func (e BindKind) String() string { return string(e) }
-
-// IsValid reports whether e is one of the values of BindKind.
-func (e BindKind) IsValid() bool {
-	switch e {
-	case BindKindA, BindKindB:
-		return true
-	}
-	return false
-}
+const _ = velox.GeneratedCodeIsVersion28

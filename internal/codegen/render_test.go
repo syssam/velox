@@ -193,10 +193,10 @@ func TestGoldenBidi(t *testing.T) {
 	}
 }
 
-// The blog golden's velox.go gives each enum Values, String and IsValid, all
+// The blog golden's post.go gives each enum Values, String and IsValid, all
 // with the receiver e.
 func TestGoldenEnumMethods(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", "velox.go"))
+	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", "post.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func (e PostStatus) IsValid() bool {
 }
 `
 	if !strings.Contains(string(b), want) {
-		t.Errorf("velox.go lacks PostStatus's methods:\n%s", b)
+		t.Errorf("post.go lacks PostStatus's methods:\n%s", b)
 	}
 }
 

@@ -31,8 +31,9 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 }
 
 // Render writes one file per entity, entityFile's (the join entities too),
-// and velox.go: the package comment and the enums; and privacy/privacy.go
-// when o.Privacy.
+// with the enum types and validators only that entity uses; velox.go, with
+// the package comment and the enum types and validators entities share; and
+// privacy/privacy.go when o.Privacy.
 //
 // The files are in the order of o.Entities, then velox.go, then
 // privacy/privacy.go. Render does not
@@ -118,13 +119,29 @@ func renderPackage(o *Out) string {
 	}
 	w.p("package %s", o.Package)
 	w.p("")
-	w.p(`import "github.com/syssam/velox"`)
-	w.p("")
+	if len(o.Imports) == 0 {
+		w.p(`import "github.com/syssam/velox"`)
+		w.p("")
+	} else {
+		importBlock(&w, o, o.Imports, nil)
+	}
 	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
 	if o.EntityTable {
 		entityTable(&w, o)
 	}
+	enums(&w, o, "")
+	enumChecks(&w, o.Checks)
+	return w.String()
+}
+
+// enums writes the enum types the file of the entity owner declares: those
+// of the entity's fields alone, or, for owner "", velox.go's, which several
+// entities share.
+func enums(w *writer, o *Out, owner string) {
 	for _, en := range o.Enums {
+		if en.Owner != owner {
+			continue
+		}
 		w.p("")
 		w.p("// %s is the type of %s.", en.Type, en.Of)
 		w.p("type %s string", en.Type)
@@ -151,7 +168,22 @@ func renderPackage(o *Out) string {
 		w.p("\treturn false")
 		w.p("}")
 	}
-	return w.String()
+}
+
+// enumChecks writes the enum validators cs, which the Check of each field of
+// their Go types calls.
+func enumChecks(w *writer, cs []*OutCheck) {
+	for _, c := range cs {
+		w.p("")
+		w.p("// %s returns an error unless x is a value of %s.", c.Func, c.Type)
+		w.p("func %s(x %s) error {", c.Func, c.Type)
+		w.p("\tswitch x {")
+		w.p("\tcase %s:", strings.Join(c.Values, ", "))
+		w.p("\t\treturn nil")
+		w.p("\t}")
+		w.p("\treturn errors.New(%s)", c.Msg)
+		w.p("}")
+	}
 }
 
 // entityTable writes the package's velox.EntityTable: every entity, by its
@@ -203,26 +235,36 @@ func renderEntity(o *Out, e *OutEntity) string {
 	entityDescriptor(&w, o, e)
 	w.p("")
 	entityString(&w, e)
+	enums(&w, o, e.Name)
+	enumChecks(&w, e.Checks)
 	return w.String()
 }
 
-// entityImports writes the import declaration: the standard packages first,
-// then the others, velox and the schema package among them, each once. A
-// path of the schema's own module is never a standard one, though a module
-// path need not have a dot ("app/schema").
+// entityImports writes the import declaration of e's file: fmt, which
+// String uses, velox, e's imports and the schema package when e reads it.
 func entityImports(w *writer, o *Out, e *OutEntity) {
+	paths := append([]string{"fmt"}, e.Imports...)
+	if e.NeedsSch {
+		paths = append(paths, o.SchemaPath)
+	}
+	importBlock(w, o, paths, e.ImportAs)
+}
+
+// importBlock writes the import declaration of velox and paths: the
+// standard packages first, then the others, each once. A path of the
+// schema's own module is never a standard one, though a module path need
+// not have a dot ("app/schema"). importAs names the paths imported under a
+// name other than the package's.
+func importBlock(w *writer, o *Out, paths []string, importAs map[string]string) {
 	module, _, _ := strings.Cut(o.SchemaPath, "/")
-	std := []string{"fmt"} // String uses fmt
-	other := []string{"github.com/syssam/velox"}
-	for _, p := range e.Imports {
+	var std []string
+	other := []string{veloxPkg}
+	for _, p := range paths {
 		if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") || first == module {
 			other = append(other, p)
 		} else {
 			std = append(std, p)
 		}
-	}
-	if e.NeedsSch {
-		other = append(other, o.SchemaPath)
 	}
 	slices.Sort(std)
 	slices.Sort(other)
@@ -232,7 +274,7 @@ func entityImports(w *writer, o *Out, e *OutEntity) {
 	}
 	w.p("")
 	for _, p := range slices.Compact(other) {
-		switch n := e.ImportAs[p]; {
+		switch n := importAs[p]; {
 		case n != "":
 			w.p("%s %s", n, strconv.Quote(p))
 		case p == o.SchemaPath && o.SchemaName != "" && o.SchemaName != guessName(o.SchemaPath):
