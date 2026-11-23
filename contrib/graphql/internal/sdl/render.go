@@ -257,7 +257,7 @@ func (w *writer) field(f gqlField) {
 		return // its type may be the application's own: the standalone check cannot see it
 	}
 	if !w.emit.keeps(f) {
-		return // its type is an entity's that entities= leaves out
+		return // it names an entity's type that entities= leaves out, or an application's that apptypes= does not list
 	}
 	at := w.at
 	w.at = f.where

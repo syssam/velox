@@ -16,7 +16,8 @@ import (
 // velox.graphql and a file per entity, Query is in package velox and
 // Post.tags in package post, and the application's module builds. With
 // entities=Post the SDL is Post's alone, with the where inputs its own
-// nests, and the module builds too.
+// nests, and the module builds too. Per entity, with entities=Post and
+// apptypes=, no gqlc group holds inputs alone (ADR 0130).
 //
 // It builds three tools and a module, offline, from the module cache, as
 // the other end-to-end tests do, and is left out under -short.
@@ -26,7 +27,9 @@ func TestGqlcPerEntity(t *testing.T) {
 		t.Skip("builds a module and gqlc")
 	}
 	schema := strings.Replace(gqlcSchema, `graphql.QueryField("labels")`, `graphql.QueryField("postTags")`, 1)
-	dir, run := app(t, map[string]string{"schema/schema.go": schema, "graph/app.graphql": gqlcApp, "gqlc.yaml": gqlcConfig})
+	schema = strings.Replace(schema, `graphql.QueryField("posts"),`, `graphql.QueryField("posts"), graphql.Resolvers(graphql.Map("reviewer", "PublicReviewer"), graphql.Map("editor", "PublicEditor")),`, 1)
+	appSDL := gqlcApp + "type PublicReviewer { id: ID! }\ntype PublicEditor { id: ID! }\n"
+	dir, run := app(t, map[string]string{"schema/schema.go": schema, "graph/app.graphql": appSDL, "gqlc.yaml": gqlcConfig})
 	withGqlc(t, dir, run)
 	gen := func(opts string) {
 		t.Helper()
@@ -70,17 +73,21 @@ func TestGqlcPerEntity(t *testing.T) {
 	}
 
 	// gqlc's packages of the run before: entities=Post has no group post.
-	groups, err := os.ReadDir(filepath.Join(dir, "graph"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, g := range groups {
-		if g.IsDir() {
-			if err := os.RemoveAll(filepath.Join(dir, "graph", g.Name())); err != nil {
-				t.Fatal(err)
+	clearGroups := func() {
+		t.Helper()
+		groups, err := os.ReadDir(filepath.Join(dir, "graph"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range groups {
+			if g.IsDir() {
+				if err := os.RemoveAll(filepath.Join(dir, "graph", g.Name())); err != nil {
+					t.Fatal(err)
+				}
 			}
 		}
 	}
+	clearGroups()
 	gen(",entities=Post")
 	if got := graphqlFiles(); !slices.Equal(got, []string{"velox.graphql"}) {
 		t.Fatalf("gen has %v, want velox.graphql alone", got)
@@ -104,5 +111,46 @@ func TestGqlcPerEntity(t *testing.T) {
 	}
 	if out, err := run("vet", "./..."); err != nil {
 		t.Fatalf("go vet, entities=Post: %v\n%s", err, out)
+	}
+
+	// Per entity and entities=Post (ADR 0130): LabelWhereInput, which
+	// hasTagsWith nests, is in velox.graphql, so no gqlc group holds inputs
+	// alone. Such a group's Bindings takes no Resolver, gqlc's NewSchema
+	// registers it itself, and an application passing it too had graphql-go
+	// refuse its inputs as already bound. apptypes=PublicEditor leaves out
+	// reviewer, of the application's PublicReviewer, and keeps editor.
+	clearGroups()
+	gen(",sdlfiles=entity,entities=Post,apptypes=PublicEditor")
+	if got, want := graphqlFiles(), []string{"velox.graphql", "velox_post.graphql"}; !slices.Equal(got, want) {
+		t.Fatalf("gen has %v, want %v", got, want)
+	}
+	read := func(name string) string {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	if shared := read("gen/velox.graphql"); !strings.Contains(shared, "input LabelWhereInput") {
+		t.Errorf("velox.graphql has no LabelWhereInput:\n%s", shared)
+	}
+	if post := read("gen/velox_post.graphql"); strings.Contains(post, "reviewer") || !strings.Contains(post, "  editor: PublicEditor") {
+		t.Errorf("velox_post.graphql under apptypes=PublicEditor:\n%s", post)
+	}
+	if out, err := run("tool", "gqlc", "-config", "gqlc.yaml"); err != nil {
+		t.Fatalf("gqlc, sdlfiles=entity,entities=Post: %v\n%s", err, out)
+	}
+	pkgs, err := filepath.Glob(filepath.Join(dir, "graph", "*", "generated.go"))
+	if err != nil || len(pkgs) == 0 {
+		t.Fatalf("gqlc's packages: %v, %v", pkgs, err)
+	}
+	for _, p := range pkgs {
+		if strings.Contains(read(p[len(dir)+1:]), "func Bindings() graphql.SchemaOption") {
+			t.Errorf("%s: a group whose Bindings takes no Resolver", p)
+		}
+	}
+	if out, err := run("vet", "./..."); err != nil {
+		t.Fatalf("go vet, sdlfiles=entity,entities=Post: %v\n%s", err, out)
 	}
 }

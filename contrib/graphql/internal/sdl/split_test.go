@@ -11,6 +11,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/parser"
 
+	"github.com/syssam/velox/contrib/graphql"
 	"github.com/syssam/velox/contrib/graphql/internal/modeltest"
 	"github.com/syssam/velox/plugin"
 )
@@ -179,11 +180,103 @@ func TestEntitiesPerEntity(t *testing.T) {
 	for _, f := range files {
 		names = append(names, f.Path)
 	}
-	if want := []string{"velox.graphql", "velox_post.graphql", "velox_user.graphql"}; !slices.Equal(names, want) {
+	if want := []string{"velox.graphql", "velox_post.graphql"}; !slices.Equal(names, want) {
 		t.Fatalf("files %v, want %v", names, want)
 	}
-	if !strings.HasPrefix(files[2].Content, "# User: only the inputs another written input names\n") || strings.Contains(files[2].Content, "type Account") {
-		t.Errorf("velox_user.graphql:\n%s", files[2].Content)
+	if c := files[0].Content; !strings.Contains(c, "# User: only the inputs another written input names\n") || !strings.Contains(c, "input AccountWhereInput") || strings.Contains(c, "type Account") {
+		t.Errorf("velox.graphql:\n%s", c)
+	}
+}
+
+// appTypesModel is Asset, whose price is the application's scalar Money and
+// whose resolvers name the application's PublicUser, Asset itself and Tag,
+// an entity apptypes= tests leave out.
+func appTypesModel(t *testing.T, priceWhere bool) *plugin.Model {
+	price := field("price", "float64")
+	as := []graphql.Annotation{graphql.Type("Money")}
+	if priceWhere {
+		as = append(as, graphql.WhereOps(graphql.OpsEquality))
+	}
+	price.Annotations = ann(t, as...)
+	name := field("name", "string")
+	name.Annotations = ann(t, graphql.WhereOps(graphql.OpsEquality))
+	a := entity("Asset", name, price)
+	a.Annotations = ann(t, graphql.QueryField(), graphql.Resolvers(
+		graphql.Map("owner", "PublicUser"),
+		graphql.Map("history(first: Int)", "[PublicChange!]!"),
+		graphql.Map("related", "[Asset!]"),
+		graphql.Map("tags", "[Tag!]"),
+	))
+	return model(a, entity("Tag", field("label", "string")))
+}
+
+// TestEntitiesAppTypes: under apptypes=Money a field of Asset that names an
+// application type it does not list, PublicUser or PublicChange, is left
+// out; price, of the listed Money, and related, of Asset, stay. tags is left
+// out as before, as Tag is not written.
+func TestEntitiesAppTypes(t *testing.T) {
+	m := appTypesModel(t, true)
+	got, err := RenderConfig(m, Config{Entities: []string{"Asset"}, AppTypes: []string{"Money"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	compareGolden(t, filepath.Join("testdata", "entities_apptypes.graphql"), got)
+	for _, absent := range []string{"  owner: ", "  history(", "  tags: ", "PublicUser", "PublicChange"} {
+		if strings.Contains(got, absent) {
+			t.Errorf("the SDL has %q", absent)
+		}
+	}
+	for _, present := range []string{"  price: Money!", "  related: [Asset!]", "input AssetWhereInput", "  price: Money\n"} {
+		if !strings.Contains(got, present) {
+			t.Errorf("the SDL has no %q", present)
+		}
+	}
+	if _, err := Check(got, `scalar Money`); err != nil {
+		t.Errorf("the SDL beside scalar Money alone: %v", err)
+	}
+
+	// Without apptypes= every application type stays, as ADR 0125 has it.
+	all, err := RenderConfig(m, Config{Entities: []string{"Asset"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, present := range []string{"  owner: PublicUser", "  history(first: Int): [PublicChange!]!"} {
+		if !strings.Contains(all, present) {
+			t.Errorf("without apptypes= the SDL has no %q", present)
+		}
+	}
+}
+
+// TestEntitiesAppTypesRefused: an input that names an application type
+// apptypes= does not list is refused, as graphql-go binds every field of an
+// input; so are a name velox-graphql declares and one that is no GraphQL
+// name, and apptypes= without entities=.
+func TestEntitiesAppTypesRefused(t *testing.T) {
+	for _, c := range []struct {
+		m        *plugin.Model
+		entities []string
+		apptypes []string
+		want     string
+	}{
+		{appTypesModel(t, true), []string{"Asset"}, []string{"PublicUser"}, "AssetWhereInput.price names Money, which apptypes= does not list"},
+		{appTypesModel(t, false), []string{"Asset"}, []string{"Tag"}, "apptypes= names Tag, which velox-graphql declares itself"},
+		{appTypesModel(t, false), []string{"Asset"}, []string{"Time"}, "apptypes= names Time, which velox-graphql declares itself"},
+		{appTypesModel(t, false), []string{"Asset"}, []string{"9x"}, `apptypes= names "9x", which is not a GraphQL name`},
+		{appTypesModel(t, false), nil, []string{"Money"}, "apptypes= narrows the SDL of entities=, which is not given"},
+	} {
+		_, err := RenderConfig(c.m, Config{Entities: c.entities, AppTypes: c.apptypes})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%v: err = %v, want %q", c.apptypes, err, c.want)
+		}
+	}
+	// Without a where on price, Money is named by Asset's type alone, and
+	// apptypes=PublicUser leaves price out with owner kept.
+	got, err := RenderConfig(appTypesModel(t, false), Config{Entities: []string{"Asset"}, AppTypes: []string{"PublicUser"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, "  price: ") || !strings.Contains(got, "  owner: PublicUser") {
+		t.Errorf("apptypes=PublicUser:\n%s", got)
 	}
 }
 

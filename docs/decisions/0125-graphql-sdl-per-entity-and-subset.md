@@ -1,6 +1,8 @@
 # 0125. velox-graphql writes the SDL per entity, and for a part of the schema
 
-- Status: accepted, 2026-11-23.
+- Status: accepted, 2026-11-23. Amended by 0130: `apptypes=` drops
+  fields of unlisted application types, and nested inputs of an entity not
+  chosen go in `velox.graphql`.
 
 ## Context
 

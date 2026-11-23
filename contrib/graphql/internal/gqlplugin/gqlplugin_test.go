@@ -127,7 +127,7 @@ func TestRun(t *testing.T) {
 		"version":            {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":           {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed":          {"{", "request"},
-		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, and entities=A+B; it is given a, x=y"},
+		"options":            {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given a, x=y"},
 		"sdlfiles":           {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"sdlfiles": "type"}, Model: m}), "it is given sdlfiles=type"},
 		"sdlfiles and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "sdlfiles": "entity"}, Model: m}), "give one or the other"},
 		"entities and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "entities": "User"}, Model: m}), "give one or the other"},
@@ -135,6 +135,9 @@ func TestRun(t *testing.T) {
 		"entities twice":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User+User"}, Model: m}), "entities=User+User: name each entity once, separated by +"},
 		"entities gap":       {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User++Post"}, Model: m}), "name each entity once"},
 		"entities unknown":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User+Post"}, Model: m}), "entities= names Post, which the schema package does not declare"},
+		"apptypes and only":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"only": "enums", "apptypes": "Money"}, Model: m}), "give one or the other"},
+		"apptypes twice":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"entities": "User", "apptypes": "Money+Money"}, Model: m}), "apptypes=Money+Money: name each type once, separated by +"},
+		"apptypes alone":     {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"apptypes": "Money"}, Model: m}), "apptypes= narrows the SDL of entities=, which is not given"},
 		"engine":             {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"engine": "graphql-go-v2"}, Model: m}), "it is given engine=graphql-go-v2"},
 		"engine no package":  {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"engine": "graphql-go"}, Model: m}), "engine=graphql-go binds every type to the generated package, and the request names none"},
 		"engine refuses": {request(t, plugin.Request{Protocol: 2, OutPackage: "gen", OutPath: "example.com/app/gen", Options: map[string]string{"engine": "graphql-go"}, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{

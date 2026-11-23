@@ -33,15 +33,17 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // and sdlfiles=one as velox.graphql alone; one is the default, and entity
 // is under compat=veloxe, as veloxe wrote it (sdl.Config's PerEntity).
 // entities=A+B writes the SDL of the entities A and B alone (sdl.Config's
-// Entities); the Go is the whole schema's.
+// Entities); the Go is the whole schema's. apptypes=A+B names the types
+// the application declares that their SDL may name; a field naming another
+// is left out (sdl.Config's AppTypes).
 func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	cfg, err := config(req)
 	if err != nil {
 		return nil, nil, err
 	}
 	if req.Options["only"] == "enums" {
-		if cfg.Veloxe || cfg.WhereWhitelist || req.Options["sdlfiles"] != "" || len(cfg.Entities) > 0 {
-			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe, where=whitelist, sdlfiles and entities shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
+		if cfg.Veloxe || cfg.WhereWhitelist || req.Options["sdlfiles"] != "" || len(cfg.Entities) > 0 || len(cfg.AppTypes) > 0 {
+			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe, where=whitelist, sdlfiles, entities and apptypes shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
 		}
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err
@@ -78,8 +80,15 @@ func config(req *plugin.Request) (sdl.Config, error) {
 				}
 				cfg.Entities = append(cfg.Entities, n)
 			}
+		case k == "apptypes" && v != "":
+			for n := range strings.SplitSeq(v, "+") {
+				if n == "" || slices.Contains(cfg.AppTypes, n) {
+					return cfg, fmt.Errorf("velox-graphql: apptypes=%s: name each type once, separated by +", v)
+				}
+				cfg.AppTypes = append(cfg.AppTypes, n)
+			}
 		default:
-			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, and entities=A+B; it is given %s", options(req.Options))
+			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", options(req.Options))
 		}
 	}
 	switch req.Options["sdlfiles"] {

@@ -162,7 +162,19 @@
 // Query field. A field whose type is a schema left out, such as an edge to
 // one, is left out. A where input keeps every predicate, as graphql-go binds
 // it to its Go struct, so a where input it nests is written too, without its
-// schema's type. The Go is the whole schema's either way (ADR 0125).
+// schema's type; under sdlfiles=entity it goes in velox.graphql. The Go is
+// the whole schema's either way (ADR 0125).
+//
+// apptypes= names the application's own types that the SDL of entities=
+// may name, separated by +:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:entities=Post,apptypes=Decimal+Map ./veloxschema
+//
+// A field naming a type that neither velox-graphql declares nor apptypes=
+// lists is left out, such as a graphql.Map field of an application type
+// the subset does not serve. An input naming one is refused, as graphql-go
+// binds every field of an input. Without apptypes= every such type stays,
+// and the application declares each (ADR 0130).
 //
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
 // has the predicates of its key in it, before the fields': the key has id,
@@ -782,6 +794,12 @@
 // Post.tags then both declare PostTagsArgs, and the package does not build.
 // sdlfiles=entity, the default under compat=veloxe, puts Query in package
 // velox and Post in package post.
+//
+// gqlc's NewSchema registers a group whose Bindings takes no Resolver
+// itself; passing it again makes graphql-go refuse its types as already
+// bound. Pass only the groups whose Bindings takes a Resolver. velox-graphql
+// writes no file of inputs alone, so under entities= every group but
+// velox.graphql's holds a type (ADR 0130).
 //
 // A field gqlgen reads through a <Field>GQL getter, a JSON field or a field
 // of the application's own Go type, carries @goField(forceResolver: true):

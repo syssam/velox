@@ -78,12 +78,15 @@
 // whose files are named as veloxe's were (velox_salesorder.graphql).
 // entities=A+B writes the SDL of the schemas A and B alone: a field whose
 // type is a schema left out is left out, and each where input a written
-// one nests is written; the Go is the whole schema's:
+// one nests is written, under sdlfiles=entity in velox.graphql; the Go is
+// the whole schema's. apptypes=A+B names the application's types their SDL
+// may name: a field naming another type velox-graphql does not declare is
+// left out, and an input naming one is refused:
 //
-//	go tool velox-gen -out veloxgen -plugin velox-graphql:engine=graphql-go,sdlfiles=entity,entities=SalesOrder+SalesOrderItem ./veloxschema
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:engine=graphql-go,sdlfiles=entity,entities=SalesOrder+SalesOrderItem,apptypes=Decimal+Map ./veloxschema
 //
-// only=enums takes neither compat, where, sdlfiles nor entities, and writes
-// the same Go for either engine. Any other option fails the run.
+// only=enums takes neither compat, where, sdlfiles, entities nor apptypes,
+// and writes the same Go for either engine. Any other option fails the run.
 package main
 
 import (

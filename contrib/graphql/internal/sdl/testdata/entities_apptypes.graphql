@@ -1,0 +1,100 @@
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
+
+"""A time, as an RFC 3339 string."""
+scalar Time
+
+"""A UUID, as a string."""
+scalar UUID
+
+"""Bytes, as a base64 string."""
+scalar Bytes
+
+"""A JSON value."""
+scalar JSON
+
+"""An unsigned 64-bit integer, as a decimal string."""
+scalar Uint64
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+
+"""Information about a page of a connection."""
+type PageInfo {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+# The root query.
+
+type Query {
+  """The connection to the Asset nodes, filtered by where, ordered by the key, and paged by the other arguments."""
+  assets(after: Cursor, first: Int, before: Cursor, last: Int, where: AssetWhereInput): AssetConnection!
+}
+
+# Asset
+
+type Asset {
+  id: ID!
+  name: String!
+  price: Money!
+  related: [Asset!] @goField(forceResolver: true)
+}
+
+"""A connection to a list of Asset."""
+type AssetConnection {
+  """The edges of this page."""
+  edges: [AssetEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Asset."""
+type AssetEdge {
+  """The Asset at the end of the edge."""
+  node: Asset!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Filters Asset nodes: a node matches when every predicate given holds."""
+input AssetWhereInput {
+  not: AssetWhereInput
+  and: [AssetWhereInput!]
+  or: [AssetWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
+  name: String
+  nameNEQ: String
+  nameIn: [String!]
+  nameNotIn: [String!]
+  price: Money
+  priceNEQ: Money
+  priceIn: [Money!]
+  priceNotIn: [Money!]
+}

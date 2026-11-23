@@ -66,8 +66,16 @@ type Config struct {
 	// is an entity left out is left out too. A where input keeps every
 	// predicate its Go struct has, so the where input of an entity left out
 	// that one of theirs nests is written, with its enums, however far it
-	// nests. The Go velox-graphql writes is the whole schema's.
+	// nests. Under PerEntity such an input goes in the shared file (ADR
+	// 0130). The Go velox-graphql writes is the whole schema's.
 	Entities []string
+	// AppTypes, when not empty, are the types the application declares that
+	// the SDL of Entities may name (velox-graphql's option apptypes=; ADR
+	// 0130). A field of a written type that names a type neither the SDL
+	// declares nor AppTypes lists is left out. A written input that names
+	// one is refused, since graphql-go binds an input's every field. When
+	// empty, every type graphql.Type and graphql.Map name stays.
+	AppTypes []string
 }
 
 // veloxeCamel is veloxe's GraphQL name of a schema name, as its generator's

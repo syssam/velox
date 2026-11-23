@@ -30,6 +30,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `entities=A+B` writes those entities' SDL alone, with each where input
   theirs nest, for an application that serves part of its schema (ADR
   0125).
+- velox-graphql: `apptypes=A+B` names the application's types the SDL of
+  `entities=` may name; a field naming another type velox-graphql does not
+  declare is left out, and an input naming one is refused. Under
+  `sdlfiles=entity` the inputs written of an entity not chosen go in
+  `velox.graphql`, so no gqlc group holds inputs alone, whose `Bindings()`
+  gqlc's `NewSchema` registers itself (ADR 0130).
 - reports: `velox.ColumnByName[E](name)` is a column's Term by its name;
   `velox.DateTrunc[E](unit, t, opts...)` truncates a time to a year,
   quarter, month, ISO week, day or hour, `InZone(name)` and
