@@ -316,7 +316,8 @@ relation's included, before the Read policy, and `WithoutPolicy` does not
 lift it. A hook that must use the typed API of `veloxgen` (another entity, say)
 is a run-time hook, `velox.WithHooks[veloxgen.Task](...)`, a DB option.
 ent's `client.Use(hooks...)` is `velox.WithHooksAll(hooks...)`, and
-`m.Type()` is `m.Entity()`. ent's `client.Intercept(...)` that adds a
+`m.Type()` is `m.Entity()`, which compares with the generated
+`veloxgen.TypeTask`, as ent's `m.Type()` with `ent.TypeTask`. ent's `client.Intercept(...)` that adds a
 condition is `velox.WithFilter(func(ctx, db *velox.DB, entity string, op velox.Op) (velox.Predicate,
 error))`, a row filter for every entity with an interceptor's reach
 (decision 0098). ent's interceptor wraps queries only; a filter that

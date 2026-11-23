@@ -1503,6 +1503,15 @@ func (l *lowerer) checkDeclared(joins []*join) {
 	for i, j := range joins {
 		joinOK[i] = add(j.ent.Name, "join entity", j.owner, j.at)
 	}
+	// velox.go names each entity in a constant, TypeX.
+	for _, e := range l.g.Entities {
+		add(typePrefix+e.Name, "type constant", e.Name, loc{pos: e.Pos})
+	}
+	for i, j := range joins {
+		if joinOK[i] {
+			add(typePrefix+j.ent.Name, "type constant", j.owner, j.at)
+		}
+	}
 	for _, c := range l.checkList {
 		add(c.check.Func, "enum validator", c.schema, c.at)
 	}

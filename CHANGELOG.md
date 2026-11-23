@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-gen: the generated package names each entity in a constant,
+  `TypeUser = "User"`, as ent's does. The value is the entity a
+  `velox.Filter` receives and `velox.HasColumn` takes. A `TypeX` that
+  collides with another generated name is refused (ADR 0139).
+  Regenerate: `velox.GeneratedCodeIsVersion29` replaces Version28.
 - A policy function, privacy rule or interceptor Filter is not applied
   to a statement made under its own ctx, so one that reads its own
   entity ends instead of calling itself without end. One that reads

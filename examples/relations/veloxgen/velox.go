@@ -5,4 +5,15 @@ package veloxgen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion28
+const _ = velox.GeneratedCodeIsVersion29
+
+// The names of the entities, which a velox.Filter receives as entity.
+const (
+	TypeAuthor     = "Author"
+	TypeClub       = "Club"
+	TypeComment    = "Comment"
+	TypeMembership = "Membership"
+	TypePost       = "Post"
+	TypePostTag    = "PostTag"
+	TypeTag        = "Tag"
+)

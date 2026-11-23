@@ -434,7 +434,7 @@ func (Note) Fields() []schema.Field { return []schema.Field{field.String("text")
 func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.Type)} }
 `)
 	code, out, errs := runCLI(t, dir, "-check", "./veloxschema")
-	for _, want := range []string{"veloxgen/tag.go is no longer generated; a run removes it", "veloxgen/label.go is missing", "veloxgen/note.go is missing", "veloxgen/user.go is out of date"} {
+	for _, want := range []string{"veloxgen/tag.go is no longer generated; a run removes it", "veloxgen/label.go is missing", "veloxgen/note.go is missing", "veloxgen/user.go is out of date", "veloxgen/velox.go is out of date"} {
 		if !strings.Contains(errs, want) {
 			t.Errorf("-check lacks %q: %d %q %q", want, code, out, errs)
 		}
@@ -443,7 +443,7 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.T
 		t.Errorf("-check: %d", code)
 	}
 	code, out, errs = runCLI(t, dir, "./veloxschema")
-	if want := "veloxgen/label.go\nveloxgen/note.go\nveloxgen/tag.go\nveloxgen/user.go\n"; code != 0 || out != want {
+	if want := "veloxgen/label.go\nveloxgen/note.go\nveloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n"; code != 0 || out != want {
 		t.Fatalf("regenerate: %d %q %q, want %q", code, out, errs, want)
 	}
 	if got, want := strings.Join(generatedFiles(t, dir), " "), "label.go note.go user.go velox.go"; got != want {
@@ -456,7 +456,7 @@ func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("notes", Note.T
 	if err := os.Remove(filepath.Join(dir, "veloxschema", "note.go")); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/note.go\nveloxgen/user.go\n" {
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/note.go\nveloxgen/user.go\nveloxgen/velox.go\n" {
 		t.Fatalf("after deleting Note: %d %q %q", code, out, errs)
 	}
 	if code, out, errs := runCLI(t, dir, "-check", "./veloxschema"); code != 0 || out != "" || errs != "" {

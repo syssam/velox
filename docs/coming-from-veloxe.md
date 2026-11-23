@@ -185,6 +185,7 @@ veloxe's own, or differ in a veloxe port:
 | field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
 | `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
+| the generated package's `velox.TypeUser` | `veloxgen.TypeUser`, the same value: the entity a filter receives, `m.Entity()` and `velox.HasColumn`'s first argument ([ADR 0139](decisions/0139-entity-type-constants.md)) |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
 | `client.User.Get(ctx, id)`, `UpdateOneID(id)…Save(ctx)`, `DeleteOneID(id).Exec(ctx)` | `Where(U.ID.EQ(id))` and `One(ctx)` on `db.Query`, `db.Update` and `db.Delete`, or `db.Save(&u, cols...)` for an entity in hand ([guide](guide.md#one-row-by-key), [ADR 0121](decisions/0122-one-row-by-key.md)) |
 | `ForUpdate()` on SQLite, which veloxe ran without the clause | the same, under the option `velox.WithSQLiteLockingReads()`; without it the read fails ([guide](guide.md#row-locks), [ADR 0123](decisions/0123-sqlite-locking-reads-opt-in.md)) |

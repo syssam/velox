@@ -151,6 +151,7 @@ func renderPackage(o *Out) string {
 		importBlock(&w, o, o.Imports, nil)
 	}
 	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
+	typeConsts(&w, o)
 	if o.EntityTable {
 		entityTable(&w, o)
 	}
@@ -158,6 +159,30 @@ func renderPackage(o *Out) string {
 	enumChecks(&w, o.Checks)
 	return w.String()
 }
+
+// typeConsts writes TypeX for each entity X, join entities too, sorted by
+// name, as ent's mutation.go does. Its value is the entity's name, which a
+// velox.Filter receives as its entity.
+func typeConsts(w *writer, o *Out) {
+	names := make([]string, len(o.Entities))
+	for i, e := range o.Entities {
+		names[i] = e.Name
+	}
+	if len(names) == 0 {
+		return
+	}
+	slices.Sort(names)
+	w.p("")
+	w.p("// The names of the entities, which a velox.Filter receives as entity.")
+	w.p("const (")
+	for _, n := range names {
+		w.p("%s%s = %s", typePrefix, n, strconv.Quote(n))
+	}
+	w.p(")")
+}
+
+// typePrefix begins the name of an entity's constant: TypeUser.
+const typePrefix = "Type"
 
 // enums writes the enum types the file of the entity owner declares: those
 // of the entity's fields alone, or, for owner "", velox.go's, which several

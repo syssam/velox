@@ -406,7 +406,7 @@ A `//go:generate go run generate.go` line in another file of the package
 runs it.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion28`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion29`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -1722,6 +1722,10 @@ reach a deleted row: code that reads it with the deleted included and then
 clears `deleted_at` under the plain context would otherwise update 0 rows
 and say nothing.
 
+`entity` is the entity's name, which the generated package names in a
+constant: `veloxgen.TypeOrder` is `"Order"`
+([ADR 0139](decisions/0139-entity-type-constants.md)).
+
 A filter fails closed. It returns `velox.Allow()` for an entity it does
 not restrict, the join entities of many-to-many edges included: restricting
 one makes `With` loads and `Has` disagree. The zero `velox.Predicate{}`, an
@@ -1741,7 +1745,7 @@ and policies apply to them
 
 ```go
 velox.WithFilter(func(ctx context.Context, db *velox.DB, entity string, op velox.Op) (velox.Predicate, error) {
-	if entity != "Order" || op != velox.OpSelect {
+	if entity != veloxgen.TypeOrder || op != velox.OpSelect {
 		return velox.Allow(), nil
 	}
 	teams, err := db.Query[veloxgen.Member]().

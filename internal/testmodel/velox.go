@@ -4,7 +4,25 @@ package testmodel
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion28
+const _ = velox.GeneratedCodeIsVersion29
+
+// The names of the entities, which a velox.Filter receives as entity.
+const (
+	TypeEvent      = "Event"
+	TypeInvoice    = "Invoice"
+	TypeItem       = "Item"
+	TypeLedger     = "Ledger"
+	TypeLine       = "Line"
+	TypePaper      = "Paper"
+	TypePaperTopic = "PaperTopic"
+	TypePlayer     = "Player"
+	TypeRemark     = "Remark"
+	TypeRoster     = "Roster"
+	TypeSample     = "Sample"
+	TypeTeam       = "Team"
+	TypeTicket     = "Ticket"
+	TypeTopic      = "Topic"
+)
 
 var veloxEntities velox.EntityTable
 

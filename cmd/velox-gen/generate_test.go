@@ -1123,7 +1123,7 @@ func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")}
 	if after := treeFiles(t, gen); !reflect.DeepEqual(after, before) {
 		t.Errorf("the output changed:\n%v", slices.Sorted(maps.Keys(after)))
 	}
-	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/item.go\nveloxgen/tag.go\nveloxgen/user.go\n" {
+	if code, out, errs := runCLI(t, dir, "./veloxschema"); code != 0 || out != "veloxgen/item.go\nveloxgen/tag.go\nveloxgen/user.go\nveloxgen/velox.go\n" {
 		t.Errorf("the next run: %d %q %q", code, out, errs)
 	}
 }

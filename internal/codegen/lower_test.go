@@ -554,6 +554,9 @@ func (ClJoin) Annotations() []schema.Annotation {
 // ClTagEdges has the name of the struct of ClTag's relations.
 type ClTagEdges struct{ schema.Schema }
 
+// TypeClBox has the name of ClBox's type constant.
+type TypeClBox struct{ schema.Schema }
+
 // ClBoxHandles has the name of the type of ClBox's handles.
 type ClBoxHandles struct{ schema.Schema }
 
@@ -601,6 +604,7 @@ func TestLowerCollisions(t *testing.T) {
 		{"enum", []schema.Interface{ClUser{}, ClUserRole{}}, []string{`schema ClUser: field "role": enum type ClUserRole collides with schema ClUserRole`}},
 		{"join", []schema.Interface{ClTag{}, ClItem{}, ClJoin{}}, []string{`schema ClTag: edge "links": join entity ClJoin collides with schema ClJoin`}},
 		{"edges", []schema.Interface{ClTag{}, ClItem{}, ClTagEdges{}}, []string{`schema ClTag: edges type ClTagEdges collides with schema ClTagEdges`}},
+		{"type constant", []schema.Interface{ClBox{}, TypeClBox{}}, []string{`schema ClBox: type constant TypeClBox collides with schema TypeClBox`}},
 		{"handles type", []schema.Interface{ClBox{}, ClBoxHandles{}}, []string{`schema ClBox: handles type ClBoxHandles collides with schema ClBoxHandles`}},
 		{"reserved", []schema.Interface{ClReserved{}, ClBox{}}, []string{
 			`schema ClReserved: field "string": its Go name String is reserved`,

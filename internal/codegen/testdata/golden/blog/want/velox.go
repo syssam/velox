@@ -10,7 +10,17 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion28
+const _ = velox.GeneratedCodeIsVersion29
+
+// The names of the entities, which a velox.Filter receives as entity.
+const (
+	TypeCategory   = "Category"
+	TypeGroup      = "Group"
+	TypePost       = "Post"
+	TypeUser       = "User"
+	TypeUserFriend = "UserFriend"
+	TypeUserGroup  = "UserGroup"
+)
 
 var veloxEntities velox.EntityTable
 
