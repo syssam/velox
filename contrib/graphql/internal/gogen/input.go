@@ -60,6 +60,42 @@ func inputNames(e *plugin.Entity, fs []sdl.InputField) []inputName {
 	return out
 }
 
+// clearRule is what the update input fs's Setters doc says of its clear
+// fields, after "A field not given sets nothing": "" when none of them
+// meets another field. A clear field wins over its field, and over the ID
+// of its edge; a clear field of an edge with a list of IDs clears it, then
+// the IDs are added.
+func clearRule(fs []sdl.InputField) string {
+	var wins, before bool
+	for _, fi := range fs {
+		switch fi.Kind {
+		case sdl.InputClear:
+			wins = true
+		case sdl.InputClearEdge:
+			for _, o := range fs {
+				switch {
+				case o.Edge != fi.Edge:
+				case o.Kind == sdl.InputEdgeID:
+					wins = true
+				case o.Kind == sdl.InputEdgeIDs || o.Kind == sdl.InputAddIDs:
+					before = true
+				}
+			}
+		}
+	}
+	var rules []string
+	if wins {
+		rules = append(rules, "a clear field wins over its field")
+	}
+	if before {
+		rules = append(rules, "a clear field of an edge with a list of IDs clears it before they are added")
+	}
+	if len(rules) == 0 {
+		return ""
+	}
+	return ", and " + strings.Join(rules, ", and ")
+}
+
 // writeInput writes the Go type of the mutation input in, whose fields are
 // fs, and, when it has a sensitive field, its String and GoString, which
 // leave out the sensitive fields' values.
@@ -206,7 +242,7 @@ func (r *renderer) writeSetters(f *file, t *sdl.Type, in string, fs []sdl.InputF
 		}
 		f.doc("", doc.String())
 	} else {
-		f.doc("", fmt.Sprintf("Setters returns the input's fields and edges as setters for db.Update[%s]().SetInput. A field not given sets nothing, and a clear field wins over its field.", e.Name))
+		f.doc("", fmt.Sprintf("Setters returns the input's fields and edges as setters for db.Update[%s]().SetInput. A field not given sets nothing%s.", e.Name, clearRule(fs)))
 	}
 	f.p("//")
 	f.doc("", "It does no I/O. A value a validator refuses, or a list of more than gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql.")

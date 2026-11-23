@@ -199,7 +199,7 @@ type UpdateUserInput struct {
 
 // Setters returns the input's fields and edges as setters for
 // db.Update[User]().SetInput. A field not given sets nothing, and a clear field
-// wins over its field.
+// of an edge with a list of IDs clears it before they are added.
 //
 // It does no I/O. A value a validator refuses, or a list of more than
 // gqlgraph.MaxIDs IDs, is BAD_USER_INPUT naming the field. See "Mutations" in
