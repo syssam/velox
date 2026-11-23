@@ -1124,7 +1124,7 @@ runs the statement `Where(I.ID.EQ(id))` would run with `All` or `Exec`.
   key, it runs in a transaction, a savepoint inside one, and rolls back with
   `ErrNotSingular` when more than one row matches. A hook that skips the
   delete without `SetAffected` makes it not found
-  ([ADR 0121](decisions/0121-one-row-by-key.md)).
+  ([ADR 0122](decisions/0122-one-row-by-key.md)).
 
 For an entity you already hold, `Save` writes the columns you name by its
 key, and is also `ErrNotFound` when the row is gone
@@ -1931,7 +1931,7 @@ other check still holds: the read needs a `Tx`, and `Count` cannot lock.
 `SkipLocked` then skips nothing, and `NoWait` does not stop a wait.
 
 What stands in for the lock is SQLite's one writer at a time
-([ADR 0122](decisions/0122-sqlite-locking-reads-opt-in.md)):
+([ADR 0123](decisions/0123-sqlite-locking-reads-opt-in.md)):
 
 - On `velox.Connect`'s one connection, transactions in the process take
   turns, so a read-modify-write is never interleaved.

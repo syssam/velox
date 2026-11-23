@@ -1,4 +1,4 @@
-# 0122. WithSQLiteLockingReads runs a locking read on SQLite without its clause
+# 0123. WithSQLiteLockingReads runs a locking read on SQLite without its clause
 
 - Status: accepted, 2026-11-23.
 

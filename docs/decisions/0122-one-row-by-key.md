@@ -1,4 +1,4 @@
-# 0121. One row by key is the key's EQ and One; DeleteQuery.One
+# 0122. One row by key is the key's EQ and One; DeleteQuery.One
 
 - Status: accepted, 2026-11-23. Builds on [0048](0048-update-one.md) and
   [0092](0092-update-one-by-key.md).
