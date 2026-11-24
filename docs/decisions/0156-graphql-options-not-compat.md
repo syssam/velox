@@ -148,16 +148,35 @@ option.
 
 ### The full option set
 
-These options together write what `compat=veloxe,where=whitelist,
-engine=graphql-go` wrote, byte for byte but for the version line and
+These options together write what `compat=veloxe,where=whitelist`
+wrote with the same `engine=`, byte for byte but for the version line and
 comments:
 
 ```
 names=schema,filters=lenient,node=on,sdlfiles=entity,orderfields=all,
 queryfields=all,optional=nullable,requirededges=nonnull,jsontypes=named,
 idops=equality,inputkeys=column,apptypes=JSON+UUID+Uint64,
-where=whitelist,engine=graphql-go
+where=whitelist
 ```
+
+`engine=` is not part of what compat set, and it stays apart: an
+application keeps the engine it generated for. `engine=graphql-go`, with
+compat as without, writes what gqlc and graphql-go read, which gqlgen
+output has not:
+
+- `@goModel` on every type, input, enum and scalar: gqlc binds a type to
+  its Go type by it (gqlc's `modelDirective`);
+- `@goField(forceResolver: true)` on a field a `<Field>GQL` method
+  converts, such as a JSON field, where gqlgen output binds the method
+  with `@goField(name: "<Field>GQL")`: gqlc does not read
+  `@goField(name:)`, so the field is on the Resolver;
+- a `graphql:"…"` tag on an input's Go field whose GraphQL name
+  graphql-go would not derive from it: graphql-go's `exportedToGraphQL`
+  reads `IPAddress` as `iPAddress` and `APIKeyID` as `aPIKeyId`, so
+  without the tag `ipAddress` would not bind.
+
+Each is needed for graphql-go to bind the schema, so none is tied to
+another option.
 
 `apptypes=` adds `Bytes` when the schema has no bytes field. `idops=
 equality` keeps compat's equality-only rule, so no predicate is added.
@@ -213,8 +232,14 @@ renames a key keeps that input name, or renames the field.
 ## Evidence
 
 - `TestOldVeloxGolden` in `contrib/graphql/internal/gqlplugin`: the full
-  option set against committed goldens (`testdata/oldvelox/graphqlgo`,
-  `edgeschema`, `salesorder`), captured from compat before its removal.
+  option set against committed goldens, each captured from compat with
+  the same engine before its removal: `testdata/oldvelox/graphqlgo`,
+  `edgeschema`, `salesorder` and `initialisms` for graphql-go, and
+  `salesorder-gqlgen` and `initialisms-gqlgen` for gqlgen. `initialisms`
+  (modeltest's `initialisms.json`) has Go names that start with
+  initialisms (`IPAddress`, `APIName`, `HasAPIAccess`, `DNSRecordName`,
+  `SLABreachAt`, `APIKeyID`, `SLADefinitionID`), a JSON field a GQL
+  method binds and a Bytes field.
 - `TestOldVeloxAPI` in `contrib/graphql/cmd/velox-graphql`: the full set,
   generated, built and served end to end.
 - `TestRun` in `contrib/graphql/internal/gqlplugin` and

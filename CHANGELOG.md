@@ -839,8 +839,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `orderfields=all`, `queryfields=all`, `optional=nullable`,
   `requirededges=nonnull`, `jsontypes=named`, `idops=equality`,
   `inputkeys=column` and `apptypes=JSON+UUID+Uint64`. Given together, with
-  `where=whitelist,engine=graphql-go`, they write what `compat=` wrote,
-  byte for byte but for the version line and comments (ADR 0156).
+  `where=whitelist` and the same `engine=`, they write what `compat=`
+  wrote, byte for byte but for the version line and comments (ADR 0156).
 - velox-graphql's defaults are entgql's (ADR 0156):
   - a declared foreign key is an `ID` in its type beside its edge, and its
     predicates and input field are named from it (`authorID`, not

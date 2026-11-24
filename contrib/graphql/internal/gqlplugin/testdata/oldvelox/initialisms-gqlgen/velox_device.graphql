@@ -1,0 +1,155 @@
+# Device
+
+type Device implements Node {
+  id: ID!
+  ipAddress: String!
+  apiName: String!
+  hasApiAccess: Boolean!
+  dnsRecordName: String
+  slaBreachAt: Time
+  usingPredicate: JSON! @goField(name: "UsingPredicateGQL")
+  payload: Bytes
+  apiKeyId: ID!
+  slaDefinitionId: ID
+  apiKey: APIKey!
+  slaDefinition: SLADefinition
+}
+
+"""A connection to a list of Device."""
+type DeviceConnection {
+  """The edges of this page."""
+  edges: [DeviceEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Device."""
+type DeviceEdge {
+  """The Device at the end of the edge."""
+  node: Device
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Device."""
+input DeviceOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: DeviceOrderField!
+}
+
+"""The fields connections to Device can be ordered by."""
+enum DeviceOrderField {
+  IP_ADDRESS
+  API_NAME
+  HAS_API_ACCESS
+  DNS_RECORD_NAME
+  SLA_BREACH_AT
+  API_KEY_ID
+  SLA_DEFINITION_ID
+}
+
+"""Filters Device nodes: a node matches when every predicate given holds."""
+input DeviceWhereInput {
+  not: DeviceWhereInput
+  and: [DeviceWhereInput!]
+  or: [DeviceWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  ipAddress: String
+  ipAddressNEQ: String
+  ipAddressIn: [String!]
+  ipAddressNotIn: [String!]
+  ipAddressContains: String
+  ipAddressHasPrefix: String
+  ipAddressHasSuffix: String
+  ipAddressEqualFold: String
+  ipAddressContainsFold: String
+  apiName: String
+  apiNameNEQ: String
+  apiNameIn: [String!]
+  apiNameNotIn: [String!]
+  apiNameContains: String
+  apiNameHasPrefix: String
+  apiNameHasSuffix: String
+  apiNameEqualFold: String
+  apiNameContainsFold: String
+  hasApiAccess: Boolean
+  hasApiAccessNEQ: Boolean
+  dnsRecordName: String
+  dnsRecordNameNEQ: String
+  dnsRecordNameIn: [String!]
+  dnsRecordNameNotIn: [String!]
+  dnsRecordNameContains: String
+  dnsRecordNameHasPrefix: String
+  dnsRecordNameHasSuffix: String
+  dnsRecordNameEqualFold: String
+  dnsRecordNameContainsFold: String
+  dnsRecordNameIsNil: Boolean
+  dnsRecordNameNotNil: Boolean
+  slaBreachAt: Time
+  slaBreachAtNEQ: Time
+  slaBreachAtIn: [Time!]
+  slaBreachAtNotIn: [Time!]
+  slaBreachAtGT: Time
+  slaBreachAtGTE: Time
+  slaBreachAtLT: Time
+  slaBreachAtLTE: Time
+  slaBreachAtIsNil: Boolean
+  slaBreachAtNotNil: Boolean
+  apiKeyId: ID
+  apiKeyIdNEQ: ID
+  apiKeyIdIn: [ID!]
+  apiKeyIdNotIn: [ID!]
+  slaDefinitionId: ID
+  slaDefinitionIdNEQ: ID
+  slaDefinitionIdIn: [ID!]
+  slaDefinitionIdNotIn: [ID!]
+  slaDefinitionIdIsNil: Boolean
+  slaDefinitionIdNotNil: Boolean
+  hasApiKey: Boolean
+  hasApiKeyWith: [APIKeyWhereInput!]
+}
+
+"""The input that creates a Device."""
+input CreateDeviceInput {
+  ipAddress: String!
+  apiName: String!
+  hasApiAccess: Boolean!
+  dnsRecordName: String
+  slaBreachAt: Time
+  usingPredicate: JSON!
+  payload: Bytes
+  """The ID of the APIKey the edge api_key leads to."""
+  apiKeyId: ID!
+  """The ID of the SLADefinition the edge sla_definition leads to."""
+  slaDefinitionId: ID
+}
+
+"""The input that updates a Device: a field not given is left as it is."""
+input UpdateDeviceInput {
+  ipAddress: String
+  apiName: String
+  hasApiAccess: Boolean
+  dnsRecordName: String
+  """Sets the field dns_record_name to NULL."""
+  clearDnsRecordName: Boolean
+  slaBreachAt: Time
+  """Sets the field sla_breach_at to NULL."""
+  clearSlaBreachAt: Boolean
+  usingPredicate: JSON
+  payload: Bytes
+  """Sets the field payload to NULL."""
+  clearPayload: Boolean
+  """The ID of the APIKey the edge api_key leads to."""
+  apiKeyId: ID
+  """The ID of the SLADefinition the edge sla_definition leads to."""
+  slaDefinitionId: ID
+  """Unlinks the edge sla_definition: it leads to no SLADefinition afterwards."""
+  clearSlaDefinition: Boolean
+}

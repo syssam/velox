@@ -1,0 +1,8 @@
+# Workspace
+
+type Workspace implements Node {
+  id: ID!
+  slug: String!
+  settings: Settings
+  assignees: [Assignee!]!
+}

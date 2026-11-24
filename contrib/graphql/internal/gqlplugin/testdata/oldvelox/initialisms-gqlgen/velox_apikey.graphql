@@ -1,0 +1,68 @@
+# APIKey
+
+type APIKey implements Node {
+  id: ID!
+  name: String!
+  devices(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: DeviceOrder, where: DeviceWhereInput): DeviceConnection!
+}
+
+"""A connection to a list of APIKey."""
+type APIKeyConnection {
+  """The edges of this page."""
+  edges: [APIKeyEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of APIKey."""
+type APIKeyEdge {
+  """The APIKey at the end of the edge."""
+  node: APIKey
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to APIKey."""
+input APIKeyOrder {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: APIKeyOrderField!
+}
+
+"""The fields connections to APIKey can be ordered by."""
+enum APIKeyOrderField {
+  NAME
+}
+
+"""Filters APIKey nodes: a node matches when every predicate given holds."""
+input APIKeyWhereInput {
+  not: APIKeyWhereInput
+  and: [APIKeyWhereInput!]
+  or: [APIKeyWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  name: String
+  nameNEQ: String
+  nameIn: [String!]
+  nameNotIn: [String!]
+  nameContains: String
+  nameHasPrefix: String
+  nameHasSuffix: String
+  nameEqualFold: String
+  nameContainsFold: String
+}
+
+"""The input that creates an APIKey."""
+input CreateAPIKeyInput {
+  name: String!
+}
+
+"""The input that updates an APIKey: a field not given is left as it is."""
+input UpdateAPIKeyInput {
+  name: String
+}

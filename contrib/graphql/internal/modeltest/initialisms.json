@@ -1,0 +1,300 @@
+{
+ "version": 3,
+ "schema_path": "example.com/app/schema",
+ "entities": [
+  {
+   "name": "APIKey",
+   "label": "api_key",
+   "handles": "APIKeys",
+   "table": "api_keys",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "auto_id": true
+    },
+    {
+     "name": "name",
+     "go_name": "Name",
+     "column": "name",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string",
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    }
+   ],
+   "edges": [
+    {
+     "name": "devices",
+     "go_name": "Devices",
+     "target": "Device",
+     "ref": "api_key",
+     "kind": "O2M",
+     "field": "api_key_id",
+     "field_on": "Device"
+    }
+   ],
+   "primary_key": [
+    0
+   ],
+   "annotations": {
+    "graphql": {
+     "query_field": "apiKeys",
+     "relay_connection": true,
+     "mutations": [
+      "create",
+      "update"
+     ]
+    }
+   }
+  },
+  {
+   "name": "SLADefinition",
+   "label": "sla_definition",
+   "handles": "SLADefinitions",
+   "table": "sla_definitions",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "auto_id": true
+    },
+    {
+     "name": "name",
+     "go_name": "Name",
+     "column": "name",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string",
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    }
+   ],
+   "edges": [
+    {
+     "name": "devices",
+     "go_name": "Devices",
+     "target": "Device",
+     "ref": "sla_definition",
+     "kind": "O2M",
+     "field": "sla_definition_id",
+     "field_on": "Device"
+    }
+   ],
+   "primary_key": [
+    0
+   ],
+   "annotations": {
+    "graphql": {
+     "query_field": "slaDefinitions",
+     "relay_connection": true,
+     "mutations": [
+      "create",
+      "update"
+     ]
+    }
+   }
+  },
+  {
+   "name": "Device",
+   "label": "device",
+   "handles": "Devices",
+   "table": "devices",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "auto_id": true
+    },
+    {
+     "name": "ip_address",
+     "go_name": "IPAddress",
+     "column": "ip_address",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string",
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    },
+    {
+     "name": "api_name",
+     "go_name": "APIName",
+     "column": "api_name",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string",
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    },
+    {
+     "name": "has_api_access",
+     "go_name": "HasAPIAccess",
+     "column": "has_api_access",
+     "type": "bool",
+     "go_type": "bool",
+     "elem_type": "bool",
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    },
+    {
+     "name": "dns_record_name",
+     "go_name": "DNSRecordName",
+     "column": "dns_record_name",
+     "type": "string",
+     "go_type": "*string",
+     "elem_type": "string",
+     "pointer": true,
+     "nullable": true,
+     "optional": true,
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    },
+    {
+     "name": "sla_breach_at",
+     "go_name": "SLABreachAt",
+     "column": "sla_breach_at",
+     "type": "time",
+     "go_type": "*time.Time",
+     "elem_type": "time.Time",
+     "pointer": true,
+     "nullable": true,
+     "optional": true,
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     },
+     "pkg_path": "time"
+    },
+    {
+     "name": "using_predicate",
+     "go_name": "UsingPredicate",
+     "column": "using_predicate",
+     "type": "json",
+     "go_type": "map[string]any",
+     "elem_type": "map[string]any",
+     "kind": "map"
+    },
+    {
+     "name": "payload",
+     "go_name": "Payload",
+     "column": "payload",
+     "type": "bytes",
+     "go_type": "*[]byte",
+     "elem_type": "[]byte",
+     "pointer": true,
+     "nullable": true,
+     "optional": true,
+     "kind": "slice"
+    },
+    {
+     "name": "api_key_id",
+     "go_name": "APIKeyID",
+     "column": "api_key_id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "annotations": {
+      "graphql": {
+       "type": "ID",
+       "where_input": true
+      }
+     }
+    },
+    {
+     "name": "sla_definition_id",
+     "go_name": "SLADefinitionID",
+     "column": "sla_definition_id",
+     "type": "int64",
+     "go_type": "*int64",
+     "elem_type": "int64",
+     "pointer": true,
+     "nullable": true,
+     "optional": true,
+     "annotations": {
+      "graphql": {
+       "where_input": true
+      }
+     }
+    }
+   ],
+   "edges": [
+    {
+     "name": "api_key",
+     "go_name": "APIKey",
+     "target": "APIKey",
+     "ref": "devices",
+     "kind": "M2O",
+     "unique": true,
+     "required": true,
+     "inverse": true,
+     "field": "api_key_id",
+     "field_on": "Device",
+     "owns_key": true,
+     "annotations": {
+      "graphql": {
+       "where_edge": true
+      }
+     }
+    },
+    {
+     "name": "sla_definition",
+     "go_name": "SLADefinition",
+     "target": "SLADefinition",
+     "ref": "devices",
+     "kind": "M2O",
+     "unique": true,
+     "inverse": true,
+     "field": "sla_definition_id",
+     "field_on": "Device",
+     "owns_key": true
+    }
+   ],
+   "primary_key": [
+    0
+   ],
+   "annotations": {
+    "graphql": {
+     "query_field": "devices",
+     "relay_connection": true,
+     "mutations": [
+      "create",
+      "update"
+     ]
+    }
+   }
+  }
+ ],
+ "enums": []
+}

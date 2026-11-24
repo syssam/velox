@@ -20,6 +20,9 @@ var edgeSchemaJSON []byte
 //go:embed salesorder.json
 var salesOrderJSON []byte
 
+//go:embed initialisms.json
+var initialismsJSON []byte
+
 // Model returns a fresh copy of model.json, so a test may change it, with
 // graphql.RelayConnection on each entity with a QueryField.
 func Model(t testing.TB) *plugin.Model {
@@ -52,6 +55,20 @@ func SalesOrder(t testing.TB) *plugin.Model {
 	t.Helper()
 	var m plugin.Model
 	if err := json.Unmarshal(salesOrderJSON, &m); err != nil {
+		t.Fatal(err)
+	}
+	return &m
+}
+
+// Initialisms returns a fresh copy of initialisms.json: devices with API
+// keys and SLA definitions, whose Go names start with initialisms
+// (IPAddress, APIName, HasAPIAccess, DNSRecordName, SLABreachAt, APIKeyID,
+// SLADefinitionID), beside a JSON field that a GQL method binds and a
+// Bytes field, as an application of the old velox annotates them.
+func Initialisms(t testing.TB) *plugin.Model {
+	t.Helper()
+	var m plugin.Model
+	if err := json.Unmarshal(initialismsJSON, &m); err != nil {
 		t.Fatal(err)
 	}
 	return &m

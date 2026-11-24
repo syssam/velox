@@ -2624,6 +2624,11 @@ graphql-go, gives these together
 go tool velox-gen -plugin velox-graphql:names=schema,filters=lenient,node=on,sdlfiles=entity,orderfields=all,queryfields=all,optional=nullable,requirededges=nonnull,jsontypes=named,idops=equality,inputkeys=column,apptypes=JSON+UUID+Uint64,where=whitelist,engine=graphql-go ./veloxschema
 ```
 
+For gqlgen, leave out `engine=graphql-go`. That option writes what gqlc
+needs: `@goModel` on each type, the Resolver for a field a `<Field>GQL`
+method converts, and a `graphql` tag on an input field whose name
+graphql-go would not derive, such as `IPAddress`'s `ipAddress`.
+
 ## Where to go next
 
 - [examples/](../examples/README.md): one runnable program per topic, plus
