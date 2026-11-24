@@ -471,6 +471,8 @@ databases it has the bootstrap ent's tests use
 | `client.Schema.Create(ctx)` in a test or a development server | `migrate.Create(ctx, velox.Pool(db), s)`, with `s` from `veloxtest.Schema(dialect, schemas...)`: it makes the tables in an empty database, does nothing when they are there as the schema says, and refuses any other database |
 | `client.Schema.Create(ctx)` at deploy | `migrate diff`, then `migrate apply` or `migrate.Up` |
 | `migrate.WithDropColumn`, `WithDropIndex` | `migrate diff -allow drop-column=t.c`; `Create` never alters a table |
+| `enttest.WithOptions(ent.Log(...))` | `veloxtest.WithOptions(velox.WithCallers(), ...)` |
+| `migrate.WithForeignKeys(false)` | velox.json `"foreign_keys": false`, set by `migrate diff -foreign-keys=false` or `migrate baseline -foreign-keys=false` when the directory starts; in a test, `veloxtest.Open(t, driver, dsn, schemas, veloxtest.WithoutForeignKeys())` ([ADR 0167](decisions/0167-no-foreign-keys.md)) |
 
 ent leaves a foreign key without an index unremarked. velox declares
 none either, but `migrate diff` writes an `unindexed-fk` review line for
@@ -519,11 +521,14 @@ a JSON column, meets this. Give the field a `Default` or make it
 [A join table becomes an edge schema](migrations-operations.md#a-join-table-becomes-an-edge-schema)
 shows the edit and `migrate hash`.
 
-velox declares a foreign key for every edge, and has no option to leave
-them out. A database made with `migrate.WithForeignKeys(false)` has none,
-and baseline records it as it is, so the first `diff` adds every foreign
-key. Each fails on rows whose key matches no row of its target: find and
-fix those first.
+velox declares a foreign key for every edge. A database made with
+`migrate.WithForeignKeys(false)` has none. Baseline it with
+`-foreign-keys=false`, and velox.json records `"foreign_keys": false`:
+no file of the directory adds a key, and drift expects none. Without the
+flag, baseline records the database as it is, so the first `diff` adds
+every foreign key. Each fails on rows whose key matches no row of its
+target: find and fix those first
+([ADR 0167](decisions/0167-no-foreign-keys.md)).
 
 A field made `Nillable` gets `DROP NOT NULL` from `diff`, so a hand step
 that relaxed such columns is not needed. When `apply` refuses or stops,

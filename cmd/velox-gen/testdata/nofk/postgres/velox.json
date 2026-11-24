@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "dialect": "postgres",
+  "table": "velox_migrations",
+  "lock_timeout": "5s",
+  "foreign_keys": false
+}

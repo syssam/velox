@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "dialect": "mysql",
+  "tables": [
+    {
+      "name": "groups",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "collation": "utf8mb4_bin"
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "title",
+          "type": "varchar(255)",
+          "default": "''"
+        },
+        {
+          "name": "author_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "indexes": [
+        {
+          "name": "posts_users_posts",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "collation": "utf8mb4_bin"
+    },
+    {
+      "name": "user_groups",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "bigint"
+        },
+        {
+          "name": "group_id",
+          "type": "bigint"
+        }
+      ],
+      "primary_key": [
+        "user_id",
+        "group_id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "indexes": [
+        {
+          "name": "user_groups_group_id",
+          "columns": [
+            "group_id"
+          ]
+        }
+      ],
+      "collation": "utf8mb4_bin"
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "collation": "utf8mb4_bin"
+    }
+  ]
+}

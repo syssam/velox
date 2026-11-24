@@ -28,18 +28,19 @@
 //	velox-gen version
 //	velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
 //	                       [-rename-table old=new]... [-rename-column table.old=new]...
-//	                       [-lock-timeout 5s] [-check [-scratch-db dsn] [-replay=false]] [-dry-run] [-db dsn] [package]
+//	                       [-lock-timeout 5s] [-check [-scratch-db dsn] [-replay=false]] [-dry-run] [-db dsn]
+//	                       [-foreign-keys=false] [package]
 //	velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume] [-lock-wait 5m] [-dry-run]
 //	                        [-baseline version]
 //	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
 //	velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json] [-scratch-db dsn]
-//	velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
+//	velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [-foreign-keys=false] [package]
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
 //	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
 //	                          [-force reason] [-scratch-db dsn]
 //	velox-gen migrate rebase [-dir ./migrations] [-scratch-db dsn] [-replay=false] file.sql... [package]
-//	velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
+//	velox-gen migrate sql -dialect postgres|mysql|sqlite [-foreign-keys=false] [package]
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
 // error. Flags may follow the package, as in "go test ./x -v"; "--" ends them.
@@ -501,7 +502,8 @@ func printUsage(w io.Writer) {
         protocol and of the model
   velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
         [-rename-table old=new]... [-rename-column table.old=new]...
-        [-lock-timeout 5s] [-check [-scratch-db dsn] [-replay=false]] [-dry-run] [-db dsn] [package]
+        [-lock-timeout 5s] [-check [-scratch-db dsn] [-replay=false]] [-dry-run] [-db dsn]
+        [-foreign-keys=false] [package]
         write the migration that brings the directory's schema.json to the
         schema package
   velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
@@ -511,7 +513,7 @@ func printUsage(w io.Writer) {
         print the applied, pending, dirty and ahead versions
   velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json] [-scratch-db dsn]
         print how the database's tables differ from schema.json
-  velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
+  velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [-foreign-keys=false] [package]
         adopt an existing database into a new migration directory
   velox-gen migrate lint [-dir ./migrations] [-since version]
         check the migration files
@@ -526,7 +528,7 @@ func printUsage(w io.Writer) {
   velox-gen migrate rebase [-dir ./migrations] [-scratch-db dsn] [-replay=false] file.sql... [package]
         move a branch's migration files after the directory's others, as two
         branches that took one version need, and rebuild schema.json and velox.sum
-  velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
+  velox-gen migrate sql -dialect postgres|mysql|sqlite [-foreign-keys=false] [package]
         print the schema package's DDL, for Atlas's external_schema
 
 Exit codes:

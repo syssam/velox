@@ -172,6 +172,7 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	seen := c.fs.String("db", "", "a database whose history to look at first: refuse if it holds a version above the directory's last, which a new file would reuse")
 	scratch := c.fs.String("scratch-db", "", "with -check: an empty database's `dsn`, which the files are applied to, to compare with schema.json (default on SQLite: a temporary file)")
 	replay := c.fs.Bool("replay", true, "with -check: apply the files to a scratch database and compare the result with schema.json; -replay=false compares the schema package with schema.json alone")
+	foreignKeys := c.fs.Bool("foreign-keys", true, foreignKeysUsage)
 	patterns, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
@@ -194,7 +195,11 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 
 	// The directory, or a new one of -dialect.
 	abs := c.abs(dir)
-	d, state, code, ok := c.diffDir(dir, abs, dialect.d, *check)
+	var fk *bool
+	if given(c.fs, "foreign-keys") {
+		fk = foreignKeys
+	}
+	d, state, code, ok := c.diffDir(dir, abs, dialect.d, fk, *check)
 	if !ok {
 		return code
 	}
@@ -219,6 +224,9 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))
 		return 1
+	}
+	if d.Config.NoForeignKeys {
+		to = to.WithoutForeignKeys()
 	}
 
 	if *check {
@@ -261,10 +269,15 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	return c.stopped(interrupted, 0)
 }
 
+// foreignKeysUsage is the help of diff's and baseline's -foreign-keys.
+const foreignKeysUsage = "with a new directory: false writes no foreign key and records \"foreign_keys\": false in velox.json, as ent's migrate.WithForeignKeys(false); with an existing one it must agree with velox.json"
+
 // diffDir returns the migration directory at abs, or a new one of
-// dialect, and dirState's state of abs. On a failure it reports the exit
-// code and false; a stale directory is staleCode 3 with check.
-func (c *migrateCmd) diffDir(dir, abs string, dialect velox.Dialect, check bool) (*migrate.Dir, int, int, bool) {
+// dialect, with no foreign keys when fk, -foreign-keys if given, is false,
+// and dirState's state of abs. On a failure it reports the exit code and
+// false; a stale directory is staleCode 3 with check, and -foreign-keys
+// that disagrees with an existing directory's velox.json is exit 2.
+func (c *migrateCmd) diffDir(dir, abs string, dialect velox.Dialect, fk *bool, check bool) (*migrate.Dir, int, int, bool) {
 	state, err := dirState(abs)
 	if err != nil {
 		return nil, 0, c.fail(1, err), false
@@ -278,7 +291,7 @@ func (c *migrateCmd) diffDir(dir, abs string, dialect velox.Dialect, check bool)
 			_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate diff: %s %s; name its dialect with -dialect to start it\n", filepath.Clean(*c.dir), how)
 			return nil, 0, 2, false
 		}
-		d, err := migrate.NewDir(migrate.Config{Dialect: dialect})
+		d, err := migrate.NewDir(migrate.Config{Dialect: dialect, NoForeignKeys: fk != nil && !*fk})
 		if err != nil {
 			return nil, 0, c.fail(1, err), false
 		}
@@ -296,7 +309,21 @@ func (c *migrateCmd) diffDir(dir, abs string, dialect velox.Dialect, check bool)
 		_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate diff: -dialect %s disagrees with %s, which says %s\n", dialect, c.path("velox.json"), d.Config.Dialect)
 		return nil, 0, 2, false
 	}
+	if fk != nil && *fk == d.Config.NoForeignKeys {
+		_, _ = fmt.Fprintln(c.stderr, foreignKeysDisagree(*fk, c.path("velox.json")))
+		return nil, 0, 2, false
+	}
 	return d, state, 0, true
+}
+
+// foreignKeysDisagree is the refusal of -foreign-keys=fk on a directory
+// whose velox.json, at path, says the other.
+func foreignKeysDisagree(fk bool, path string) string {
+	says := `"foreign_keys": false`
+	if !fk {
+		says = `no "foreign_keys": false`
+	}
+	return fmt.Sprintf("velox-gen: migrate diff: -foreign-keys=%t disagrees with %s, which has %s; -foreign-keys only starts a directory. To change an existing one, edit \"foreign_keys\" in velox.json, run velox-gen migrate hash, then migrate diff writes the migration that adds or drops the constraints", fk, path, says)
 }
 
 // schemaTables loads and builds the schema package at pattern and returns

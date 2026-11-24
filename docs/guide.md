@@ -467,6 +467,22 @@ Declare `index.Fields("author_id")` in the schema, or pass
 ([ADR 0114](decisions/0114-unindexed-foreign-keys.md)). MySQL indexes
 every key itself.
 
+**Without foreign keys.** velox declares a FOREIGN KEY for every edge. A
+database that has never had them, as ent's
+`migrate.WithForeignKeys(false)` makes, starts its directory with
+`migrate diff -dialect postgres -foreign-keys=false` (or `migrate baseline
+… -foreign-keys=false`). velox.json then records `"foreign_keys": false`,
+and every file and schema.json of the directory holds no foreign key, on
+every dialect. `diff -check` expects none, and `migrate drift` reports a
+key the database has as `drop-foreign-key`. The indexes are the same as
+with keys, and no `unindexed-fk` line is written, as no key is added. To
+change the setting later, edit `"foreign_keys"` in velox.json and run
+`migrate hash`; the next `diff` writes the migration that drops or adds
+the keys. Relations work as before, since velox reads no key at run time,
+but what the database did for one is yours: an edge's `OnDelete` does
+nothing, and a key may name a row that does not exist
+([ADR 0167](decisions/0167-no-foreign-keys.md)).
+
 You can also apply migrations from your program, which is handy in tests and
 small services. Embed the directory and call `migrate.Up` on the pool:
 
@@ -510,6 +526,11 @@ development server: it makes the tables in an empty database, does
 nothing when the database already holds them as the schema says, and
 refuses anything else. It never alters a table and writes no history, so
 production keeps the versioned files and `migrate.Up`.
+
+For a production directory without foreign keys, pass
+`veloxtest.WithoutForeignKeys()` to `veloxtest.Open`, or
+`s.WithoutForeignKeys()` to `migrate.Create`, so the test's tables match
+it. `veloxtest.WithOptions(...)` passes `velox.Option`s to the DB.
 
 **Using Atlas instead?** `go tool velox-gen migrate sql -dialect postgres
 ./veloxschema` prints the schema's `CREATE` statements for Atlas's

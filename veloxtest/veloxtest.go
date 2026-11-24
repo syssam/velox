@@ -43,7 +43,10 @@ import (
 // one of the errors joined in the result, as velox-gen reports them.
 //
 // It reads the schema values in the process, so a test needs no go
-// command, and the generated package is not involved.
+// command, and the generated package is not involved. For a directory
+// whose velox.json says "foreign_keys": false, make the tables of
+// s.WithoutForeignKeys() with migrate.Create, as Open does under
+// WithoutForeignKeys.
 func Schema(d velox.Dialect, schemas ...schema.Interface) (*migrate.Schema, error) {
 	if len(schemas) == 0 {
 		return nil, errors.New("veloxtest: no schemas")
@@ -86,14 +89,15 @@ func Schema(d velox.Dialect, schemas ...schema.Interface) (*migrate.Schema, erro
 	return codegen.Tables(g, d)
 }
 
-// built holds the tables Open built, by dialect and schema values, so that
-// the tests of one package build them once.
+// built holds the tables Open built, by dialect, foreign keys and schema
+// values, so that the tests of one package build them once.
 var built sync.Map // string → *migrate.Schema
 
-// cached is Schema, built once per dialect and schema values, and the key
-// it is kept by.
-func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, string, error) {
-	key := fmt.Sprintf("%d %#v", d, schemas)
+// cached is Schema, built once per dialect, foreign keys and schema values,
+// without its foreign keys when noFKs, and the key it is kept by, which
+// tells the two apart.
+func cached(d velox.Dialect, noFKs bool, schemas []schema.Interface) (*migrate.Schema, string, error) {
+	key := fmt.Sprintf("%d %t %#v", d, noFKs, schemas)
 	if s, ok := built.Load(key); ok {
 		return s.(*migrate.Schema), key, nil
 	}
@@ -101,15 +105,44 @@ func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, strin
 	if err != nil {
 		return nil, "", err
 	}
+	if noFKs {
+		s = s.WithoutForeignKeys()
+	}
 	built.Store(key, s)
 	return s, key, nil
 }
 
-// Open opens a database with velox.Connect(driver, dsn, opts...), makes the
-// tables of schemas in it with migrate.Create, and closes it when t ends.
+// An Option configures Open, as enttest's options do: the DB's options
+// (WithOptions) and the tables' (WithoutForeignKeys).
+type Option func(*options)
+
+// options is what Open's Options set.
+type options struct {
+	db    []velox.Option
+	noFKs bool
+}
+
+// WithOptions passes opts to velox.Connect, as enttest.WithOptions passes
+// ent's.
+func WithOptions(opts ...velox.Option) Option {
+	return func(o *options) { o.db = append(o.db, opts...) }
+}
+
+// WithoutForeignKeys makes Open's tables without a FOREIGN KEY on every
+// dialect, as enttest.WithMigrateOptions(migrate.WithForeignKeys(false))
+// does: the tables of a migration directory whose velox.json says
+// "foreign_keys": false. Indexes are kept. Nothing checks that the test
+// and the directory agree.
+func WithoutForeignKeys() Option {
+	return func(o *options) { o.noFKs = true }
+}
+
+// Open opens a database with velox.Connect(driver, dsn), with the options
+// of WithOptions, makes the tables of schemas in it with migrate.Create,
+// without foreign keys under WithoutForeignKeys, and closes it when t ends.
 // It fails t on an error. The application imports the driver, as for
 // Connect. The DB counts statements (velox.WithStatementCounting) for
-// NoNPlusOne and Budget, before opts' Around hooks.
+// NoNPlusOne and Budget, before the options' Around hooks.
 //
 // On SQLite ("sqlite" or "sqlite3") an empty dsn, or one of a database in
 // memory, as enttest's "file:ent?mode=memory&cache=shared&_fk=1", is a
@@ -117,15 +150,20 @@ func cached(d velox.Dialect, schemas []schema.Interface) (*migrate.Schema, strin
 // tables Create made once for the test binary, opened with the dsn's other
 // parameters, and with journal_mode = MEMORY and synchronous = OFF, which
 // a database the test throws away does without. Two calls with one such dsn
-// never share a database. A dsn naming a file is opened as it is.
+// never share a database, and tables with and without foreign keys are
+// copies of different files. A dsn naming a file is opened as it is.
 //
 // On PostgreSQL and MySQL the dsn names a database, and each test should
 // have its own. On every dialect, for a dsn opened as it is, Create makes
 // the tables in an empty database, accepts one that holds them as the
 // schema says, rows and all, and refuses any other.
-func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...velox.Option) *velox.DB {
+func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...Option) *velox.DB {
 	t.Helper()
-	return open(t, driver, dsn, func(d velox.Dialect) (*migrate.Schema, string, error) { return cached(d, schemas) }, opts)
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return open(t, driver, dsn, func(d velox.Dialect) (*migrate.Schema, string, error) { return cached(d, o.noFKs, schemas) }, o.db)
 }
 
 // open is Open of the tables that tables gives for a dialect, with the key

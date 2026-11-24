@@ -14,12 +14,14 @@ import (
 
 // runMigrateBaseline is velox-gen migrate baseline: it reads the schema
 // package's tables from the database and writes a new directory whose
-// 0001_baseline.sql builds them.
+// 0001_baseline.sql builds them. With -foreign-keys=false the directory
+// holds no foreign key, the database's included, each named in a warning.
 func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("baseline", stderr)
 	c.whose = "-dialect"
 	var dialect dialectFlag
 	c.fs.Var(&dialect, "dialect", "the dialect of the database and the new directory: postgres, mysql or sqlite")
+	foreignKeys := c.fs.Bool("foreign-keys", true, "false writes no foreign key, the database's included, and records \"foreign_keys\": false in velox.json, as ent's migrate.WithForeignKeys(false)")
 	patterns, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
@@ -65,7 +67,11 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 		if err != nil {
 			return nil, err
 		}
-		return codegen.Tables(g, dialect.d)
+		s, err := codegen.Tables(g, dialect.d)
+		if err != nil || *foreignKeys {
+			return s, err
+		}
+		return s.WithoutForeignKeys(), nil
 	}()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))
@@ -87,9 +93,13 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 		}
 		return 1
 	}
+	if !*foreignKeys {
+		warnings = append(warnings, leftOutKeys(snap)...)
+		snap = snap.WithoutForeignKeys()
+	}
 
 	// The new directory.
-	d, err := migrate.NewDir(migrate.Config{Dialect: dialect.d})
+	d, err := migrate.NewDir(migrate.Config{Dialect: dialect.d, NoForeignKeys: !*foreignKeys})
 	if err != nil {
 		return c.fail(1, err)
 	}
@@ -114,4 +124,19 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 	// The directory is new, so its last version is its number of scripts.
 	_, _ = fmt.Fprintf(stderr, "velox-gen: migrate baseline: run velox-gen migrate apply -baseline %d once on each existing database, then migrate drift there\n", len(plan.Scripts))
 	return c.stopped(interrupted, 0)
+}
+
+// leftOutKeys is a warning for each foreign key of snap, the database's,
+// which baseline -foreign-keys=false leaves out of the directory.
+func leftOutKeys(snap *migrate.Schema) []migrate.Warning {
+	var out []migrate.Warning
+	for _, t := range snap.Tables {
+		for _, fk := range t.ForeignKeys {
+			out = append(out, migrate.Warning{
+				Object:  t.Ref().String() + "." + fk.Name,
+				Message: "the database has this foreign key and -foreign-keys=false leaves it out of the directory, so migrate drift reports it until it is dropped",
+			})
+		}
+	}
+	return out
 }

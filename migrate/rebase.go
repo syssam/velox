@@ -24,7 +24,8 @@ import (
 // carries: keep the branch's that the moved files follow, the main branch's.
 // to is the schema the directory ends at, as velox-gen builds it from the
 // merged schema package; the files are not compared with it, which Verify
-// does on the result. A path that is not a migration file of fsys, a moved
+// does on the result. When velox.json says "foreign_keys": false, to's
+// foreign keys are left out, as Dir.Add needs. A path that is not a migration file of fsys, a moved
 // file that does not parse, a schema.json that does not read, as one with a
 // merge's conflict in it, and a result ReadDir refuses, as one whose other
 // files still share a version, are an *Error of Code "directory" or the
@@ -53,6 +54,9 @@ func Rebase(fsys fs.FS, paths []string, to *Schema) (map[string][]byte, map[stri
 	}
 	if to.Dialect != cfg.Dialect {
 		return nil, nil, refuse("the schema is %s's; the directory is %s's", to.Dialect, cfg.Dialect)
+	}
+	if cfg.NoForeignKeys {
+		to = to.WithoutForeignKeys()
 	}
 	var snap Schema
 	if err := snap.UnmarshalJSON(bytes.TrimPrefix(files["schema.json"], bom)); err != nil {

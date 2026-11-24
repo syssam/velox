@@ -20,6 +20,7 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 	fs := newFlagSet("migrate sql", stderr)
 	var dialect dialectFlag
 	fs.Var(&dialect, "dialect", "the dialect of the DDL: postgres, mysql or sqlite")
+	foreignKeys := fs.Bool("foreign-keys", true, "false writes no foreign key, as a directory whose velox.json says \"foreign_keys\": false")
 	patterns, code, done := parseFlags(fs, args)
 	if done {
 		return code
@@ -53,7 +54,11 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 		if err != nil {
 			return nil, err
 		}
-		return codegen.Tables(g, dialect.d)
+		s, err := codegen.Tables(g, dialect.d)
+		if err != nil || *foreignKeys {
+			return s, err
+		}
+		return s.WithoutForeignKeys(), nil
 	}()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", genrun.RelErrors(dir, err))

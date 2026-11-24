@@ -23,6 +23,11 @@ type Config struct {
 	Dialect     velox.Dialect
 	Table       string        // default "velox_migrations"
 	LockTimeout time.Duration // default 5s
+
+	// NoForeignKeys is velox.json's "foreign_keys": false, ent's
+	// migrate.WithForeignKeys(false): the directory's schema.json and
+	// files hold no foreign key. The default, false, keeps them.
+	NoForeignKeys bool
 }
 
 // The defaults of velox.json's optional keys, and the longest history table
@@ -89,12 +94,17 @@ type configJSON struct {
 	Dialect     string `json:"dialect"`
 	Table       string `json:"table"`
 	LockTimeout string `json:"lock_timeout"`
+	ForeignKeys *bool  `json:"foreign_keys,omitempty"`
 }
 
 // marshal is velox.json: every key, indented by two spaces, with a final
-// newline.
+// newline. "foreign_keys" is written only when it is false.
 func (c Config) marshal() []byte {
-	b, _ := json.MarshalIndent(configJSON{1, c.Dialect.String(), c.Table, c.LockTimeout.String()}, "", "  ")
+	j := configJSON{Version: 1, Dialect: c.Dialect.String(), Table: c.Table, LockTimeout: c.LockTimeout.String()}
+	if c.NoForeignKeys {
+		j.ForeignKeys = new(false)
+	}
+	b, _ := json.MarshalIndent(j, "", "  ")
 	return append(b, '\n')
 }
 
@@ -139,7 +149,8 @@ func configKeys(data []byte) (map[string]json.RawMessage, error) {
 }
 
 // parseConfig reads velox.json: the version and the dialect are required, an
-// unknown key is an error, and the table and lock timeout default.
+// unknown key is an error, and the table, lock timeout and foreign_keys
+// (true) default.
 func parseConfig(data []byte) (Config, error) {
 	bad := func(format string, args ...any) error {
 		return &Error{Code: "config", Pos: "velox.json", Reason: fmt.Sprintf(format, args...)}
@@ -150,7 +161,7 @@ func parseConfig(data []byte) (Config, error) {
 	}
 	for _, k := range slices.Sorted(maps.Keys(raw)) {
 		switch k {
-		case "version", "dialect", "table", "lock_timeout":
+		case "version", "dialect", "table", "lock_timeout", "foreign_keys":
 		default:
 			return Config{}, bad("unknown key %q", k)
 		}
@@ -203,6 +214,11 @@ func parseConfig(data []byte) (Config, error) {
 		}
 		c.LockTimeout = t
 	}
+	foreignKeys := true
+	if _, err := get("foreign_keys", &foreignKeys); err != nil {
+		return Config{}, err
+	}
+	c.NoForeignKeys = !foreignKeys
 	c, err = c.check(false)
 	if err != nil {
 		e, _ := errors.AsType[*Error](err)
@@ -433,8 +449,10 @@ func (d *Dir) PathOf(version uint64, name string) string {
 // explicitly.
 //
 // Add refuses, with an *Error of Code "directory", a nil plan or one with no
-// script, a schema of another dialect than the directory's, and a name that
-// is not of a-z, 0-9 and _ or is over 40 bytes. It does not change d, p or
+// script, a schema of another dialect than the directory's, a schema with a
+// foreign key when the Config has NoForeignKeys (plan from
+// to.WithoutForeignKeys()), and a name that is not of a-z, 0-9 and _ or is
+// over 40 bytes. It does not change d, p or
 // to; a second plan reads the directory again.
 func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 	refuse := func(format string, args ...any) error {
@@ -447,6 +465,9 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 		return nil, refuse("the schema is nil")
 	case !knownDialect(d.Config.Dialect) || to.Dialect != d.Config.Dialect:
 		return nil, refuse("the schema is %s's; the directory is %s's", to.Dialect, d.Config.Dialect)
+	}
+	if fk, ok := to.hasForeignKey(); ok && d.Config.NoForeignKeys {
+		return nil, refuse("the schema has the foreign key %s, and velox.json says \"foreign_keys\": false; plan from the schema's WithoutForeignKeys()", fk)
 	}
 	if name == "" {
 		name = defaultName(p.Changes)

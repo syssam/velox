@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "groups",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "default": "''"
+        },
+        {
+          "name": "author_id",
+          "type": "integer",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    },
+    {
+      "name": "user_groups",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "name": "group_id",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "user_id",
+        "group_id"
+      ]
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    }
+  ]
+}

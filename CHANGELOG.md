@@ -21,6 +21,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox.json's `"foreign_keys": false`, ent's `migrate.WithForeignKeys(false)`:
+  a migration directory whose files and schema.json hold no foreign key on
+  any dialect, which `migrate diff -foreign-keys=false` and `migrate baseline
+  -foreign-keys=false` start; drift reports a key the database has.
+  `migrate.Config.NoForeignKeys` and `(*migrate.Schema).WithoutForeignKeys()`
+  for Go code; `migrate sql -foreign-keys=false`; `veloxtest.WithoutForeignKeys()`
+  for `veloxtest.Open` (ADR 0167).
 - `Order.NullsFirst()` and `NullsLast()`: an ordering puts NULL before or
   after every value, in either direction, with the same rows in the same
   order on PostgreSQL and SQLite (`NULLS FIRST|LAST`) and MySQL (an
@@ -845,6 +852,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `veloxtest.Open` takes `veloxtest.Option`s, as enttest does: the DB's
+  `velox.Option`s go in `veloxtest.WithOptions(...)` (ADR 0167).
 - `FieldInSelect` and `FieldInSelectRaw` keep an integer key bare against
   a text column, so the key's index serves each outer row: the column is
   cast to the integer it spells behind a guard (a regular expression on

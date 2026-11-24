@@ -211,6 +211,33 @@ func (s *Schema) Table(ref TableRef) (*Table, bool) {
 	return nil, false
 }
 
+// WithoutForeignKeys is a copy of s with no foreign key on any table, as
+// ent's migrate.WithForeignKeys(false) creates: what a migration directory
+// whose velox.json says "foreign_keys": false holds. Indexes are kept,
+// including the one velox declares on MySQL for a key no index leads.
+// A nil s is nil.
+func (s *Schema) WithoutForeignKeys() *Schema {
+	if s == nil {
+		return nil
+	}
+	c := s.clone()
+	for i := range c.Tables {
+		c.Tables[i].ForeignKeys = nil
+	}
+	return c
+}
+
+// hasForeignKey reports whether a table of s has a foreign key, and names
+// the first.
+func (s *Schema) hasForeignKey() (string, bool) {
+	for _, t := range s.Tables {
+		if len(t.ForeignKeys) > 0 {
+			return t.Ref().String() + "." + t.ForeignKeys[0].Name, true
+		}
+	}
+	return "", false
+}
+
 // Equal reports whether s and t hold the same database. It ignores Pos and
 // column order, treats a nil and an empty slice alike, and compares
 // everything else exactly, Dialect included.

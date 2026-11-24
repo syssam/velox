@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "dialect": "postgres",
+  "tables": [
+    {
+      "name": "groups",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "groups_id_seq"
+        },
+        {
+          "name": "name",
+          "type": "character varying",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "groups_pkey"
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "posts_id_seq"
+        },
+        {
+          "name": "title",
+          "type": "character varying",
+          "default": "''"
+        },
+        {
+          "name": "author_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "posts_pkey"
+    },
+    {
+      "name": "user_groups",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "bigint"
+        },
+        {
+          "name": "group_id",
+          "type": "bigint"
+        }
+      ],
+      "primary_key": [
+        "user_id",
+        "group_id"
+      ],
+      "primary_key_name": "user_groups_pkey"
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "users_id_seq"
+        },
+        {
+          "name": "name",
+          "type": "character varying",
+          "default": "''"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "users_pkey"
+    }
+  ]
+}

@@ -1360,6 +1360,7 @@ func (r TableRef) String() string
 func (s *Schema) Equal(t *Schema) bool
 func (s *Schema) Table(ref TableRef) (*Table, bool)
 func (s *Schema) UnmarshalJSON(data []byte) error
+func (s *Schema) WithoutForeignKeys() *Schema
 func (s Schema) MarshalJSON() ([]byte, error)
 func (t *Table) Ref() TableRef
 func (w Warning) String() string
@@ -1404,7 +1405,7 @@ type ChecksumError struct { Version uint64 Path string Applied, Now string }
 type Class uint8
 type Column struct { Name string Type string Nullable bool Default string Identity bool Sequence string Comment string Pos string }
 type ColumnRef struct { Table TableRef Column string }
-type Config struct { Dialect velox.Dialect Table string LockTimeout time.Duration }
+type Config struct { Dialect velox.Dialect Table string LockTimeout time.Duration NoForeignKeys bool }
 type DiffOptions struct { RenameTables map[TableRef]TableRef RenameColumns map[ColumnRef]string }
 type Dir struct { Config Config Files []File Snapshot *Schema }
 type Directives struct { NoTransaction bool ForeignKeysOff bool LockTimeout time.Duration LockTimeoutSet bool Allow []Allow Drops []string }
@@ -1523,9 +1524,12 @@ package veloxtest
 func Budget(t testing.TB, ctx context.Context, b velox.StatementBudget) context.Context
 func FilterEntity(name string, columns ...string) velox.FilterEntity
 func NoNPlusOne(t testing.TB, ctx context.Context) context.Context
-func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...velox.Option) *velox.DB
+func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...Option) *velox.DB
 func RolledBack(t testing.TB, ctx context.Context, db *velox.DB, fn func(ctx context.Context, tx *velox.DB))
 func Schema(d velox.Dialect, schemas ...schema.Interface) (*migrate.Schema, error)
+func WithOptions(opts ...velox.Option) Option
+func WithoutForeignKeys() Option
+type Option func(*options)
 
 package untyped
 PredOp is uint8
