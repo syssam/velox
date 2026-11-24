@@ -7,7 +7,7 @@ import (
 )
 
 // Config holds velox-graphql's options for one model. Each string option is
-// "" for its default; ADR 0155 records why each default is what it is.
+// "" for its default; ADR 0156 records why each default is what it is.
 type Config struct {
 	// Names is how fields and edges are named (velox-graphql's option
 	// names=; ADR 0150): "go" by their Go names, so customer_id is

@@ -114,7 +114,7 @@ type Type struct {
 	// an and; and MaxFilterWidth does not apply, as entgql has no such
 	// limit. MaxFilterDepth does, and a where argument's budget is 10 times
 	// MaxFilterNodes, 10000 by default. Without it a where input fails
-	// closed, as SQL reads it (ADR 0155).
+	// closed, as SQL reads it (ADR 0156).
 	LenientFilters bool
 
 	fieldsOnce sync.Once

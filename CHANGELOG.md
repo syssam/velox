@@ -58,7 +58,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `or`, a `not` or a `has<Edge>With` sets nothing under `filters=lenient`:
   `errors.Is(err, veloxgql.ErrEmptyWhereInput)` holds on what a where
   input's `Predicate` and `Paginate` return. The message is unchanged
-  (ADR 0155).
+  (ADR 0156).
 
 - velox-graphql: `node=on|off` declares Relay's `Node`, with `node(id:)`
   and `nodes(ids:)` and `noder_gql.go`; `off` is the default. The generated `WithNodeType(fn)` and `WithFixedNodeType(name)`, as
@@ -827,7 +827,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   with no EXISTS on the target. `gqlgraph.Type`'s compat connection
   flag is gone, and its lenient-filters flag is `Type.LenientFilters`.
   `veloxgql.GeneratedCodeIsVersion29` is now `GeneratedCodeIsVersion30`:
-  regenerate (ADR 0155).
+  regenerate (ADR 0156).
 - velox-graphql: the `compat=` option is gone, and refused with the options
   that replace it, each of which stands alone: `names=schema`,
   `filters=lenient` (a renamed value), `node=on`, `sdlfiles=entity`,
@@ -835,8 +835,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `requirededges=nonnull`, `jsontypes=named`, `idops=equality`,
   `inputkeys=column` and `apptypes=JSON+UUID+Uint64`. Given together, with
   `where=whitelist,engine=graphql-go`, they write what `compat=` wrote,
-  byte for byte but for the version line and comments (ADR 0155).
-- velox-graphql's defaults are entgql's (ADR 0155):
+  byte for byte but for the version line and comments (ADR 0156).
+- velox-graphql's defaults are entgql's (ADR 0156):
   - a declared foreign key is an `ID` in its type beside its edge, and its
     predicates and input field are named from it (`authorID`, not
     `writerID` after a renamed edge); a key whose edge is skipped is

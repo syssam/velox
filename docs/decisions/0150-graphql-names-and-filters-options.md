@@ -1,6 +1,9 @@
 # 0150. names= and filters= are options of their own; compat=veloxe presets them
 
 - Status: accepted, 2026-11-24. Amends 0087 and 0088.
+  Its GraphQL parts are superseded by
+  [0156](0156-graphql-options-not-compat.md), 2026-11-24: compat is gone,
+  and each part is a neutral option or a default.
 
 ## Context
 

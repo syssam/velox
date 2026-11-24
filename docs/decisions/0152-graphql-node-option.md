@@ -1,6 +1,9 @@
 # 0152. node= is an option of its own; compat=veloxe presets it
 
 - Status: accepted, 2026-11-24. Amends 0061 and 0088.
+  Its GraphQL parts are superseded by
+  [0156](0156-graphql-options-not-compat.md), 2026-11-24: compat is gone,
+  and each part is a neutral option or a default.
 
 ## Context
 

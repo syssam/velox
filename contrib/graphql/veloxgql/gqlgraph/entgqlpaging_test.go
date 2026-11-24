@@ -16,7 +16,7 @@ import (
 
 // The tests of entgql's paging, which velox's connections share: msgpack
 // cursors, the tie order of one term, the page flags at a cursor, and plain
-// foreign-key predicates (ADR 0155).
+// foreign-key predicates (ADR 0156).
 
 // user is a user of a running server's probe: a key, a name and a nullable
 // age.

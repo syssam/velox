@@ -536,7 +536,7 @@ func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
 // NotNil. Each predicate is the column's alone, as SQL and entgql have
 // them: the type shows the foreign key, so scoping its predicates to what
 // the reader may see of the target would hide nothing, and would add an
-// EXISTS (ADR 0155). has<Edge> and has<Edge>With test the edge through the
+// EXISTS (ADR 0156). has<Edge> and has<Edge>With test the edge through the
 // target's policies.
 func EdgeIDField[V any](f *Filter, field string, col, _ int, _ *Type, o Ops[V]) {
 	edgeIDs(f, field, col, o)

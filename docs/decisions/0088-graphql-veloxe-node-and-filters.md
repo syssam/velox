@@ -12,6 +12,8 @@ Amended 2026-11-24 by 0152: Node is the option node=on, which compat=veloxe
 presets and node=off overrides, and which works without compat;
 `ResolveNode` and `ResolveNodes` take `WithNodeType` and
 `WithFixedNodeType`, which give an ID's type and skip the lookup.
+Its GraphQL parts are superseded by [0156](0156-graphql-options-not-compat.md),
+2026-11-24: compat is gone, and each part is a neutral option or a default.
 
 ## Context
 

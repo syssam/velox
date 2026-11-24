@@ -20,7 +20,7 @@ var update = flag.Bool("update", false, "rewrite testdata/oldvelox")
 // three models as the old velox's schemas annotate them: no
 // RelayConnection. The files and the warnings are those compat= wrote
 // before these options replaced it, but for the version line and comments
-// (ADR 0155). Run it with -update to rewrite testdata/oldvelox.
+// (ADR 0156). Run it with -update to rewrite testdata/oldvelox.
 func TestOldVeloxGolden(t *testing.T) {
 	for name, c := range map[string]struct {
 		m        *plugin.Model

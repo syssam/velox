@@ -4,6 +4,9 @@
   writing its own SDL, and over changing the API.
   Amended 2026-11-24 by 0150: names from the schema name are the option
   names=schema, which compat=veloxe presets and names=go overrides.
+  Its GraphQL parts are superseded by
+  [0156](0156-graphql-options-not-compat.md), 2026-11-24: compat is gone,
+  and each part is a neutral option or a default.
 
 ## Context
 

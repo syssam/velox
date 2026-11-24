@@ -210,7 +210,7 @@
 // and jsontypes= each shape one more part, for an application that keeps
 // an API another generator made; command velox-graphql lists their values,
 // and docs/guide.md the set an application of the old velox gives (ADR
-// 0155). Each refuses a value it does not know, and compat=, which they
+// 0156). Each refuses a value it does not know, and compat=, which they
 // replace, is refused with them.
 //
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,

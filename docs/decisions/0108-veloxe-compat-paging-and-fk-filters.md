@@ -2,6 +2,8 @@
 
 Status: accepted, 2026-11-22. Extends 0088. Amends 0027 and 0103 for
 compat=veloxe only: a foreign key's predicates are the column's alone.
+Its GraphQL parts are superseded by [0156](0156-graphql-options-not-compat.md),
+2026-11-24: compat is gone, and each part is a neutral option or a default.
 
 ## Context
 
