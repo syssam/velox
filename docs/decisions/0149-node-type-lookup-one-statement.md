@@ -1,4 +1,4 @@
-# 148. node(id:) finds its types with one statement
+# 0149. node(id:) finds its types with one statement
 
 - Status: accepted, 2026-11-24. Amends 0088.
 
