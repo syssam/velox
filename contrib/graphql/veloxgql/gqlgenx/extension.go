@@ -38,10 +38,11 @@ import (
 // A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
 // leaves it out, and its resolvers get the transaction's DB and context, so
 // every statement of the operation, its nested fields' too, is in the
-// transaction. A statement a mutation's resolver runs on db itself, not on
-// the DB veloxgql.DBFromContext reads, fails with velox.ErrOutsideTx; under
-// velox.WithoutTx(ctx) it runs outside the transaction, as an audit row that
-// must survive a rollback does.
+// transaction. A statement a mutation's resolver runs on db itself, the DB
+// the extension was given, runs in that transaction too (velox.DB.Tx), so a
+// resolver needs only the DB it holds; one on another DB fails with
+// velox.ErrOutsideTx. Under velox.WithoutTx(ctx) it runs outside the
+// transaction, as an audit row that must survive a rollback does.
 //
 // A transaction's DB is not safe for concurrent use, and gqlgen runs only
 // the mutation's root fields one after another: below the root it resolves

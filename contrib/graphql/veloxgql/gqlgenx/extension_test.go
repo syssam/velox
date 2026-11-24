@@ -584,17 +584,19 @@ func TestMutationCommits(t *testing.T) {
 }
 
 // TestMutationGetsTheTxContext: a mutation's resolvers get the transaction's
-// context. It has the transaction's deadline, and under it a statement on the
-// DB given to NewExtension, not the transaction's, fails with ErrOutsideTx, before
-// it waits for the connection the transaction holds.
+// context. It has the transaction's deadline. Under it a statement on the DB
+// given to NewExtension, which began the transaction, runs in it, on the
+// connection the transaction holds; one on another DB fails with
+// ErrOutsideTx, before it waits for that connection.
 func TestMutationGetsTheTxContext(t *testing.T) {
 	db, _ := handlerDB(t, velox.WithDeadlines(velox.Deadlines{Tx: 30 * time.Second}))
 	var deadline bool
-	var outside error
+	var inside, outside error
 	srv := serve(db, map[string]resolver{
 		"add": func(ctx context.Context, args map[string]any) (any, error) {
 			_, deadline = ctx.Deadline()
-			_, outside = db.Query[person]().Count(ctx)
+			_, inside = db.Query[person]().Count(ctx)
+			_, outside = db.WithoutPolicy("another DB").Query[person]().Count(ctx)
 			return args["id"], nil
 		},
 	})
@@ -604,8 +606,41 @@ func TestMutationGetsTheTxContext(t *testing.T) {
 	if !deadline {
 		t.Error("the resolver's context has no deadline")
 	}
+	if inside != nil {
+		t.Errorf("a statement on the extension's DB: %v", inside)
+	}
 	if !errors.Is(outside, velox.ErrOutsideTx) {
-		t.Errorf("a statement on the extension's DB: %v, want ErrOutsideTx", outside)
+		t.Errorf("a statement on another DB: %v, want ErrOutsideTx", outside)
+	}
+}
+
+// TestMutationWritesOnItsDB: a mutation's resolver that writes on the DB
+// given to NewExtension, as a resolver holding only that DB does, writes in
+// the mutation's transaction, and its write rolls back with the mutation.
+func TestMutationWritesOnItsDB(t *testing.T) {
+	db, _ := handlerDB(t)
+	var seen int64
+	srv := serve(db, map[string]resolver{
+		"fail": func(ctx context.Context, args map[string]any) (any, error) {
+			if err := db.Insert(&person{ID: args["id"].(int64), Name: "p", Age: 1}).Exec(ctx); err != nil {
+				return nil, err
+			}
+			n, err := db.Query[person]().Count(ctx)
+			if err != nil {
+				return nil, err
+			}
+			seen = n
+			return nil, errFail
+		},
+	})
+	if got := post(t, context.Background(), srv, `mutation { fail(id: 1) }`); !strings.Contains(got, errFail.Error()) {
+		t.Fatalf("got %s, want the resolver's error", got)
+	}
+	if seen != 1 {
+		t.Errorf("in the mutation the DB counted %d people, want its own insert", seen)
+	}
+	if n, err := db.Query[person]().Count(context.Background()); err != nil || n != 0 {
+		t.Errorf("after the mutation: %d people, %v; want 0: the insert rolled back", n, err)
 	}
 }
 

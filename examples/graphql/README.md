@@ -81,23 +81,22 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    }
 
    func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
-   	viewer, err := Author(ctx)
+   	viewer, err := Author(ctx, r.DB)
    	if err != nil {
    		return nil, err
    	}
    	x := &veloxgen.Post{AuthorID: viewer}
-   	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+   	if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
    		return nil, err
    	}
    	return x, nil
    }
 
    func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error) {
-   	db := veloxgql.DB(ctx)
-   	if err := OwnPost(ctx, db, id); err != nil {
+   	if err := OwnPost(ctx, r.DB, id); err != nil {
    		return nil, err
    	}
-   	x, err := db.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+   	x, err := r.DB.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
    	if velox.IsNotFound(err) {
    		return nil, NotFound(ctx, "Post")
    	}
@@ -109,10 +108,12 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    I/O; the resolver writes them. The insert takes the row with what the
    client must not choose already on it (the author). It trusts that row's
    own fields, foreign keys included, so `Author` checks first that the
-   viewer is a user. A query's resolver reads on `r.DB`, the DB `main.go`
-   puts in `graph.Resolver`; the rows it returns carry it, and their edges
-   read on it. A mutation's writes on `veloxgql.DB(ctx)`, which the
-   extension puts there, in the mutation's transaction. The update's
+   viewer is a user. Every resolver reads and writes on `r.DB`, the DB
+   `main.go` puts in `graph.Resolver` and serves; the rows it returns carry
+   it, and their edges read on it. A mutation runs in a transaction the
+   extension begins on that DB, and a statement on `r.DB` under the
+   resolver's `ctx` runs in it: one DB everywhere. `veloxgql.DB(ctx)` is
+   for code outside a resolver that has only the context. The update's
    `One` writes the one row and returns it as written, `velox.ErrNotFound`
    when it names none the request may change, which the resolver shows as
    `NOT_FOUND`; `updateUser` appends a setter of its own, the password's hash, to the

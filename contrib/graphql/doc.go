@@ -308,8 +308,10 @@
 //
 // Each node carries the DB that read it, and its edges read on that DB:
 // batched with the page's other nodes in a request, alone outside one. A
-// mutation's resolver writes on veloxgql.DB(ctx), the mutation's
-// transaction, which the extension puts in the request context.
+// mutation's resolver writes on the same DB: gqlgenx runs a mutation in a
+// transaction it begins on that DB, and a statement on it under the
+// resolver's ctx runs in that transaction. veloxgql.DB(ctx) is for code
+// outside a resolver that has only the context.
 //
 // The query may hold the application's own filters and With loads. It must
 // not be ordered, and must select the key and the order columns. The example
@@ -371,14 +373,14 @@
 //
 //	func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
 //		x := &veloxgen.Post{AuthorID: viewer(ctx)}
-//		if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+//		if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
 //			return nil, err
 //		}
 //		return x, nil
 //	}
 //
 //	func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error) {
-//		x, err := veloxgql.DB(ctx).Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+//		x, err := r.DB.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 //		if velox.IsNotFound(err) {
 //			return nil, notFound(ctx, "Post")
 //		}

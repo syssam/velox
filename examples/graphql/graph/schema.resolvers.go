@@ -22,12 +22,12 @@ import (
 // so a client cannot post as another user. The insert trusts what x holds,
 // the author's key among it, so the resolver checks it.
 func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
-	viewer, err := Author(ctx)
+	viewer, err := Author(ctx, r.DB)
 	if err != nil {
 		return nil, err
 	}
 	x := &veloxgen.Post{AuthorID: viewer}
-	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+	if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -37,11 +37,10 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.Create
 // author may change it, and UpdatePostInput has no authorID, so a post stays
 // its author's.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input veloxgen.UpdatePostInput) (*veloxgen.Post, error) {
-	db := veloxgql.DB(ctx)
-	if err := OwnPost(ctx, db, id); err != nil {
+	if err := OwnPost(ctx, r.DB, id); err != nil {
 		return nil, err
 	}
-	x, err := db.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
+	x, err := r.DB.Update[veloxgen.Post]().Where(veloxgen.Posts.ID.EQ(id)).SetInput(input).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Post")
 	}
@@ -55,9 +54,9 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input velox
 // database enforces with foreign keys on (main.go's DSN), deletes its join
 // rows. A count the driver did not report is an internal error: the delete
 // is rolled back, not reported done. It runs in the operation's transaction,
-// in a savepoint of its own.
+// which r.DB joins under ctx, in a savepoint of its own.
 func (r *mutationResolver) DeletePost(ctx context.Context, id int64) (int64, error) {
-	err := veloxgql.DB(ctx).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+	err := r.DB.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		if err := OwnPost(ctx, tx, id); err != nil {
 			return err
 		}
@@ -81,7 +80,7 @@ func (r *mutationResolver) DeletePost(ctx context.Context, id int64) (int64, err
 // CreateLabel is the resolver for the createLabel field.
 func (r *mutationResolver) CreateLabel(ctx context.Context, input veloxgen.CreateLabelInput) (*veloxgen.Tag, error) {
 	x := new(veloxgen.Tag)
-	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+	if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -89,7 +88,7 @@ func (r *mutationResolver) CreateLabel(ctx context.Context, input veloxgen.Creat
 
 // UpdateLabel is the resolver for the updateLabel field.
 func (r *mutationResolver) UpdateLabel(ctx context.Context, id int64, input veloxgen.UpdateLabelInput) (*veloxgen.Tag, error) {
-	x, err := veloxgql.DB(ctx).Update[veloxgen.Tag]().Where(veloxgen.Tags.ID.EQ(id)).SetInput(input).One(ctx)
+	x, err := r.DB.Update[veloxgen.Tag]().Where(veloxgen.Tags.ID.EQ(id)).SetInput(input).One(ctx)
 	if velox.IsNotFound(err) {
 		return nil, NotFound(ctx, "Label")
 	}
@@ -104,7 +103,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input veloxgen.Create
 		return nil, err
 	}
 	x := &veloxgen.User{PasswordHash: hash}
-	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+	if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -114,7 +113,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input veloxgen.Create
 // replaces the hash, a setter of the resolver's beside the input's, in the
 // same UPDATE.
 func (r *mutationResolver) UpdateUser(ctx context.Context, id int64, input veloxgen.UpdateUserInput, password *string) (*veloxgen.User, error) {
-	u := veloxgql.DB(ctx).Update[veloxgen.User]().Where(veloxgen.Users.ID.EQ(id)).SetInput(input)
+	u := r.DB.Update[veloxgen.User]().Where(veloxgen.Users.ID.EQ(id)).SetInput(input)
 	if password != nil {
 		hash, err := hashPassword(ctx, *password)
 		if err != nil {

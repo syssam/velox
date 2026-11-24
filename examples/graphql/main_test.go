@@ -1205,8 +1205,10 @@ func TestDeletePost(t *testing.T) {
 }
 
 // TestMutationTransaction: an operation's mutations run in one transaction.
-// The second label's name is taken, so the operation fails, and the first
-// label, written before, is rolled back with it.
+// createLabel writes on r.DB, the DB the server serves, which runs in the
+// transaction the extension began on it under the resolver's ctx (ADR
+// 0171). The second label's name is taken, so the operation fails, and the
+// first label, written before, is rolled back with it.
 func TestMutationTransaction(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{

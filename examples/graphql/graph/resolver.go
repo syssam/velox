@@ -17,10 +17,10 @@ import (
 )
 
 // Resolver is the root resolver. Its DB is the one the server serves, which
-// the root query's resolvers read on: the rows they return carry it, and
-// their edges read on it. A mutation's resolver writes on veloxgql.DB(ctx)
-// instead, the mutation's transaction, which gqlgenx.NewExtension puts in
-// the request context.
+// every resolver reads and writes on: the rows they return carry it, and
+// their edges read on it. In a mutation, which gqlgenx.NewExtension runs in
+// a transaction it begins on that DB, a statement on it under the
+// resolver's ctx runs in that transaction (ADR 0171).
 type Resolver struct {
 	DB *velox.DB
 }
@@ -44,13 +44,13 @@ func Viewer(ctx context.Context) (int64, error) {
 }
 
 // Author is the viewer, as an author: Viewer's, once it names a user the
-// request may read. A viewer that names none is UNAUTHENTICATED too.
-func Author(ctx context.Context) (int64, error) {
+// request may read on db. A viewer that names none is UNAUTHENTICATED too.
+func Author(ctx context.Context, db *velox.DB) (int64, error) {
 	viewer, err := Viewer(ctx)
 	if err != nil {
 		return 0, err
 	}
-	ok, err := veloxgql.DB(ctx).Query[veloxgen.User]().Where(veloxgen.Users.ID.EQ(viewer)).Exists(ctx)
+	ok, err := db.Query[veloxgen.User]().Where(veloxgen.Users.ID.EQ(viewer)).Exists(ctx)
 	if err != nil {
 		return 0, err
 	}
