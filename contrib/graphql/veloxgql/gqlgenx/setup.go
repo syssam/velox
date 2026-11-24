@@ -32,8 +32,10 @@ type Server interface {
 	SetValidationRulesFn(func() *rules.Rules)
 }
 
-// Setup makes srv a server of db: call it first on a new server, and serve what
-// it returns, not srv:
+// Setup makes srv a server of db fit for clients: call it first on a new
+// server, and serve what it returns, not srv. A server pages and batches
+// without it (decision 0173); Setup adds the limits, the mutation
+// transaction and the presenter below, and changes no statement:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	h := gqlgenx.Setup(srv, db)

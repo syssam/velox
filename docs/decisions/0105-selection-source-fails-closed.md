@@ -1,7 +1,9 @@
 # 105. The selection source, fail closed
 
 Status: accepted, 2026-11-22. Amended by 0121: `veloxgql.Service` is the
-explicit way in for a service outside a request.
+explicit way in for a service outside a request. Amended by 0173: a read
+with no adapter state finds its engine's registered reader, or reads every
+column outside one; nothing fails with `ErrNoSelectionSource`.
 
 ## Context
 

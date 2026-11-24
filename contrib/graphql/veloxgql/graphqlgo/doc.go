@@ -8,20 +8,20 @@
 // # The executor
 //
 // gqlc binds the SDL velox-graphql writes to the generated Go. The server
-// adds Scalars to the schema, and With to the executor:
+// adds Scalars to the schema, and needs no setup (decision 0173):
 //
 //	s, err := graph.NewSchema(post.Bindings(h), user.Bindings(h), graphqlgo.Scalars())
 //	exec := graphql.NewExecutor(s,
-//		graphqlgo.With(db),
 //		graphql.WithMaxDepth(12),
 //		graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
 //
-// With puts the DB, veloxgql.DefaultLimits() and graphql-go's selection
-// source in each operation's context, with a new table of rows per
-// operation and per event of a subscription. Without it, generated code
-// fails with veloxgql.ErrNoDB and veloxgql.ErrNoSelectionSource, before any
-// statement. A mutation runs in no transaction: a resolver that needs one
-// opens it (db.Tx, velox.UseTx).
+// The package registers graphql-go's selection source when it is linked,
+// as Scalars links it: it reads each field from graphql-go's
+// context, with a table of rows per operation and per event of a
+// subscription, and veloxgql.DefaultLimits(). With is opt-in: it puts the
+// DB in each operation's context, for veloxgql.DB, and pins a mutation's
+// reads to the primary of a routed DB. A mutation runs in no transaction:
+// a resolver that needs one opens it (db.Tx, velox.UseTx).
 //
 // # Selections
 //

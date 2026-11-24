@@ -100,7 +100,7 @@ func serve(ctx context.Context, ln net.Listener) error {
 // minimalServer is all that velox's generated code needs of a gqlgen server:
 // the executable schema, whose resolver holds db, and a transport. No
 // extension and no setup: a connection pages on the DB of its query, an edge
-// reads on its row's, and gqlgenx, which the generated code imports, gives
+// reads on its row's, and gqlgenx, which gqlgen.yml's models link, gives
 // each field's selection and batches the edges of a page (decision 0173).
 // It is what a server behind an authenticating gateway may serve; one open
 // to clients adds gqlgenx.Setup, as server does.

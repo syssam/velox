@@ -31,7 +31,7 @@ const (
 	CodeTimeout = "TIMEOUT"
 	// CodeInternal: anything else, which the client cannot fix, such as a
 	// driver's error, a deadline of the application's, a list edge over MaxList,
-	// ErrNoDB or ErrNoSelectionSource.
+	// or ErrNoDB.
 	CodeInternal = "INTERNAL_SERVER_ERROR"
 )
 

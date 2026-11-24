@@ -80,6 +80,12 @@ Each rule names the test that backs it.
   start another statement (`TestIterNestedStatementFails`).
 - **A MySQL DSN needs `parseTime=true` and `clientFoundRows=true`**
   (`TestConnectRefuses`).
+- **A GraphQL server needs no setup.** `Resolver{DB: db}` alone pages and
+  batches edges, on gqlgen and graphql-go (`TestNestedNoSetup`,
+  `TestNoSetupServer`); a service's `Paginate` reads outside any request
+  with no `veloxgql.Service` (`TestPaginateInAService`). `gqlgenx.Setup`
+  adds request limits, the mutation transaction and the error presenter.
+  Fake a connection with `gqlgraph.ConnectionFromRows`.
 
 ## Errors
 

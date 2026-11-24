@@ -729,7 +729,11 @@ replacement.
   writes on `r.DB` too: under its `ctx` a statement on that DB runs in the
   mutation's transaction, where entgql's resolver asks
   `ent.FromContext(ctx)`. `veloxgql.DB(ctx)` is for code outside a
-  resolver. The filter
+  resolver. As with entgql, the server needs no setup to page and batch
+  edges (ADR 0173); `gqlgenx.Setup` is opt-in, as `entgql.Transactioner`
+  is, and adds the mutation transaction, request limits and an error
+  presenter. A test fakes a connection with `gqlgraph.ConnectionFromRows`,
+  where entgql's connection struct is built by hand. The filter
   option takes the where input itself. `Paginate` is generic and calls
   the entity's generated `PaginateQuery`, so it does not compile for an
   entity with no connection. The connection is lazy: it sends nothing

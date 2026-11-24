@@ -12,8 +12,8 @@ import "errors"
 // returned in an error with the code CodeBadUserInput, which an adapter's
 // error presenter shows the client. ErrTooCostly, ErrResponseTooLarge and
 // ErrTooManyErrors have the code CodeTooCostly, and ErrTimeout CodeTimeout.
-// ErrNoDB and ErrNoSelectionSource are programming errors, which have no
-// code: the presenter logs them and shows "internal error".
+// ErrNoDB is a programming error, which has no code: the presenter logs it
+// and shows "internal error".
 var (
 	// ErrBadCursor: a cursor that does not decode, or one taken on another
 	// type or under another order than the query's, or whose values are not
@@ -57,14 +57,13 @@ var (
 	// ErrTimeout: a query or a mutation ran over the Timeout of the limits, whose
 	// statements were cancelled. Its data is null.
 	ErrTimeout = errors.New("request timed out")
-	// ErrNoDB: a resolver ran with no DB in its context, which an adapter
-	// (gqlgenx.NewExtension, graphqlgo.With), or Service outside a request,
-	// puts there.
+	// ErrNoDB: DBFromContext found no DB in the context, which an adapter's
+	// setup (gqlgenx.NewExtension, graphqlgo.With), or Service, puts there.
+	// An edge of a row no DB read, such as one a test built, wraps it too.
 	ErrNoDB = errors.New("no DB in the context")
-	// ErrNoSelectionSource: a read of generated code (a connection, an edge)
-	// ran in a context no adapter and no Service made, so nothing tells it
-	// the field it resolves. It fails rather than read every column and
-	// batch nothing. It is returned with ErrNoDB, as the adapter puts both
-	// there.
+	// ErrNoSelectionSource is not returned since GraphQL needs no setup
+	// (decision 0173): generated code finds its field from the engine's
+	// context, and reads every column outside one. It stays so that code
+	// that tests for it compiles.
 	ErrNoSelectionSource = errors.New("no selection source in the context")
 )

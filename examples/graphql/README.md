@@ -151,11 +151,14 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    name on the entity, `Post.Author(ctx)`, as entgql's is, and `id` is the
    `ID` field, the key; connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
-6. `main.go`: gqlgen's server with `gqlgenx.NewExtension(db)` first, which
-   puts the DB and the limits in each operation's context (and runs a
-   mutation in one transaction), `gqlgenx.ErrorPresenter`, a limit on the
-   cost of a request, middlewares that put the organization, the role and the
-   viewer in the context, and the directive `@admin`.
+6. `main.go`: gqlgen's server on `Resolver{DB: db}`. That alone pages and
+   batches each edge of a level in one statement (`minimalServer`; decision
+   0173). The served one adds `gqlgenx.Setup`, which is opt-in and changes
+   no statement: the limits on a request's size and cost, one transaction
+   per mutation, and `gqlgenx.ErrorPresenter`. Then come middlewares that
+   put the organization, the role and the viewer in the context, and the
+   directive `@admin`. `nosetup_test.go` runs the read tests on
+   `minimalServer`'s shape, with the same statements.
 
 ### Mutations
 
@@ -186,9 +189,11 @@ its `Setters`, before any statement: `createPost` with an empty title is
 row the caller may read fails the write with a `*velox.EdgeError`, which
 `gqlgenx.ErrorPresenter` shows as `NOT_FOUND` naming the edge.
 
-**One transaction per operation.** `gqlgenx.NewExtension` runs a mutation
-operation in one transaction, and rolls it back when the response has any
-error. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
+**One transaction per operation.** `gqlgenx.NewExtension`, which
+`gqlgenx.Setup` uses, runs a mutation operation in one transaction, and
+rolls it back when the response has any error. It is opt-in: a server
+without it runs each write on its own, as entgql's does without its
+`Transactioner`. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
 (its name is taken), `a`'s row is rolled back too, and `data` is `null`.
 Inside that transaction an insert or an update with edge setters runs in a
 savepoint, so an edge's error rolls back its row at once; one of columns
@@ -314,7 +319,7 @@ and variables. So the extension parses a request first, and refuses one over
 `Limits.MaxTokens` (15000), `MaxFields` (2000), `MaxFragments` (500), `MaxDepth` (64),
 `MaxNameBytes` (128), `MaxLiteralBytes` (64 KiB) or `MaxVariableNodes` (25000), or with
 more than 5 times `MaxFields` pairs that differ under one response name, with
-`BAD_USER_INPUT`. `main.go` calls `gqlgenx.Setup`, which does what a server needs: it
+`BAD_USER_INPUT`. `main.go` calls `gqlgenx.Setup`, which does what a public server needs: it
 uses the extension and `ErrorPresenter`, stops validation at `MaxErrors` (100) errors,
 shows no suggestions, and the handler it returns refuses a body over
 `Limits.MaxBodyBytes` (1 MiB). `bounded_test.go` asserts what each shape allocates, and

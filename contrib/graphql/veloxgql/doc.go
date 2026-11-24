@@ -8,27 +8,33 @@
 // name below belongs to gqlgraph it is written gqlgraph.Name. An engine is
 // served through its adapter: package gqlgenx for gqlgen, package graphqlgo
 // for github.com/syssam/graphql-go. Generated code imports this package and
-// gqlgraph alone, so one generated package serves either adapter.
+// gqlgraph alone, so a program that only queries links no engine.
 //
 // # Adapters
 //
-// An adapter puts an operation's state in its context: the DB, the Limits
-// and a selection source of its engine, which tells generated code the
-// field each resolver resolves and what it selects. gqlgenx takes options
-// of its own (gqlgenx.WithLimits, gqlgenx.WithTxOptions,
-// gqlgenx.WithTxFilter, gqlgenx.WithBatchScope); graphqlgo takes none and
-// always puts DefaultLimits().
-// A read of generated code (a connection, an edge) in a context no adapter
-// made fails with ErrNoSelectionSource, and ErrNoDB: it never falls back to
-// reading every column and batching nothing.
+// A server needs no setup (decision 0173). Each adapter registers, when
+// its package is linked, a reader of its engine's context. A gqlgen server
+// links gqlgenx through the models gqlgen.yml binds to it (ID, Time and
+// velox's other scalars), and a graphql-go one links graphqlgo through
+// graphqlgo.Scalars; one that binds none imports it blank. The reader tells
+// generated code the field each resolver resolves, what it selects, and
+// the batch its edge joins, one for each root field under gqlgen and one
+// for each operation under graphql-go. So a server whose resolvers hold
+// the DB pages, projects and batches with nothing installed, under
+// DefaultLimits().
 //
-// Outside a request, a service asks for that fallback with Service (or
-// ServiceWithLimits): its context holds the DB, the limits and a source
-// that selects nothing, so generated code there reads every column, and
-// each edge alone. A service's list method, a call from another service
-// and a test page through it:
+// The adapters' setup is opt-in, for what a server open to clients adds:
+// gqlgenx.Setup and gqlgenx.NewExtension bound a request's size, cost and
+// time, run a mutation in one transaction and take options of their own
+// (gqlgenx.WithLimits, gqlgenx.WithTxOptions, gqlgenx.WithTxFilter,
+// gqlgenx.WithBatchScope); graphqlgo.With pins a mutation's reads to the
+// primary. Either puts the DB in the context, for DB.
 //
-//	ctx = veloxgql.Service(ctx, db)
+// Outside a request a service pages with no setup too, as a job or a test
+// does: generated code there reads every column, and each edge alone.
+// Service (or ServiceWithLimits) still puts the DB, the limits and a
+// source that selects nothing in a context, for DB and LimitsFromContext:
+//
 //	conn, err := db.Query[veloxgen.Post]().Paginate(ctx, nil, &first, nil, nil)
 //
 // # IDs
@@ -50,13 +56,13 @@
 //
 // # The DB
 //
-// Generated code runs its queries on the DB that DBFromContext reads from the
-// request's context, where the adapter puts it with the limits for every
-// operation; LimitsFromContext reads those. gqlgenx.Extension runs a
-// mutation operation in one transaction. Outside a server, in a job, a
-// service or a test, Service puts the DB in a context for generated code,
-// whichever engine serves the schema; gqlgenx.Extension's NewContext does
-// so with the extension's limits.
+// Generated code runs a connection's queries on the DB of the query it was
+// given, and an edge's on the DB that read its row (decision 0171): it
+// reads no DB from the context. DBFromContext reads the DB an adapter's
+// setup or Service put there, for code that has only the context, and
+// LimitsFromContext the limits, or DefaultLimits() without them.
+// gqlgenx.Extension runs a mutation operation in one transaction; its
+// NewContext puts its DB and limits in a context outside a request.
 //
 // # Cursors
 //
@@ -179,8 +185,8 @@
 // (CodeUnauthenticated), denied by a policy (CodeForbidden), of a validator or
 // a violated constraint (CodeBadUserInput); and "internal error"
 // (CodeInternal) for anything else, which the presenter logs: a driver's
-// error, a deadline of the application's, a list edge over MaxList, ErrNoDB,
-// ErrNoSelectionSource. So no driver text, SQL, scope, entity or constraint
+// error, a deadline of the application's, a list edge over MaxList, or
+// ErrNoDB. So no driver text, SQL, scope, entity or constraint
 // name reaches a client.
 //
 // # Limits
@@ -224,7 +230,7 @@
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes and
 // MaxVariableNodes bound the document and its variables, before gqlgen parses or validates
 // it, which gqlgenx.Extension does on its own. MaxBodyBytes bounds the request's body and a
-// websocket's message, in the handler gqlgenx.Setup returns, the one call a server needs.
+// websocket's message, in the handler gqlgenx.Setup returns, which a server open to clients uses.
 //
 // gqlgenx.Cost cannot see the size of a value, or how long a statement takes. MaxResponseBytes
 // holds a response's strings, bytes and JSON, counted as its fields resolve; MaxErrors its

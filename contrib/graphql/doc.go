@@ -567,8 +567,10 @@
 // one more), a totalCount with a grouped count (velox.CountEach), a to-one
 // edge by the target's key. Nothing waits for other resolvers to join a batch
 // (a mutation runs its resolvers one at a time, and would deadlock), so a
-// batch is read by the first caller, under its context, on the DB DBFromContext
-// reads; its error is every row's.
+// batch is read by the first caller, under its context, on the DB that read
+// its rows (decision 0171); its error is every row's. It needs no setup
+// (decision 0173): gqlgenx, which gqlgen.yml's models link, finds the
+// field and the batch from gqlgen's context.
 //
 // A call joins a batch only when it is the same read: the same edge, called
 // from the edge's own field, with the same arguments, those the edge method
@@ -588,14 +590,15 @@
 // reads, such as the viewer or a role, must be the same for every row of a
 // field, or be returned by gqlgenx.WithBatchScope, whose value joins the key:
 // a directive or a field middleware that gives an edge field's resolver another
-// context for some parent rows needs it. Batches belong to one response: a
+// context for some parent rows needs it. Batches belong to one response
+// under gqlgenx's Extension, and to one root field without it: a
 // subscription's event starts new ones, and outside a gqlgen field there is no
 // batch, so a row read alone resolves its edges one row at a time.
 //
-// Outside any request, generated code reads only in a context
-// veloxgql.Service(ctx, db) made, for a service's own list methods, calls
-// between services and tests; there it reads every column, and each edge
-// one row at a time. Elsewhere it fails with veloxgql.ErrNoSelectionSource.
+// Outside any request, in a service's own list methods, calls between
+// services, jobs and tests, generated code reads with no setup: every
+// column, and each edge one row at a time. veloxgql.Service(ctx, db) still
+// works there, and adds the DB that veloxgql.DB reads.
 //
 // A generated many-to-many edge reads the join table inside the target's
 // statement, so the join entity's hooks and policy do not see the edge's
@@ -698,16 +701,19 @@
 // a larger schema raises it, at about 640 bytes a unit, and a server open to
 // strangers lowers it, or has no extension.Introspection.
 //
-// # What a server must call
+// # What a public server adds
 //
-// A server calls gqlgenx.Setup first, and serves what it returns:
+// A server needs no call of velox's to page and batch (decision 0173). One
+// open to clients calls gqlgenx.Setup first, and serves what it returns:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	h := gqlgenx.Setup(srv, db)
 //	srv.AddTransport(transport.POST{})
 //	http.Handle("/graphql", h)
 //
-// Setup uses the Extension and ErrorPresenter on srv, and refuses a body over
+// Without it, nothing below bounds a request but gqlgen's own options and
+// a page's veloxgql.DefaultLimits(), a mutation runs in no transaction,
+// and gqlgen's presenter shows an error's text. Setup uses the Extension and ErrorPresenter on srv, and refuses a body over
 // Limits.MaxBodyBytes, 1 MiB by default, which nothing else in a request bounds. It holds
 // a websocket's messages to the same: a connection whose message goes over is closed
 // before the message is read, and no message is compressed. So a public websocket is
@@ -887,11 +893,11 @@
 //
 // Without inputListPointers a multi-order edge's method no longer fits its
 // arguments, and gqlc puts the field on a Resolver. The server adds
-// graphqlgo.Scalars() to the schema and graphqlgo.With to the executor, with
-// graphql-go's own limits:
+// graphqlgo.Scalars() to the schema, and graphql-go's own limits to the executor
+// (graphqlgo.With, opt-in, puts the DB in the context and pins a mutation):
 //
 //	s, err := graph.NewSchema(velox.Bindings(root), app.Bindings(root), graphqlgo.Scalars())
-//	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
+//	exec := graphql.NewExecutor(s, graphql.WithMaxDepth(12))
 //
 // A nil []byte, a NULL bytes field, is null, as under gqlgen.
 //

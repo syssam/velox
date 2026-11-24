@@ -2,7 +2,8 @@
 
 Status: accepted, 2026-11-24. Supersedes the "an entity is a plain struct,
 with no client in it" rule of `docs/coming-from-ent.md`, and amends 0121
-(a resolver no longer needs a DB in its context to read an edge).
+(a resolver no longer needs a DB in its context to read an edge). Amended
+by 0173: a query's connection needs no adapter or `Service` either.
 
 ## Context
 

@@ -2769,26 +2769,45 @@ go tool gqlgen generate
 
 Most resolvers are one line. The generated code imports the engine-free
 runtime `veloxgql` and its package `gqlgraph`; gqlgen's adapter is
-`veloxgql/gqlgenx`. `gqlgenx.Setup` wraps the gqlgen server with limits on
-a request's size, depth and cost, and `gqlgenx.ErrorPresenter` keeps
-database and velox error text away from clients.
+`veloxgql/gqlgenx`, which gqlgen's code links through the models
+`gqlgen.yml` binds to it (`ID`, `Time` and velox's other scalars). A
+server needs no setup (decision 0173): gqlgen's server with
+`Resolver{DB: db}` alone pages, reads only the columns a request selects,
+and loads each edge of a level in one statement, batched by the adapter
+from gqlgen's own context. A `gqlgen.yml` that binds nothing to gqlgenx
+needs `import _ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"`
+in the server.
+
+```go
+srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}}))
+srv.AddTransport(transport.POST{})
+```
+
+A server open to clients adds `gqlgenx.Setup(srv, db)`. It is opt-in and
+changes no statement: it bounds a request's size, depth, cost and time,
+runs each mutation in one transaction, and adds `gqlgenx.ErrorPresenter`,
+which keeps database and velox error text away from clients. Without it
+a page still holds to `veloxgql.DefaultLimits` (100 rows), and a mutation
+runs in no transaction: a resolver that needs one opens it with `db.Tx`
+or `velox.UseTx`.
 
 A resolver reads and writes on the one DB the server serves, which its
-`Resolver` holds: `r.DB.Query[veloxgen.User]()`, `r.DB.Insert(x)`. A
-mutation runs in a transaction the adapter begins on that DB, and a
-statement on `r.DB` under the resolver's `ctx` runs in it, so the
-mutation's writes roll back together. The rows a resolver returns carry
-the DB that read them, and a generated edge reads on it: batched with its
-siblings in a request, alone outside one. `veloxgql.DB(ctx)` is for code
-outside a resolver that has only the context.
+`Resolver` holds: `r.DB.Query[veloxgen.User]()`, `r.DB.Insert(x)`. Under
+`gqlgenx.Setup` a mutation runs in a transaction the extension begins on
+that DB, and a statement on `r.DB` under the resolver's `ctx` runs in it,
+so the mutation's writes roll back together. The rows a resolver returns
+carry the DB that read them, and a generated edge reads on it: batched
+with its siblings in a request, alone outside one. `veloxgql.DB(ctx)` is
+for code outside a resolver that has only the context, under
+`gqlgenx.Setup`, `graphqlgo.With` or `veloxgql.Service`.
 
-A connection of a query read in a context no adapter made fails with
-`veloxgql.ErrNoSelectionSource`. A service that pages outside a request,
-in its own list method, a call from another service or a test, asks for
-it with `ctx = veloxgql.Service(ctx, db)`: there generated code reads
-every column, and each edge one row at a time. GraphQL reads and
-writes run through the same velox runtime, so policies and scopes apply to
-them too. The
+A service pages through generated code outside a request too, in its own
+list method, a call from another service or a job, with no setup:
+`db.Query[veloxgen.Post]().Paginate(ctx, ...)` reads every column there,
+and each edge of a row one row at a time. `veloxgql.Service(ctx, db)`
+still works, and adds the DB that `veloxgql.DB(ctx)` reads. GraphQL reads
+and writes run through the same velox runtime, so policies and scopes
+apply to them too. The
 [graphql example](../examples/graphql) is a complete server, and its README
 walks through each step.
 
@@ -2823,14 +2842,38 @@ exec := graphql.NewExecutor(s,
 	graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(log)))
 ```
 
-`graphqlgo.With(db)` puts velox's state in each operation, so edges batch
-and reads are projected as under gqlgen, and `graphqlgo.Scalars()` binds
+Edges batch and reads are projected as under gqlgen, with no setup.
+`graphqlgo.With(db)` is opt-in: it puts the DB in each operation for
+`veloxgql.DB(ctx)`, and pins a mutation's reads to the primary on a
+routed DB. `graphqlgo.Scalars()` binds
 velox's scalars in the schema. A schema that declares only some of them
 binds those with `graphqlgo.ScalarsOnly("Time", "UUID")`. graphql-go's own options limit a request's
 size, depth, complexity and cost; velox keeps only its fixed bounds on a
 page (100 rows), a list edge (1000) and a where filter. A mutation runs
 in no transaction: a resolver that needs one opens it with `db.Tx` or
 `velox.UseTx`.
+
+### Testing GraphQL code
+
+A test of a resolver or a service runs on `veloxtest.Open`'s DB with no
+setup, as a server does. A test that fakes a service's list method, which
+returns a generated connection, builds the connection of the rows it has,
+as ent's plain connection struct is built by hand.
+`gqlgraph.ConnectionFromRows` reads no DB and runs no query:
+
+```go
+func (f fakePosts) List(ctx context.Context) (*veloxgen.PostConnection, error) {
+	rows := []*veloxgen.Post{{ID: 1, Title: "Alpha"}}
+	return &veloxgen.PostConnection{
+		Conn: gqlgraph.ConnectionFromRows(rows, 1, veloxgql.PageInfo{}),
+	}, nil
+}
+```
+
+Its edges are the rows, its `totalCount` the total given, and its page
+info the one given, with the first and the last row's cursors as start
+and end when those are nil. Its cursors encode, and no `Paginate` takes
+them.
 
 ### velox-graphql's options
 

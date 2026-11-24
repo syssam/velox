@@ -20,8 +20,10 @@ import (
 )
 
 // Extension is the gqlgen handler extension that serves a schema on a DB.
-// Make one with NewExtension, and use it first, so that it is the outermost
-// of the server's extensions:
+// A server reads and batches without it (decision 0173); it adds a
+// request's limits and cost, the mutation transaction, and the DB for
+// veloxgql.DB. Make one with NewExtension, and use it first, so that it is
+// the outermost of the server's extensions:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	srv.Use(gqlgenx.NewExtension(db))

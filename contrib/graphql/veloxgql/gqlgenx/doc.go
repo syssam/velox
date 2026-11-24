@@ -7,13 +7,21 @@
 //
 // # The server
 //
-// Setup is the one call a server needs:
+// A server needs no setup (decision 0173). The package registers a reader
+// of gqlgen's context when it is linked, as gqlgen's generated code links
+// it through the models gqlgen.yml binds here (Int64ID, Time and the other
+// scalars); a server that binds none imports the package blank. The reader
+// tells generated code the field each resolver resolves, what it selects,
+// and the batch of its root field, so a server whose Resolver holds the DB
+// pages, projects and batches with nothing installed.
+//
+// Setup is opt-in, for a server open to clients:
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	h := gqlgenx.Setup(srv, db)
 //	srv.AddTransport(transport.POST{})
 //
-// It uses NewExtension(db, opts...), first of the server's extensions, and
+// It changes no statement a request sends. It uses NewExtension(db, opts...), first of the server's extensions, and
 // ErrorPresenter(nil), and returns a handler that bounds a request's body and
 // a websocket's messages. The options are this package's: WithLimits,
 // WithTxOptions, WithTxFilter and WithBatchScope.
