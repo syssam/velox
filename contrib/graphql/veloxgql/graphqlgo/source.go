@@ -10,9 +10,9 @@ import (
 
 // source is graphql-go's selection source, which the package registers with
 // the core when it is linked (decision 0173): an executor needs no option
-// for generated code to find the field it resolves and batch its edges. The
-// code velox-graphql writes for graphql-go imports the package for this,
-// blank. The field of a context is graphql-go's field context
+// for generated code to find the field it resolves and batch its edges. A
+// server links the package through Scalars or ScalarsOnly, or a blank
+// import. The field of a context is graphql-go's field context
 // (graphql.FieldFrom), which graphql-go gives a Resolve or a ResolveArgs
 // function and not a Field accessor: generated code reaches gqlgraph only
 // from methods that take a context, which gqlc binds with Resolve. Its
