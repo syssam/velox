@@ -7,6 +7,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The thresholds were measured at GOFLAGS=-p=2, and the ratio depends on -p
+# (2026-11-24 on main: cold 7.40 at -p=2, 8.61 at the default -p=14), so the
+# check builds at -p=2 unless GOFLAGS sets -p itself.
+case " ${GOFLAGS:-} " in
+  *" -p="*) ;;
+  *) export GOFLAGS="${GOFLAGS:+$GOFLAGS }-p=2" ;;
+esac
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 # Built first because go run reports every failure as exit 1, and scale's codes

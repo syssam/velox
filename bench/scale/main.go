@@ -16,10 +16,12 @@
 // the children it reaped: the compiler and linker under go build) relative to a
 // reference build in the same run: a small module of its own that imports
 // net/http, built cold before the cold build and again after the schema edit.
-// CPU time counts the work, not the wait, so it does not depend on -p (the
-// local gate's GOFLAGS=-p=2 against CI's default) or on how many cores are
-// free. Contention still slows each CPU-second (shared caches, the clock),
-// which the reference, measured on the same machine at the same time, absorbs.
+// CPU time counts the work, not the wait, so it depends less on how many
+// cores are free than wall time does. It still depends on -p: more parallel
+// compiles slow each CPU-second (shared caches, the clock), and the small
+// reference build feels that less than the big one, so the ratio grows with
+// -p (cold 7.40 at -p=2, 8.61 at -p=14 on an M3 Max). The thresholds were
+// measured at -p=2, which scripts/scale-check.sh sets.
 // The wall-clock seconds are printed for information and not checked.
 package main
 
