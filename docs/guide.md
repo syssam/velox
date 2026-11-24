@@ -907,6 +907,32 @@ policies. The check guards against a mistake, not
 against hostile text; text comes from your program, not from a user
 ([ADR 0069](decisions/0069-expr.md)).
 
+### A raw condition: ExprRaw
+
+Some conditions need a subquery velox cannot guard: a text key against an
+integer key made text, a table no entity maps, or a table read on purpose
+without its policy, such as an audit trail that keeps rows after an
+assignment is removed. `ExprRaw` takes the same text as `Expr`, a reason
+first, and allows `SELECT`, `EXISTS` and any function:
+
+```go
+db.Query[veloxgen.Bill]().Where(velox.ExprRaw[veloxgen.Bill](
+	"audit trail: a removed assignment keeps its rows",
+	"NOT EXISTS (SELECT 1 FROM audit_log m WHERE m.workspace_id = ? "+
+		"AND m.entity_id = CAST(? AS TEXT))", B.WorkspaceID, B.ID))
+```
+
+No policy, filter or interceptor applies inside the text: it is `Raw`'s
+trade, for one condition. The statement around it keeps its policies on its
+own rows, in a read and in an update's or delete's `Where`. A column handle
+is written qualified, `"bills"."workspace_id"`, or by velox's alias `vx1`
+inside a relation's subquery, so a correlated subquery names the outer row;
+alias the text's own tables, never with the outer table's name or `vx` and
+a number. The text must be a constant, with values as arguments; a
+semicolon, a comment, `$` and an unbalanced parenthesis or quote are still
+refused. An Around hook reads each reason from `Statement.RawReasons()`
+([ADR 0155](decisions/0155-expr-raw.md)).
+
 ### Joins
 
 For a to-one relation (a belongs-to, or a one-to-one), `Join` reads the
@@ -2238,7 +2264,9 @@ softdelete.Mixin{Assign: softdelete.Assigns(
 
 [sql.md](sql.md) lists every way to write SQL in velox, from a guarded
 condition to a raw statement, and which keep the policies. Reach for raw SQL
-only when `Expr`, `Calc` and `SetExpr` cannot say it.
+only when `Expr`, `Calc` and `SetExpr` cannot say it. A single condition
+that must read past the policies is `ExprRaw`, which keeps them on the rest
+of the statement.
 
 Raw SQL is the escape hatch for what the builder cannot express. Each call
 takes a reason, because velox applies no policy or scope to raw SQL; filtering

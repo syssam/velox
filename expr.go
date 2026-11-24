@@ -53,6 +53,49 @@ func Expr[E any](text string, args ...any) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.ExprNode(text, slots, vals)))
 }
 
+// ExprRaw is a condition written as SQL text that may read other tables: a
+// subquery, EXISTS, a CAST to meet a key of another type. It is db.Raw's
+// trade made for one condition. No policy, filter, scope or interceptor
+// applies inside the text: velox adds nothing to it, as it cannot find the
+// tables without parsing SQL. The statement around it keeps them all, on
+// its own rows, as with any other condition; a write keeps its Write policy.
+// Use HasWith, InSelect or Expr when they can say it, as they keep the
+// inner table's policies.
+//
+//	db.Query[veloxgen.Bill]().Where(velox.ExprRaw[veloxgen.Bill](
+//		"audit trail: a removed assignment keeps its rows",
+//		"NOT EXISTS (SELECT 1 FROM audit_log m WHERE m.workspace_id = ? "+
+//			"AND m.entity_id = CAST(? AS TEXT))", B.WorkspaceID, B.ID))
+//
+// reason says why the text reads past the policies; empty or white space
+// fails the statement. RawReasons on the Statement returns it, so an Around
+// hook can record each raw condition a statement used.
+//
+// text must be a constant of the program, never built from input: each ?
+// is the only placeholder, written in the dialect's form ($1 on
+// PostgreSQL), and the values are arguments, bound as Expr's are. The
+// render cache keys the text, not the values. A column handle or Term of E
+// is written qualified: by its table's name, or by velox's alias (vx and a
+// number) inside a relation's subquery, such as HasWith's, and by a join's
+// alias for a joined target's condition. So a correlated subquery names the
+// outer row through the handle, and must alias its own tables, never with
+// the outer table's name or vx and a number.
+//
+// The text keeps Expr's guard on its structure, not on its words: a
+// semicolon, a comment, a backslash, a $, a # or an unbalanced parenthesis
+// outside a literal is refused, a literal is Expr's, and a quoted
+// identifier ("x" or `x`) must be closed with no quote, ? or backslash
+// inside. A wrong number of arguments, another entity's column and an
+// encoded (JSON) column fail the statement, as with Expr. It works in
+// Where, Having, Or, And and Not, and in an update's or a delete's Where.
+func ExprRaw[E any](reason, text string, args ...any) Pred[E] {
+	slots, vals, err := slotsOf[E](text, args)
+	if err != nil {
+		return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: err}))
+	}
+	return Pred[E](engine.NewPredicate(engine.ExprRawNode(reason, text, slots, vals)))
+}
+
 // SetExpr assigns column c the SQL expression text, written as Expr's text
 // is: each ? is filled by the next argument, a column handle or a Term of E
 // written as it is, and any other value bound. The same text is refused. It

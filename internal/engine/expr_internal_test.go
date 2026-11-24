@@ -2,6 +2,7 @@ package engine
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -68,5 +69,28 @@ func TestExprColumnsChecked(t *testing.T) {
 	far := AggTerm(TermSum, ColumnTerm(9))
 	if err := checkNode(st, "a statement names", ExprNode("? > 1", []ExprSlot{{Col: -1, Term: &far}}, nil)); err == nil {
 		t.Error("checkNode accepted column 9 of 2 inside a term")
+	}
+}
+
+// TestRawReasonsEverywhere: RawReasons reads a join's On, a projection's
+// Having and an upsert's conditions after Where, in that order, and skips
+// an Expr.
+func TestRawReasonsEverywhere(t *testing.T) {
+	raw := func(r string) Predicate {
+		return NewPredicate(ExprRawNode(r, "1 = 1", nil, nil))
+	}
+	plain := NewPredicate(ExprNode("1 = 1", nil, nil))
+	st := &Statement{
+		Where:    []Predicate{plain, raw("where")},
+		Joins:    []JoinClause{{On: []Predicate{raw("on")}}},
+		Project:  &Projection{Having: []Predicate{raw("having")}},
+		Conflict: &ConflictClause{TargetWhere: []Predicate{raw("target")}, Where: []Predicate{raw("update")}},
+	}
+	want := []string{"where", "on", "having", "target", "update"}
+	if got := st.RawReasons(); !slices.Equal(got, want) {
+		t.Errorf("RawReasons %q, want %q", got, want)
+	}
+	if got := (&Statement{Where: []Predicate{plain}}).RawReasons(); got != nil {
+		t.Errorf("no raw condition: %q", got)
 	}
 }

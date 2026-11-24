@@ -25,6 +25,9 @@ type writer struct {
 	// subquery: an upsert's condition is on the existing row, and on
 	// PostgreSQL a bare column there may also be EXCLUDED's.
 	qualify bool
+	// raw is set while a raw condition (ExprRawNode) is written: its
+	// columns are always qualified (colRef).
+	raw bool
 	// grouped is set while a grouped projection's ORDER BY is written.
 	grouped bool
 	// upsert is set while an upsert's update branch is written: an
@@ -106,6 +109,16 @@ func (w *writer) colRef(i int32) {
 		w.str(".")
 	case w.qualify && w.depth == 0:
 		w.table()
+		w.str(".")
+	case w.raw:
+		// A raw condition's text may hold a subquery, whose own tables a
+		// bare name would bind to: name the row's table by the alias of
+		// the subquery being written, or by the table itself.
+		if w.alias != "" {
+			w.ident(w.alias)
+		} else {
+			w.table()
+		}
 		w.str(".")
 	}
 	w.col(i)

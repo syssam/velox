@@ -206,6 +206,15 @@ func Expr(text string, args ...any) velox.Predicate {
 	return engine.NewPredicate(engine.ExprNode(text, slots, vals))
 }
 
+// ExprRaw is velox.ExprRaw with terms for columns: the raw SQL text as a
+// condition, for Where or Having, which may read other tables with no
+// policy applied inside it. Each ? is filled by the next argument, a Term
+// written qualified and any other value bound. reason must say why.
+func ExprRaw(reason, text string, args ...any) velox.Predicate {
+	slots, vals := termSlots(args)
+	return engine.NewPredicate(engine.ExprRawNode(reason, text, slots, vals))
+}
+
 // termSlots classifies the arguments of a Calc or an Expr: a Term fills its ?
 // as the term, anything else is bound.
 func termSlots(args []any) ([]engine.ExprSlot, []any) {

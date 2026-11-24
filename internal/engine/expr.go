@@ -28,12 +28,19 @@ type exprData struct {
 	// rel says a slot's term is or holds a relation's aggregate (RelTerm),
 	// which the scope gives its target's row condition.
 	rel bool
+	// reason is a raw condition's (ExprRawNode): why its text may read
+	// what no policy guards. "" for every other expression.
+	reason string
 }
 
 // seal sets d's shape from its text pieces and what each slot holds. The
 // terms among the slots are sealed already.
 func (d *exprData) seal() *exprData {
-	b := binary.AppendUvarint(make([]byte, 0, 32), uint64(len(d.slots)))
+	b := make([]byte, 1, 32)
+	if d.reason != "" {
+		b[0] = 1 // a raw condition qualifies its columns (colRef)
+	}
+	b = binary.AppendUvarint(b, uint64(len(d.slots)))
 	for i, p := range d.parts {
 		b = binary.AppendUvarint(b, uint64(len(p)))
 		b = append(b, p...)
@@ -130,6 +137,29 @@ func ExprNode(text string, slots []ExprSlot, args []any) Node {
 	return Node{Op: OpExpr, V: d, Deep: d.rel}
 }
 
+// ExprRawNode makes the raw condition text, written as ExprNode's is,
+// except that the text may read other tables: a subquery, EXISTS, any
+// function. Nothing is added inside it, so no policy, filter or interceptor
+// applies there. Its columns are written qualified, by the alias of the
+// relation subquery being written, or by the table (colRef), so a subquery
+// in the text can name the outer row. The text keeps ExprNode's guard on
+// its structure: no semicolon, comment, backslash, $ or #, no unbalanced
+// parenthesis, a literal as ExprNode's, and a quoted identifier ("x" or
+// `x`) closed with no quote, ?, backslash or control character inside.
+// reason, which must say something, is what Statement.RawReasons reports.
+func ExprRawNode(reason, text string, slots []ExprSlot, args []any) Node {
+	if NoReason(reason) {
+		return Node{Op: OpInvalid, V: fmt.Errorf("velox: ExprRaw %q needs a reason, as no policy applies inside its text", text)}
+	}
+	d, err := newExprText(text, slots, args, true)
+	if err != nil {
+		return Node{Op: OpInvalid, V: err}
+	}
+	d.reason = reason
+	d.seal()
+	return Node{Op: OpExpr, V: d, Deep: d.rel}
+}
+
 // exprHasWindow reports whether d's text, or a term among its slots, holds
 // a window function.
 func exprHasWindow(d *exprData) bool {
@@ -146,9 +176,17 @@ func exprHasWindow(d *exprData) bool {
 
 // newExpr checks text and makes the expression of it and its slots.
 func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
-	window, err := checkExprText(text)
+	return newExprText(text, slots, args, false)
+}
+
+// newExprText is newExpr, of a raw condition's text when raw.
+func newExprText(text string, slots []ExprSlot, args []any, raw bool) (*exprData, error) {
+	window, err := checkExprText(text, raw)
 	if err != nil {
 		return nil, err
+	}
+	if raw {
+		window = false // a window in a subquery is the subquery's
 	}
 	if n := strings.Count(text, "?"); n != len(slots) {
 		if n > len(slots) {
@@ -180,12 +218,22 @@ func newExpr(text string, slots []ExprSlot, args []any) (*exprData, error) {
 // (PARTITION BY ? ORDER BY ?). What its parentheses hold is checked as the
 // rest of the text is, so a subquery or a refused function inside OVER is
 // refused too.
-func checkExprText(text string) (window bool, err error) {
+//
+// With raw, the text is a raw condition's (ExprRawNode): words are not
+// checked, and a quoted identifier is allowed (exprQuoted).
+func checkExprText(text string, raw bool) (window bool, err error) {
+	name := "Expr"
+	if raw {
+		name = "ExprRaw"
+	}
 	bad := func(what string) error {
+		if raw {
+			return fmt.Errorf("velox: ExprRaw %q: %s: write a value as an argument", text, what)
+		}
 		return fmt.Errorf("velox: Expr %q: %s: write a value as an argument, and a condition on another table as HasWith or InSelect", text, what)
 	}
 	if strings.TrimSpace(text) == "" {
-		return false, errors.New("velox: Expr: the text is empty")
+		return false, errors.New("velox: " + name + ": the text is empty")
 	}
 	depth := 0
 	for i := 0; i < len(text); {
@@ -197,12 +245,18 @@ func checkExprText(text string) (window bool, err error) {
 				return false, bad("a string literal " + why + " (it is 'x' with no quote, backslash, ? or control character inside; pass anything else as an argument)")
 			}
 			i = end
+		case raw && (c == '"' || c == '`'):
+			end, why := exprQuoted(text, i)
+			if why != "" {
+				return false, bad("a quoted identifier " + why)
+			}
+			i = end
 		case isIdentStart(c):
 			j := i
 			for j < len(text) && (isIdentStart(text[j]) || text[j] >= '0' && text[j] <= '9') {
 				j++
 			}
-			if exprWordBanned(text[i:j]) {
+			if !raw && exprWordBanned(text[i:j]) {
 				return false, bad(fmt.Sprintf("the word %s is not allowed", text[i:j]))
 			}
 			window = window || strings.EqualFold(text[i:j], "OVER")
@@ -272,6 +326,26 @@ func exprLiteral(text string, i int) (end int, why string) {
 	return 0, "is not closed"
 }
 
+// exprQuoted reads the quoted identifier that starts at text[i], a double
+// quote or a backtick, and returns the index after its closing one. why is
+// not empty when it is not closed, or holds the quote doubled, a ?, a
+// backslash or a control character.
+func exprQuoted(text string, i int) (end int, why string) {
+	q := text[i]
+	for j := i + 1; j < len(text); j++ {
+		switch c := text[j]; {
+		case c == q:
+			if j+1 < len(text) && text[j+1] == q {
+				return 0, "holds a doubled quote"
+			}
+			return j + 1, ""
+		case c == '\\', c == '?', c < ' ':
+			return 0, fmt.Sprintf("holds %q", c)
+		}
+	}
+	return 0, "is not closed"
+}
+
 func isIdentStart(b byte) bool {
 	return b == '_' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
 }
@@ -281,7 +355,14 @@ func (w *writer) expr(n Node) { w.exprBody(n.V.(*exprData)) }
 
 // exprBody writes d: its text in parentheses, with its columns written as a
 // condition's column is, its terms as terms and its values bound.
+//
+// A raw condition's columns, its terms' included, are written qualified
+// (colRef).
 func (w *writer) exprBody(d *exprData) {
+	if d.reason != "" && !w.raw {
+		w.raw = true
+		defer func() { w.raw = false }()
+	}
 	w.str("(")
 	next := 0
 	for i, p := range d.parts {
@@ -357,4 +438,46 @@ func swapExprData(d *exprData) *exprData {
 		}
 	}
 	return c.seal()
+}
+
+// RawReasons returns the reasons of the raw conditions (velox.ExprRaw) st
+// holds, in the order they are written: in Where, a join's On, a
+// projection's Having and an upsert's conditions, at any depth (inside Or,
+// Not or a relation's condition). It is nil when st holds none. An Around
+// hook reads it to record that a statement read past the policies, and why;
+// a raw condition does not set PolicyBypass, as the policies still apply to
+// the statement's own rows.
+func (st *Statement) RawReasons() []string {
+	var rs []string
+	add := func(ps []Predicate) {
+		for _, p := range ps {
+			rs = nodeRawReasons(rs, p.n)
+		}
+	}
+	add(st.Where)
+	for i := range st.Joins {
+		add(st.Joins[i].On)
+	}
+	if st.Project != nil {
+		add(st.Project.Having)
+	}
+	if st.Conflict != nil {
+		add(st.Conflict.TargetWhere)
+		add(st.Conflict.Where)
+	}
+	return rs
+}
+
+// nodeRawReasons appends to rs the reasons of the raw conditions in n and
+// its kids.
+func nodeRawReasons(rs []string, n Node) []string {
+	if n.Op == OpExpr {
+		if d := n.V.(*exprData); d.reason != "" {
+			rs = append(rs, d.reason)
+		}
+	}
+	for _, k := range n.Kids {
+		rs = nodeRawReasons(rs, k)
+	}
+	return rs
 }

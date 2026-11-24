@@ -93,6 +93,7 @@ Statement.Op Op
 Statement.OrderBy []OrderTerm
 Statement.PolicyBypass string
 Statement.Project *Projection
+Statement.RawReasons() []string
 Statement.Result Result
 Statement.Returning []int
 Statement.Route Route
@@ -748,6 +749,7 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescripto
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int, unfilled ...int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
 func Excluded[E any](c Column[E]) Term[E]
+func ExprRaw[E any](reason, text string, args ...any) Pred[E]
 func Expr[E any](text string, args ...any) Pred[E]
 func FieldContains(name, s string) Predicate
 func FieldContainsFold(name, s string) Predicate
@@ -1607,6 +1609,7 @@ func CountAll() Term
 func CountDistinct(t Term) Term
 func Delete(db *velox.DB, t Table) TableDelete
 func Expr(text string, args ...any) velox.Predicate
+func ExprRaw(reason, text string, args ...any) velox.Predicate
 func FromQuery[E any](q velox.Query[E]) TableQuery
 func Insert(db *velox.DB, t Table, row any) TableInsert
 func InsertBulk(db *velox.DB, t Table, qs ...TableInsert) TableInsert

@@ -1,13 +1,15 @@
 # Writing SQL in velox
 
 The handles say most of what an application needs. When they do not, velox
-takes SQL text in eight places. Five of them keep the entity's Read and
+takes SQL text in nine places. Five of them keep the entity's Read and
 Write policies, its scope and its interceptors: the text is one part of a
-statement velox builds. Three of them are raw: the whole statement is
-yours, velox applies no policy, and each takes a reason that says why.
+statement velox builds. One, `ExprRaw`, is a raw condition: the statement
+keeps its policies, and no policy applies inside the text. Three of them
+are raw: the whole statement is yours, velox applies no policy, and each
+takes a reason that says why.
 
 Pick the smallest tool that says what you need. The first five cannot leak
-another tenant's rows; the last three can.
+another tenant's rows; `ExprRaw` and the last three can.
 
 | Need | Tool | Policies, scope, interceptors | Entity hooks |
 | --- | --- | --- | --- |
@@ -15,6 +17,7 @@ another tenant's rows; the last three can.
 | A value: an ordering, a result column, a group key | `velox.Calc`, `Query.SelectRaw` | kept | n/a |
 | A column set to an expression | `velox.SetExpr` | kept | run; `Mutation.Value` reports false |
 | A condition on another table | `HasWith`, `InSelect`, `FieldInSelect` | kept, the other table's too | n/a |
+| A condition with a subquery velox cannot guard | `velox.ExprRaw(reason, …)` | kept on the statement's rows, **none inside the text** | n/a (a read) or kept (in a write's Where) |
 | Grouped results | `Select`, `GroupBy`, `Having` with `Calc` | kept | n/a |
 | Rows of an entity, by any SELECT | `db.Raw[E](reason, …)` | **bypassed** | not run |
 | Rows of no entity | `db.Rows(ctx, reason, …)` | **bypassed** | not run |
@@ -22,7 +25,8 @@ another tenant's rows; the last three can.
 
 Every tool goes through the transaction check, the Around hooks, routing
 and the SQL comment. The raw ones show their reason to the Around
-hooks as `Statement.PolicyBypass`.
+hooks as `Statement.PolicyBypass`; `ExprRaw`'s reasons are
+`Statement.RawReasons()`.
 
 ## The text rules
 
@@ -50,6 +54,14 @@ column are refused too. Pass values as arguments, never in the text.
 These rules guard against a policy bypass by mistake. They are not a
 defence against hostile input: the text comes from your program, never from
 a user. See [ADR 0069](decisions/0069-expr.md).
+
+`ExprRaw` keeps the rules on structure (the semicolon, comments, backslash,
+`$`, `#`, parentheses and literals) and drops the ones on words, so its text
+may hold `SELECT`, `EXISTS`, `WITH` and any function, and a closed quoted
+identifier (`"order"`, `` `order` ``). Its column handles are written
+qualified by the table, or by velox's `vx1`… inside a relation's subquery,
+so a correlated subquery can name the outer row. No policy applies inside
+its text ([ADR 0155](decisions/0155-expr-raw.md)).
 
 The examples below use `I := veloxgen.Invoices`, with `ctx` carrying the
 scope.
@@ -217,6 +229,7 @@ transaction both see its writes.
 | ent | velox |
 | --- | --- |
 | `Where(sql.FieldEQ…)`, `predicate.X(func(s *sql.Selector){…})` | `velox.Expr` |
+| `predicate.X(func(s *sql.Selector){…})` with a subquery on another table | `HasWith` or `InSelect`; `velox.ExprRaw(reason, …)` when no policy may apply inside |
 | `Order(func(s *sql.Selector){ s.OrderExpr(…) })` | `velox.Calc(…).Desc()` |
 | `Modify(func(u *sql.UpdateBuilder){ u.Set(c, sql.Expr(…)) })` | `velox.SetExpr` |
 | `Modify(func(s *sql.Selector){ s.Select(…) })` + `Scan` | `Select` / `SelectRaw` + `Rows` |

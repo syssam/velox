@@ -25,6 +25,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   so code that builds an entity itself, such as a test's fixture, can set
   `x.Edges.Foo` as ent's `x.Edges.Foo = y` does. A nil `p` or `s` is a
   relation loaded with no row; an empty `Many`'s JSON is `[]`.
+- `velox.ExprRaw[E](reason, text, args...)` and `untyped.ExprRaw`: a
+  condition whose text may hold a subquery, `EXISTS` or any function, with
+  no policy, filter or interceptor applied inside the text; the statement
+  around it keeps them on its own rows. A column handle is written as the
+  qualified outer column, so a correlated subquery can name the outer row.
+  The reason is required and an Around hook reads every raw condition's
+  reason from `Statement.RawReasons()` (ADR 0155).
 - A JSON handle's `Contains(doc)` is true where the column's JSON document
   contains `doc`: PostgreSQL's `@>` (`"col" @> $1::jsonb`, which a GIN index
   serves) and MySQL's `JSON_CONTAINS`. `doc` is encoded with `encoding/json`
