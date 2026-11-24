@@ -4,7 +4,7 @@ go 1.27.0
 
 toolchain go1.27.4
 
-// Another project's code (veloxe), not this module's: see decision 0023.
+// The earlier project published at this path (decision 0023).
 retract [v0.1.0, v0.3.0]
 
 require (

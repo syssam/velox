@@ -178,7 +178,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 
 	var at []place // the element that makes each index, for the checks
 	for i, ix := range e.Indexes {
-		// SQLite has one kind of index, and ent's and veloxe's SQLite
+		// SQLite has one kind of index, and ent's SQLite
 		// migration never read an index's type: a GIN index of PostgreSQL is
 		// a plain one here (decision 0090). MySQL's check refuses one.
 		method := ix.Method
@@ -273,7 +273,7 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 	return tb
 }
 
-// symbol is name on the dialect: capped as veloxe capped it when derived,
+// symbol is name on the dialect: capped as ddl.Symbol caps it when derived,
 // else as given.
 func (t *tabler) symbol(name string, derived bool) string {
 	if derived {
@@ -283,8 +283,8 @@ func (t *tabler) symbol(name string, derived bool) string {
 }
 
 // foreignKey adds fk to tb; it reports whether it added an index. velox
-// declares no index of a foreign key on PostgreSQL and SQLite, as ent and
-// veloxe declare none (decision 0090). On MySQL, which makes an index named
+// declares no index of a foreign key on PostgreSQL and SQLite, as ent
+// declares none (decision 0090). On MySQL, which makes an index named
 // as the key for a key that neither the primary key nor a full index of tb
 // leads, tb has that index, as an inspection of the database has it, and
 // the migrate package wants every MySQL key indexed. MySQL cannot name the
@@ -350,18 +350,18 @@ func (t *tabler) column(e *Entity, i int, f *Field) migrate.Column {
 }
 
 // columnNullable reports whether f's column holds NULL: a Nillable field's,
-// and an Optional JSON field's of any Go type, as veloxe made it. A JSON
+// and an Optional JSON field's of any Go type. A JSON
 // field of a struct type reads NULL back as its zero value.
 func columnNullable(f *Field) bool {
 	return f.Nillable || f.Optional && f.Type == "json"
 }
 
 // autoDefault reports whether f's NOT NULL column gets its type's zero as
-// its DEFAULT, as veloxe's FeatureAutoDefault gave it, so that a column added
+// its DEFAULT, so that a column added
 // to a table with rows needs no default of its own: a string, bool or number
 // field, required or Optional, that is not Nillable and has no Default or
 // DefaultFunc (decision 0090). An enum, a time, bytes, a UUID, JSON and an
-// Other field get none, as in veloxe; nor does a foreign key velox adds.
+// Other field get none; nor does a foreign key velox adds.
 func autoDefault(f *Field) bool {
 	if f.Nillable || len(f.Default) > 0 || f.DefaultFunc || f.Implicit != "" {
 		return false
@@ -400,7 +400,7 @@ func (t *tabler) plainType(f *Field) string {
 }
 
 // fieldType is the type of e's field f. An enum is a string column with no
-// check, as veloxe stored it (decision 0090): varchar on PostgreSQL, text on
+// check, as ent stores it (decision 0090): varchar on PostgreSQL, text on
 // SQLite, or its SchemaType for the dialect; MySQL's enum(…) on MySQL unless
 // its SchemaType is a string type. A PostgreSQL SchemaType that names no
 // string type is that enum type, which it lists.
@@ -531,7 +531,7 @@ func baseType(d velox.Dialect, typ string, size int) string {
 		case d == velox.Postgres && size > 0 && size <= 10485760:
 			return "character varying(" + strconv.Itoa(size) + ")"
 		case d == velox.Postgres && size == 0:
-			// Unbounded varchar, as veloxe and ent made a string with no
+			// Unbounded varchar, as ent makes a string with no
 			// size; a Text field's size is over the limit, and is text.
 			return "character varying"
 		case d == velox.MySQL:

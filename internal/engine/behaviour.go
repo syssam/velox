@@ -45,15 +45,15 @@ type Policy struct {
 	// and does not change the row.
 	Insert func(ctx context.Context, db *DB, r Row) error
 
-	// Query is veloxe's query rules (package privacy). Their conditions are
+	// Query is the ent-style query rules (package privacy). Their conditions are
 	// ANDed into every read of the entity, after Read's: a SELECT, Count,
 	// With load, join and Has/HasWith subquery of a statement that reads.
 	// Unlike Read, they do not apply to an UPDATE, a DELETE, a Save, an
-	// upsert's update branch, or anything inside one, as veloxe's query
-	// policy did not. Any error they return, but a Decision of Allow or
+	// upsert's update branch, or anything inside one, as ent's query
+	// policy does not. Any error they return, but a Decision of Allow or
 	// Skip, denies the read.
 	Query QueryEval
-	// Mutation is veloxe's mutation rules (package privacy). They judge
+	// Mutation is the ent-style mutation rules (package privacy). They judge
 	// every inserted or upserted row, after Insert, and their conditions
 	// are ANDed into every UPDATE, DELETE and Save, and an upsert's update
 	// branch, after Write's.

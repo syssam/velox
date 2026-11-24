@@ -54,7 +54,7 @@ func (dnOrder) Fields() []schema.Field {
 	}
 }
 
-// An enum is a string column, as veloxe stored it, unless its PostgreSQL
+// An enum is a string column, as ent stores it, unless its PostgreSQL
 // SchemaType names a type that is not a string type (decision 0090).
 func TestEnumType(t *testing.T) {
 	e := mustBuild(t, dnOrder{}).Entity("dnOrder")

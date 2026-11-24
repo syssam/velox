@@ -10,7 +10,7 @@ import (
 
 // Allocation is reversed by another allocation: a one-to-one edge to its own
 // schema whose assoc edge binds the key, so reversed_by_id in a row holds the
-// ID of the allocation that reverses it, as a veloxe schema declares it.
+// ID of the allocation that reverses it.
 type Allocation struct{ schema.Schema }
 
 func (Allocation) Fields() []schema.Field {

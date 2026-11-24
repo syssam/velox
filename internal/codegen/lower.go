@@ -418,7 +418,7 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		h = "StringCol"
 	case f.Type == "other":
 		// Its own SQL type (a range, a point): the database compares and
-		// orders it, as veloxe's predicates did.
+		// orders it.
 		h = "OtherCol"
 	default:
 		h = "Col"
@@ -565,8 +565,8 @@ func (s *entState) elemType(f *Field, at loc) (elem, kind string) {
 			en.Values = append(en.Values, v.Value)
 		}
 		// Two fields whose enum types get one name and hold the same
-		// values, in any order, share the type the first declares, as
-		// veloxe did; with other values, checkDeclared reports the clash.
+		// values, in any order, share the type the first declares; with
+		// other values, checkDeclared reports the clash.
 		for _, d := range s.l.enums {
 			if d.enum.Type == t && sameEnum(d.enum, en) {
 				d.users[s.name] = true
@@ -773,13 +773,12 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, at loc) {
 		switch f.GoType.Kind {
 		case "slice", "map":
 			// Unset, an Optional JSON slice or map is written empty, [] or
-			// {}, as veloxe zero-filled it (decision 0090), not NULL; it
+			// {}, zero-filled (decision 0090), not NULL; it
 			// reads back empty. Set to nil by an update, it is NULL.
 			o.ZeroFillCode = fmt.Sprintf("func() any { return %s{} }", elem)
 		case "ptr":
 			// Unset, an Optional JSON pointer is written as its element's
-			// zero, as veloxe, whose field held the element, zero-filled it
-			// (decision 0090); it reads back a pointer to that zero. Set to
+			// zero, zero-filled as the element (decision 0090); it reads back a pointer to that zero. Set to
 			// nil by an update, it is NULL.
 			o.ZeroFillCode = fmt.Sprintf("func() any { return new(%s) }", strings.TrimPrefix(elem, "*"))
 		}

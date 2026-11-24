@@ -67,7 +67,7 @@ func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E] {
 }
 
 // KeepDefaults stops the UpdateDefault of each named column from firing, so
-// the update writes nothing to it, as veloxe's SkipDefault does: a system
+// the update writes nothing to it: a system
 // write that must not move an updated_at column. A column the update
 // assigns is still written as assigned; an assignment already won over the
 // UpdateDefault, but it writes a value, where KeepDefaults writes nothing.

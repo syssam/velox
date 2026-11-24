@@ -472,8 +472,8 @@ func (*sdUser) VeloxMeta() *velox.Meta[sdUser] {
 type includeDeletedKey struct{}
 
 // softDelete is the guide's soft-delete filter: it hides deleted users from
-// reads, unless the context includes them, and leaves writes alone, as
-// veloxe's query-only interceptor did.
+// reads, unless the context includes them, and leaves writes alone, as a
+// query-only interceptor does.
 func softDelete(readsOnly bool) velox.Filter {
 	return func(ctx context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
 		if fe.Name() != "sdUser" || readsOnly && op != velox.OpSelect || ctx.Value(includeDeletedKey{}) != nil {

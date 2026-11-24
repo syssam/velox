@@ -794,8 +794,8 @@ func runs(xs []string, sep string) []string {
 }
 
 // privacyNames are the names of velox's privacy package that
-// privacy/privacy.go gives again, those veloxe's generated privacy package
-// had, as types or as variables.
+// privacy/privacy.go gives again, those ent's generated privacy package
+// has, as types or as variables.
 var privacyNames = struct{ types, vars []string }{
 	types: []string{
 		"Decision", "Policy", "QueryRule", "MutationRule", "QueryMutationRule",
@@ -811,15 +811,15 @@ var privacyNames = struct{ types, vars []string }{
 }
 
 // renderPrivacy writes privacy/privacy.go, package privacy beside the
-// entities, as veloxe generated it: veloxe's names, each an alias of velox's
+// entities, as ent generates it: ent's names, each an alias of velox's
 // privacy package's, so that an application's import of the generated
-// package's privacy keeps building. veloxe's per-entity rule funcs are left
+// package's privacy keeps building. ent's per-entity rule funcs are left
 // out: velox's FilterFunc and QueryRuleFunc take any entity's query.
 func renderPrivacy(o *Out) string {
 	var w writer
 	w.WriteString(header)
 	w.p("// Package privacy gives the names of %s to the code that imports", privacyPkg)
-	w.p("// %s/privacy, as veloxe's generated privacy package did.", o.GenPath)
+	w.p("// %s/privacy, as ent's generated privacy package does.", o.GenPath)
 	w.p("package privacy\n")
 	w.p("import \"%s\"\n", privacyPkg)
 	for _, n := range privacyNames.types {

@@ -80,7 +80,7 @@ import (
 // policy decides, and does not change the row.
 //
 // Read, Write and Insert fail closed. Query and Mutation hold rule lists
-// that follow ent's privacy, as veloxe's did; package privacy has their
+// that follow ent's privacy; package privacy has their
 // types and says how they apply. A list whose rules all skip allows, and
 // privacy.DecisionContext lifts them; to deny by default, end a list with
 // privacy.AlwaysDenyRule(). Query's conditions apply to reads only, after

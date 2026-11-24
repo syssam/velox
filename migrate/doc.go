@@ -236,7 +236,7 @@
 //
 // # Adopting a database
 //
-// A database made before the directory, by ent, by veloxe or by hand,
+// A database made before the directory, by ent, by another tool or by hand,
 // is adopted in five steps. In a program, [Baseline] is step 1 and
 // [WithBaseline] step 3:
 //

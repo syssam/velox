@@ -202,8 +202,8 @@ func TestLowerJSONFlag(t *testing.T) {
 		src += string(f.Data)
 	}
 	// tags is Optional and a slice: its column holds NULL, which a nil
-	// slice an update sets binds; unset on insert, it is written as [], as
-	// veloxe wrote it (decision 0090).
+	// slice an update sets binds; unset on insert, it is written as []
+	// (decision 0090).
 	tags := regexp.MustCompile(`(?s)Field:\s+"Tags",\s+Name:\s+"tags",\s+DefaultFunc:\s+func\(\) any \{ return \[\]string\{\} \},\s+Nullable:\s+true,\s+Encode:\s+json.Marshal,\s+Decode:\s+json.Unmarshal,`)
 	if !tags.MatchString(src) {
 		t.Errorf("the generated code lacks tags' descriptor with its DefaultFunc and Nullable")
@@ -461,7 +461,7 @@ type LwBox struct{ W, H int }
 func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
 	e := o.entity("LwMixed")
-	// An Other field's SQL type compares and orders, as veloxe's did.
+	// An Other field's SQL type compares and orders.
 	if f := e.field("pt"); f.Handle != "velox.OtherCol[LwMixed, codegen.UUIDValue]" {
 		t.Errorf("pt's handle is %s", f.Handle)
 	}

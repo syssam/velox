@@ -156,7 +156,7 @@ func FuncOf(pc uintptr) string {
 // arguments with their full package paths), an unnamed func, an unnamed
 // interface with methods, or an unnamed struct with an unexported field,
 // which written in another package would be another type. An unnamed struct
-// of exported fields is written inline, as veloxe wrote it: reflect prints
+// of exported fields is written inline: reflect prints
 // it as Go source, its tags quoted, and GoTypeOf lists its fields' packages.
 // interface{} and struct{} are writable.
 func Unwritable(t reflect.Type) string {

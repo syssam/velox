@@ -17,7 +17,7 @@ import (
 )
 
 // pnAudit is a mixin whose index has one StorageKey for every table that
-// lists it, as a veloxe application's audit mixin has.
+// lists it, as an audit mixin may.
 type pnAudit struct{ mixin.Schema }
 
 func (pnAudit) Fields() []schema.Field {
@@ -56,9 +56,9 @@ func (pnMetric) Annotations() []schema.Annotation {
 }
 
 // Each index is "<table>_<name>" unless it starts with "<table>_" already,
-// a derived name included, as veloxe applications' hook named them, so a
+// a derived name included, so a
 // mixin's StorageKey on two tables is two names; a name the prefix makes too
-// long is capped as veloxe capped it (decision 0083).
+// long is capped by ddl.Symbol (decision 0083).
 func TestPrefixIndexNames(t *testing.T) {
 	g, err := build(t, pnTesting{}, pnMetric{})
 	if err != nil {
@@ -85,13 +85,14 @@ func TestPrefixIndexNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, capped := indexNamesOf(s, "ab_testing"), ddl.Symbol(velox.Postgres, long); !strings.Contains(got, capped) || len(capped) != 63 || !strings.HasSuffix(capped, "_"+veloxeFNV(long)) {
+	if got, capped := indexNamesOf(s, "ab_testing"), ddl.Symbol(velox.Postgres, long); !strings.Contains(got, capped) || len(capped) != 63 || !strings.HasSuffix(capped, "_"+fnvSuffix(long)) {
 		t.Errorf("ab_testing's indexes %s lack %s", got, capped)
 	}
 }
 
-// veloxeFNV is the hex of the 128-bit FNV-1 hash of s, veloxe's cap suffix.
-func veloxeFNV(s string) string {
+// fnvSuffix is the hex of the 128-bit FNV-1 hash of s, ddl.Symbol's cap
+// suffix.
+func fnvSuffix(s string) string {
 	h := fnv.New128()
 	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))

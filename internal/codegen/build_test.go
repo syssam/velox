@@ -667,7 +667,7 @@ func (optionalJSONOK) Fields() []schema.Field {
 	}
 }
 
-// An Optional JSON field of any Go type passes, as in veloxe: one of a
+// An Optional JSON field of any Go type passes: one of a
 // struct or a scalar need not be Nillable (decision 0090).
 func TestBuildOptionalJSONNeedsNoNillable(t *testing.T) {
 	mustBuild(t, optionalJSONOK{}, optionalJSONStruct{}, optionalJSONScalar{})
@@ -1560,8 +1560,8 @@ func (optionalNoValueSchema) Fields() []schema.Field {
 }
 
 // Rule 37 is an Optional enum's only: every other Optional field that is not
-// Nillable and has no Default is written as its zero value when unset, as
-// veloxe wrote it (decision 0090). An enum's zero is none of its values.
+// Nillable and has no Default is written as its zero value when unset
+// (decision 0090). An enum's zero is none of its values.
 func TestOptionalNeedsAValue(t *testing.T) {
 	_, err := build(t, optionalNoValueSchema{})
 	want := `schema optionalNoValueSchema: field "mood": an Optional enum needs a Default or Nillable: unset, it has no value to store, as "" is none of its values. Write field.Enum("mood").Optional().Default("calm"), or field.Enum("mood").Optional().Nillable() for NULL`
@@ -1571,8 +1571,8 @@ func TestOptionalNeedsAValue(t *testing.T) {
 	mustBuild(t, optionalBytes{}, optionalTime{})
 }
 
-// An Immutable key bound to an edge that is not makes the edge Immutable, as
-// veloxe took such a schema: the key cannot change, so neither can the edge.
+// An Immutable key bound to an edge that is not makes the edge Immutable:
+// the key cannot change, so neither can the edge.
 func TestImmutableKeyMakesEdgeImmutable(t *testing.T) {
 	g := mustBuild(t, immutableField{})
 	if ed := g.Entity("immutableField").Edge("parent"); !ed.Immutable {
@@ -1977,7 +1977,7 @@ func (capIndexes) Indexes() []schema.Index {
 	return []schema.Index{index.Fields(capColumn, "p"), index.Fields(capColumn, "q")}
 }
 
-// A derived index name over the cap is capped as veloxe capped it, on each
+// A derived index name over the cap is capped by ddl.Symbol, on each
 // dialect, and stays apart from another that differs only past the cut. The
 // Graph keeps it whole; the plugin model gives PostgreSQL's.
 func TestIndexNamesCapped(t *testing.T) {
@@ -2323,7 +2323,7 @@ func (reqSelfCascade) Edges() []schema.Edge {
 }
 
 // A Required edge to its own schema keeps its implicit key NULL-able, as
-// ent's and veloxe's tables do (n != e.Type), so its default is SET NULL;
+// ent's tables do (n != e.Type), so its default is SET NULL;
 // the edge stays Required.
 func TestRequiredSelfKeyIsNullable(t *testing.T) {
 	g := mustBuild(t, reqSelf{}, reqSelfCascade{})

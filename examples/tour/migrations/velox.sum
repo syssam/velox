@@ -1,9 +1,9 @@
-h1:OUfrRuJVPdzku28bHQjNO/MVxOYUVStZXMI7hpSCPTM=
+h1:ulBhaksvV7vlbU0VYSPJ3gCEF0lajxV3ibTmnrH2y7c=
 0001_init.sql h1:zKUYPbbrTHzrWNeos4HuJ8jT95UY4wH/G9wX8RxFQ/E=
 0002_time_default.sql h1:dE+kKh9j2q36A72K2M3h8Z9QqN5dEXU+qy11nbh1IqA=
 0003_soft_delete.sql h1:wPlBTHgILqgHhP8q/7bKnzP2XdN6+SOzZn4LWq0NCpA=
 0004_sqlite_datetime9.sql h1:XCC852UP+AM2ECQv/1g5jGThDrr4xhsKWqwftWJvr5c=
-0005_veloxe_defaults.sql h1:4Ni6C6JwoP5Q4oAUbdqQNznomW+5l0g4tUD2uiaBJIo=
+0005_zero_defaults.sql h1:4Ni6C6JwoP5Q4oAUbdqQNznomW+5l0g4tUD2uiaBJIo=
 0006_drop_fk_indexes.sql h1:y2KxGJS9cLQaLwUFx7Kz8c90He8lMOsEMSAYrJdzvFU=
 schema.json h1:Hz+OfV0s0u1avy/2qbWFdfKp9sFz/v4pSatu8k4OvAU=
 velox.json h1:kwGXDUmLy0YS8XIgvaPehFkSYOwxr3lcNqybqvcDGRc=

@@ -1,5 +1,6 @@
-// Package privacy is veloxe's privacy package, for a schema written for
-// veloxe: its Policy method compiles and behaves as it did there.
+// Package privacy has the privacy rules of ent's privacy package, for a
+// schema whose Policy method is written as ent's are: it compiles, and its
+// rules decide as ent's do.
 //
 //	func (Doc) Policy() velox.Policy {
 //		return privacy.Policy{Query: privacy.QueryPolicy{
@@ -11,8 +12,8 @@
 //		}}
 //	}
 //
-// Policy is velox.Policy, whose Query and Mutation fields hold veloxe's rule
-// lists; a Policy may set them beside Read, Write and Insert. velox binds it
+// Policy is velox.Policy, whose Query and Mutation fields hold ent-style
+// rule lists; a Policy may set them beside Read, Write and Insert. velox binds it
 // as any Policy: a mixin's first, then the entity's own.
 //
 // A list runs its rules in order. A rule returns Skip (or nil) to go on to
@@ -24,17 +25,17 @@
 // AlwaysDenyRule(). Conditions a rule gives the filter (Filter.Where) before the
 // list ends stay, Allow or not: they are ANDed into the statement. Each
 // Policy's list ends on its own, so an Allow in an entity's list does not
-// lift a mixin's, as veloxe's generated runtime did not.
+// lift a mixin's.
 //
 // Query's rules decide reads: their conditions are ANDed into every SELECT,
 // Count, With load, join and Has/HasWith subquery of a statement that only
 // reads. They do not apply to an UPDATE, a DELETE, a Save or an upsert, as
-// veloxe's query policy did not; Read is velox's condition for both.
+// ent's query policy does not; Read is velox's condition for both.
 // Mutation's rules judge every inserted row (Mutation.Op is velox.OpInsert,
-// Mutation.Value reads the row, and Filter.Where is ignored, as in veloxe),
+// Mutation.Value reads the row, and Filter.Where is ignored),
 // and narrow every UPDATE, DELETE and Save (velox.OpUpdate, velox.OpDelete).
 //
-// A rule that reads to decide, as veloxe's did through a client from the
+// A rule that reads to decide, as ent's does through a client from the
 // context, reads with ctx through Query.DB or Mutation.DB: the DB the
 // statement runs on, the transaction's inside Tx. A statement made under
 // a rule's ctx is not judged by its Policy's list.
@@ -44,10 +45,10 @@
 // Deny refusing. It does not lift Read, Write, Insert or an interceptor,
 // such as a tenant mixin's; velox.DB.WithoutPolicy lifts every policy.
 //
-// What veloxe had and velox does not: a rule narrows with Filter.Where and
+// What ent has and velox does not: a rule narrows with Filter.Where and
 // velox.Predicate conditions, not WhereP and *sql.Selector functions; a
 // rule sees no generated query or mutation type, only Query and Mutation;
-// and NewPolicies and Policies, which veloxe's generated code called, have
+// and NewPolicies and Policies, which ent's generated code calls, have
 // no use, since velox composes a mixin's and an entity's policies itself.
 package privacy
 
@@ -62,16 +63,16 @@ import (
 
 // Decision is a rule's verdict: Allow, Deny or Skip. It is an error, so a
 // rule returns it, wrapped or not (Allowf, Denyf, Skipf).
-type Decision = engine.Decision //nolint:errname // veloxe's name
+type Decision = engine.Decision //nolint:errname // ent's name
 
 var (
 	// Allow ends a rule list, allowing the statement with the conditions
 	// the rules before gave it.
-	Allow = engine.PrivacyAllow //nolint:errname // veloxe's name
+	Allow = engine.PrivacyAllow //nolint:errname // ent's name
 	// Deny ends a rule list, denying the statement.
-	Deny = engine.PrivacyDeny //nolint:errname // veloxe's name
+	Deny = engine.PrivacyDeny //nolint:errname // ent's name
 	// Skip goes on to the next rule.
-	Skip = engine.PrivacySkip //nolint:errname // veloxe's name
+	Skip = engine.PrivacySkip //nolint:errname // ent's name
 )
 
 // IsDecision reports whether err is or wraps a Decision.
@@ -95,7 +96,7 @@ func Skipf(format string, a ...any) error {
 	return fmt.Errorf(format+": %w", append(a, Skip)...)
 }
 
-// Policy is velox.Policy: Query and Mutation hold veloxe's rule lists.
+// Policy is velox.Policy: Query and Mutation hold ent-style rule lists.
 type Policy = velox.Policy
 
 type (

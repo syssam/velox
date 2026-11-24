@@ -574,7 +574,7 @@ func (OrderStatus) Values() []string { return []string{"open", "paid"} }
 func TestTablesEnums(t *testing.T) {
 	pg := tables(t, velox.Postgres, tbEnumUser{}, tbEnumOrder{})
 	users := table(t, pg, "users")
-	// An enum is varchar on PostgreSQL, as veloxe made it, unless its
+	// An enum is varchar on PostgreSQL, as ent makes it, unless its
 	// SchemaType names an enum type (decision 0090).
 	for name, typ := range map[string]string{"kind": "character varying", "status": "character varying", "mood": `"mood"`, "role": "text"} {
 		if c := column(t, users, name); c.Type != typ {
@@ -590,7 +590,7 @@ func TestTablesEnums(t *testing.T) {
 			t.Errorf("enum %d: %+v, want %+v", i, e, wantEnums[i])
 		}
 	}
-	// No enum is given a CHECK, on any dialect, as veloxe gave none.
+	// No enum is given a CHECK, on any dialect.
 	if len(users.Checks) != 0 {
 		t.Errorf("PostgreSQL checks %+v", users.Checks)
 	}
@@ -1868,8 +1868,8 @@ type UserProfile struct{ schema.Schema }
 func (UserProfile) Fields() []schema.Field  { return []schema.Field{field.String("bio")} }
 func (UserProfile) Indexes() []schema.Index { return []schema.Index{index.Fields("bio")} }
 
-// Tables names foreign keys as ent does on each dialect, and indexes as
-// veloxe did, after the table.
+// Tables names foreign keys as ent does on each dialect, and indexes
+// after the table.
 func TestDDLNames(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, Writer{}, Story{}, Topic{}, UserProfile{})
@@ -2054,8 +2054,7 @@ func TestDeclaredChecks(t *testing.T) {
 	if !checksEqual(got, want) {
 		t.Errorf("checks %+v, want %+v", got, want)
 	}
-	// An enum adds no check of its own on SQLite, as veloxe added none
-	// (decision 0090).
+	// An enum adds no check of its own on SQLite (decision 0090).
 	lite := table(t, tables(t, velox.SQLite, checkedSchema{}), "checked_schemas").Checks
 	if len(lite) != 2 {
 		t.Errorf("SQLite checks %+v", lite)

@@ -6,8 +6,8 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// This file is veloxe's privacy rules, which Policy.Query and
-// Policy.Mutation hold. Package privacy exports them with veloxe's names
+// This file is the ent-style privacy rules, which Policy.Query and
+// Policy.Mutation hold. Package privacy exports them with ent's names
 // (privacy.Query, privacy.QueryRule, …) and says how a rule list becomes
 // velox's conditions.
 
@@ -32,7 +32,7 @@ type PrivacyMutation interface {
 	// Op returns the write's kind: OpInsert, OpUpdate or OpDelete.
 	Op() Op
 	// Filter returns the write's filter. An update's or a delete's narrows
-	// the rows it changes; an insert's is ignored, as veloxe ignored it.
+	// the rows it changes; an insert's is ignored, as it has no rows.
 	Filter() PrivacyFilter
 	// Value returns an inserted row's value of the column of the given
 	// name, as Row.Value does. It reports false for a column the entity

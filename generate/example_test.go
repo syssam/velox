@@ -7,8 +7,8 @@ import (
 	"github.com/syssam/velox/generate"
 )
 
-// A generate.go in the module's root replaces ent's and veloxe's
-// compiler.Generate("./schema", cfg). Its build constraint keeps it out of
+// A generate.go in the module's root replaces ent's
+// entc.Generate("./schema", cfg). Its build constraint keeps it out of
 // the package, and a go:generate line in another file of the package runs
 // it, as ent's entc.go is run:
 //
@@ -30,7 +30,7 @@ func ExampleRun() {
 	cfg := generate.Config{
 		Schema:  "./veloxschema",
 		Out:     "./velox",
-		Plugins: []generate.Plugin{{Tool: "velox-graphql", Options: map[string]string{"compat": "veloxe"}}},
+		Plugins: []generate.Plugin{{Tool: "velox-graphql", Options: map[string]string{"names": "schema"}}},
 	}
 	if _, err := generate.Run(context.Background(), "", cfg); err != nil {
 		log.Fatal(err)

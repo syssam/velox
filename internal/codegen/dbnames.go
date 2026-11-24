@@ -64,7 +64,7 @@ func joinFKName(table, column string) string { return table + "_" + column }
 // enumType is the PostgreSQL enum type of the enum field f: its
 // Postgres SchemaType when that names a type that is not a string type.
 // native is false otherwise: an enum is a string column, varchar on
-// PostgreSQL, as veloxe and ent stored it (decision 0090).
+// PostgreSQL, as ent stores it (decision 0090).
 func enumType(f *Field) (name string, native bool) {
 	if st := f.SchemaType[velox.Postgres.String()]; st != "" && !ddl.StringType(velox.Postgres, st) {
 		return st, true

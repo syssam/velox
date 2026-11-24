@@ -75,7 +75,7 @@ func TestIndexMethodTables(t *testing.T) {
 }
 
 // MySQL has no choice of index method, and refuses one. SQLite has none
-// either, and ignores one, as ent's and veloxe's SQLite migration never read
+// either, and ignores one, as ent's SQLite migration never reads
 // an index's type: an application whose indexes are GIN on PostgreSQL gets
 // plain indexes on SQLite (decision 0090).
 func TestIndexMethodOutsidePostgres(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/schema/field"
 )
 
-// nuCustomer is a veloxe application's Customer: its to-one edge to its own
+// nuCustomer is an application's Customer: its to-one edge to its own
 // schema is many-to-one in intent, which sqlschema.NonUniqueFK says.
 type nuCustomer struct{ schema.Schema }
 
@@ -54,8 +54,8 @@ func (nuPlain) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("spouse", nuPlain.Type).Field("spouse_id").Unique()}
 }
 
-// sqlschema.NonUniqueFK keeps a to-one edge's key from being unique, as in
-// veloxe; on an edge to its own schema with no inverse it is many-to-one, so
+// sqlschema.NonUniqueFK keeps a to-one edge's key from being unique; on an
+// edge to its own schema with no inverse it is many-to-one, so
 // nothing re-points a partner (decision 0090).
 func TestNonUniqueFK(t *testing.T) {
 	g := mustBuild(t, nuCustomer{}, nuAllocation{}, nuPlain{})
@@ -101,7 +101,7 @@ func (zdFields) Fields() []schema.Field {
 }
 
 // A string, bool or number column that is NOT NULL and has no Default gets
-// its zero as its DEFAULT, as veloxe's FeatureAutoDefault gave it; others
+// its zero as its DEFAULT; others
 // get none.
 func TestZeroColumnDefaults(t *testing.T) {
 	want := map[string][3]string{ // PostgreSQL, MySQL, SQLite
@@ -129,7 +129,7 @@ func TestZeroColumnDefaults(t *testing.T) {
 	}
 }
 
-// ojFields has the Optional JSON fields veloxe zero-filled: a slice, a map,
+// ojFields has the Optional JSON fields velox zero-fills: a slice, a map,
 // a struct and a pointer, none Nillable, beside a required one.
 type ojFields struct{ schema.Schema }
 
@@ -150,7 +150,7 @@ func (ojFields) Fields() []schema.Field {
 
 // An Optional JSON column is NULL-able; unset, a slice or a map is written
 // empty, [] or {}, and a pointer as a pointer to its element's zero, by a
-// DefaultFunc in its descriptor, as veloxe wrote them. A struct needs none:
+// DefaultFunc in its descriptor. A struct needs none:
 // its zero value is written. An unnamed struct is written inline.
 func TestOptionalJSONZeroFill(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, ojFields{})

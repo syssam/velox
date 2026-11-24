@@ -75,7 +75,7 @@ func (tcCheckUser) Annotations() []schema.Annotation {
 	return []schema.Annotation{sqlschema.Table("users"), sqlschema.Checks(map[string]string{"users_pets": "age > 0"})}
 }
 
-// tcAllocation is a veloxe application's PaymentAllocation: the assoc edge
+// tcAllocation is an application's PaymentAllocation: the assoc edge
 // of a one-to-one pair to its own schema binds the key field.
 type tcAllocation struct{ schema.Schema }
 
@@ -94,7 +94,7 @@ func (tcAllocation) Annotations() []schema.Annotation {
 	return []schema.Annotation{sqlschema.Table("payment_allocation")}
 }
 
-// The key stays in reversed_by_id, unique, with the foreign key veloxe named;
+// The key stays in reversed_by_id, unique, with its foreign key named;
 // the inverse edge gets no column of its own.
 func TestSelfOneToOneKeyOnAssoc(t *testing.T) {
 	g := mustBuild(t, tcAllocation{})

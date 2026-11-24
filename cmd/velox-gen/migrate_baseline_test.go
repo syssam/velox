@@ -187,7 +187,7 @@ func baselineEnt(t *testing.T, d velox.Dialect) {
 // entChange reports whether ch is one the next diff of an ent database may
 // hold: the rename of an index to the name with its table's prefix, which ent
 // does not give; the rename of a foreign-key constraint whose name is longer
-// than the dialect allows, which velox caps as veloxe did, not as ent did
+// than the dialect allows, which velox caps with FNV-1, not as ent does
 // (decision 0090); the default of a string column, which velox sets to its
 // zero (decision 0090); and users.id's serial-to-identity on PostgreSQL. No
 // index of a foreign key is added: velox declares none, as ent does

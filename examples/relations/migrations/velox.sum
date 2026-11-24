@@ -1,7 +1,7 @@
-h1:xQEQo4NNUfGL86oZLpLGZ7yfAoe+Pwu9HkV1vQKQRuo=
+h1:c1P1N+r0Q55oYU1hpotTV96NtvqX3KwTw7xDiEvyqnw=
 0001_init.sql h1:YzIfDG0s84yaQWTOpx0KmC/tyFZ2d3nkfV0dOA8m/+g=
 0002_tags.sql h1:5neXE339kWLd9AMFp+xl5XfD2DWUVWmAJt8+qC/maf8=
-0003_veloxe_defaults.sql h1:8SQxMnS8JAICyCZAkvLMGkMWk+p/w7KPVV5/NPRVuxA=
+0003_zero_defaults.sql h1:8SQxMnS8JAICyCZAkvLMGkMWk+p/w7KPVV5/NPRVuxA=
 0004_drop_fk_indexes.sql h1:t5bzhcuBKiBqIW/15kyY66LvhY/Sh9p7R6AOtaUGoIk=
 0005_memberships.sql h1:wV5xDG97mc8VFFW0QGZGBjNzbli8YZFqkGRVntZenIY=
 schema.json h1:xYkQ1Dnlse2do3PVEbXXagro/hr2HHwfyUCS9CPN7vI=

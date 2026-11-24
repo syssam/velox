@@ -1502,7 +1502,7 @@ func TestSweepRemovesOldEntityFile(t *testing.T) {
 	}
 }
 
-// schemaPrivacyPolicies are Policies written for veloxe, with package
+// schemaPrivacyPolicies are Policies written as ent's are, with package
 // privacy's rule lists: User's returns velox.Policy, as nextapp's do, and
 // Tag's returns privacy.Policy.
 const schemaPrivacyPolicies = `package veloxschema
@@ -1528,7 +1528,7 @@ func (Tag) Policy() privacy.Policy {
 }
 `
 
-// A veloxe-shaped Policy is bound as any Policy: velox-gen accepts both
+// An ent-shaped Policy is bound as any Policy: velox-gen accepts both
 // result spellings, names the schema's value in each descriptor, and the
 // generated package builds (verify).
 func TestGeneratePrivacyPolicy(t *testing.T) {
@@ -1549,7 +1549,7 @@ func TestGeneratePrivacyPolicy(t *testing.T) {
 		t.Errorf("verify: %d %q %q", code, out, errs)
 	}
 
-	// veloxe's applications imported the generated package's privacy:
+	// ent's applications import the generated package's privacy:
 	// velox-gen writes it, and code that imports it builds.
 	src, err := os.ReadFile(filepath.Join(dir, "veloxgen", "privacy", "privacy.go"))
 	if err != nil || !strings.HasPrefix(string(src), genrun.Header) || !strings.Contains(string(src), "DecisionContext = privacy.DecisionContext") {
@@ -1575,7 +1575,7 @@ var _ privacy.QueryRule = privacy.FilterFunc(nil)
 }
 
 // A schema whose Policy is velox's own gets no privacy package: only an
-// application written for veloxe imported one.
+// application written as ent's are imports one.
 func TestGenerateNoPrivacyPackage(t *testing.T) {
 	dir := genModule(t, map[string]string{"veloxschema/policies.go": `package veloxschema
 

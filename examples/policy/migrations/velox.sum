@@ -1,6 +1,6 @@
-h1:fHH48LHOlSn6MvJre43ImLgh+kv9Du3hXyp8SfAYnl8=
+h1:4D4SxMx/J4jRaIoKhhquZXEBP9wq0/wEr8v5PILtIYY=
 0001_init.sql h1:EWmIbqgtFPHV/cSx81ZahbasXrUmaftUa5BWy7BDS18=
-0002_veloxe_defaults.sql h1:TyzZcvVpVI5v8mjrmhwjgnsHUBM+iH4X45rLUMOW+DA=
+0002_zero_defaults.sql h1:TyzZcvVpVI5v8mjrmhwjgnsHUBM+iH4X45rLUMOW+DA=
 0003_drop_fk_indexes.sql h1:Y8DzChwcjdxQibapDHRpvXMP6xouwXHPmEYc/QNJmbo=
 schema.json h1:4QOgxWfhPjkaBBYnXyVdkRmBfgC5EvATcLzcsic28ag=
 velox.json h1:kwGXDUmLy0YS8XIgvaPehFkSYOwxr3lcNqybqvcDGRc=

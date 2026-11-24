@@ -95,7 +95,7 @@ func TestCapHelpers(t *testing.T) {
 	}
 }
 
-// Symbol is veloxe's cap: 63 bytes on PostgreSQL, 64 on MySQL and SQLite, with
+// Symbol is velox's cap: 63 bytes on PostgreSQL, 64 on MySQL and SQLite, with
 // the 128-bit FNV-1 hash of the whole name.
 func TestSymbol(t *testing.T) {
 	var inputs []string

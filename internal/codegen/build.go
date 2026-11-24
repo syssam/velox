@@ -328,7 +328,7 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 		ed.Rel.Kind, ref.Rel.Kind = "O2O", "O2O"
 		// On its own schema, both edges are on one table, so the key may be
 		// either row's: the assoc edge's when it binds the field and the
-		// inverse does not, as veloxe and ent take such a schema.
+		// inverse does not, as ent takes such a schema.
 		if t == n && r.le.Field != "" && le.Field == "" {
 			ed.KeyOnAssoc, ref.KeyOnAssoc = true, true
 		}
@@ -381,9 +381,9 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 		ed.Rel.Table = n.ent.Label + "_" + le.Name
 		cols = []string{n.ent.Label + "_id", plugin.Singular(le.Name) + "_id"}
 	case le.Unique && t == n && le.NonUniqueFK:
-		// Many-to-one in intent, as veloxe read sqlschema.NonUniqueFK: a
-		// plain key many rows may hold, and no partner to re-point. veloxe
-		// wrote a key bound to a field as a plain column too.
+		// Many-to-one in intent, as sqlschema.NonUniqueFK says: a plain
+		// key many rows may hold, and no partner to re-point. A key bound
+		// to a field is a plain column too.
 		ed.Rel.Kind = "M2O"
 		ed.Rel.Table = n.ent.Table
 	case le.Unique && t == n:
@@ -527,7 +527,7 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		case le.Immutable && !f.Immutable:
 			b.fail(34, n.ent.Name, edgeLoc(ed), "is Immutable but field %q is not", f.Name)
 		case f.Immutable && !le.Immutable:
-			// veloxe took an Immutable key on a mutable edge. The key
+			// An Immutable key on a mutable edge is taken. The key
 			// cannot change, so neither can the edge: it is Immutable.
 			ed.Immutable = true
 		}
@@ -556,7 +556,7 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 }
 
 // nonUniqueFK reports whether sqlschema.NonUniqueFK is on the edge s or on
-// its pair, as veloxe read it on either end.
+// its pair: it is read on either end.
 func nonUniqueFK(s *edgeState) bool {
 	return s.le.NonUniqueFK || s.pair != nil && s.pair.le.NonUniqueFK
 }
@@ -768,8 +768,8 @@ func (b *builder) indexes() {
 }
 
 // prefixIndexNames gives each declared index the name "<table>_<name>" when
-// the name does not start with "<table>_" already, as veloxe applications'
-// UniqueIndexNamesHook did (decision 0083): PostgreSQL wants index names
+// the name does not start with "<table>_" already, as a codegen hook of
+// the predecessor's applications did (decision 0083): PostgreSQL wants index names
 // unique in a database schema, and a mixin's index has one StorageKey for
 // every table that lists it. Such a name is capped as a derived one is,
 // since the prefix may make it too long; the StorageKey itself is still
@@ -1096,10 +1096,9 @@ var (
 
 // optionalEnumNoValue reports whether f is an Optional enum that gives an
 // unset row no value: it is not Nillable and has no Default or DefaultFunc.
-// Every other Optional field is written as its Go zero value when unset, as
-// veloxe wrote it (decision 0090), but an enum's zero, "", is none of its
-// values, and veloxe refused it too: it left the column out of the INSERT,
-// which a NOT NULL column fails.
+// Every other Optional field is written as its Go zero value when unset
+// (decision 0090), but an enum's zero, "", is none of its values: left out
+// of the INSERT, the column, NOT NULL, fails it.
 func optionalEnumNoValue(f *Field) bool {
 	return f.Type == "enum" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc
 }
@@ -1201,8 +1200,8 @@ func (b *builder) validateField(e *Entity, f *Field) {
 	case uniqueUnset(e, f):
 		b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook")
 	}
-	// An Optional JSON field of a struct type need not be Nillable: veloxe
-	// wrote its zero value's JSON when unset, and its column holds NULL, which
+	// An Optional JSON field of a struct type need not be Nillable: velox
+	// writes its zero value's JSON when unset, and its column holds NULL, which
 	// reads back as the zero value (decision 0090).
 	b.unwritableJSON(e, f)
 	// No index covers a JSON column (rule 42 is a declared index's).

@@ -11,7 +11,7 @@
 // ignored one without a word): Table on a field, Default on a schema, an
 // IndexAnnotation anywhere but an index. The old velox's options that velox
 // does not hold, such as Size, ColumnType, Skip or Prefix, are not here: a
-// port that names one does not compile, and docs/coming-from-veloxe.md names
+// port that names one does not compile, and docs/coming-from-ent.md names
 // velox's spelling.
 //
 // # Schemas
@@ -274,7 +274,7 @@ func Collation(c string) Annotation { return Annotation{Collation: c} }
 func Checks(c map[string]string) Annotation { return Annotation{Checks: maps.Clone(c)} }
 
 // NonUniqueFK declares, on an edge, that a to-one edge is many-to-one in
-// intent, as in veloxe: its foreign key is not unique. A unique edge to its
+// intent: its foreign key is not unique. A unique edge to its
 // own schema with no inverse is a bidirectional one-to-one edge, whose key is
 // unique and whose partner is re-pointed with it; with NonUniqueFK it is a
 // plain many-to-one edge whose key many rows may hold. On a one-to-one pair

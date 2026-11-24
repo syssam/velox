@@ -215,7 +215,7 @@ func TestBindingRoundTrip(t *testing.T) {
 				if got.Kind != testbind.BindKindA || got.Level != "low" {
 					t.Errorf("kind %q, level %q", got.Kind, got.Level)
 				}
-				// An enum is stored as ent and veloxe store it (decision 0090):
+				// An enum is stored as ent stores it (decision 0090):
 				// varchar on PostgreSQL and text on SQLite, with no check, so
 				// another value is stored; a native enum on MySQL, which
 				// refuses it.
@@ -256,8 +256,8 @@ func TestBindingRoundTrip(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				// An Optional slice left nil is written empty, as veloxe wrote
-				// it (decision 0090); NULL, which an update can set, reads
+				// An Optional slice left nil is written empty (decision
+				// 0090); NULL, which an update can set, reads
 				// back nil.
 				if text, null := rawText(t, tg, "tags", nilTags.ID); null || text != "[]" {
 					t.Errorf("nil tags stored %q (NULL %v), want []", text, null)
@@ -283,7 +283,7 @@ func TestBindingRoundTrip(t *testing.T) {
 					t.Fatal(err)
 				}
 				// An Optional JSON pointer left nil is written as a pointer
-				// to its element's zero, as veloxe wrote it (decision 0090);
+				// to its element's zero (decision 0090);
 				// NULL, which an update can set, reads back nil.
 				if text, null := rawText(t, tg, "doc_ptr", row.ID); null || !strings.Contains(text, `"title"`) {
 					t.Errorf("nil doc_ptr stored %q (NULL %v), want the zero Doc", text, null)

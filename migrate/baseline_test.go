@@ -121,7 +121,7 @@ func TestAdoptKeepsDifferences(t *testing.T) {
 }
 
 // TestAdoptWithoutForeignKeys: a database made with no foreign keys, as
-// ent's and veloxe's WithForeignKeys(false) make it, is adopted as it is,
+// ent's WithForeignKeys(false) makes it, is adopted as it is,
 // and the next diff adds the schema's key.
 func TestAdoptWithoutForeignKeys(t *testing.T) {
 	t.Parallel()

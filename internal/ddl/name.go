@@ -29,13 +29,13 @@ func Cap(name string) string {
 	return fmt.Sprintf("%s_%08x", Clip(name, MaxName-9), h.Sum32())
 }
 
-// Symbol is veloxe's cap on an index or foreign-key name
-// (dialect/sql/schema/atlas.go, symbol): name when it is at most limit
+// Symbol is velox's cap on an index or foreign-key name, as the
+// predecessor's Atlas fork made it (dialect/sql/schema/atlas.go, symbol): name when it is at most limit
 // bytes, else name[:limit-33], cut back to a UTF-8 boundary, then "_", then
 // the 32 lower-case hex digits of the 128-bit FNV-1 hash of name. limit is
 // 63 on PostgreSQL and 64 on MySQL and SQLite. ent caps the same way with an
-// MD5; velox takes veloxe's, so that a database veloxe migrated keeps its
-// names (decision 0083).
+// MD5; velox takes the FNV-1 form, so that a database its predecessor
+// migrated keeps its names (decision 0083).
 func Symbol(d velox.Dialect, name string) string {
 	limit := 64
 	if d == velox.Postgres {

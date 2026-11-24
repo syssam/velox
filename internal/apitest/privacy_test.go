@@ -15,7 +15,7 @@ import (
 	"github.com/syssam/velox/schema"
 )
 
-// pvDoc is an entity whose policy is written as for veloxe: a
+// pvDoc is an entity whose policy is written as ent's are: a
 // privacy.Policy with Query and Mutation rules, after a tenant mixin's
 // velox Read and Insert.
 type pvDoc struct {
@@ -67,7 +67,7 @@ func pvRole(ctx context.Context) string { r, _ := ctx.Value(pvRoleKey{}).(string
 // admin: an Allow ends the list, so an admin's reads never reach it.
 var pvAfterAllow atomic.Int64
 
-// Policy is shaped as nextapp's veloxe schemas write theirs.
+// Policy is shaped as an ent-style application's schemas write theirs.
 func (*pvDoc) Policy() velox.Policy {
 	return privacy.Policy{
 		Query: privacy.QueryPolicy{
@@ -196,7 +196,7 @@ func TestPrivacyQueryRules(t *testing.T) {
 	}
 }
 
-// Query rules do not apply to writes, as veloxe's query policy did not; the
+// Query rules do not apply to writes, as ent's query policy does not; the
 // mixin's Read does.
 func TestPrivacyQueryRulesLeaveWrites(t *testing.T) {
 	db := pvDB(t)

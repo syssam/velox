@@ -5,25 +5,25 @@ import (
 	"errors"
 )
 
-// This file is the engine's side of veloxe's privacy model, which the
+// This file is the engine's side of the ent-style privacy model, which the
 // root's Policy.Query and Policy.Mutation accept so that a schema written
-// for veloxe compiles and behaves as it did there. The rule types name the
+// as ent's are compiles and decides as ent's does. The rule types name the
 // root's DB, so the root declares them and hands the engine a QueryEval and
 // a MutationEval. Package privacy exports them; its doc says how a rule
 // list becomes velox's conditions.
 
 // Decision is the verdict of a privacy rule: PrivacyAllow, PrivacyDeny or
 // PrivacySkip, which a rule returns as an error, wrapped or not.
-type Decision struct{ msg string } //nolint:errname // veloxe's name, which schemas written for it use
+type Decision struct{ msg string } //nolint:errname // ent's name, which schemas written as ent's use
 
 // Error returns the decision's text.
 func (d *Decision) Error() string { return d.msg }
 
-// The three decisions, with veloxe's texts.
+// The three decisions, with ent's texts under velox's name.
 var (
-	PrivacyAllow = &Decision{"velox/privacy: allow rule"} //nolint:errname // veloxe's decisions
-	PrivacyDeny  = &Decision{"velox/privacy: deny rule"}  //nolint:errname // veloxe's decisions
-	PrivacySkip  = &Decision{"velox/privacy: skip rule"}  //nolint:errname // veloxe's decisions
+	PrivacyAllow = &Decision{"velox/privacy: allow rule"} //nolint:errname // ent's decisions
+	PrivacyDeny  = &Decision{"velox/privacy: deny rule"}  //nolint:errname // ent's decisions
+	PrivacySkip  = &Decision{"velox/privacy: skip rule"}  //nolint:errname // ent's decisions
 )
 
 // PrivacyFilter is what a privacy rule narrows a statement with: each
@@ -41,7 +41,7 @@ type QueryEval func(ctx context.Context, db *DB, f PrivacyFilter) error
 // row; row is nil for an update or a delete.
 type MutationEval func(ctx context.Context, db *DB, op Op, f PrivacyFilter, row *Row) error
 
-// PrivacyDecided reads a rule's result as veloxe did: nil and PrivacySkip
+// PrivacyDecided reads a rule's result as ent does: nil and PrivacySkip
 // go on (false), PrivacyAllow ends with nil, anything else ends with
 // itself.
 func PrivacyDecided(err error) (bool, error) { return decided(err) }
@@ -58,7 +58,7 @@ func RowLookup(r *Row, name string) (any, bool) {
 	return r.Value(name), true
 }
 
-// decided reads a rule's result as veloxe did: nil and Skip go on, Allow
+// decided reads a rule's result as ent does: nil and Skip go on, Allow
 // ends with nil, anything else ends with itself.
 func decided(err error) (bool, error) {
 	switch {
@@ -95,7 +95,7 @@ func PrivacyDecisionFromContext(ctx context.Context) (error, bool) {
 
 // privacyFilter collects the conditions rules give a statement of entity
 // in. HasColumn lets a rule written for several entities check that this
-// one has a column, as veloxe's generated filters could.
+// one has a column, as ent's generated filters can.
 type privacyFilter struct {
 	in    *EntityInfo
 	where []Predicate
@@ -119,8 +119,8 @@ func (f *privacyFilter) cond() Predicate {
 }
 
 // ignoredFilter is an insert's filter, which drops what it is given: an
-// insert has no rows to narrow, and veloxe ignored a rule's predicates on
-// one, so a rule written for both reads and writes, such as a tenant's,
+// insert has no rows to narrow, and a rule's predicates on one are
+// ignored, so a rule written for both reads and writes, such as a tenant's,
 // still passes an insert.
 type ignoredFilter struct{ in *EntityInfo }
 
