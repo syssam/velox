@@ -349,7 +349,9 @@ func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
 // Filter is given the statement's ctx and db, the DB the statement runs
 // on, never nil: inside Tx the transaction's, as a Policy function's db
 // is. One that reads, reads through db. A statement made under its ctx is
-// not narrowed by it.
+// not narrowed by it. WithoutPolicy does not lift an interceptor, so db
+// has no WithoutPolicy reason: a read through it is judged by the
+// policies, even under a statement that skips them.
 //
 // A generated entity's interceptors are declared in the schema package, on
 // the entity's schema or a mixin, and bound by velox-gen. An entity written

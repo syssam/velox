@@ -146,7 +146,13 @@ behaviour reads one way: `Filter func(ctx context.Context, db *DB)
 (Predicate, error)`. `Interceptor` is declared in the root, as `Policy`
 is, and the engine keeps each Filter as a `FilterFn` taking a `StmtDB`.
 0135's guard stays for it: a statement made under a Filter's ctx is not
-narrowed by that Filter. `TxFrom` stays for helpers handed a DB and a
+narrowed by that Filter. WithoutPolicy does not lift an interceptor, so
+the DB its Filter gets is the statement's without the WithoutPolicy
+reason: a read through it is judged by the policies, which the bypass
+would otherwise have lent the interceptor
+(`TestInterceptorDBKeepsPolicies`). A `WithFilter` filter, which
+WithoutPolicy does not lift either, still gets the statement's DB as it
+is (0132). `TxFrom` stays for helpers handed a DB and a
 ctx, such as a `WithTx` that joins the caller's transaction; no behaviour
 function needs it. velox-gen checks policy keys, not function types, so it is unchanged, and
 the generated code is unchanged: no version change.

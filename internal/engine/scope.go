@@ -71,6 +71,9 @@ type Scoper struct {
 	// db is the DB the statement runs on, which the filters are given;
 	// nil in a test that has none.
 	db *DB
+	// kept is db without its WithoutPolicy reason, which the interceptors
+	// are given (keptDB); made on first use.
+	kept *DB
 	// Reads is set for a statement that reads only (a SELECT that is not
 	// Writable): the policies' Query conditions apply to it, and to every
 	// EXISTS and join in it.
@@ -170,6 +173,23 @@ func (sc *Scoper) markCut(at int) {
 	}
 }
 
+// keptDB is the DB an interceptor's Filter is given: the statement's,
+// without its WithoutPolicy reason. WithoutPolicy does not lift an
+// interceptor, so a read the Filter makes through it is judged by the
+// policies (ADR 0151). A DB with no reason is given as it is.
+func (sc *Scoper) keptDB() *DB {
+	if sc.db == nil || sc.db.bypass == "" {
+		return sc.db
+	}
+	if sc.kept == nil {
+		c := *sc.db
+		c.owned = false
+		c.bypass = ""
+		sc.kept = &c
+	}
+	return sc.kept
+}
+
 // rowCond makes RowCond's condition.
 func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 	var kids []Node
@@ -189,7 +209,7 @@ func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 		}
 	}
 	for i, f := range t.filters {
-		p, err := f(sc.Ctx, sc.db)
+		p, err := f(sc.Ctx, sc.keptDB())
 		c, err := sc.filterCond(t, "interceptor", i, p, err)
 		if err != nil {
 			return Predicate{}, err

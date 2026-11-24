@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -167,6 +168,38 @@ func TestPolicyGetsTheStatementsDB(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestInterceptorDBKeepsPolicies: WithoutPolicy does not lift an
+// interceptor, so the DB its Filter gets has no bypass: a read through it
+// is judged by the policies, as the Filter's own condition is applied.
+// Before, it was the statement's DB with the bypass on.
+func TestInterceptorDBKeepsPolicies(t *testing.T) {
+	resetPNote(t)
+	ctx := context.Background()
+	var bypass []string
+	var rows []int
+	fixture.PNoteFilter = func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
+		bypass = append(bypass, db.PolicyBypass())
+		ns, err := db.Query[fixture.PNote]().Limit(10).All(ctx)
+		if err != nil {
+			return velox.Predicate{}, err
+		}
+		rows = append(rows, len(ns))
+		return velox.Allow(), nil
+	}
+	fixture.PNoteRead = func(context.Context, *velox.DB) (velox.Predicate, error) {
+		return velox.FieldEQ("owner_id", 2), nil
+	}
+	db := interceptorDB(t)
+	for _, d := range []*velox.DB{db, db.WithoutPolicy("audit")} {
+		if _, err := d.Query[fixture.PNote]().Count(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(bypass, []string{"", ""}) || !slices.Equal(rows, []int{1, 1}) {
+		t.Errorf("the Filter's db had bypass %q and read %v rows, want no bypass and owner 2's 1 row each time", bypass, rows)
 	}
 }
 
