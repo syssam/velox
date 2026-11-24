@@ -166,5 +166,5 @@ func (p Project) GoString() string { return p.String() }
 
 // QueryIssues queries the edge issues, to Issue, on the DB that read or wrote p.
 func (p *Project) QueryIssues() velox.Query[Issue] {
-	return velox.QueryEdge(p.source, p, Projects.Issues)
+	return velox.QueryEdge[Issue](p.source, p, Projects.Issues.I)
 }

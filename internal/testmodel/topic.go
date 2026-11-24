@@ -113,4 +113,6 @@ func (t Topic) String() string {
 func (t Topic) GoString() string { return t.String() }
 
 // QueryPapers queries the edge papers, to Paper, on the DB that read or wrote t.
-func (t *Topic) QueryPapers() velox.Query[Paper] { return velox.QueryEdge(t.source, t, Topics.Papers) }
+func (t *Topic) QueryPapers() velox.Query[Paper] {
+	return velox.QueryEdge[Paper](t.source, t, Topics.Papers.I)
+}

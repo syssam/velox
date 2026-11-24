@@ -121,5 +121,5 @@ func (d Doc) GoString() string { return d.String() }
 
 // QueryComments queries the edge comments, to Comment, on the DB that read or wrote d.
 func (d *Doc) QueryComments() velox.Query[Comment] {
-	return velox.QueryEdge(d.source, d, Docs.Comments)
+	return velox.QueryEdge[Comment](d.source, d, Docs.Comments.I)
 }

@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -213,27 +215,41 @@ func EdgeDB(s *Source) (*DB, error) {
 	return noSourceDB, ErrNoSource
 }
 
+// entityTypes maps the type word of each entity pointer type *E whose
+// metadata BuildDescriptor built to its EntityInfo, for EdgeQuery: an
+// entity that has a Source was read or written by a statement, which built
+// its type's metadata first.
+var entityTypes sync.Map // unsafe.Pointer → *EntityInfo
+
+// registerEntity records info as the metadata of x's type, a *E.
+func registerEntity(x any, info *EntityInfo) { entityTypes.Store(typeWord(x), info) }
+
 // EdgeQuery is the state of an edge read (velox.QueryEdge): the query of
-// target's rows related through ref, with r's conditions where and its error
-// rerr, to the owner at p, on Source s. target is nil when the target's
-// metadata failed, whose error the query returns.
-func EdgeQuery(s *Source, ref RelRef, where []Predicate, rerr error, p unsafe.Pointer, target *EntityInfo) QueryState {
+// the rows of the target T, whose metadata is info, related to owner, a *E,
+// through E's relation edge, on owner's Source s; one and many are the
+// reflect.Types of One[T] and Many[T], which the relation's field must be.
+// info is nil when the target's metadata failed, whose error the query
+// returns. It is not generic, so that velox's QueryEdge, compiled for each
+// target type, holds no more than this call.
+func EdgeQuery(s *Source, owner any, edge int32, info *EntityInfo, one, many any) QueryState {
 	db, err := EdgeDB(s)
-	q := QueryState{DB: db, St: Statement{Op: OpSelect, Entity: target, InTx: db.InTx}}
-	if target == nil {
+	q := QueryState{DB: db, St: Statement{Op: OpSelect, Entity: info, InTx: db.InTx}}
+	if info == nil {
 		return q
 	}
-	if err != nil {
-		name := target.Name
-		if l, lerr := ref.Link(); lerr == nil {
-			if o, _ := ref.Owner(); o != nil {
-				name = o.Name + "." + l.Name
-			}
+	v, _ := entityTypes.Load(typeWord(owner))
+	in, _ := v.(*EntityInfo)
+	if err != nil || in == nil {
+		name := fmt.Sprintf("%v", ElemType(owner))
+		if in != nil && edge >= 0 && int(edge) < len(in.rels) {
+			name = in.Name + "." + in.rels[edge].Name
 		}
-		q.Err = fmt.Errorf("velox: %s: %w", name, err)
+		q.Err = fmt.Errorf("velox: %s: %w", name, cmp.Or(err, ErrNoSource))
 		return q
 	}
-	pred := NewPredicate(OfNode(ref, where, rerr, []unsafe.Pointer{p}))
+	target := RelTarget{Get: func() (*EntityInfo, error) { return info, nil }, One: one, Many: many}
+	ref := RelRef{Owner: func() (*EntityInfo, error) { return in, nil }, Target: target, I: edge}
+	pred := NewPredicate(OfNode(ref, nil, nil, []unsafe.Pointer{dataWord(owner)}))
 	q.St.Where = []Predicate{pred}
 	q.Err = PredErr(pred.n)
 	return q

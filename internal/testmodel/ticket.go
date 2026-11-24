@@ -179,15 +179,15 @@ func (t Ticket) GoString() string { return t.String() }
 
 // QueryInvoice queries the edge invoice, to Invoice, on the DB that read or wrote t.
 func (t *Ticket) QueryInvoice() velox.Query[Invoice] {
-	return velox.QueryEdge(t.source, t, Tickets.Invoice)
+	return velox.QueryEdge[Invoice](t.source, t, Tickets.Invoice.I)
 }
 
 // QueryChildren queries the edge children, to Ticket, on the DB that read or wrote t.
 func (t *Ticket) QueryChildren() velox.Query[Ticket] {
-	return velox.QueryEdge(t.source, t, Tickets.Children)
+	return velox.QueryEdge[Ticket](t.source, t, Tickets.Children.I)
 }
 
 // QueryParent queries the edge parent, to Ticket, on the DB that read or wrote t.
 func (t *Ticket) QueryParent() velox.Query[Ticket] {
-	return velox.QueryEdge(t.source, t, Tickets.Parent)
+	return velox.QueryEdge[Ticket](t.source, t, Tickets.Parent.I)
 }

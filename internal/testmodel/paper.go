@@ -124,8 +124,10 @@ func (p Paper) GoString() string { return p.String() }
 
 // QueryRemarks queries the edge remarks, to Remark, on the DB that read or wrote p.
 func (p *Paper) QueryRemarks() velox.Query[Remark] {
-	return velox.QueryEdge(p.source, p, Papers.Remarks)
+	return velox.QueryEdge[Remark](p.source, p, Papers.Remarks.I)
 }
 
 // QueryTopics queries the edge topics, to Topic, on the DB that read or wrote p.
-func (p *Paper) QueryTopics() velox.Query[Topic] { return velox.QueryEdge(p.source, p, Papers.Topics) }
+func (p *Paper) QueryTopics() velox.Query[Topic] {
+	return velox.QueryEdge[Topic](p.source, p, Papers.Topics.I)
+}

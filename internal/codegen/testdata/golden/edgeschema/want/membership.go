@@ -163,12 +163,12 @@ func (m Membership) GoString() string { return m.String() }
 
 // QueryUser queries the edge user, to User, on the DB that read or wrote m.
 func (m *Membership) QueryUser() velox.Query[User] {
-	return velox.QueryEdge(m.source, m, Memberships.User)
+	return velox.QueryEdge[User](m.source, m, Memberships.User.I)
 }
 
 // QueryGroup queries the edge group, to Group, on the DB that read or wrote m.
 func (m *Membership) QueryGroup() velox.Query[Group] {
-	return velox.QueryEdge(m.source, m, Memberships.Group)
+	return velox.QueryEdge[Group](m.source, m, Memberships.Group.I)
 }
 
 // MembershipRole is the type of Membership's role field.

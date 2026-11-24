@@ -187,10 +187,10 @@ func (c Comment) GoString() string { return c.String() }
 
 // QueryIssue queries the edge issue, to Issue, on the DB that read or wrote c.
 func (c *Comment) QueryIssue() velox.Query[Issue] {
-	return velox.QueryEdge(c.source, c, Comments.Issue)
+	return velox.QueryEdge[Issue](c.source, c, Comments.Issue.I)
 }
 
 // QueryAuthor queries the edge author, to User, on the DB that read or wrote c.
 func (c *Comment) QueryAuthor() velox.Query[User] {
-	return velox.QueryEdge(c.source, c, Comments.Author)
+	return velox.QueryEdge[User](c.source, c, Comments.Author.I)
 }

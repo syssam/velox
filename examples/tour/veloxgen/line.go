@@ -133,5 +133,5 @@ func (l Line) GoString() string { return l.String() }
 
 // QueryInvoice queries the edge invoice, to Invoice, on the DB that read or wrote l.
 func (l *Line) QueryInvoice() velox.Query[Invoice] {
-	return velox.QueryEdge(l.source, l, Lines.Invoice)
+	return velox.QueryEdge[Invoice](l.source, l, Lines.Invoice.I)
 }

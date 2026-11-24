@@ -109,4 +109,6 @@ func (c Comment) String() string {
 func (c Comment) GoString() string { return c.String() }
 
 // QueryPost queries the edge post, to Post, on the DB that read or wrote c.
-func (c *Comment) QueryPost() velox.Query[Post] { return velox.QueryEdge(c.source, c, Comments.Post) }
+func (c *Comment) QueryPost() velox.Query[Post] {
+	return velox.QueryEdge[Post](c.source, c, Comments.Post.I)
+}

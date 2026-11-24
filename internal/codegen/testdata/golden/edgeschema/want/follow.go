@@ -129,9 +129,11 @@ func (f Follow) String() string {
 func (f Follow) GoString() string { return f.String() }
 
 // QueryUser queries the edge user, to User, on the DB that read or wrote f.
-func (f *Follow) QueryUser() velox.Query[User] { return velox.QueryEdge(f.source, f, Follows.User) }
+func (f *Follow) QueryUser() velox.Query[User] {
+	return velox.QueryEdge[User](f.source, f, Follows.User.I)
+}
 
 // QueryFollower queries the edge follower, to User, on the DB that read or wrote f.
 func (f *Follow) QueryFollower() velox.Query[User] {
-	return velox.QueryEdge(f.source, f, Follows.Follower)
+	return velox.QueryEdge[User](f.source, f, Follows.Follower.I)
 }

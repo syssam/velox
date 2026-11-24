@@ -154,7 +154,9 @@ func (u User) String() string {
 func (u User) GoString() string { return u.String() }
 
 // QueryPosts queries the edge posts, to Post, on the DB that read or wrote u.
-func (u *User) QueryPosts() velox.Query[Post] { return velox.QueryEdge(u.source, u, Users.Posts) }
+func (u *User) QueryPosts() velox.Query[Post] {
+	return velox.QueryEdge[Post](u.source, u, Users.Posts.I)
+}
 
 // UserRole is the type of User's role field.
 type UserRole string

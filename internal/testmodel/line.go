@@ -102,4 +102,6 @@ func (l Line) String() string {
 func (l Line) GoString() string { return l.String() }
 
 // QuerySample queries the edge sample, to Sample, on the DB that read or wrote l.
-func (l *Line) QuerySample() velox.Query[Sample] { return velox.QueryEdge(l.source, l, Lines.Sample) }
+func (l *Line) QuerySample() velox.Query[Sample] {
+	return velox.QueryEdge[Sample](l.source, l, Lines.Sample.I)
+}

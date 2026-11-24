@@ -202,10 +202,12 @@ func (p Post) String() string {
 func (p Post) GoString() string { return p.String() }
 
 // QueryAuthor queries the edge author, to User, on the DB that read or wrote p.
-func (p *Post) QueryAuthor() velox.Query[User] { return velox.QueryEdge(p.source, p, Posts.Author) }
+func (p *Post) QueryAuthor() velox.Query[User] {
+	return velox.QueryEdge[User](p.source, p, Posts.Author.I)
+}
 
 // QueryTags queries the edge tags, to Tag, on the DB that read or wrote p.
-func (p *Post) QueryTags() velox.Query[Tag] { return velox.QueryEdge(p.source, p, Posts.Tags) }
+func (p *Post) QueryTags() velox.Query[Tag] { return velox.QueryEdge[Tag](p.source, p, Posts.Tags.I) }
 
 // PostStatus is the type of Post's status field.
 type PostStatus string

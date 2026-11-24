@@ -117,4 +117,4 @@ func (t Tag) String() string {
 func (t Tag) GoString() string { return t.String() }
 
 // QueryPosts queries the edge posts, to Post, on the DB that read or wrote t.
-func (t *Tag) QueryPosts() velox.Query[Post] { return velox.QueryEdge(t.source, t, Tags.Posts) }
+func (t *Tag) QueryPosts() velox.Query[Post] { return velox.QueryEdge[Post](t.source, t, Tags.Posts.I) }

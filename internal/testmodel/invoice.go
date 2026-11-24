@@ -193,4 +193,6 @@ func (i Invoice) String() string {
 func (i Invoice) GoString() string { return i.String() }
 
 // QueryItems queries the edge items, to Item, on the DB that read or wrote i.
-func (i *Invoice) QueryItems() velox.Query[Item] { return velox.QueryEdge(i.source, i, Invoices.Items) }
+func (i *Invoice) QueryItems() velox.Query[Item] {
+	return velox.QueryEdge[Item](i.source, i, Invoices.Items.I)
+}

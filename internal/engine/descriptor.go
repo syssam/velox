@@ -46,7 +46,11 @@ func BuildDescriptor(x any, base unsafe.Pointer, load func() DescriptorView) (in
 			info, err = nil, &SchemaError{Entity: t.String(), Reason: fmt.Sprintf("the generated metadata panicked: %v", p)}
 		}
 	}()
-	return buildDescriptor(t, base, load)
+	info, err = buildDescriptor(t, base, load)
+	if err == nil {
+		registerEntity(x, info)
+	}
+	return info, err
 }
 
 // buildDescriptor is BuildDescriptor for the entity type t, without its

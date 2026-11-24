@@ -197,7 +197,9 @@ func (i Invoice) String() string {
 func (i Invoice) GoString() string { return i.String() }
 
 // QueryLines queries the edge lines, to Line, on the DB that read or wrote i.
-func (i *Invoice) QueryLines() velox.Query[Line] { return velox.QueryEdge(i.source, i, Invoices.Lines) }
+func (i *Invoice) QueryLines() velox.Query[Line] {
+	return velox.QueryEdge[Line](i.source, i, Invoices.Lines.I)
+}
 
 // InvoiceStatus is the type of Invoice's status field.
 type InvoiceStatus string

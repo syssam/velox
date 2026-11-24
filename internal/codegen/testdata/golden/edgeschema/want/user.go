@@ -137,22 +137,26 @@ func (u User) String() string {
 func (u User) GoString() string { return u.String() }
 
 // QueryGroups queries the edge groups, to Group, on the DB that read or wrote u.
-func (u *User) QueryGroups() velox.Query[Group] { return velox.QueryEdge(u.source, u, Users.Groups) }
+func (u *User) QueryGroups() velox.Query[Group] {
+	return velox.QueryEdge[Group](u.source, u, Users.Groups.I)
+}
 
 // QueryFollowing queries the edge following, to User, on the DB that read or wrote u.
 func (u *User) QueryFollowing() velox.Query[User] {
-	return velox.QueryEdge(u.source, u, Users.Following)
+	return velox.QueryEdge[User](u.source, u, Users.Following.I)
 }
 
 // QueryFollowers queries the edge followers, to User, on the DB that read or wrote u.
 func (u *User) QueryFollowers() velox.Query[User] {
-	return velox.QueryEdge(u.source, u, Users.Followers)
+	return velox.QueryEdge[User](u.source, u, Users.Followers.I)
 }
 
 // QueryMemberships queries the edge memberships, to Membership, on the DB that read or wrote u.
 func (u *User) QueryMemberships() velox.Query[Membership] {
-	return velox.QueryEdge(u.source, u, Users.Memberships)
+	return velox.QueryEdge[Membership](u.source, u, Users.Memberships.I)
 }
 
 // QueryFollows queries the edge follows, to Follow, on the DB that read or wrote u.
-func (u *User) QueryFollows() velox.Query[Follow] { return velox.QueryEdge(u.source, u, Users.Follows) }
+func (u *User) QueryFollows() velox.Query[Follow] {
+	return velox.QueryEdge[Follow](u.source, u, Users.Follows.I)
+}

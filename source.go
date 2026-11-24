@@ -40,11 +40,12 @@ var _ [unsafe.Sizeof(Source{}) - unsafe.Sizeof((*engine.Source)(nil))]struct{} =
 // Query such an edge on a DB: db.Query[T]().Where(r.Of(owner)).
 var ErrNoSource = engine.ErrNoSource
 
-// QueryEdge returns the query of the entities related to owner through r,
-// on the DB owner was read or written through, its Source src. For
-// generated code: velox-gen's QueryX methods call it.
+// QueryEdge returns the query of the entities of T related to owner, a *E,
+// through E's relation edge, the index I of its handle, on the DB owner
+// was read or written through, its Source src. For generated code:
+// velox-gen's QueryX methods call it.
 //
-//	func (m *Post) QueryAuthor() velox.Query[User] { return velox.QueryEdge(m.source, m, Posts.Author) }
+//	func (m *Post) QueryAuthor() velox.Query[User] { return velox.QueryEdge[User](m.source, m, Posts.Author.I) }
 //
 // It is the query db.Query[T]().Where(r.Of(owner)) on that DB, read only,
 // as any Query is: a write names its DB (db.Update, db.Insert, db.Delete).
@@ -52,12 +53,14 @@ var ErrNoSource = engine.ErrNoSource
 // the viewer of the context it runs under: the Source never keeps a
 // WithoutPolicy reason. owner's key is read when QueryEdge is called. An
 // owner with no Source gives a query each of whose statements fails with
-// ErrNoSource; a nil owner fails them too.
-func QueryEdge[E, T any](src Source, owner *E, r Rel[E, T]) Query[T] {
+// ErrNoSource.
+//
+// It is generic in T only, and takes owner as an any, so that it is
+// compiled once for each target type, not once for each edge.
+func QueryEdge[T any](src Source, owner any, edge int32) Query[T] {
 	m, err := metaOf[T]()
 	if m == nil {
 		m = &metaState[T]{Err: err}
 	}
-	ref := engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}
-	return Query[T]{s: engine.EdgeQuery((*engine.Source)(src.p), ref, r.where, r.err, unsafe.Pointer(owner), m.Info), meta: m}
+	return Query[T]{s: engine.EdgeQuery((*engine.Source)(src.p), owner, edge, m.Info, engine.ElemType((*One[T])(nil)), engine.ElemType((*Many[T])(nil))), meta: m}
 }

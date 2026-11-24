@@ -252,24 +252,28 @@ func (i Issue) GoString() string { return i.String() }
 
 // QueryProject queries the edge project, to Project, on the DB that read or wrote i.
 func (i *Issue) QueryProject() velox.Query[Project] {
-	return velox.QueryEdge(i.source, i, Issues.Project)
+	return velox.QueryEdge[Project](i.source, i, Issues.Project.I)
 }
 
 // QueryAuthor queries the edge author, to User, on the DB that read or wrote i.
-func (i *Issue) QueryAuthor() velox.Query[User] { return velox.QueryEdge(i.source, i, Issues.Author) }
+func (i *Issue) QueryAuthor() velox.Query[User] {
+	return velox.QueryEdge[User](i.source, i, Issues.Author.I)
+}
 
 // QueryAssignee queries the edge assignee, to User, on the DB that read or wrote i.
 func (i *Issue) QueryAssignee() velox.Query[User] {
-	return velox.QueryEdge(i.source, i, Issues.Assignee)
+	return velox.QueryEdge[User](i.source, i, Issues.Assignee.I)
 }
 
 // QueryComments queries the edge comments, to Comment, on the DB that read or wrote i.
 func (i *Issue) QueryComments() velox.Query[Comment] {
-	return velox.QueryEdge(i.source, i, Issues.Comments)
+	return velox.QueryEdge[Comment](i.source, i, Issues.Comments.I)
 }
 
 // QueryLabels queries the edge labels, to Label, on the DB that read or wrote i.
-func (i *Issue) QueryLabels() velox.Query[Label] { return velox.QueryEdge(i.source, i, Issues.Labels) }
+func (i *Issue) QueryLabels() velox.Query[Label] {
+	return velox.QueryEdge[Label](i.source, i, Issues.Labels.I)
+}
 
 // IssueStatus is the type of Issue's status field.
 type IssueStatus string

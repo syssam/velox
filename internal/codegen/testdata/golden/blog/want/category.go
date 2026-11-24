@@ -126,10 +126,10 @@ func (c Category) GoString() string { return c.String() }
 
 // QueryChildren queries the edge children, to Category, on the DB that read or wrote c.
 func (c *Category) QueryChildren() velox.Query[Category] {
-	return velox.QueryEdge(c.source, c, Categories.Children)
+	return velox.QueryEdge[Category](c.source, c, Categories.Children.I)
 }
 
 // QueryParent queries the edge parent, to Category, on the DB that read or wrote c.
 func (c *Category) QueryParent() velox.Query[Category] {
-	return velox.QueryEdge(c.source, c, Categories.Parent)
+	return velox.QueryEdge[Category](c.source, c, Categories.Parent.I)
 }

@@ -129,4 +129,6 @@ func (l Label) String() string {
 func (l Label) GoString() string { return l.String() }
 
 // QueryIssues queries the edge issues, to Issue, on the DB that read or wrote l.
-func (l *Label) QueryIssues() velox.Query[Issue] { return velox.QueryEdge(l.source, l, Labels.Issues) }
+func (l *Label) QueryIssues() velox.Query[Issue] {
+	return velox.QueryEdge[Issue](l.source, l, Labels.Issues.I)
+}

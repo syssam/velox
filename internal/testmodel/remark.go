@@ -111,4 +111,6 @@ func (r Remark) String() string {
 func (r Remark) GoString() string { return r.String() }
 
 // QueryPaper queries the edge paper, to Paper, on the DB that read or wrote r.
-func (r *Remark) QueryPaper() velox.Query[Paper] { return velox.QueryEdge(r.source, r, Remarks.Paper) }
+func (r *Remark) QueryPaper() velox.Query[Paper] {
+	return velox.QueryEdge[Paper](r.source, r, Remarks.Paper.I)
+}

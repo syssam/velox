@@ -823,7 +823,7 @@ func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
-func QueryEdge[E, T any](src Source, owner *E, r Rel[E, T]) Query[T]
+func QueryEdge[T any](src Source, owner any, edge int32) Query[T]
 func RecordIgnore[E any](cols ...Column[E]) RecordOption
 func RecordKeep[E any](cols ...Column[E]) RecordOption
 func Reject(ops ...Op) Hook

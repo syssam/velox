@@ -308,16 +308,24 @@ func (u User) String() string {
 func (u User) GoString() string { return u.String() }
 
 // QueryPosts queries the edge posts, to Post, on the DB that read or wrote u.
-func (u *User) QueryPosts() velox.Query[Post] { return velox.QueryEdge(u.source, u, Users.Posts) }
+func (u *User) QueryPosts() velox.Query[Post] {
+	return velox.QueryEdge[Post](u.source, u, Users.Posts.I)
+}
 
 // QueryGroups queries the edge groups, to Group, on the DB that read or wrote u.
-func (u *User) QueryGroups() velox.Query[Group] { return velox.QueryEdge(u.source, u, Users.Groups) }
+func (u *User) QueryGroups() velox.Query[Group] {
+	return velox.QueryEdge[Group](u.source, u, Users.Groups.I)
+}
 
 // QueryFriends queries the edge friends, to User, on the DB that read or wrote u.
-func (u *User) QueryFriends() velox.Query[User] { return velox.QueryEdge(u.source, u, Users.Friends) }
+func (u *User) QueryFriends() velox.Query[User] {
+	return velox.QueryEdge[User](u.source, u, Users.Friends.I)
+}
 
 // QuerySpouse queries the edge spouse, to User, on the DB that read or wrote u.
-func (u *User) QuerySpouse() velox.Query[User] { return velox.QueryEdge(u.source, u, Users.Spouse) }
+func (u *User) QuerySpouse() velox.Query[User] {
+	return velox.QueryEdge[User](u.source, u, Users.Spouse.I)
+}
 
 // UserRole is the type of User's role field.
 type UserRole string

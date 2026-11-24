@@ -134,4 +134,6 @@ func (g Group) String() string {
 func (g Group) GoString() string { return g.String() }
 
 // QueryUsers queries the edge users, to User, on the DB that read or wrote g.
-func (g *Group) QueryUsers() velox.Query[User] { return velox.QueryEdge(g.source, g, Groups.Users) }
+func (g *Group) QueryUsers() velox.Query[User] {
+	return velox.QueryEdge[User](g.source, g, Groups.Users.I)
+}

@@ -111,9 +111,11 @@ func (p Player) String() string {
 func (p Player) GoString() string { return p.String() }
 
 // QueryTeams queries the edge teams, to Team, on the DB that read or wrote p.
-func (p *Player) QueryTeams() velox.Query[Team] { return velox.QueryEdge(p.source, p, Players.Teams) }
+func (p *Player) QueryTeams() velox.Query[Team] {
+	return velox.QueryEdge[Team](p.source, p, Players.Teams.I)
+}
 
 // QueryRosters queries the edge rosters, to Roster, on the DB that read or wrote p.
 func (p *Player) QueryRosters() velox.Query[Roster] {
-	return velox.QueryEdge(p.source, p, Players.Rosters)
+	return velox.QueryEdge[Roster](p.source, p, Players.Rosters.I)
 }

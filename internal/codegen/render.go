@@ -748,7 +748,7 @@ func entityEdgeQueries(w *writer, e *OutEntity) {
 	for _, r := range e.Rels {
 		w.p("")
 		w.p("// Query%s queries the edge %s, to %s, on the DB that read or wrote %s.", r.GoName, r.Name, r.Target, x)
-		w.p("func (%s *%s) Query%s() velox.Query[%s] { return velox.QueryEdge(%[1]s.source, %[1]s, %[5]s.%[3]s) }", x, e.Name, r.GoName, r.Target, e.Handles)
+		w.p("func (%s *%s) Query%s() velox.Query[%s] { return velox.QueryEdge[%[4]s](%[1]s.source, %[1]s, %[5]s.%[3]s.I) }", x, e.Name, r.GoName, r.Target, e.Handles)
 	}
 }
 

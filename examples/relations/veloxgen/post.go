@@ -135,12 +135,14 @@ func (p Post) String() string {
 func (p Post) GoString() string { return p.String() }
 
 // QueryAuthor queries the edge author, to Author, on the DB that read or wrote p.
-func (p *Post) QueryAuthor() velox.Query[Author] { return velox.QueryEdge(p.source, p, Posts.Author) }
+func (p *Post) QueryAuthor() velox.Query[Author] {
+	return velox.QueryEdge[Author](p.source, p, Posts.Author.I)
+}
 
 // QueryComments queries the edge comments, to Comment, on the DB that read or wrote p.
 func (p *Post) QueryComments() velox.Query[Comment] {
-	return velox.QueryEdge(p.source, p, Posts.Comments)
+	return velox.QueryEdge[Comment](p.source, p, Posts.Comments.I)
 }
 
 // QueryTags queries the edge tags, to Tag, on the DB that read or wrote p.
-func (p *Post) QueryTags() velox.Query[Tag] { return velox.QueryEdge(p.source, p, Posts.Tags) }
+func (p *Post) QueryTags() velox.Query[Tag] { return velox.QueryEdge[Tag](p.source, p, Posts.Tags.I) }

@@ -218,14 +218,16 @@ func (s Sample) String() string {
 func (s Sample) GoString() string { return s.String() }
 
 // QueryLines queries the edge lines, to Line, on the DB that read or wrote s.
-func (s *Sample) QueryLines() velox.Query[Line] { return velox.QueryEdge(s.source, s, Samples.Lines) }
+func (s *Sample) QueryLines() velox.Query[Line] {
+	return velox.QueryEdge[Line](s.source, s, Samples.Lines.I)
+}
 
 // QueryChildren queries the edge children, to Sample, on the DB that read or wrote s.
 func (s *Sample) QueryChildren() velox.Query[Sample] {
-	return velox.QueryEdge(s.source, s, Samples.Children)
+	return velox.QueryEdge[Sample](s.source, s, Samples.Children.I)
 }
 
 // QueryParent queries the edge parent, to Sample, on the DB that read or wrote s.
 func (s *Sample) QueryParent() velox.Query[Sample] {
-	return velox.QueryEdge(s.source, s, Samples.Parent)
+	return velox.QueryEdge[Sample](s.source, s, Samples.Parent.I)
 }

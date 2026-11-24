@@ -102,4 +102,6 @@ func (t Team) String() string {
 func (t Team) GoString() string { return t.String() }
 
 // QueryPlayers queries the edge players, to Player, on the DB that read or wrote t.
-func (t *Team) QueryPlayers() velox.Query[Player] { return velox.QueryEdge(t.source, t, Teams.Players) }
+func (t *Team) QueryPlayers() velox.Query[Player] {
+	return velox.QueryEdge[Player](t.source, t, Teams.Players.I)
+}

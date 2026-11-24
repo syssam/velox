@@ -119,12 +119,16 @@ func (a Author) String() string {
 func (a Author) GoString() string { return a.String() }
 
 // QueryPosts queries the edge posts, to Post, on the DB that read or wrote a.
-func (a *Author) QueryPosts() velox.Query[Post] { return velox.QueryEdge(a.source, a, Authors.Posts) }
+func (a *Author) QueryPosts() velox.Query[Post] {
+	return velox.QueryEdge[Post](a.source, a, Authors.Posts.I)
+}
 
 // QueryClubs queries the edge clubs, to Club, on the DB that read or wrote a.
-func (a *Author) QueryClubs() velox.Query[Club] { return velox.QueryEdge(a.source, a, Authors.Clubs) }
+func (a *Author) QueryClubs() velox.Query[Club] {
+	return velox.QueryEdge[Club](a.source, a, Authors.Clubs.I)
+}
 
 // QueryMemberships queries the edge memberships, to Membership, on the DB that read or wrote a.
 func (a *Author) QueryMemberships() velox.Query[Membership] {
-	return velox.QueryEdge(a.source, a, Authors.Memberships)
+	return velox.QueryEdge[Membership](a.source, a, Authors.Memberships.I)
 }
