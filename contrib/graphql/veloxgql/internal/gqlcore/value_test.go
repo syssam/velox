@@ -54,7 +54,7 @@ func TestSetValue(t *testing.T) {
 		p, v any
 	}{
 		{&i, json.Number("-1")}, {&i8, json.Number("127")}, {&i16, json.Number("16")}, {&i32, json.Number("32")}, {&i64, json.Number("64")},
-		{&u, json.Number("1")}, {&u8, json.Number("255")}, {&u16, json.Number("16")}, {&u32, json.Number("32")}, {&u64, json.Number("18446744073709551615")},
+		{&u, json.Number("1")}, {&u8, json.Number("255")}, {&u16, json.Number("16")}, {&u32, json.Number("32")}, {&u64, json.Number("9223372036854775807")},
 		{&f64, json.Number("1.5")}, {&f32, "NaN"}, {&f64, "-Inf"},
 		{&s, "x"}, {&s, "y"}, {&b, true},
 		{&tm, "2026-01-02T03:04:05Z"}, {&id, "000000ab-0000-0000-0000-000000000001"}, {&bs, "AAE="},
@@ -65,14 +65,15 @@ func TestSetValue(t *testing.T) {
 			t.Errorf("SetValue(%T, %#v): %v", c.p, c.v, err)
 		}
 	}
-	if i8 != 127 || u64 != math.MaxUint64 || !math.IsInf(f64, -1) || !math.IsNaN(float64(f32)) || s != "y" || !b ||
+	if i8 != 127 || u64 != math.MaxInt64 || !math.IsInf(f64, -1) || !math.IsNaN(float64(f32)) || s != "y" || !b ||
 		tm.Year() != 2026 || id[3] != 0xab || len(bs) != 2 || ad.String() != "10.0.0.1" {
 		t.Errorf("the values set: %v %v %v %v %q %v %v %v %v %v", i8, u64, f64, f32, s, b, tm, id, bs, ad)
 	}
 	bad := []struct {
 		p, v any
 	}{
-		{&i, "1"}, {&i8, json.Number("128")}, {&u, json.Number("-1")}, {&u8, "1"}, {&f64, true}, {&f32, json.Number("x")},
+		{&i, "1"}, {&i8, json.Number("128")}, {&u, json.Number("-1")},
+		{&u64, json.Number("9223372036854775808")}, {&u, json.Number("18446744073709551615")}, {&u8, "1"}, {&f64, true}, {&f32, json.Number("x")},
 		{&s, json.Number("1")}, {&b, "true"}, {&tm, 1}, {&tm, "yesterday"}, {&id, 1}, {&id, "not-a-uuid"},
 		{&bs, 1}, {&bs, "!"}, {&ad, 1}, {&ad, "not an address"},
 	}
