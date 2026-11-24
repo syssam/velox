@@ -17,7 +17,7 @@ func resetPNote(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
 		fixture.PNoteRead, fixture.PNoteWrite, fixture.PNoteInsert = nil, nil, nil
-		fixture.PNoteQuery, fixture.PNoteFilter = nil, nil
+		fixture.PNoteQuery, fixture.PNoteMut, fixture.PNoteFilter = nil, nil, nil
 	})
 }
 
@@ -111,9 +111,10 @@ func TestPolicyReadsThroughItsDB(t *testing.T) {
 	}
 }
 
-// TestPolicyGetsTheStatementsDB: every policy function and rule, and an
-// interceptor's Filter, is given the DB its statement runs on: the
-// transaction's inside Tx, never nil.
+// TestPolicyGetsTheStatementsDB: every policy function, Query and Mutation
+// rule (on an update and on an insert), and an interceptor's Filter, is
+// given the DB its statement runs on: the transaction's inside Tx, never
+// nil.
 func TestPolicyGetsTheStatementsDB(t *testing.T) {
 	resetPNote(t)
 	got := map[string]*velox.DB{}
@@ -133,6 +134,10 @@ func TestPolicyGetsTheStatementsDB(t *testing.T) {
 		got["Query"] = q.DB()
 		return privacy.Skip
 	}
+	fixture.PNoteMut = func(_ context.Context, m privacy.Mutation) error {
+		got["Mutation "+m.Op().String()] = m.DB()
+		return privacy.Skip
+	}
 	fixture.PNoteFilter = func(_ context.Context, db *velox.DB) (velox.Predicate, error) {
 		got["Interceptor"] = db
 		return velox.Allow(), nil
@@ -150,7 +155,7 @@ func TestPolicyGetsTheStatementsDB(t *testing.T) {
 		if err := db.Insert(&fixture.PNote{OwnerID: 1, Body: body}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		for _, k := range []string{"Read", "Write", "Insert", "Query", "Interceptor"} {
+		for _, k := range []string{"Read", "Write", "Insert", "Query", "Mutation update", "Mutation insert", "Interceptor"} {
 			if got[k] != db {
 				t.Errorf("%s was given %p, want the statement's DB %p", k, got[k], db)
 			}

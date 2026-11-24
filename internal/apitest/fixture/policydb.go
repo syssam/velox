@@ -18,12 +18,13 @@ type PNote struct {
 }
 
 // The functions PNote's behaviour calls: its Read, Write and Insert
-// policies, its Query rule, and its interceptor's Filter.
+// policies, its Query and Mutation rules, and its interceptor's Filter.
 var (
 	PNoteRead   func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
 	PNoteWrite  func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
 	PNoteInsert func(ctx context.Context, db *velox.DB, r velox.Row) error
 	PNoteQuery  func(ctx context.Context, q privacy.Query) error
+	PNoteMut    func(ctx context.Context, m privacy.Mutation) error
 	PNoteFilter func(ctx context.Context, db *velox.DB) (velox.Predicate, error)
 )
 
@@ -39,7 +40,7 @@ var pNoteMeta velox.MetaOnce[PNote]
 // VeloxMeta returns PNote's metadata.
 func (*PNote) VeloxMeta() *velox.Meta[PNote] { return pNoteMeta.Load(pNoteDescriptor) }
 
-// Policy calls PNoteRead, PNoteWrite, PNoteInsert and PNoteQuery.
+// Policy calls PNoteRead, PNoteWrite, PNoteInsert, PNoteQuery and PNoteMut.
 func (*PNote) Policy() velox.Policy {
 	return velox.Policy{
 		Read: func(ctx context.Context, db *velox.DB) (velox.Predicate, error) {
@@ -65,6 +66,12 @@ func (*PNote) Policy() velox.Policy {
 				return privacy.Skip
 			}
 			return PNoteQuery(ctx, q)
+		})},
+		Mutation: privacy.MutationPolicy{privacy.MutationRuleFunc(func(ctx context.Context, m privacy.Mutation) error {
+			if PNoteMut == nil {
+				return privacy.Skip
+			}
+			return PNoteMut(ctx, m)
 		})},
 	}
 }
