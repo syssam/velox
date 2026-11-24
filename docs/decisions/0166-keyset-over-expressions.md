@@ -40,7 +40,8 @@ connection type the resolver returns.
 - **The untyped API carries it.** `TableQuery.OrderValues()`,
   `TableRows.OrderValues(i)`, `TableQuery.AfterValues(row, vals)`,
   `TableQuery.Order()`, `TableQuery.Unordered()`, `Table.OrderSig(o)` and
-  `untyped.OrderValueTerm(o)`. `velox.Query` gains nothing: a method in
+  `untyped.OrderValueTerm(o)`, `EncodeOrderValue`, `DecodeOrderValue`,
+  `DecimalText` and `TimeText`. `velox.Query` gains nothing: a method in
   `Query[E]`'s method set costs every entity package its declaration, and
   `entityDescMixin` was 62 bytes under its bound.
 - **A connection's query may be ordered by expressions.** gqlgraph puts
@@ -54,20 +55,46 @@ connection type the resolver returns.
   hash of the ordering as SQLite writes it in ORDER BY (direction and NULL
   placement included) and of each bound value with its Go type. A cursor
   taken under another expression, other bound values, another placement,
-  or no expression, is "taken under another order" (`ErrBadCursor`). Its
-  value reads back as the Go type the driver gave: null, a bool, an
-  integer as a JSON integer, a finite float as a JSON number with a
-  fraction or exponent (`3.0`), NaN and the infinities as `"f:NaN"`,
-  text and bytes as `"s:<text>"`, a time as `"t:<RFC 3339 nano>"`. Any
-  other value fails with `ErrBadCursor`. A msgpack (entgql) cursor is
-  refused on such a connection; entgql never paged one.
-- **Untyped values are allowed.** Any expression that is not an aggregate
-  or a window function may page. velox binds back the value the driver
-  read, so the expression must give a row the same value each time, and
-  compare in SQL as its value read back compares. Text that is a decimal
-  (PostgreSQL's numeric through pgx, every value on MySQL's text protocol)
-  is bound as text and converted by the database; MySQL compares a
-  decimal with text as a double. The guide states it.
+  or no expression, is "taken under another order" (`ErrBadCursor`).
+  Because the bound values are hashed, an expression bound to a value that
+  changes per request (the time now, a search term) makes every earlier
+  cursor another order's: bind such a value in a filter, or accept cursors
+  that last one request. A msgpack (entgql) cursor is refused on such a
+  connection; entgql never paged one.
+- **Values keep their kind.** `untyped.EncodeOrderValue` and
+  `DecodeOrderValue` (root, so the integration tests cover the round trip
+  on every dialect) write a value so that it reads back as the same Go
+  value: null, a bool, an integer as a JSON integer (`"u:<digits>"` past
+  int64: MySQL's BIGINT UNSIGNED), a finite float as a JSON number with a
+  fraction or exponent (`3.0`), NaN and the infinities as `"f:NaN"`, text
+  as `"s:<text>"`, a time as `"t:<RFC 3339 nano>"`, a decimal read as text
+  as `"d:<text>"` and a time read as text as `"dt:<text>"`. Any other value
+  fails with `ErrBadCursor`.
+- **A decimal or a time read as text is bound cast to its type.** The
+  read takes each value column's database type when the rows tell it
+  (`sql.ColumnType.DatabaseTypeName`): text in a DECIMAL or NUMERIC column
+  is an `untyped.DecimalText`, and in a DATE, DATETIME or TIMESTAMP column
+  a `TimeText`. pgx's own rows tell no types; its `pgtype.Numeric` (read
+  into an `any`) is a DecimalText by its `NumericValue` method. The keyset
+  binds a DecimalText as `CAST(? AS DECIMAL(65,30))` on MySQL and
+  `CAST(? AS NUMERIC)` elsewhere, and a TimeText or a `time.Time` as
+  `CAST(? AS DATETIME(6))` on MySQL. MySQL compares a decimal with text as
+  a double, so without the cast rows that differ past a double's digits
+  tie, and the page repeats or skips them. What the drivers give, as read
+  in their source: go-sql-driver/mysql 1.10 parses integers (uint64 when
+  unsigned) and floats even on the text protocol, and returns `[]byte` for
+  DECIMAL and, without parseTime, for DATE, DATETIME and TIMESTAMP; pgx's
+  database/sql driver returns numeric as a string, and pgx sends a string
+  argument in text format, which PostgreSQL reads as the type the context
+  gives it. `TestOrderValuesWire` pages an integer, a fraction, a decimal
+  finer than a double, a text and a time (and on MySQL an unsigned value
+  past int64, and a time without parseTime) through the cursor's JSON, both
+  ways, asserting the exact rows.
+- **Any expression may page.** Any expression that is not an aggregate
+  or a window function may page; terms have no Go type. The expression
+  must give a row the same value each time, and compare in SQL as its
+  value read back compares. A type the cast list does not name (MySQL's
+  TIME, JSON) is bound as the driver read it.
 
 ## Rejected
 

@@ -1533,6 +1533,7 @@ func WithoutForeignKeys() Option
 type Option func(*options)
 
 package untyped
+DecimalText is string
 PredOp is uint8
 Rows.At(i int) any
 Rows.Len() int
@@ -1606,6 +1607,7 @@ TableUpdate.SQL(ctx context.Context) (string, []any, error)
 TableUpdate.Set(col int, v any) TableUpdate
 TableUpdate.SetNull(col int) TableUpdate
 TableUpdate.Where(ps ...Predicate) TableUpdate
+TimeText is string
 const PredContains
 const PredContainsFold
 const PredEQ
@@ -1632,7 +1634,9 @@ func Col(col int) Term
 func Count(t Term) Term
 func CountAll() Term
 func CountDistinct(t Term) Term
+func DecodeOrderValue(v any) (any, error)
 func Delete(db *velox.DB, t Table) TableDelete
+func EncodeOrderValue(v any) (any, error)
 func Expr(text string, args ...any) velox.Predicate
 func ExprRaw(reason, text string, args ...any) velox.Predicate
 func FromQuery[E any](q velox.Query[E]) TableQuery
@@ -1653,6 +1657,7 @@ func SetExpr(col int, text string, args ...any) velox.Assignment
 func Sum(t Term) Term
 func TableOf[E any]() Table
 func Update(db *velox.DB, t Table) TableUpdate
+type DecimalText = engine.DecimalText
 type PredOp = engine.PredOp
 type Rows = engine.TableRows
 type Table = engine.Table
@@ -1661,6 +1666,7 @@ type TableInsert = engine.TableInsert
 type TableQuery = engine.TableQuery
 type TableUpdate = engine.TableUpdate
 type Term = engine.Term
+type TimeText = engine.TimeText
 
 package contrib/graphql
 const MutationCreate MutationKind

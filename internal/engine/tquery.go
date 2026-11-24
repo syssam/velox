@@ -316,7 +316,7 @@ func readTable(a *tableRun, r Rows) error {
 				return err
 			}
 			if a.vals != nil {
-				a.vals.keep()
+				a.vals.keep(r)
 			}
 			continue
 		}
@@ -573,7 +573,7 @@ func (q TableQuery) prepare() (Statement, error) {
 func (q TableQuery) prepareAny() (Statement, error) {
 	st := CloneStatement(&q.st)
 	if q.after != nil {
-		if err := AddAfterValues(&st, q.t.info, q.after, q.afterVals); err != nil {
+		if err := AddAfterValues(&st, q.t.info, q.after, q.afterVals, q.e.D); err != nil {
 			return Statement{}, err
 		}
 	}

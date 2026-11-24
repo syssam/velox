@@ -270,6 +270,30 @@ func OrderByTerm(t Term, desc bool) velox.OrderTerm { return velox.OrderTerm{Exp
 // row's key.
 func OrderValueTerm(o velox.OrderTerm) bool { return engine.OrderValueTerm(o) }
 
+// DecimalText is an order value that is a decimal the driver read as text,
+// such as MySQL's DECIMAL: AfterValues binds it cast to a decimal, so that
+// it compares as one.
+type DecimalText = engine.DecimalText
+
+// TimeText is an order value that is a date or a time the driver read as
+// text, MySQL's without parseTime: AfterValues binds it cast to DATETIME(6)
+// on MySQL.
+type TimeText = engine.TimeText
+
+// EncodeOrderValue is v, one of TableRows.OrderValues, as a JSON value that
+// DecodeOrderValue reads back as the same value: what a cursor holds. NULL
+// is null, a bool a bool, an integer an integer ("u:" and its digits past
+// int64), a finite float a json.Number with a fraction or an exponent
+// ("3.0"), NaN and the infinities "f:NaN", "f:+Inf" and "f:-Inf", text
+// "s:<text>", a DecimalText "d:<text>", a TimeText "dt:<text>" and a time
+// "t:" and RFC 3339 with nanoseconds. Any other value is an error.
+func EncodeOrderValue(v any) (any, error) { return engine.EncodeOrderValue(v) }
+
+// DecodeOrderValue is v, a value EncodeOrderValue wrote, after a JSON round
+// trip that reads a number as a json.Number, back as the order value, for
+// AfterValues. Any value EncodeOrderValue does not write is an error.
+func DecodeOrderValue(v any) (any, error) { return engine.DecodeOrderValue(v) }
+
 // TableInsert is an INSERT of rows of a Table's entity: InsertQuery with the
 // entity's type erased and columns by index.
 // Insert, InsertRows and InsertBulk start one. It builds the statements an

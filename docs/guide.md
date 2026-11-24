@@ -756,10 +756,12 @@ Outside GraphQL, `untyped.FromQuery(q).OrderValues()` reads the values
 (`rows.OrderValues(i)`) and `AfterValues(row, vals)` continues after a
 row. The expression must give the same value for a row each time it runs,
 and compare in SQL as the value read back compares: velox binds that value,
-an integer, a float, text, a time, a bool or NULL, as the driver read it. A
-decimal the driver reads as text is bound as text, and the database
-converts it back; MySQL compares a decimal with text as a double. A window
-function or an aggregate is refused.
+an integer, a float, text, a time, a bool or NULL, as the driver read it.
+A decimal or a time the driver reads as text (MySQL's DECIMAL, or its
+DATETIME without parseTime) is bound cast to its type, so it compares
+exactly. The cursor's term hashes the values the expression binds: an
+expression bound to a value that changes per request, such as the time now,
+makes earlier cursors invalid. A window function or an aggregate is refused.
 
 ## Relations
 

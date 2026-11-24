@@ -47,6 +47,30 @@ func TestOrderValuesSQL(t *testing.T) {
 	}
 }
 
+// TestOrderValuesDecimalSQL: a decimal the driver read as text is compared
+// cast to a decimal, on MySQL DECIMAL(65,30), so that it is not compared as
+// a double; a time read as text is cast to DATETIME(6) on MySQL.
+func TestOrderValuesDecimalSQL(t *testing.T) {
+	calc := velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2))
+	row := &testmodel.Invoice{ID: 7}
+	for _, c := range []struct {
+		d    velox.Dialect
+		v    any
+		want string
+		arg  string
+	}{
+		{velox.MySQL, untyped.DecimalText("2.50"), "(`total` * ?) = CAST(? AS DECIMAL(65,30))", "2.50"},
+		{velox.MySQL, untyped.TimeText("2026-03-01 10:00:00"), "(`total` * ?) = CAST(? AS DATETIME(6))", "2026-03-01 10:00:00"},
+		{velox.Postgres, untyped.DecimalText("2.50"), `("total" * $3) = CAST($4 AS NUMERIC)`, "2.50"},
+	} {
+		q := untyped.FromQuery(openFake(c.d, &fakeconn.Exec{}).Query[testmodel.Invoice]().OrderBy(calc.Asc().NullsFirst(), I.ID.Asc()).Limit(10))
+		text, args := sqlOK(t)(q.AfterValues(row, []any{c.v}).SQL(ctx))
+		if !strings.Contains(text, c.want) || len(args) < 4 || args[3] != c.arg {
+			t.Errorf("%v:\n got %s %#v\nwant …%s… with %q", c.d, text, args, c.want, c.arg)
+		}
+	}
+}
+
 // TestOrderValuesCacheKey: one DB renders a read with and without its
 // order values as two texts, in either order.
 func TestOrderValuesCacheKey(t *testing.T) {

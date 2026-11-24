@@ -502,7 +502,7 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
 	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
-	want := "veloxgql: Paginate of Person: q has an OrderBy; the connection orders by its orderBy argument"
+	want := "veloxgql: Paginate of Person: q may be ordered only by expressions (Calc); a column ordering comes from the orderBy argument"
 	if c.Connection != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)
 	}

@@ -1,10 +1,18 @@
 package engine
 
 import (
+	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"math"
+	"reflect"
 	"slices"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // An ordering by an expression pages by its values (decision 0166). A row
@@ -77,41 +85,72 @@ func checkOrderValueTerm(in *EntityInfo, o OrderTerm) error {
 
 // valueSource is the afterSource of an OrderValueTerm: the row's value of
 // it, read beside the row.
-func valueSource(in *EntityInfo, o OrderTerm, v any) (afterSource, error) {
+func valueSource(in *EntityInfo, o OrderTerm, v any, d Dialect) (afterSource, error) {
 	if err := checkOrderValueTerm(in, o); err != nil {
 		return afterSource{}, err
 	}
-	return afterSource{info: in, value: true, v: v}, nil
+	return afterSource{info: in, value: true, v: v, d: d}, nil
 }
 
 // valueEqual is the condition that the expression o orders by has the value
-// v: NULL equals NULL.
-func valueEqual(o OrderTerm, v any) Node {
+// v, bound on dialect d (boundValue): NULL equals NULL.
+func valueEqual(o OrderTerm, v any, d Dialect) Node {
 	t := o.Expr.(Term)
 	if nullValue(v) {
 		return valueExpr("? IS NULL", t)
 	}
-	return valueExpr("? = ?", t, v)
+	b, arg := boundValue(d, v)
+	return valueExpr("? = "+b, t, arg)
+}
+
+// boundValue is how v, an order value, is bound on dialect d: the text that
+// stands for it and the argument. A DecimalText is cast to a decimal (on
+// MySQL DECIMAL(65,30)), so that it compares as a decimal: MySQL compares a
+// decimal with text as a double. A TimeText, and a time.Time, are cast to
+// DATETIME(6) on MySQL. Anything else is bound as it is. On PostgreSQL a
+// text argument takes the type of the expression it is compared with, so a
+// numeric that pgx read as text compares exactly too.
+func boundValue(d Dialect, v any) (string, any) {
+	switch x := v.(type) {
+	case DecimalText:
+		if d == MySQL {
+			return "CAST(? AS DECIMAL(65,30))", string(x)
+		}
+		return "CAST(? AS NUMERIC)", string(x)
+	case TimeText:
+		if d == MySQL {
+			return "CAST(? AS DATETIME(6))", string(x)
+		}
+		return "?", string(x)
+	case time.Time:
+		if d == MySQL {
+			return "CAST(? AS DATETIME(6))", x
+		}
+	}
+	return "?", v
 }
 
 // valuePast is the condition that the expression o orders by is past v,
 // and false when no row is: as pastValue's for a nullable column, since an
 // expression can be NULL.
-func valuePast(o OrderTerm, v any) (Node, bool) {
+func valuePast(o OrderTerm, v any, d Dialect) (Node, bool) {
 	t := o.Expr.(Term)
 	cmp := " > "
 	if o.Desc {
 		cmp = " < "
 	}
-	switch null, first := nullValue(v), nullsFirst(o); {
+	null, first := nullValue(v), nullsFirst(o)
+	switch {
 	case null && !first:
 		return Node{}, false
 	case null:
 		return valueExpr("? IS NOT NULL", t), true
-	case first:
-		return valueExpr("?"+cmp+"?", t, v), true
 	}
-	return valueExpr("(?"+cmp+"? OR ? IS NULL)", t, v, t), true
+	b, arg := boundValue(d, v)
+	if first {
+		return valueExpr("?"+cmp+b, t, arg), true
+	}
+	return valueExpr("(?"+cmp+b+" OR ? IS NULL)", t, arg, t), true
 }
 
 // valueExpr is the condition text with each ? filled by the next of xs: a
@@ -137,6 +176,11 @@ type orderValueScan struct {
 	dst  []any
 	cell []any
 	vals []any
+	// types are the database type names of the value columns
+	// (sql.ColumnType.DatabaseTypeName), read at the first row when the
+	// rows tell them; nil otherwise.
+	types []string
+	typed bool // types was looked for
 }
 
 // newOrderValueScan is the scan of st's order values; nil when it reads
@@ -153,16 +197,196 @@ func newOrderValueScan(st *Statement) *orderValueScan {
 	return s
 }
 
-// keep appends the values the last row scanned, a []byte copied as a
-// string: a driver may reuse its buffer.
-func (s *orderValueScan) keep() {
-	for i, v := range s.cell {
-		if b, ok := v.([]byte); ok {
-			v = string(b)
+// columnTyper is rows that tell their columns' types: *sql.Rows.
+type columnTyper interface {
+	ColumnTypes() ([]*sql.ColumnType, error)
+}
+
+// keep appends the values the last row of r scanned, each as orderValue
+// makes it.
+func (s *orderValueScan) keep(r Rows) {
+	if !s.typed {
+		s.typed = true
+		if ct, ok := r.(columnTyper); ok {
+			if cts, err := ct.ColumnTypes(); err == nil && len(cts) >= s.n {
+				for _, c := range cts[len(cts)-s.n:] {
+					s.types = append(s.types, strings.ToUpper(c.DatabaseTypeName()))
+				}
+			}
 		}
-		s.vals = append(s.vals, v)
+	}
+	for i, v := range s.cell {
+		typ := ""
+		if s.types != nil {
+			typ = s.types[i]
+		}
+		s.vals = append(s.vals, orderValue(v, typ))
 		s.cell[i] = nil
 	}
+}
+
+// DecimalText is an order value that is a decimal the driver read as text:
+// MySQL's DECIMAL, or a NUMERIC through pgx's database/sql driver.
+// AfterValues binds it cast to a decimal (boundValue).
+type DecimalText string
+
+// TimeText is an order value that is a date or a time the driver read as
+// text: MySQL's DATE, DATETIME or TIMESTAMP without parseTime. AfterValues
+// binds it cast to DATETIME(6) on MySQL.
+type TimeText string
+
+// orderValue is v, a value the driver read into an any, as an order value:
+// a driver.Valuer, such as pgx's pgtype.Numeric, as its value; text, or a
+// []byte copied as text since the driver may reuse its buffer, as a
+// DecimalText in a column whose database type typ is a decimal, a TimeText
+// in a date or time column, and a string otherwise. A pgtype.Numeric, from
+// pgx's own rows, which tell no column types, is a DecimalText.
+func orderValue(v any, typ string) any {
+	if v != nil && typ == "" {
+		// pgx's own rows tell no column types; its pgtype.Numeric, a
+		// numeric read into an any, says what it is by this method.
+		if _, ok := reflect.TypeOf(v).MethodByName("NumericValue"); ok {
+			typ = "NUMERIC"
+		}
+	}
+	if dv, ok := v.(driver.Valuer); ok {
+		if x, err := dv.Value(); err == nil {
+			v = x
+		}
+	}
+	var text string
+	switch x := v.(type) {
+	case []byte:
+		text = string(x)
+	case string:
+		text = x
+	default:
+		return v
+	}
+	switch typ {
+	case "DECIMAL", "NUMERIC", "NEWDECIMAL":
+		return DecimalText(text)
+	case "DATE", "DATETIME", "TIMESTAMP":
+		return TimeText(text)
+	}
+	return text
+}
+
+// EncodeOrderValue is v, an order value (TableRows.OrderValues), as a JSON
+// value that DecodeOrderValue reads back as the same value: a cursor holds
+// it. NULL is nil and a bool a bool; an integer is an int64, or "u:" and
+// its digits past the int64 range; a finite float is a json.Number with a
+// fraction or an exponent ("3.0"), NaN and the infinities "f:NaN", "f:+Inf"
+// and "f:-Inf"; text is "s:" and the text, a DecimalText "d:" and its text,
+// a TimeText "dt:" and its text, and a time.Time "t:" and RFC 3339 with
+// nanoseconds. Any other value is an error.
+func EncodeOrderValue(v any) (any, error) {
+	switch x := v.(type) {
+	case nil, bool, int64:
+		return x, nil
+	case int:
+		return int64(x), nil
+	case int32:
+		return int64(x), nil
+	case int16:
+		return int64(x), nil
+	case int8:
+		return int64(x), nil
+	case uint64:
+		if x > math.MaxInt64 {
+			return "u:" + strconv.FormatUint(x, 10), nil
+		}
+		return int64(x), nil
+	case uint:
+		return EncodeOrderValue(uint64(x))
+	case uint32:
+		return int64(x), nil
+	case uint16:
+		return int64(x), nil
+	case uint8:
+		return int64(x), nil
+	case float32:
+		return floatOrderValue(float64(x)), nil
+	case float64:
+		return floatOrderValue(x), nil
+	case string:
+		return "s:" + x, nil
+	case []byte:
+		return "s:" + string(x), nil
+	case DecimalText:
+		return "d:" + string(x), nil
+	case TimeText:
+		return "dt:" + string(x), nil
+	case time.Time:
+		return "t:" + x.Format(time.RFC3339Nano), nil
+	}
+	return nil, fmt.Errorf("velox: an ordering by an expression read a value of the Go type %T, which a cursor cannot hold", v)
+}
+
+// floatOrderValue is f as EncodeOrderValue writes it.
+func floatOrderValue(f float64) any {
+	s := strconv.FormatFloat(f, 'g', -1, 64)
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return "f:" + s
+	}
+	if !strings.ContainsAny(s, ".e") {
+		s += ".0"
+	}
+	return json.Number(s)
+}
+
+// errOrderValue is DecodeOrderValue's error.
+var errOrderValue = errors.New("velox: a value of an ordering by an expression is not one EncodeOrderValue wrote")
+
+// DecodeOrderValue is v, a value EncodeOrderValue wrote, after a JSON round
+// trip that reads a number as a json.Number, back as the order value; an
+// int64 is taken as it is. Any other value is an error.
+func DecodeOrderValue(v any) (any, error) {
+	switch x := v.(type) {
+	case nil, bool, int64:
+		return x, nil
+	case json.Number:
+		if n, err := strconv.ParseInt(string(x), 10, 64); err == nil {
+			return n, nil
+		}
+		if strings.ContainsAny(string(x), ".eE") {
+			if f, err := strconv.ParseFloat(string(x), 64); err == nil {
+				return f, nil
+			}
+		}
+	case string:
+		return decodeTagged(x)
+	}
+	return nil, errOrderValue
+}
+
+// decodeTagged is DecodeOrderValue of a string: "<tag>:<text>".
+func decodeTagged(x string) (any, error) {
+	tag, rest, ok := strings.Cut(x, ":")
+	switch {
+	case !ok:
+	case tag == "s":
+		return rest, nil
+	case tag == "d":
+		if _, err := strconv.ParseFloat(rest, 64); err == nil || errors.Is(err, strconv.ErrRange) {
+			return DecimalText(rest), nil
+		}
+	case tag == "dt":
+		return TimeText(rest), nil
+	case tag == "u":
+		if n, err := strconv.ParseUint(rest, 10, 64); err == nil && n > math.MaxInt64 {
+			return n, nil
+		}
+	case tag == "t":
+		if t, err := time.Parse(time.RFC3339Nano, rest); err == nil {
+			return t, nil
+		}
+	case tag == "f":
+		if f, err := strconv.ParseFloat(rest, 64); err == nil && (math.IsNaN(f) || math.IsInf(f, 0)) {
+			return f, nil
+		}
+	}
+	return nil, errOrderValue
 }
 
 // width is the number of values per row, 0 for none.
@@ -227,7 +451,7 @@ func scanWithValues(r Rows, dst []any, s *orderValueScan) error {
 		return err
 	}
 	if s != nil {
-		s.keep()
+		s.keep(r)
 	}
 	return nil
 }

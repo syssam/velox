@@ -190,7 +190,7 @@ func TestConnectionExpressionCursorRefused(t *testing.T) {
 			t.Errorf("value %#v: %v, want ErrBadCursor", v, err)
 		}
 	}
-	if _, err := gqlgraph.PageWith(ctx, db.Query[person]().OrderBy(by(3).Asc(), people.Age.Asc()), "Person", gqlgraph.Args{First: new(2)}, nil, personKey()); err == nil || !strings.Contains(err.Error(), "q has an OrderBy") {
+	if _, err := gqlgraph.PageWith(ctx, db.Query[person]().OrderBy(by(3).Asc(), people.Age.Asc()), "Person", gqlgraph.Args{First: new(2)}, nil, personKey()); err == nil || !strings.Contains(err.Error(), "q may be ordered only by expressions") {
 		t.Errorf("a column ordering after an expression: %v", err)
 	}
 }

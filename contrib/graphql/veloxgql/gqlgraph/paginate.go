@@ -483,36 +483,35 @@ type Connection struct {
 // Paginate is the connection to the nodes of c's type that from leads to,
 // filtered by args.Where, paged by args, in the order args.Order and then
 // c's key, each column ASC. For generated code: the body of a type's
-// newXConnection, which the entity's PaginateQuery calls with a Query and
-// an edge method with an Edge. It checks the query and the arguments, decodes the cursor,
-// and runs no query. An Edge's connection batches (see Edge's paginate). It
-// fails with veloxgql.ErrNoSelectionSource, and veloxgql.ErrNoDB, in a
-// context no adapter made (gqlgenx.NewExtension, graphqlgo.With), which tells it nothing of
-// the field it resolves.
+// newXConnection, which the entity's PaginateQuery calls with a Query and an
+// edge method with an Edge. It checks the query and the arguments, decodes
+// the cursor, and runs no query. An Edge's connection batches (see Edge's
+// paginate). It fails with veloxgql.ErrNoSelectionSource, and
+// veloxgql.ErrNoDB, in a context no adapter made (gqlgenx.NewExtension,
+// graphqlgo.With), which tells it nothing of the field it resolves.
 //
-// A Query's q keeps its filters, its With loads and the scope the application gave
-// it. It may be ordered by expressions only (OrderBy of a Calc or another
-// Term that is not a column or a relation's aggregate, with its Nulls):
-// they come first in the order, before order and the key, and each page
-// reads their values beside the rows for the cursors, which hold them
-// (ordervalue.go, decision 0166). An ordering by a column would come first
-// too and break the cursors. It must select the key and the columns of
+// A Query's q keeps its filters, its With loads and the scope the
+// application gave it. It may be ordered by expressions only (OrderBy of a
+// Calc or another Term that is not a column or a relation's aggregate, with
+// its Nulls): they come first in the order, before order and the key, and
+// each page reads their values beside the rows for the cursors, which hold
+// them (ordervalue.go, decision 0166). An ordering by a column would come
+// first too and break the cursors. It must select the key and the columns of
 // order's own fields, which the cursors hold: a q that does either wrong is
-// refused with an internal error. Its Offset is cleared and its Limit replaced, as the page
-// is the connection's. It reads only the columns the selection of the field
-// of ctx needs (selected, narrow, c.columns): a column the selection does
-// not need is left zero in the nodes, except the key, the foreign keys and
-// the columns of order, so an application's resolver must not read one it
-// did not ask for.
+// refused with an internal error. Its Offset is cleared and its Limit
+// replaced, as the page is the connection's. It reads only the columns the
+// selection of the field of ctx needs (selected, narrow, c.columns): a
+// column the selection does not need is left zero in the nodes, except the
+// key, the foreign keys and the columns of order, so an application's
+// resolver must not read one it did not ask for.
 //
 // It fails with the where input's error; with an input error for an order
-// field c does not know; with
-// ErrBadPagination for first and last together, either below 0, another
-// combination Args refuses, or an order of more than MaxOrderTerms terms;
-// with ErrPageTooLarge for either over MaxPage (both the limits of
-// veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a cursor of
-// another type, taken under another order, or whose
-// values are not of the order's types.
+// field c does not know; with ErrBadPagination for first and last together,
+// either below 0, another combination Args refuses, or an order of more
+// than MaxOrderTerms terms; with ErrPageTooLarge for either over MaxPage
+// (both the limits of veloxgql.LimitsFromContext(ctx)); and with
+// ErrBadCursor for a cursor of another type, taken under another order, or
+// whose values are not of the order's types.
 //
 // A msgpack cursor, entgql's format, which veloxgql.Cursor's UnmarshalGQL
 // keeps, is read as entgql reads one: its key as the key, and its values
