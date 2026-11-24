@@ -1,9 +1,11 @@
 package untyped_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/untyped"
 )
@@ -25,5 +27,28 @@ func TestTableOfNoEntity(t *testing.T) {
 	}
 	if rows := untyped.RowsOf[testmodel.Ticket](tk.NewRows(2)); len(rows) != 2 {
 		t.Errorf("RowsOf: %d rows", len(rows))
+	}
+}
+
+// TestOrderValueTerm: an ordering by an expression reads its value beside
+// each row; one by a column does not.
+func TestOrderValueTerm(t *testing.T) {
+	if !untyped.OrderValueTerm(untyped.OrderByTerm(untyped.Calc("1"), false)) {
+		t.Error("an expression: false")
+	}
+	if untyped.OrderValueTerm(velox.OrderTerm{}) {
+		t.Error("no expression: true")
+	}
+}
+
+// TestRewrites: a DB reports a Rewrite hook, which raw SQL never passes.
+func TestRewrites(t *testing.T) {
+	db := velox.Open(velox.SQLite, nil)
+	if untyped.Rewrites(db) {
+		t.Error("a DB with no hook: true")
+	}
+	rw := velox.WithRewrite(func(context.Context, *velox.Statement) error { return nil })
+	if !untyped.Rewrites(velox.Open(velox.SQLite, nil, rw)) {
+		t.Error("a DB with a Rewrite hook: false")
 	}
 }
