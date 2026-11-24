@@ -132,6 +132,8 @@ var (
 			"return jsonHasAny[E](c.I, vs)"},
 		{"HasEvery", "is true where the column's JSON array holds every one of vs. With no values it is true.", "(vs ...any) Pred[E]",
 			"return jsonHasAll[E](c.I, vs)"},
+		{"Contains", "is true where the column's JSON document contains doc, as the database's JSON containment defines it: PostgreSQL's @> on a jsonb column, MySQL's JSON_CONTAINS. An object contains an object whose every key and value it contains, recursively, and a scalar an equal scalar; arrays follow the database's rule. SQLite has no JSON containment, so there the statement fails. doc is encoded with encoding/json once, when Contains is called, and bound as one argument; a doc that does not encode fails the statement. On PostgreSQL a GIN index on the column serves it.", "(doc any) Pred[E]",
+			"return jsonContains[E](c.I, doc)"},
 		{"IsEmpty", "is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.", "() Pred[E]",
 			"return jsonIsEmpty[E](c.I)"},
 		{"Len", "is the number of elements of the JSON array at the path of object keys in the column, or of the column's own array when no key is given, for its conditions and an ordering: NULL where the path is missing or holds no array (an object has no length).", "(keys ...string) JSONNumber[E]",

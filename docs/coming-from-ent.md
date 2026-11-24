@@ -88,6 +88,7 @@ map as follows ([0115](decisions/0115-json-append-len-patterns-order.md)):
 | --- | --- |
 | `client.User.Update().AppendTags([]string{"x"})` (`sqljson.Append`) | `Set(U.Tags.Append([]string{"x"}))`; a NULL column becomes the elements, as in ent |
 | `sqljson.ValueContains(f, v, sqljson.Path("a", "ids"))` | `U.Attrs.Array("a", "ids").Has(v)`; also `HasSome`, `HasEvery`, `IsEmpty`: false where the path holds no array ([0141](decisions/0141-json-array-at-a-path.md)) |
+| `sqljson.ValueContains(f, doc)` with an object `doc` and no path | `U.Attrs.Contains(doc)`: PostgreSQL's `@>`, MySQL's `JSON_CONTAINS`, and a refusal on SQLite, where ent's form compares `json_each` values ([0154](decisions/0154-json-contains.md)) |
 | `sqljson.LenEQ(user.FieldTags, 2)`, `LenGT`… with `sqljson.Path` | `U.Tags.Len().EQ(2)`, `U.Attrs.Len("a", "b").GT(0)`: NULL where the path holds no array |
 | `sqljson.StringContains(f, "x", sqljson.Path("name"))`, `StringHasPrefix`, `StringHasSuffix` | `U.Attrs.Text("name").Contains("x")`, `HasPrefix`, `HasSuffix`: literal and with case on every dialect |
 | `sqljson.OrderValue(f, sqljson.Path("n"))` | `OrderBy(U.Attrs.Number("n").Asc())`, or `Text("n").Desc()` |

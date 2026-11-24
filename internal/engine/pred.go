@@ -59,6 +59,10 @@ const (
 	// OpJSONEmpty is true where the column holds an array with no element.
 	// JSONEmptyNode makes it.
 	OpJSONEmpty
+	// OpJSONContains is true where the JSON document in column col contains
+	// the document v, a string of JSON, as the database's containment says.
+	// JSONContainsNode makes it.
+	OpJSONContains
 	// opRowIn is (a, b, …) IN ((?, ?, …), …), PostgreSQL's row-value IN: v
 	// is the columns, a []int, and w the rows of values, a [][]any, each
 	// one value per column. rowsIn makes it.

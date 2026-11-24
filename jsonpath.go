@@ -87,6 +87,10 @@ func jsonHasEach[E any](all bool, col int32, vs []any) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Group(engine.OpOr, kids)))
 }
 
+func jsonContains[E any](col int32, doc any) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONContainsNode(col, doc)))
+}
+
 func jsonIsEmpty[E any](col int32) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.JSONEmptyNode(col)))
 }

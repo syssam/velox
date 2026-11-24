@@ -191,6 +191,7 @@ func (c JSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Array[_ Lazy[V]](keys ...string) JSONArray[E]
 func (c JSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
+func (c JSONCol[E, V]) Contains[_ Lazy[V]](doc any) Pred[E]
 func (c JSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c JSONCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E]
@@ -242,6 +243,7 @@ func (c NullJSONCol[E, V]) Array[_ Lazy[V]](keys ...string) JSONArray[E]
 func (c NullJSONCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
 func (c NullJSONCol[E, V]) Assign[_ Lazy[V]](m *Mutation, v V) error
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E]
+func (c NullJSONCol[E, V]) Contains[_ Lazy[V]](doc any) Pred[E]
 func (c NullJSONCol[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c NullJSONCol[E, V]) GetPtr[_ Lazy[V]](r Row) *V
 func (c NullJSONCol[E, V]) Get[_ Lazy[V]](r Row) V

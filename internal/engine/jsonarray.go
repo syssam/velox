@@ -271,3 +271,42 @@ func (w *writer) jsonEmpty(n Node) {
 	w.colRef(n.Col)
 	w.str(" IS NULL THEN NULL ELSE 1 = 0 END")
 }
+
+// JSONContainsNode is true where the JSON document in column col contains
+// doc, as the database's JSON containment defines it: PostgreSQL's @> and
+// MySQL's JSON_CONTAINS. doc is encoded with encoding/json here, once, and
+// bound as one argument. A doc that does not encode makes an invalid
+// condition. SQLite has no JSON containment, so the condition fails the
+// statement there. It is NULL where the column is NULL.
+func JSONContainsNode(col int32, doc any) Node {
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return Node{Op: OpInvalid, V: fmt.Errorf("velox: a JSON containment document does not encode: %w", err)}
+	}
+	return Node{Op: OpJSONContains, Col: col, V: string(b)}
+}
+
+// jsonContains writes the OpJSONContains node n: the bare column on the left,
+// so that a GIN index on a jsonb column serves it, and the document as the one
+// argument, which PostgreSQL reads as jsonb and MySQL as JSON.
+func (w *writer) jsonContains(n Node) {
+	if !w.jsonColumn(n.Col) {
+		return
+	}
+	doc := n.V.(string)
+	switch w.d {
+	case Postgres:
+		w.colRef(n.Col)
+		w.str(" @> ")
+		w.argOf(n.Col, doc)
+		w.str("::jsonb")
+	case MySQL:
+		w.str("JSON_CONTAINS(")
+		w.colRef(n.Col)
+		w.str(", ")
+		w.argOf(n.Col, doc)
+		w.str(")")
+	default:
+		w.fail(fmt.Errorf("velox: %s: SQLite has no JSON containment, which Contains needs", w.in.Name))
+	}
+}

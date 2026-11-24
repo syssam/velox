@@ -1579,6 +1579,9 @@ func (c JSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAny
 // HasEvery is true where the column's JSON array holds every one of vs. With no values it is true.
 func (c JSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAll[E](c.I, vs) }
 
+// Contains is true where the column's JSON document contains doc, as the database's JSON containment defines it: PostgreSQL's @> on a jsonb column, MySQL's JSON_CONTAINS. An object contains an object whose every key and value it contains, recursively, and a scalar an equal scalar; arrays follow the database's rule. SQLite has no JSON containment, so there the statement fails. doc is encoded with encoding/json once, when Contains is called, and bound as one argument; a doc that does not encode fails the statement. On PostgreSQL a GIN index on the column serves it.
+func (c JSONCol[E, V]) Contains[_ Lazy[V]](doc any) Pred[E] { return jsonContains[E](c.I, doc) }
+
 // IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
 func (c JSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }
 
@@ -1662,6 +1665,9 @@ func (c NullJSONCol[E, V]) HasSome[_ Lazy[V]](vs ...any) Pred[E] { return jsonHa
 
 // HasEvery is true where the column's JSON array holds every one of vs. With no values it is true.
 func (c NullJSONCol[E, V]) HasEvery[_ Lazy[V]](vs ...any) Pred[E] { return jsonHasAll[E](c.I, vs) }
+
+// Contains is true where the column's JSON document contains doc, as the database's JSON containment defines it: PostgreSQL's @> on a jsonb column, MySQL's JSON_CONTAINS. An object contains an object whose every key and value it contains, recursively, and a scalar an equal scalar; arrays follow the database's rule. SQLite has no JSON containment, so there the statement fails. doc is encoded with encoding/json once, when Contains is called, and bound as one argument; a doc that does not encode fails the statement. On PostgreSQL a GIN index on the column serves it.
+func (c NullJSONCol[E, V]) Contains[_ Lazy[V]](doc any) Pred[E] { return jsonContains[E](c.I, doc) }
 
 // IsEmpty is true where the column's JSON array has no element, []: false for an array with one and for a document that is no array, NULL where the column is.
 func (c NullJSONCol[E, V]) IsEmpty[_ Lazy[V]]() Pred[E] { return jsonIsEmpty[E](c.I) }

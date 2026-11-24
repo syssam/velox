@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A JSON handle's `Contains(doc)` is true where the column's JSON document
+  contains `doc`: PostgreSQL's `@>` (`"col" @> $1::jsonb`, which a GIN index
+  serves) and MySQL's `JSON_CONTAINS`. `doc` is encoded with `encoding/json`
+  when `Contains` is called. SQLite has no JSON containment, so the statement
+  fails there with an error naming it (ADR 0154).
 - velox-graphql: `node=on|off` declares Relay's `Node`, with `node(id:)`
   and `nodes(ids:)` and `noder_gql.go`, apart from `compat=veloxe`, which
   presets `on`; `off` is the default, and `compat=veloxe,node=off` drops

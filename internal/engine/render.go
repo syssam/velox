@@ -916,6 +916,8 @@ func (w *writer) pred(n Node) {
 		w.jsonHas(n)
 	case OpJSONEmpty:
 		w.jsonEmpty(n)
+	case OpJSONContains:
+		w.jsonContains(n)
 	case opJSONLike:
 		w.jsonLike(n)
 	case opRowIn:

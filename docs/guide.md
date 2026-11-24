@@ -807,6 +807,29 @@ neither. `Array()` with no key is the column's own array. On PostgreSQL the
 condition keeps `column @> '{"receiptIds":["…"]}'`, which a GIN index on the
 column serves. See [ADR 0141](decisions/0141-json-array-at-a-path.md).
 
+### A document that contains another: Contains
+
+`Contains(doc)` is true where the column's JSON document contains `doc`, as
+the database's JSON containment defines it. An object contains an object
+whose every key and value it contains, recursively; a scalar contains an
+equal scalar; arrays follow the database's rule.
+
+```go
+A := veloxgen.Accounts
+db.Query[veloxgen.Account]().Where(A.Attrs.Contains(map[string]any{"plan": "pro"}))
+db.Query[veloxgen.Account]().Where(velox.Or(
+	A.Attrs.Contains(map[string]any{"beta": true}),
+	A.Attrs.Contains(map[string]any{"plan": map[string]any{"tier": "gold"}})))
+```
+
+`doc` is encoded with `encoding/json` when `Contains` is called, and bound as
+one argument; a `doc` that does not encode fails the statement. PostgreSQL
+writes `"attrs" @> $1::jsonb`, with the bare column, so a GIN index on the
+jsonb column serves it; MySQL writes `JSON_CONTAINS(attrs, ?)`. SQLite has no
+JSON containment, so there the statement fails with an error naming SQLite.
+A NULL column matches neither `Contains` nor its `Not`. See
+[ADR 0154](decisions/0154-json-contains.md).
+
 ### Subqueries on a column: Select and InSelect
 
 When no edge links the two columns, or you want to say which columns are
