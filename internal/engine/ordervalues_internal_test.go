@@ -68,7 +68,8 @@ func TestOrderValueRoundTrip(t *testing.T) {
 		{math.Inf(1), math.Inf(1)}, {math.Inf(-1), math.Inf(-1)},
 		{"", ""}, {"s:x", "s:x"}, {"12", "12"},
 		{DecimalText("0.37500000000000000700"), DecimalText("0.37500000000000000700")},
-		{DecimalText("-1E+40"), DecimalText("-1E+40")},
+		{DecimalText("-12.500"), DecimalText("-12.500")},
+		{TimeText("2026-03-01"), TimeText("2026-03-01")},
 		{TimeText("2026-03-01 10:00:00.123456"), TimeText("2026-03-01 10:00:00.123456")},
 		{at, at},
 	} {
@@ -107,14 +108,69 @@ func TestOrderValueRoundTrip(t *testing.T) {
 	if got, err := DecodeOrderValue(nan); err != nil || !math.IsNaN(got.(float64)) {
 		t.Errorf("NaN: %v %v", got, err)
 	}
-	if _, err := EncodeOrderValue(struct{}{}); err == nil {
-		t.Error("a struct: no error")
+	for _, bad := range []any{struct{}{}, DecimalText("NaN"), DecimalText("-Infinity"), TimeText("0000-00-00 00:00:00")} {
+		if _, err := EncodeOrderValue(bad); err == nil {
+			t.Errorf("%#v: no error", bad)
+		}
 	}
-	for _, bad := range []any{"x", "u:12", "u:x", "d:abc", "t:now", "f:1.5", json.Number("1x"), 1.5, []any{}} {
+	for _, bad := range []any{"x", "u:12", "u:x", "d:abc", "t:now", "f:1.5", json.Number("1x"), 1.5, []any{},
+		"d:NaN", "d:Inf", "d:infinity", "d:0x1p-2", "d:1e999999", "d:1E+40", "d:+1", "d:1.", "d:.5", "d:",
+		"dt:yesterday", "dt:2026-13-45 99:00:00", "dt:2026-02-30", "dt:2026-03-01T10:00:00", "dt:2026-03-01 10:00:00.1234567", "dt:",
+		"u:018446744073709551615", "u:+18446744073709551615", "u:18446744073709551616", "u:9223372036854775807",
+		"f:nan", "f:inf", "f:Infinity", "f:+inf",
+		json.Number("0x10"), json.Number("+1"), json.Number("1e999"), json.Number("Inf"), json.Number("01"),
+	} {
 		if _, err := DecodeOrderValue(bad); err == nil {
 			t.Errorf("%#v: no error", bad)
 		}
 	}
+}
+
+// FuzzOrderValue: no string or JSON number panics DecodeOrderValue, and a
+// value it decodes encodes to a value that decodes to the same.
+func FuzzOrderValue(f *testing.F) {
+	for _, s := range []string{"s:x", "d:-12.50", "dt:2026-03-01 10:00:00.5", "u:18446744073709551615", "t:2026-03-01T10:00:00Z", "f:NaN", "d:0x1p-2", "dt:2026-13-45"} {
+		f.Add(s, false)
+	}
+	for _, s := range []string{"3", "3.0", "-1e5", "1e999"} {
+		f.Add(s, true)
+	}
+	f.Fuzz(func(t *testing.T, s string, number bool) {
+		var in any = s
+		if number {
+			in = json.Number(s)
+		}
+		v, err := DecodeOrderValue(in)
+		if err != nil {
+			return
+		}
+		enc, err := EncodeOrderValue(v)
+		if err != nil {
+			t.Fatalf("%#v decodes to %#v, which does not encode: %v", in, v, err)
+		}
+		if n, ok := enc.(json.Number); ok {
+			enc = n
+		}
+		back, err := DecodeOrderValue(enc)
+		if err != nil {
+			t.Fatalf("%#v: %#v encodes to %#v, which does not decode: %v", in, v, enc, err)
+		}
+		if f, ok := v.(float64); ok && math.IsNaN(f) {
+			if g, ok := back.(float64); !ok || !math.IsNaN(g) {
+				t.Fatalf("%#v: NaN back as %#v", in, back)
+			}
+			return
+		}
+		if tm, ok := v.(time.Time); ok {
+			if g, ok := back.(time.Time); !ok || !g.Equal(tm) {
+				t.Fatalf("%#v: %v back as %#v", in, tm, back)
+			}
+			return
+		}
+		if !reflect.DeepEqual(back, v) {
+			t.Fatalf("%#v: %#v back as %#v", in, v, back)
+		}
+	})
 }
 
 // TestBoundValue: a decimal read as text is bound cast to a decimal, and a

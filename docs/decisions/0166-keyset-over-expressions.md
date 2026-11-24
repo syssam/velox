@@ -68,8 +68,15 @@ connection type the resolver returns.
   int64: MySQL's BIGINT UNSIGNED), a finite float as a JSON number with a
   fraction or exponent (`3.0`), NaN and the infinities as `"f:NaN"`, text
   as `"s:<text>"`, a time as `"t:<RFC 3339 nano>"`, a decimal read as text
-  as `"d:<text>"` and a time read as text as `"dt:<text>"`. Any other value
-  fails with `ErrBadCursor`.
+  as `"d:<text>"` and a time read as text as `"dt:<text>"`. A cursor is
+  the client's, so decoding takes only what the encoder writes: a decimal
+  as the drivers print it (digits, sign, point, no exponent, no NaN), a
+  time as MySQL's `2006-01-02[ 15:04:05[.ffffff]]` that is a real date,
+  `u:` digits past int64 with no sign or leading zero, `f:` exactly NaN,
+  +Inf or -Inf, and a JSON number as JSON spells one. Anything else fails
+  with `ErrBadCursor`, before the database could cast it to 0 or NULL;
+  the encoder refuses a NaN numeric or a zero date likewise.
+  `FuzzOrderValue` holds the round trip.
 - **A decimal or a time read as text is bound cast to its type.** The
   read takes each value column's database type when the rows tell it
   (`sql.ColumnType.DatabaseTypeName`): text in a DECIMAL or NUMERIC column

@@ -235,6 +235,7 @@ jobs:
           go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/dberr
           go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
           go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
+          go test -run XXX -fuzz '^FuzzOrderValue$' -fuzztime 10s ./internal/engine
   # Each fuzz target for 5 minutes, on the schedule only.
   fuzz-long:
     if: github.event_name == 'schedule'
@@ -264,6 +265,7 @@ jobs:
           go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 5m ./internal/dberr
           go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 5m ./migrate
           go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 5m ./internal/conn
+          go test -run XXX -fuzz '^FuzzOrderValue$' -fuzztime 5m ./internal/engine
       - name: fuzz (long), contrib/graphql
         working-directory: contrib/graphql
         run: |

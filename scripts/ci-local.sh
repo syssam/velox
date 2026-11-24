@@ -191,6 +191,7 @@ lane_fuzz() {
   go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/dberr
   go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
   go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
+  go test -run XXX -fuzz '^FuzzOrderValue$' -fuzztime 10s ./internal/engine
 }
 
 lane_generated() {

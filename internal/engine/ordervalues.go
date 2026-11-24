@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"math"
 	"reflect"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -279,7 +280,9 @@ func orderValue(v any, typ string) any {
 // fraction or an exponent ("3.0"), NaN and the infinities "f:NaN", "f:+Inf"
 // and "f:-Inf"; text is "s:" and the text, a DecimalText "d:" and its text,
 // a TimeText "dt:" and its text, and a time.Time "t:" and RFC 3339 with
-// nanoseconds. Any other value is an error.
+// nanoseconds. Any other value is an error, and so is a DecimalText or a
+// TimeText that is not as the drivers print one (decimalText,
+// validTimeText): a NaN or infinite numeric, a zero date.
 func EncodeOrderValue(v any) (any, error) {
 	switch x := v.(type) {
 	case nil, bool, int64:
@@ -314,8 +317,14 @@ func EncodeOrderValue(v any) (any, error) {
 	case []byte:
 		return "s:" + string(x), nil
 	case DecimalText:
+		if !decimalText.MatchString(string(x)) {
+			return nil, fmt.Errorf("velox: an ordering by an expression read the decimal %q, which a cursor cannot hold", string(x))
+		}
 		return "d:" + string(x), nil
 	case TimeText:
+		if !validTimeText(string(x)) {
+			return nil, fmt.Errorf("velox: an ordering by an expression read the time %q, which a cursor cannot hold", string(x))
+		}
 		return "dt:" + string(x), nil
 	case time.Time:
 		return "t:" + x.Format(time.RFC3339Nano), nil
@@ -335,6 +344,35 @@ func floatOrderValue(f float64) any {
 	return json.Number(s)
 }
 
+// What DecodeOrderValue takes, as EncodeOrderValue writes it: a cursor is
+// the client's, and a value the database would cast to something else (a
+// hex or NaN decimal MySQL casts to 0, a time it casts to NULL) would page
+// from the wrong place.
+var (
+	// decimalText is a decimal as MySQL and PostgreSQL print one: digits,
+	// a sign and a point, no exponent.
+	decimalText = regexp.MustCompile(`^-?[0-9]{1,200}(\.[0-9]{1,100})?$`)
+	// timeText is MySQL's DATE, or DATETIME and TIMESTAMP with up to six
+	// fraction digits.
+	timeText = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}( [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?)?$`)
+	// jsonNumber is a JSON number.
+	jsonNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
+)
+
+// validTimeText reports whether s is a date or a time as MySQL prints one,
+// and a real date and time.
+func validTimeText(s string) bool {
+	if !timeText.MatchString(s) {
+		return false
+	}
+	layout := "2006-01-02"
+	if len(s) > len(layout) {
+		layout += " 15:04:05"
+	}
+	_, err := time.Parse(layout, s)
+	return err == nil
+}
+
 // errOrderValue is DecodeOrderValue's error.
 var errOrderValue = errors.New("velox: a value of an ordering by an expression is not one EncodeOrderValue wrote")
 
@@ -346,6 +384,9 @@ func DecodeOrderValue(v any) (any, error) {
 	case nil, bool, int64:
 		return x, nil
 	case json.Number:
+		if !jsonNumber.MatchString(string(x)) {
+			break
+		}
 		if n, err := strconv.ParseInt(string(x), 10, 64); err == nil {
 			return n, nil
 		}
@@ -368,12 +409,17 @@ func decodeTagged(x string) (any, error) {
 	case tag == "s":
 		return rest, nil
 	case tag == "d":
-		if _, err := strconv.ParseFloat(rest, 64); err == nil || errors.Is(err, strconv.ErrRange) {
+		if decimalText.MatchString(rest) {
 			return DecimalText(rest), nil
 		}
 	case tag == "dt":
-		return TimeText(rest), nil
+		if validTimeText(rest) {
+			return TimeText(rest), nil
+		}
 	case tag == "u":
+		if rest == "" || rest[0] < '1' || rest[0] > '9' || strings.Trim(rest, "0123456789") != "" {
+			break
+		}
 		if n, err := strconv.ParseUint(rest, 10, 64); err == nil && n > math.MaxInt64 {
 			return n, nil
 		}
@@ -382,8 +428,13 @@ func decodeTagged(x string) (any, error) {
 			return t, nil
 		}
 	case tag == "f":
-		if f, err := strconv.ParseFloat(rest, 64); err == nil && (math.IsNaN(f) || math.IsInf(f, 0)) {
-			return f, nil
+		switch rest {
+		case "NaN":
+			return math.NaN(), nil
+		case "+Inf":
+			return math.Inf(1), nil
+		case "-Inf":
+			return math.Inf(-1), nil
 		}
 	}
 	return nil, errOrderValue
