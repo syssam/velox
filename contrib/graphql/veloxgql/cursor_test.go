@@ -256,17 +256,16 @@ func trailingBits(s string) string {
 	return s[:len(s)-1] + string(alphabet[i^1])
 }
 
-// TestCursorLegacy: a cursor veloxe wrote (the parity probe's) decodes
-// through UnmarshalGQL and UnmarshalGQLContext with no error, to a Cursor
-// whose Key is the legacy cursor, which keeps the error DecodeCursor gives
-// its text, for a connection to use or return.
-// DecodeCursor still refuses it, and any other text still fails in
-// UnmarshalGQL as it did.
-func TestCursorLegacy(t *testing.T) {
-	for _, s := range []string{"gqFpAaF2wA", "gqFpAqF2plVzZXItNA", "gqFpA6F2FA"} {
-		_, want := veloxgql.DecodeCursor(s)
-		if !errors.Is(want, veloxgql.ErrBadCursor) {
-			t.Fatalf("DecodeCursor(%q) = %v, want ErrBadCursor", s, want)
+// TestCursorMsgpack: a msgpack cursor, entgql's format (with v left out,
+// a value, and a timestamp extension's time), decodes through UnmarshalGQL
+// and UnmarshalGQLContext with no error, to a Cursor whose Key is the
+// msgpack cursor, for a connection to read. Its time is RFC 3339, as a
+// time in velox's own cursor. DecodeCursor still refuses it, and any
+// other text still fails in UnmarshalGQL.
+func TestCursorMsgpack(t *testing.T) {
+	for _, s := range []string{"gqFpAaF2wA", "gqFpAqF2plVzZXItNA", "gqFpA6F2FA", "gaFpAQ", "gqFpA6F21v9pVzWl"} {
+		if _, err := veloxgql.DecodeCursor(s); !errors.Is(err, veloxgql.ErrBadCursor) {
+			t.Fatalf("DecodeCursor(%q) = %v, want ErrBadCursor", s, err)
 		}
 		for name, un := range map[string]func(*veloxgql.Cursor) error{
 			"UnmarshalGQL":        func(c *veloxgql.Cursor) error { return c.UnmarshalGQL(s) },
@@ -277,17 +276,19 @@ func TestCursorLegacy(t *testing.T) {
 				t.Errorf("%s(%q) = %v, want no error", name, s, err)
 				continue
 			}
-			l, ok := c.Key.(*gqlcore.LegacyCursor)
-			if c.Type != "" || c.Terms != nil || !ok {
-				t.Errorf("%s(%q) = %+v, want only the legacy cursor as the key", name, s, c)
-				continue
-			}
-			if l.Err == nil || l.Err.Error() != want.Error() || !errors.Is(l.Err, veloxgql.ErrBadCursor) {
-				t.Errorf("%s(%q): kept %v, want %v", name, s, l.Err, want)
+			if _, ok := c.Key.(*gqlcore.MsgpackCursor); c.Type != "" || c.Terms != nil || !ok {
+				t.Errorf("%s(%q) = %+v, want only the msgpack cursor as the key", name, s, c)
 			}
 		}
 	}
 	var c veloxgql.Cursor
+	if err := c.UnmarshalGQL("gqFpA6F21v9pVzWl"); err != nil {
+		t.Fatal(err)
+	}
+	vs, _ := c.Key.(*gqlcore.MsgpackCursor).Values(1)
+	if want := "2026-01-02T03:04:05Z"; len(vs) != 1 || vs[0] != want {
+		t.Errorf("entgql's time: %#v, want [%q]", vs, want)
+	}
 	if err := c.UnmarshalGQL("garbage!!"); !errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("UnmarshalGQL(garbage!!) = %v, want ErrBadCursor", err)
 	}

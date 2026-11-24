@@ -819,9 +819,9 @@ func TestExplicitNullDefault(t *testing.T) {
 	s.want("clear", fmt.Sprintf("mutation { updateThing(id: %q, input: {clearN: true}) { n } }", id), '{"data":{"updateThing":{"n":null}}}')
 }
 
-// TestForeignKeyFilterHidden: a foreign key whose target a policy hides reads as null
-// to every predicate on it, as the edge does: no filter tells the hidden row is
-// linked, or which row it is.
+// TestForeignKeyFilterHidden: a foreign key's predicates read its column alone,
+// as entgql's do, though a policy hides its target; has<Edge> reads the edge,
+// so it sees the target as the policy does.
 func TestForeignKeyFilterHidden(t *testing.T) {
 	s := serve(t)
 	seen, hidden := "1", "2"
@@ -838,15 +838,15 @@ func TestForeignKeyFilterHidden(t *testing.T) {
 	}
 	for _, c := range []struct{ where, want string }{
 		{fmt.Sprintf("memberID: %q", seen), "d1"},
-		{fmt.Sprintf("memberID: %q", hidden), ""},
-		{fmt.Sprintf("memberIDNEQ: %q", seen), ""},
+		{fmt.Sprintf("memberID: %q", hidden), "d4"},
+		{fmt.Sprintf("memberIDNEQ: %q", seen), "d4"},
 		{fmt.Sprintf("memberIDNEQ: %q", hidden), "d1"},
-		{fmt.Sprintf("memberIDIn: [%q, %q]", seen, hidden), "d1"},
+		{fmt.Sprintf("memberIDIn: [%q, %q]", seen, hidden), "d1,d4"},
 		{fmt.Sprintf("memberIDNotIn: [%q]", hidden), "d1"},
-		{"memberIDIsNil: true", "d4,d5"},
-		{"memberIDIsNil: false", "d1"},
-		{"memberIDNotNil: true", "d1"},
-		{"memberIDNotNil: false", "d4,d5"},
+		{"memberIDIsNil: true", "d5"},
+		{"memberIDIsNil: false", "d1,d4"},
+		{"memberIDNotNil: true", "d1,d4"},
+		{"memberIDNotNil: false", "d5"},
 		{"hasMember: false", "d4,d5"},
 		{"hasMember: true", "d1"},
 	} {
@@ -919,19 +919,20 @@ func TestNullBytesGoType(t *testing.T) {
 	s.want("clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {clearIp: true}) { ip } }", "2"), '{"data":{"updateItem":{"ip":null}}}')
 }
 
-// TestForeignKeyFilterOtherScope: a foreign key to a row of another org reads as
-// null to every predicate on it, as the edge does: the same hides as a policy hides.
+// TestForeignKeyFilterOtherScope: a foreign key to a row of another org is its
+// column's value to its predicates, as entgql's are; has<Edge> reads the
+// edge, under the target's scope.
 func TestForeignKeyFilterOtherScope(t *testing.T) {
 	s := serve(t)
 	mine, theirs := "1", "2"
 	for _, c := range []struct{ where, want string }{
 		{fmt.Sprintf("ticketID: %q", mine), "r1"},
-		{fmt.Sprintf("ticketID: %q", theirs), ""},
+		{fmt.Sprintf("ticketID: %q", theirs), "r2"},
 		{fmt.Sprintf("ticketIDNEQ: %q", theirs), "r1"},
-		{fmt.Sprintf("ticketIDIn: [%q, %q]", mine, theirs), "r1"},
+		{fmt.Sprintf("ticketIDIn: [%q, %q]", mine, theirs), "r1,r2"},
 		{fmt.Sprintf("ticketIDNotIn: [%q]", theirs), "r1"},
-		{"ticketIDIsNil: true", "r2,r3"},
-		{"ticketIDNotNil: true", "r1"},
+		{"ticketIDIsNil: true", "r3"},
+		{"ticketIDNotNil: true", "r1,r2"},
 		{"hasTicket: false", "r2,r3"},
 		{"hasTicket: true", "r1"},
 	} {

@@ -2,6 +2,7 @@ package gqlcore
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"math"
 	"strconv"
@@ -9,19 +10,16 @@ import (
 	"unicode/utf8"
 )
 
-// LegacyCursor is a cursor veloxe, velox's predecessor, wrote: standard
-// base64 without padding of the msgpack map {"i": key, "v": value} or
-// {"i": key, "v": nil, "vs": [values…]}. Its key and values are JSON values
-// (json.Number, string, bool and, in a value, nil), as DecodeCursor's are,
-// so a connection converts them the same way. A time is an RFC 3339 string
-// and a 16-byte binary a UUID's string. veloxgql.Cursor's UnmarshalGQL
-// gives one as the Cursor's Key.
-type LegacyCursor struct {
+// MsgpackCursor is a msgpack cursor, entgql's format: standard base64
+// without padding of the msgpack map {"i": key, "v": value}, v left out
+// when nil, or {"i": key, "v": nil, "vs": [values…]}. Its key and values
+// are JSON values (json.Number, string, bool and, in a value, nil), as
+// DecodeCursor's are, so a connection converts them the same way. A time is
+// an RFC 3339 string and a 16-byte binary a UUID's string.
+// veloxgql.Cursor's UnmarshalGQL gives one as the Cursor's Key.
+type MsgpackCursor struct {
 	// Key is the row's key, a json.Number or a string.
 	Key any
-	// Err is the error velox's own decoding gave the cursor's text, which a
-	// connection that takes no legacy cursor returns.
-	Err error
 
 	values []any // the values of v when it is an array, or of vs
 	one    any   // v when it is not an array
@@ -30,8 +28,8 @@ type LegacyCursor struct {
 
 // Values returns the cursor's values for an order of n terms, and false
 // when the cursor holds another number. A nil v is the values of an order
-// of no terms, or of one term whose value is NULL, as veloxe wrote both.
-func (l *LegacyCursor) Values(n int) ([]any, bool) {
+// of no terms, or of one term whose value is NULL, as entgql writes both.
+func (l *MsgpackCursor) Values(n int) ([]any, bool) {
 	switch {
 	case l.array:
 		return l.values, len(l.values) == n
@@ -43,13 +41,15 @@ func (l *LegacyCursor) Values(n int) ([]any, bool) {
 	return nil, false
 }
 
-// DecodeLegacyCursor decodes s, a cursor veloxe wrote, and reports false for
-// any other text. It reads exactly the msgpack veloxe wrote, and nothing
+// DecodeMsgpackCursor decodes s, a msgpack cursor, and reports false for
+// any other text. It reads exactly what such a cursor holds, and nothing
 // else: a map of the keys i, v and vs; integers, strings of valid UTF-8,
-// nil, booleans, floats, 16-byte binaries and veloxe's time extension (type
-// 1) as values; an array of them as v or vs. Every length is checked
+// nil, booleans, floats, 16-byte binaries and times as values; an array of
+// them as v or vs. A time is msgpack's timestamp extension (type -1), as
+// entgql's encoder writes it, or the extension of type 1 that holds
+// MarshalBinary of the time and its zone's name. Every length is checked
 // against what is left of the input before anything is allocated.
-func DecodeLegacyCursor(s string) (*LegacyCursor, bool) {
+func DecodeMsgpackCursor(s string) (*MsgpackCursor, bool) {
 	b, err := base64.RawStdEncoding.DecodeString(s)
 	if s == "" || err != nil || base64.RawStdEncoding.EncodeToString(b) != s {
 		return nil, false
@@ -66,13 +66,13 @@ func DecodeLegacyCursor(s string) (*LegacyCursor, bool) {
 type msgDecoder struct{ b []byte }
 
 // cursor reads the cursor's map.
-func (d *msgDecoder) cursor() (*LegacyCursor, bool) {
+func (d *msgDecoder) cursor() (*MsgpackCursor, bool) {
 	n, ok := d.mapLen()
 	if !ok || n < 1 || n > 3 {
 		return nil, false
 	}
 	var (
-		l                      LegacyCursor
+		l                      MsgpackCursor
 		haveKey, haveV, haveVs bool
 		vArray                 bool  // v is an array
 		v, vs                  []any // v's elements, or v alone; vs
@@ -114,7 +114,7 @@ func (d *msgDecoder) cursor() (*LegacyCursor, bool) {
 	case !haveKey:
 		return nil, false
 	case len(vs) > 0:
-		// veloxe's Values: v is nil beside them.
+		// Several values: v is nil beside them.
 		if vArray || len(v) == 1 && v[0] != nil {
 			return nil, false
 		}
@@ -319,10 +319,11 @@ func floatValue(s string, f float64) any {
 	return json.Number(s)
 }
 
-// ext reads the rest of an extension whose type byte is c: veloxe's time,
-// type 1, whose payload is the msgpack array [MarshalBinary of the time,
-// its zone's name]. It is the time as RFC 3339 with nanoseconds and the
-// zone offset, as JSONValue writes a time.
+// ext reads the rest of an extension whose type byte is c: a time, as
+// RFC 3339 with nanoseconds and the zone offset, as JSONValue writes one.
+// The extension is msgpack's timestamp (type -1), in UTC, or type 1, whose
+// payload is the msgpack array [MarshalBinary of the time, its zone's
+// name].
 func (d *msgDecoder) ext(c byte) (any, bool) {
 	var n uint64
 	ok := true
@@ -339,27 +340,67 @@ func (d *msgDecoder) ext(c byte) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	if d.head() != 1 {
-		return nil, false
-	}
+	typ := d.head()
 	p, ok := d.take(n)
 	if !ok {
 		return nil, false
 	}
-	e := msgDecoder{b: p}
-	if k, ok := e.arrayLen(); !ok || k != 2 {
-		return nil, false
-	}
-	bin, ok := e.bin()
-	if !ok {
-		return nil, false
-	}
-	if _, ok := e.str(); !ok || len(e.b) != 0 {
-		return nil, false
-	}
 	var t time.Time
-	if t.UnmarshalBinary(bin) != nil {
+	switch typ {
+	case 0xff: // -1
+		if t, ok = timestamp(p); !ok {
+			return nil, false
+		}
+	case 1:
+		if t, ok = binaryTime(p); !ok {
+			return nil, false
+		}
+	default:
 		return nil, false
 	}
 	return t.Format(time.RFC3339Nano), true
+}
+
+// timestamp is the time of p, the payload of msgpack's timestamp
+// extension: 4 bytes of seconds; 8 bytes of 30 bits of nanoseconds and 34
+// of seconds; or 12 bytes, 4 of nanoseconds and 8 of signed seconds. It is
+// in UTC, and its nanoseconds are under a second.
+func timestamp(p []byte) (time.Time, bool) {
+	var sec, nsec int64
+	switch len(p) {
+	case 4:
+		sec = int64(binary.BigEndian.Uint32(p))
+	case 8:
+		x := binary.BigEndian.Uint64(p)
+		nsec, sec = int64(x>>34), int64(x&(1<<34-1))
+	case 12:
+		nsec, sec = int64(binary.BigEndian.Uint32(p)), int64(binary.BigEndian.Uint64(p[4:]))
+	default:
+		return time.Time{}, false
+	}
+	if nsec >= 1e9 {
+		return time.Time{}, false
+	}
+	return time.Unix(sec, nsec).UTC(), true
+}
+
+// binaryTime is the time of p, the payload of the extension of type 1: the
+// msgpack array [MarshalBinary of the time, its zone's name].
+func binaryTime(p []byte) (time.Time, bool) {
+	var t time.Time
+	e := msgDecoder{b: p}
+	if k, ok := e.arrayLen(); !ok || k != 2 {
+		return t, false
+	}
+	bin, ok := e.bin()
+	if !ok {
+		return t, false
+	}
+	if _, ok := e.str(); !ok || len(e.b) != 0 {
+		return t, false
+	}
+	if t.UnmarshalBinary(bin) != nil {
+		return t, false
+	}
+	return t, true
 }

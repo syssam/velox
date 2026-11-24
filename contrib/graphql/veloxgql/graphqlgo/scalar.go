@@ -34,9 +34,9 @@ func Scalars() graphql.SchemaOption {
 }
 
 // ScalarsOnly is Scalars of the named scalars alone, of Time, UUID, Bytes
-// and Uint64, for a schema that does not declare them all: under
-// compat=veloxe velox.graphql leaves UUID, Uint64 and Bytes to the
-// application, and a schema served in slices may lack any of them.
+// and Uint64, for a schema that does not declare them all: velox-graphql's
+// apptypes= leaves a scalar to the application, and a schema served in
+// slices may lack any of them.
 // graphql-go's NewSchema refuses a binding of a scalar the schema does not
 // declare, and an option cannot see the schema, so the caller names them,
 // as gqlc lists the scalars that need a binding:

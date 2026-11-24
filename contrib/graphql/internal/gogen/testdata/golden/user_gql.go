@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion29
+const _ = veloxgql.GeneratedCodeIsVersion30
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.

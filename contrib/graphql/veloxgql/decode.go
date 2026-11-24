@@ -24,7 +24,7 @@ import (
 // (*PostWhereInput), from v, a document of it: the object a JSON decoder
 // gives for the input (map[string]any), or the JSON text itself ([]byte or
 // json.RawMessage). It reads a filter that was kept, such as a rule of an
-// access policy, as veloxe's generated UnmarshalGQL of a where input did.
+// access policy, as a where input's UnmarshalGQL would.
 //
 // The document's keys are the input's GraphQL field names, as the SDL
 // spells them ("authorID", "titleNEQ", "not", "hasTagsWith"). A value is

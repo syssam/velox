@@ -92,8 +92,8 @@ func TestRun(t *testing.T) {
 	if resp.Error != "" || len(resp.Files) != 3 || resp.Files[0].Path != "velox.graphql" || !strings.Contains(resp.Files[0].Content, "  imageUrl: String!\n") {
 		t.Errorf("compat=veloxe,sdlfiles=one: %+v", resp)
 	}
-	if !strings.Contains(strings.Join(strings.Fields(resp.Files[2].Content), " "), " VeloxeFilters: true,") {
-		t.Errorf("compat=veloxe gives no VeloxeFilters:\n%s", resp.Files[2].Content)
+	if !strings.Contains(strings.Join(strings.Fields(resp.Files[2].Content), " "), " LenientFilters: true,") {
+		t.Errorf("compat=veloxe gives no LenientFilters:\n%s", resp.Files[2].Content)
 	}
 
 	// names= and filters= win over compat=veloxe's defaults, and stand
@@ -109,7 +109,7 @@ func TestRun(t *testing.T) {
 	} {
 		resp := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Options: c.opts, Model: vm}))
 		goSrc := strings.Join(strings.Fields(resp.Files[len(resp.Files)-1].Content), " ")
-		if resp.Error != "" || !strings.Contains(resp.Files[0].Content, "  "+c.name+": String!\n") || strings.Contains(goSrc, " VeloxeFilters: true,") != c.filters {
+		if resp.Error != "" || !strings.Contains(resp.Files[0].Content, "  "+c.name+": String!\n") || strings.Contains(goSrc, " LenientFilters: true,") != c.filters {
 			t.Errorf("%v: %+v", c.opts, resp)
 		}
 	}

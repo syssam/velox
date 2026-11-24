@@ -4,7 +4,7 @@
 // client may ask for. It imports no engine.
 //
 // What only generated code calls is in package gqlgraph, whose names are
-// stable by GeneratedCodeIsVersion29 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion30 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name. An engine is
 // served through its adapter: package gqlgenx for gqlgen, package graphqlgo
 // for github.com/syssam/graphql-go. Generated code imports this package and
@@ -118,16 +118,15 @@
 //   - gqlgraph.IDField is Field of the key's predicates, on keys gqlgen
 //     decoded, and Has adds has<Edge>;
 //   - gqlgraph.EdgeIDField is IDField of a foreign key, with its IsNil and
-//     NotNil, which with a Read policy on the edge's target also hold the
-//     edge's EXISTS.
+//     NotNil: each the column's alone, as SQL and entgql have them.
 //
 // The limits are LimitsFromContext(ctx)'s, read at the top of the where
 // argument. A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A
 // list of more than MaxFilterWidth entries, of inputs or of In or NotIn values,
 // fails with ErrFilterTooWide, and a where argument over its budget of
 // MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
-// Under filters=veloxe, compat=veloxe's default, no width cap applies and
-// the budget is 10 times MaxFilterNodes. The budget is never over 30000, whatever the limits: each
+// Under filters=lenient no width cap applies, as in entgql, and the budget
+// is 10 times MaxFilterNodes. The budget is never over 30000, whatever the limits: each
 // predicate and each In value binds a parameter, and the statement must
 // stay under every dialect's limit on them (SQLite's 32766).
 // None of it runs a query, so a refused filter fails before any statement is
@@ -236,8 +235,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion29 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion30 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
 // disagree. For generated code. It is replaced by the next number when generated
 // code must change.
-const GeneratedCodeIsVersion29 = true
+const GeneratedCodeIsVersion30 = true

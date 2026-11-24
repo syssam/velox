@@ -10,12 +10,11 @@ import (
 	"github.com/syssam/velox/contrib/graphql/internal/sdl"
 )
 
-// Under compat=veloxe, noder_gql.go makes each type with an ID a Noder, as
+// Under node=on, noder_gql.go makes each type with an ID a Noder, as
 // gqlgen's binding of the interface Node needs, and resolves node and nodes
-// through gqlgraph; each type's gqlgraph.Type has Veloxe, which gives its
-// where input veloxe's semantics. Without it there is neither.
-func TestVeloxeNoder(t *testing.T) {
-	files, err := RenderConfig(modeltest.Model(t), outPath, "gen", sdl.Config{Veloxe: true, Package: outPath})
+// through gqlgraph. Without it there is none.
+func TestNoder(t *testing.T) {
+	files, err := RenderConfig(modeltest.Model(t), outPath, "gen", sdl.Config{Node: "on", Package: outPath})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,32 +43,26 @@ func TestVeloxeNoder(t *testing.T) {
 			t.Errorf("noder_gql.go lacks %q:\n%s", want, noder)
 		}
 	}
-	if !strings.Contains(strings.Join(strings.Fields(got["post_gql.go"]), " "), " Veloxe: true,") {
-		t.Errorf("post_gql.go's postType has no Veloxe:\n%s", got["post_gql.go"])
-	}
 
 	def := render(t, modeltest.Model(t))
 	if _, ok := def["noder_gql.go"]; ok {
 		t.Error("velox's own Go has noder_gql.go")
 	}
 	for name, src := range def {
-		if strings.Contains(src, "Veloxe") || strings.Contains(src, "IsNode") {
-			t.Errorf("velox's own %s holds Veloxe or IsNode", name)
+		if strings.Contains(src, "IsNode") {
+			t.Errorf("velox's own %s holds IsNode", name)
 		}
 	}
 }
 
-// node=on writes noder_gql.go outside compat, and its type literals keep
-// velox's own semantics: no Veloxe. compat=veloxe,node=off writes no
-// noder_gql.go and keeps veloxe's Veloxe (ADR 0152).
+// node=on writes noder_gql.go, and node=off none (ADR 0152).
 func TestNodeOption(t *testing.T) {
 	for _, c := range []struct {
-		cfg           sdl.Config
-		noder, veloxe bool
+		cfg   sdl.Config
+		noder bool
 	}{
-		{sdl.Config{Node: "on", Package: outPath}, true, false},
-		{sdl.Config{Veloxe: true, Node: "off", Package: outPath}, false, true},
-		{sdl.Config{Node: "off"}, false, false},
+		{sdl.Config{Node: "on", Package: outPath}, true},
+		{sdl.Config{Node: "off"}, false},
 	} {
 		files, err := RenderConfig(modeltest.Model(t), outPath, "gen", c.cfg)
 		if err != nil {
@@ -82,9 +75,6 @@ func TestNodeOption(t *testing.T) {
 		noder, ok := got["noder_gql.go"]
 		if ok != c.noder || ok && !strings.Contains(noder, "func WithFixedNodeType(name string) NodeOption") {
 			t.Errorf("%+v: noder_gql.go %v, want %v:\n%s", c.cfg, ok, c.noder, noder)
-		}
-		if v := strings.Contains(strings.Join(strings.Fields(got["post_gql.go"]), " "), " Veloxe: true,"); v != c.veloxe {
-			t.Errorf("%+v: post_gql.go's Veloxe %v, want %v", c.cfg, v, c.veloxe)
 		}
 	}
 }

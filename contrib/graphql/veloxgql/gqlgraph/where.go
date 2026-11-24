@@ -47,8 +47,7 @@ type Filter struct {
 	t       untyped.Table
 	depth   int
 	budget  *budget // the where argument's
-	veloxe  bool    // Type.VeloxeFilters: veloxe's semantics, see Type
-	plainFK bool    // Type.Veloxe: a foreign key's predicates are the column's
+	lenient bool    // Type.LenientFilters: lenient semantics, see Type
 	ps      []velox.Predicate
 	err     error
 }
@@ -67,7 +66,7 @@ func (n name) String() string { return n.base + n.op }
 // The depth, how deeply the input is nested in the where argument, and the
 // argument's node budget travel in ctx, under one unexported key. A context
 // without them starts a where argument: depth 0, a full budget of
-// MaxFilterNodes (10 times that under c's VeloxeFilters, and never over 30000), and
+// MaxFilterNodes (10 times that under c's LenientFilters, and never over 30000), and
 // the limits of veloxgql.LimitsFromContext(ctx). So each
 // call of a where input's Pred with a context of the application's has its own
 // budget, however often the context is used. A nested input's Pred is called
@@ -84,16 +83,16 @@ func (n name) String() string { return n.base + n.op }
 // The filter fails, before any query runs, on a key the column cannot hold;
 // on a nesting deeper than MaxFilterDepth (veloxgql.ErrFilterTooDeep); on an and, an
 // or, a has…With, an In or a NotIn of more than MaxFilterWidth entries
-// (veloxgql.ErrFilterTooWide), unless under VeloxeFilters; and on a where argument
+// (veloxgql.ErrFilterTooWide), unless under LenientFilters; and on a where argument
 // over its budget of inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
 func NewFilter(ctx context.Context, c *Type) *Filter {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
 		lim := veloxgql.LimitsFromContext(ctx)
-		st = &state{budget: newBudget(lim, c.VeloxeFilters)}
+		st = &state{budget: newBudget(lim, c.LenientFilters)}
 	}
-	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, veloxe: c.VeloxeFilters, plainFK: c.Veloxe}
+	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, lenient: c.LenientFilters}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
 		f.refuse(name{}, err)
 		return f
@@ -110,9 +109,9 @@ func (f *Filter) Pred() (velox.Predicate, error) {
 	switch {
 	case f.err != nil:
 		return velox.Predicate{}, f.err
-	case f.veloxe && f.depth > 0 && len(f.ps) == 0:
-		// veloxe refused a nested input that sets no predicate; its and
-		// skips one (list), its not, or and has<Edge>With fail.
+	case f.lenient && f.depth > 0 && len(f.ps) == 0:
+		// entgql refuses a nested input that sets no predicate; an and
+		// skips one (list), and a not, an or and a has<Edge>With fail.
 		return velox.Predicate{}, &gqlcore.Error{Code: gqlcore.CodeBadUserInput, Msg: "empty predicate " + f.typ + "WhereInput", Err: errEmptyPredicate}
 	case len(f.ps) == 1:
 		return f.ps[0], nil
@@ -120,13 +119,13 @@ func (f *Filter) Pred() (velox.Predicate, error) {
 	return untyped.And(f.ps...), nil
 }
 
-// errEmptyPredicate is what Pred's error wraps, under Type.VeloxeFilters, for a
+// errEmptyPredicate is what Pred's error wraps, under Type.LenientFilters, for a
 // nested input that sets no predicate.
 var errEmptyPredicate = errors.New("empty predicate")
 
 // emptyPredicate reports whether err is Pred's own error for an input that
-// sets no predicate, not one nested deeper that a helper wrapped: veloxe's
-// and skipped only an entry that was itself empty.
+// sets no predicate, not one nested deeper that a helper wrapped: an and
+// skips only an entry that is itself empty.
 func emptyPredicate(err error) bool {
 	e, ok := err.(*gqlcore.Error)           //nolint:errorlint // the input's own error, never a wrapped one
 	return ok && e.Err == errEmptyPredicate //nolint:errorlint // likewise
@@ -139,10 +138,10 @@ type budget struct {
 	limits     veloxgql.Limits
 }
 
-// veloxeBudget is how many times MaxFilterNodes a where argument may hold
-// under Type.VeloxeFilters, whose clients send In lists over MaxFilterWidth, as
-// veloxe had no cap: 10000 nodes under the default limits.
-const veloxeBudget = 10
+// lenientBudget is how many times MaxFilterNodes a where argument may hold
+// under Type.LenientFilters, whose clients send In lists over MaxFilterWidth, as
+// entgql has no cap: 10000 nodes under the default limits.
+const lenientBudget = 10
 
 // maxFilterNodes is the most nodes any where argument may hold, whatever
 // its limits. Each predicate binds a parameter and each In value one more,
@@ -153,11 +152,11 @@ const veloxeBudget = 10
 const maxFilterNodes = 30000
 
 // newBudget is the budget of a where argument under lim: MaxFilterNodes,
-// veloxeBudget times that under Type.VeloxeFilters, and never over maxFilterNodes.
-func newBudget(lim veloxgql.Limits, veloxe bool) *budget {
+// lenientBudget times that under Type.LenientFilters, and never over maxFilterNodes.
+func newBudget(lim veloxgql.Limits, lenient bool) *budget {
 	most := lim.MaxFilterNodes
-	if veloxe {
-		most *= veloxeBudget
+	if lenient {
+		most *= lenientBudget
 	}
 	most = min(most, maxFilterNodes)
 	return &budget{left: most, most: most, limits: lim}
@@ -257,9 +256,8 @@ func nestedCond[W comparable](f *Filter, w W, cond Cond[W]) (velox.Predicate, er
 
 // list is the conditions of ws, the inputs nested in f's at field, after
 // checkWidth; ok is false when one fails, and f has its error, which names
-// the entry, as "or[3]". Under Type.VeloxeFilters a null entry is left out, as
-// veloxe left it out, and with skipEmpty (an and's) so is an entry that sets
-// no predicate.
+// the entry, as "or[3]". Under Type.LenientFilters a null entry is left
+// out, and with skipEmpty (an and's) so is an entry that sets no predicate.
 func list[W comparable](f *Filter, field string, ws []W, cond Cond[W], skipEmpty bool) (ps []velox.Predicate, ok bool) {
 	if !f.width(name{base: field}, len(ws)) {
 		return nil, false
@@ -267,11 +265,11 @@ func list[W comparable](f *Filter, field string, ws []W, cond Cond[W], skipEmpty
 	var none W
 	ps = make([]velox.Predicate, 0, len(ws))
 	for i, w := range ws {
-		if f.veloxe && w == none {
+		if f.lenient && w == none {
 			continue
 		}
 		p, err := nestedCond(f, w, cond)
-		if skipEmpty && f.veloxe && emptyPredicate(err) {
+		if skipEmpty && f.lenient && emptyPredicate(err) {
 			continue
 		}
 		if err != nil {
@@ -314,7 +312,7 @@ func And[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 
 // Or adds ws, the input's or: a node matches when it matches one of ws. An
 // empty ws matches no node, as an empty In does; a nil ws adds nothing. More
-// than MaxFilterWidth fails with ErrFilterTooWide. Under Type.VeloxeFilters an
+// than MaxFilterWidth fails with ErrFilterTooWide. Under Type.LenientFilters an
 // empty ws, or one of only nulls, adds nothing.
 func Or[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	if f.err != nil || ws == nil {
@@ -322,7 +320,7 @@ func Or[W comparable](f *Filter, field string, ws []W, cond Cond[W]) {
 	}
 	ps, ok := list(f, field, ws, cond, false)
 	switch {
-	case !ok, f.veloxe && len(ps) == 0:
+	case !ok, f.lenient && len(ps) == 0:
 	case len(ps) == 1:
 		f.add(name{base: field}, 0, ps[0])
 	default:
@@ -415,7 +413,7 @@ func one[V any](f *Filter, field name, col int, op untyped.PredOp, v *V) {
 // many adds op, In or NotIn, on column col with the values of vs, unless vs
 // is nil.
 func many[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V) {
-	if f.err != nil || vs == nil || f.veloxe && len(vs) == 0 || !f.width(field, len(vs)) {
+	if f.err != nil || vs == nil || f.lenient && len(vs) == 0 || !f.width(field, len(vs)) {
 		return
 	}
 	xs := make([]any, len(vs))
@@ -428,7 +426,7 @@ func many[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V) {
 // null adds op, IsNull or NotNull, on column col, for a true *b, and its
 // negation for a false one, unless b is nil.
 func (f *Filter) null(field name, col int, op untyped.PredOp, b *bool) {
-	if f.err == nil && b != nil && (*b || !f.veloxe) {
+	if f.err == nil && b != nil && (*b || !f.lenient) {
 		f.is(field, *b, f.t.Pred(col, op, nil))
 	}
 }
@@ -466,8 +464,8 @@ func (f *Filter) convert(field name, col int, v any) (any, error) {
 
 // width is checkWidth of field's list of n, with its error recorded in f.
 func (f *Filter) width(field name, n int) bool {
-	if f.veloxe {
-		return true // veloxe had no cap
+	if f.lenient {
+		return true // as entgql, no cap
 	}
 	if err := checkWidth(n, f.budget.limits.MaxFilterWidth); err != nil {
 		f.refuse(field, err)
@@ -508,7 +506,7 @@ func ArrayField[V any](f *Filter, field string, col int, o ArrayOps[V]) {
 	}
 	elements(f, name{field, "HasSome"}, col, o.HasSome, untyped.Or)
 	elements(f, name{field, "HasEvery"}, col, o.HasEvery, untyped.And)
-	if f.err == nil && o.IsEmpty != nil && (*o.IsEmpty || !f.veloxe) {
+	if f.err == nil && o.IsEmpty != nil && (*o.IsEmpty || !f.lenient) {
 		f.is(name{field, "IsEmpty"}, *o.IsEmpty, f.t.Pred(col, untyped.PredJSONEmpty, nil))
 	}
 	f.null(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil)
@@ -519,7 +517,7 @@ func ArrayField[V any](f *Filter, field string, col int, o ArrayOps[V]) {
 // unless vs is nil. An empty list joins to nothing, which is false for Or and
 // true for And.
 func elements[V any](f *Filter, field name, col int, vs []V, join func(...velox.Predicate) velox.Predicate) {
-	if f.err != nil || vs == nil || f.veloxe && len(vs) == 0 || !f.width(field, len(vs)) {
+	if f.err != nil || vs == nil || f.lenient && len(vs) == 0 || !f.width(field, len(vs)) {
 		return
 	}
 	ps := make([]velox.Predicate, len(vs))
@@ -534,95 +532,64 @@ func elements[V any](f *Filter, field name, col int, vs []V, join func(...velox.
 // client's IDs. The predicates on IDs are EQ, NEQ, In, NotIn, GT, GTE, LT
 // and LTE; the others of o are ignored.
 func IDField[V any](f *Filter, field string, col int, o Ops[V]) {
-	ids(f, field, col, o, fkScope{})
+	ids(f, field, col, o)
 }
 
-// EdgeIDField is IDField of a foreign key, on column col, which holds the keys
-// of target's type, through the relation edge, and its IsNil and NotNil. Its
-// predicates are scoped to what the relation lets the reader see, the
-// target's WithFilter filters, interceptors and Read policy: a row they
-// hide reads as null, to the edge and so to every predicate of its key, or
-// a filter would say which hidden row another row links to. With a row
-// condition on target, a predicate on IDs is the key's predicate and the
-// edge's Has, IsNil is the edge's Has negated and NotNil the edge's Has;
-// with none, each is the column's alone, and there is no EXISTS. Which it
-// is the statement decides, on the DB that runs it (Table.ScopedKey).
-//
-// A WithRewrite in the application's own query is not known here, nor is it
-// to the edge's Has.
-//
-// Under Type.Veloxe each predicate is the column's alone, as veloxe's were:
-// compat shows the foreign key in the type, so the scoping would hide
-// nothing, and would only change results and add an EXISTS (ADR 0108).
-func EdgeIDField[V any](f *Filter, field string, col, edge int, target *Type, o Ops[V]) {
-	edgeIDs(f, field, col, edge, target.table(), o)
+// EdgeIDField is IDField of a foreign key, on column col, which holds the
+// keys of target's type through the relation edge, and its IsNil and
+// NotNil. Each predicate is the column's alone, as SQL and entgql have
+// them: the type shows the foreign key, so scoping its predicates to what
+// the reader may see of the target would hide nothing, and would add an
+// EXISTS (ADR 0155). has<Edge> and has<Edge>With test the edge through the
+// target's policies.
+func EdgeIDField[V any](f *Filter, field string, col, _ int, _ *Type, o Ops[V]) {
+	edgeIDs(f, field, col, o)
 }
 
-// edgeIDs is EdgeIDField with the target's Table, which Predicate's
-// WhereEdgeID calls too: the IDs predicates and IsNil and NotNil of a
-// foreign key, scoped to the relation edge, unless under Type.Veloxe.
-func edgeIDs[V any](f *Filter, field string, col, edge int, target untyped.Table, o Ops[V]) {
-	fk := fkScope{edge: edge, target: target, on: !f.plainFK}
-	ids(f, field, col, o, fk)
-	f.fkNull(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil, fk)
-	f.fkNull(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil, fk)
+// edgeIDs is EdgeIDField, which Predicate's WhereEdgeID calls too: the IDs
+// predicates and IsNil and NotNil of a foreign key.
+func edgeIDs[V any](f *Filter, field string, col int, o Ops[V]) {
+	ids(f, field, col, o)
+	f.keyNull(name{field, "IsNil"}, col, untyped.PredIsNull, o.IsNil)
+	f.keyNull(name{field, "NotNil"}, col, untyped.PredNotNull, o.NotNil)
 }
 
-// fkScope is the relation of a foreign key's predicates, when on.
-type fkScope struct {
-	edge   int
-	target untyped.Table
-	on     bool
-}
-
-// ids adds the predicates on keys that o sets on column col, scoped by fk.
-func ids[V any](f *Filter, field string, col int, o Ops[V], fk fkScope) {
-	id(f, name{field, ""}, col, untyped.PredEQ, o.EQ, fk)
-	id(f, name{field, "NEQ"}, col, untyped.PredNEQ, o.NEQ, fk)
-	idList(f, name{field, "In"}, col, untyped.PredIn, o.In, fk)
-	idList(f, name{field, "NotIn"}, col, untyped.PredNotIn, o.NotIn, fk)
-	id(f, name{field, "GT"}, col, untyped.PredGT, o.GT, fk)
-	id(f, name{field, "GTE"}, col, untyped.PredGTE, o.GTE, fk)
-	id(f, name{field, "LT"}, col, untyped.PredLT, o.LT, fk)
-	id(f, name{field, "LTE"}, col, untyped.PredLTE, o.LTE, fk)
+// ids adds the predicates on keys that o sets on column col.
+func ids[V any](f *Filter, field string, col int, o Ops[V]) {
+	id(f, name{field, ""}, col, untyped.PredEQ, o.EQ)
+	id(f, name{field, "NEQ"}, col, untyped.PredNEQ, o.NEQ)
+	idList(f, name{field, "In"}, col, untyped.PredIn, o.In)
+	idList(f, name{field, "NotIn"}, col, untyped.PredNotIn, o.NotIn)
+	id(f, name{field, "GT"}, col, untyped.PredGT, o.GT)
+	id(f, name{field, "GTE"}, col, untyped.PredGTE, o.GTE)
+	id(f, name{field, "LT"}, col, untyped.PredLT, o.LT)
+	id(f, name{field, "LTE"}, col, untyped.PredLTE, o.LTE)
 }
 
 // id adds op on column col with the key *v, unless v is nil.
-func id[V any](f *Filter, field name, col int, op untyped.PredOp, v *V, fk fkScope) {
+func id[V any](f *Filter, field name, col int, op untyped.PredOp, v *V) {
 	if f.err == nil && v != nil {
-		f.add(field, 0, f.scoped(f.pred(field, col, op, *v), fk))
+		f.add(field, 0, f.pred(field, col, op, *v))
 	}
 }
 
 // idList adds op, In or NotIn, on column col with the keys vs, unless vs is
 // nil. More than MaxFilterWidth keys fail the filter.
-func idList[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V, fk fkScope) {
-	if f.err != nil || vs == nil || f.veloxe && len(vs) == 0 || !f.width(field, len(vs)) {
+func idList[V any](f *Filter, field name, col int, op untyped.PredOp, vs []V) {
+	if f.err != nil || vs == nil || f.lenient && len(vs) == 0 || !f.width(field, len(vs)) {
 		return
 	}
 	ks := make([]any, len(vs))
 	for i, v := range vs {
 		ks[i] = v
 	}
-	f.add(field, len(ks), f.scoped(f.pred(field, col, op, ks), fk))
+	f.add(field, len(ks), f.pred(field, col, op, ks))
 }
 
-// fkNull is null of a foreign key, scoped by fk: with a row condition on
-// fk's target, IsNil is the edge's Has negated, and NotNil the edge's Has,
-// as a hidden target counts as none.
-func (f *Filter) fkNull(field name, col int, op untyped.PredOp, b *bool, fk fkScope) {
-	if f.err != nil || b == nil || !*b && f.veloxe {
+// keyNull is the IsNil or NotNil, op, of a foreign key on column col.
+func (f *Filter) keyNull(field name, col int, op untyped.PredOp, b *bool) {
+	if f.err != nil || b == nil || !*b && f.lenient {
 		return
 	}
-	f.is(field, *b, f.scoped(f.t.Pred(col, op, nil), fk))
-}
-
-// scoped is p, a predicate on the key of fk's relation, read as the relation
-// lets the statement see its target (Table.ScopedKey): with a row condition
-// on the target, on the DB the statement runs on, the edge's Has decides.
-func (f *Filter) scoped(p velox.Predicate, fk fkScope) velox.Predicate {
-	if !fk.on {
-		return p
-	}
-	return f.t.ScopedKey(p, fk.edge, fk.target)
+	f.is(field, *b, f.t.Pred(col, op, nil))
 }

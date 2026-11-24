@@ -78,7 +78,7 @@ func TestPaginateNullableVia(t *testing.T) {
 		want []int64
 	}{
 		{veloxgql.OrderDirectionAsc, []int64{4, 8, 11, 2, 6, 9, 1, 3, 5, 7, 10, 12}},
-		{veloxgql.OrderDirectionDesc, []int64{1, 3, 5, 7, 10, 12, 2, 6, 9, 4, 8, 11}},
+		{veloxgql.OrderDirectionDesc, []int64{12, 10, 7, 5, 3, 1, 9, 6, 2, 11, 8, 4}}, // ties by the key DESC
 	} {
 		t.Run(string(c.rank), func(t *testing.T) {
 			order := []gqlgraph.OrderTerm[toy]{gqlgraph.JoinedTermOf[toy, pet]("PET_RANK", c.rank, int(toys.Pet.I), int(pets.Rank.I))}

@@ -149,8 +149,9 @@ func TestNamedTypeTerms(t *testing.T) {
 		return out, p
 	}
 	all, p := page(gqlgraph.Args{First: new(6)})
-	// NULL sorts as the largest value, so first descending.
-	want := []gadgetID{2, 5, 1, 4, 6, 3}
+	// NULL sorts as the largest value, so first descending; the key breaks
+	// ties in the one term's direction, as entgql's does.
+	want := []gadgetID{5, 2, 4, 1, 6, 3}
 	if !slices.Equal(all, want) {
 		t.Fatalf("all: %v, want %v", all, want)
 	}

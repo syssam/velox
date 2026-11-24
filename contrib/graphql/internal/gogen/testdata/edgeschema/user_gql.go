@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion29
+const _ = veloxgql.GeneratedCodeIsVersion30
 
 // Groups is the edge groups: a connection to the Group nodes it leads to. Its
 // queries batch with the same edge of every row on u's page.

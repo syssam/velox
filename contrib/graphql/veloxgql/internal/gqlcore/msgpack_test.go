@@ -8,19 +8,21 @@ import (
 	"unicode/utf8"
 )
 
-// legacyVectors are cursors veloxe wrote, with their key and their values
-// for an order of as many terms as they hold. The first eight are from the
-// parity probe's responses (veloxe's examples/fullgql, compact integers);
-// the others from veloxe's Cursor encoded by msgpack v5.4.1 with veloxe's
-// cursor-time extension, as its MarshalGQL does.
+// msgpackVectors are msgpack cursors, with their key and their values for
+// an order of as many terms as they hold. The first eight are from a
+// running server's responses (compact integers). The next fourteen are of
+// the Cursor below, encoded by msgpack v5.4.1 with a time extension of type
+// 1, as velox's predecessor wrote them. The last six are entgql's
+// Cursor[int] (contrib v0.7.0 pagination.go: ID tagged i, Value tagged
+// v,omitempty), encoded by msgpack v5.4.1, whose times are msgpack's
+// timestamp extension (type -1).
 //
-// To regenerate the others: copy veloxe's gqlrelay Cursor (fields ID, Value
-// and Values, tagged i, v and vs,omitempty) and cursorTime (MarshalMsgpack
-// of []any{t.MarshalBinary(), zone name}, registered with
-// msgpack.RegisterExt(1, (*cursorTime)(nil))) from
-// contrib/graphql/gqlrelay/types.go at veloxe cfd8da5. Encode each with
-// github.com/vmihailenco/msgpack/v5 v5.4.1 (msgpack.GetEncoder, Encode), and
-// write base64.RawStdEncoding of the bytes. The Go values, in order:
+// To regenerate the fourteen: declare a Cursor (fields ID, Value and
+// Values, tagged i, v and vs,omitempty) and a cursorTime (MarshalMsgpack of
+// []any{t.MarshalBinary(), zone name}, registered with
+// msgpack.RegisterExt(1, (*cursorTime)(nil))). Encode each with
+// github.com/vmihailenco/msgpack/v5 v5.4.1 (msgpack.Marshal), and write
+// base64.RawStdEncoding of the bytes. The Go values, in order:
 //
 //	Cursor{ID: int64(1)}
 //	Cursor{ID: int64(2), Value: "User-4"}
@@ -36,7 +38,16 @@ import (
 //	Cursor{ID: uuid.MustParse("0b9e4f2a-1c3d-4e5f-8a9b-0c1d2e3f4a5b"), Value: "n"}
 //	Cursor{ID: int64(14), Value: int64(0)}
 //	Cursor{ID: int64(15), Value: float32(1.5)}
-var legacyVectors = []struct {
+//
+// entgql's, in order, with ID an int:
+//
+//	{ID: 1}
+//	{ID: 2, Value: "User-4"}
+//	{ID: 3, Value: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)}
+//	{ID: 4, Value: time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)}
+//	{ID: 5, Value: time.Date(1960, 1, 2, 3, 4, 5, 7, time.UTC)}
+//	{ID: 6, Value: time.Date(2026, 1, 1, 0, 0, 0, 0, time.FixedZone("EST", -5*3600))}
+var msgpackVectors = []struct {
 	s      string
 	key    any
 	values []any // nil: v was nil, the values of an order of no terms
@@ -63,16 +74,22 @@ var legacyVectors = []struct {
 	{"gqFpxBALnk8qHD1OX4qbDB0uP0pboXahbg", "0b9e4f2a-1c3d-4e5f-8a9b-0c1d2e3f4a5b", []any{"n"}},
 	{"gqFp0wAAAAAAAAAOoXbTAAAAAAAAAAA", json.Number("14"), []any{json.Number("0")}},
 	{"gqFp0wAAAAAAAAAPoXbKP8AAAA", json.Number("15"), []any{json.Number("1.5")}},
+	{"gaFpAQ", json.Number("1"), nil},
+	{"gqFpAqF2plVzZXItNA", json.Number("2"), []any{"User-4"}},
+	{"gqFpA6F21v9pVzWl", json.Number("3"), []any{"2026-01-02T03:04:05Z"}},
+	{"gqFpBKF21/8AAAAYaVc1pQ", json.Number("4"), []any{"2026-01-02T03:04:05.000000006Z"}},
+	{"gqFpBaF2xwz/AAAAB//////tMYUl", json.Number("5"), []any{"1960-01-02T03:04:05.000000007Z"}},
+	{"gqFpBqF21v9pVf9Q", json.Number("6"), []any{"2026-01-01T05:00:00Z"}},
 }
 
-// TestDecodeLegacyCursor: each vector decodes to its key, and to its values
+// TestDecodeMsgpackCursor: each vector decodes to its key, and to its values
 // for an order of as many terms; a cursor of a nil value is one of no
 // terms, or of one whose value is NULL.
-func TestDecodeLegacyCursor(t *testing.T) {
-	for _, v := range legacyVectors {
-		l, ok := DecodeLegacyCursor(v.s)
+func TestDecodeMsgpackCursor(t *testing.T) {
+	for _, v := range msgpackVectors {
+		l, ok := DecodeMsgpackCursor(v.s)
 		if !ok {
-			t.Errorf("%s: not a legacy cursor", v.s)
+			t.Errorf("%s: not a msgpack cursor", v.s)
 			continue
 		}
 		if l.Key != v.key {
@@ -96,9 +113,9 @@ func TestDecodeLegacyCursor(t *testing.T) {
 	}
 }
 
-// TestDecodeLegacyCursorRefuses: a string that is not a cursor veloxe
-// wrote, exactly in the subset it writes, is not one.
-func TestDecodeLegacyCursorRefuses(t *testing.T) {
+// TestDecodeMsgpackCursorRefuses: a string that is not a msgpack cursor,
+// exactly in the subset such a cursor holds, is not one.
+func TestDecodeMsgpackCursorRefuses(t *testing.T) {
 	enc := func(b ...byte) string { return base64.RawStdEncoding.EncodeToString(b) }
 	for name, s := range map[string]string{
 		"empty":                 "",
@@ -143,17 +160,21 @@ func TestDecodeLegacyCursorRefuses(t *testing.T) {
 		"truncated ext length":  enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xc8, 0x00),
 		"short ext payload":     enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xc7, 0x05, 0x01, 0x92),
 		"time bin truncated":    enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xd5, 0x01, 0x92, 0xc4),
+		"timestamp of 2 bytes":  enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xd5, 0xff, 0x00, 0x01),
+		"timestamp of 16 bytes": enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xd8, 0xff, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+		"timestamp nsec 1e9":    enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xc7, 0x0c, 0xff, 0x3b, 0x9a, 0xca, 0x00, 0, 0, 0, 0, 0, 0, 0, 1),
+		"timestamp truncated":   enc(0x82, 0xa1, 'i', 0x01, 0xa1, 'v', 0xd7, 0xff, 0x00, 0x00),
 	} {
-		if l, ok := DecodeLegacyCursor(s); ok {
+		if l, ok := DecodeMsgpackCursor(s); ok {
 			t.Errorf("%s: %q decodes to %+v, want refused", name, s, l)
 		}
 	}
 }
 
-// TestDecodeLegacyCursorEncodings: every msgpack encoding of the types
-// veloxe's cursors hold decodes, the longer lengths of strings, arrays and
+// TestDecodeMsgpackCursorEncodings: every msgpack encoding of the types
+// msgpack cursors hold decodes, the longer lengths of strings, arrays and
 // maps included.
-func TestDecodeLegacyCursorEncodings(t *testing.T) {
+func TestDecodeMsgpackCursorEncodings(t *testing.T) {
 	enc := func(b ...byte) string { return base64.RawStdEncoding.EncodeToString(b) }
 	val := func(v ...byte) string {
 		return enc(append([]byte{0x82, 0xa1, 'i', 0x01, 0xa1, 'v'}, v...)...)
@@ -186,9 +207,9 @@ func TestDecodeLegacyCursorEncodings(t *testing.T) {
 		{enc(0x81, 0xa1, 'i', 0x01), nil},
 		{enc(0x82, 0xd9, 0x01, 'i', 0x01, 0xa1, 'v', 0x0b), json.Number("11")},
 	} {
-		l, ok := DecodeLegacyCursor(c.s)
+		l, ok := DecodeMsgpackCursor(c.s)
 		if !ok {
-			t.Errorf("%s: not a legacy cursor", c.s)
+			t.Errorf("%s: not a msgpack cursor", c.s)
 			continue
 		}
 		if got, ok := l.Values(1); !ok || got[0] != c.want {
@@ -201,25 +222,25 @@ func TestDecodeLegacyCursorEncodings(t *testing.T) {
 	payload := []byte{0x92, 0xc4, 0x0f, 0x01, 0x00, 0x00, 0x00, 0x0e, 0xe0, 0xe9, 0x2c, 0xa5, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa0}
 	for _, ext := range [][]byte{{0xc7, 0x13, 0x01}, {0xc8, 0x00, 0x13, 0x01}, {0xc9, 0x00, 0x00, 0x00, 0x13, 0x01}} {
 		x := append(append(append([]byte{}, head...), ext...), payload...)
-		if l, ok := DecodeLegacyCursor(enc(x...)); !ok {
-			t.Errorf("% x: not a legacy cursor", ext)
+		if l, ok := DecodeMsgpackCursor(enc(x...)); !ok {
+			t.Errorf("% x: not a msgpack cursor", ext)
 		} else if got, _ := l.Values(1); got[0] != "2026-01-02T03:04:05Z" {
 			t.Errorf("% x: %#v", ext, got)
 		}
 	}
 }
 
-// FuzzLegacyCursor: no input panics DecodeLegacyCursor; a cursor it decodes
+// FuzzMsgpackCursor: no input panics DecodeMsgpackCursor; a cursor it decodes
 // has a key that is a number or a string, values that are JSON values, and
 // encodes back to the text it was read from.
-func FuzzLegacyCursor(f *testing.F) {
-	for _, v := range legacyVectors {
+func FuzzMsgpackCursor(f *testing.F) {
+	for _, v := range msgpackVectors {
 		b, _ := base64.RawStdEncoding.DecodeString(v.s)
 		f.Add(b)
 	}
 	f.Fuzz(func(t *testing.T, b []byte) {
 		s := base64.RawStdEncoding.EncodeToString(b)
-		l, ok := DecodeLegacyCursor(s)
+		l, ok := DecodeMsgpackCursor(s)
 		if !ok {
 			return
 		}

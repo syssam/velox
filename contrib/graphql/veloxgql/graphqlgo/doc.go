@@ -62,7 +62,7 @@
 //
 // Scalars binds Time, UUID, Bytes and Uint64 to time.Time, uuid.UUID,
 // []byte and uint64, the Go types velox entities hold. A schema that does not
-// declare all four, as under compat=veloxe or served in slices, binds the
+// declare all four, as under apptypes= or served in slices, binds the
 // ones it declares with ScalarsOnly: graphql-go's NewSchema refuses a binding
 // of a scalar the schema does not declare.
 //

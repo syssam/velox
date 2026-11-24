@@ -820,6 +820,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- A gqlgraph connection pages as entgql's does on every type: a cursor
+  in entgql's msgpack format is read, its `-1` time extension included;
+  under one order term the key breaks ties in that term's direction; and
+  a page at a cursor has `hasPreviousPage` (after) or `hasNextPage`
+  (before). A foreign key's where predicates are its column's alone,
+  with no EXISTS on the target. `gqlgraph.Type.Veloxe` is gone, and
+  `Type.VeloxeFilters` is `Type.LenientFilters`.
+  `veloxgql.GeneratedCodeIsVersion29` is now `GeneratedCodeIsVersion30`:
+  regenerate (ADR 0155).
 - velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
   the types that hold the IDs with one statement, then read only those
   types under their policies: `node(id:)` is 2 statements, not one per

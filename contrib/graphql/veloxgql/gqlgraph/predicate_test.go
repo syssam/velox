@@ -50,7 +50,7 @@ func (w *noteWhere) Predicate(ctx context.Context) (velox.Predicate, error) {
 
 var vNoteType = func() *gqlgraph.Type {
 	c := gqlgraph.TableType[note]("Note")
-	c.Veloxe, c.VeloxeFilters = true, true
+	c.LenientFilters = true
 	c.WhereFields = []gqlgraph.WhereField{
 		{Name: "tags", Kind: gqlgraph.WhereArray, Ops: gqlgraph.OpHasSome | gqlgraph.OpHasEvery | gqlgraph.OpIsEmpty | gqlgraph.OpsNull, Col: 1},
 	}
@@ -62,8 +62,8 @@ func (w *vNoteWhere) Predicate(ctx context.Context) (velox.Predicate, error) {
 }
 
 // vIn is vWhere without its def, which a generated input has not: the
-// struct Predicate reads, of veloxe's type for M veloxeM and of velox's for
-// M veloxM.
+// struct Predicate reads, of the lenient type for M lenientM and of the
+// strict one for M strictM.
 type vIn[M any] struct {
 	Not *vIn[M]
 	And []*vIn[M]
@@ -75,8 +75,8 @@ type vIn[M any] struct {
 }
 
 type (
-	veloxeM struct{}
-	veloxM  struct{}
+	lenientM struct{}
+	strictM  struct{}
 )
 
 var vFields = []gqlgraph.WhereField{
@@ -86,12 +86,11 @@ var vFields = []gqlgraph.WhereField{
 	{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpEQ | gqlgraph.OpIn | gqlgraph.OpNotIn, Col: 0},
 }
 
-// vTypes are vIn's types: under veloxe's semantics, and velox's.
+// vTypes are vIn's types: lenient, and strict.
 var vTypes = func() (m [2]*gqlgraph.Type) {
 	for i := range m {
 		c := gqlgraph.TableType[person]("Person")
-		c.Veloxe = i == 0
-		c.VeloxeFilters = c.Veloxe
+		c.LenientFilters = i == 0
 		c.WhereFields = vFields
 		m[i] = c
 	}
@@ -100,7 +99,7 @@ var vTypes = func() (m [2]*gqlgraph.Type) {
 
 func (w *vIn[M]) Predicate(ctx context.Context) (velox.Predicate, error) {
 	var m M
-	if _, ok := any(m).(veloxM); ok {
+	if _, ok := any(m).(strictM); ok {
 		return gqlgraph.Predicate(ctx, vTypes[1], w)
 	}
 	return gqlgraph.Predicate(ctx, vTypes[0], w)
@@ -124,13 +123,13 @@ func vInOf[M any](w *vWhere) *vIn[M] {
 	return &vIn[M]{Not: vInOf[M](w.Not), And: list(w.And), Or: list(w.Or), ID: w.ID, IDIn: w.IDIn, IDNotIn: w.IDNotIn}
 }
 
-// Predicate of vWhere is vIn's: its fields hold the same, under veloxe's
+// Predicate of vWhere is vIn's: its fields hold the same, under lenient
 // semantics unless w.def.
 func (w *vWhere) Predicate(ctx context.Context) (velox.Predicate, error) {
 	if w != nil && w.def {
-		return vInOf[veloxM](w).Predicate(ctx)
+		return vInOf[strictM](w).Predicate(ctx)
 	}
-	return vInOf[veloxeM](w).Predicate(ctx)
+	return vInOf[lenientM](w).Predicate(ctx)
 }
 
 // twin is hand(ctx), after a check that refl(ctx) gives the same: the same

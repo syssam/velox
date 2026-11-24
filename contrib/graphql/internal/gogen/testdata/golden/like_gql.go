@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion29
+const _ = veloxgql.GeneratedCodeIsVersion30
 
 // User is the edge user: the Account it leads to, or nil. It is read in one
 // query with the same edge of every row on l's page.

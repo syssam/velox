@@ -81,7 +81,8 @@ func TestPaginateNullable(t *testing.T) {
 		want      []int64
 	}{
 		{veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionAsc, []int64{4, 8, 11, 2, 6, 9, 1, 3, 5, 7, 10, 12}},
-		{veloxgql.OrderDirectionDesc, veloxgql.OrderDirectionAsc, []int64{1, 3, 5, 7, 10, 12, 2, 6, 9, 4, 8, 11}},
+		// One term DESC: the key breaks its ties DESC, as entgql's does.
+		{veloxgql.OrderDirectionDesc, veloxgql.OrderDirectionAsc, []int64{12, 10, 7, 5, 3, 1, 9, 6, 2, 11, 8, 4}},
 	} {
 		t.Run(string(c.rank)+" "+string(c.key), func(t *testing.T) {
 			page := func(args gqlgraph.Args) *gqlgraph.PageOf[pet] {

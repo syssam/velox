@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion29
+const _ = veloxgql.GeneratedCodeIsVersion30
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {

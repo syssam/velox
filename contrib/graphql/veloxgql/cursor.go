@@ -27,8 +27,8 @@ type Cursor struct {
 	Terms []CursorTerm
 	// Key is the row's primary key. After DecodeCursor it is a JSON value, as
 	// each term's Value is; a connection converts them to their Go types.
-	// After UnmarshalGQL of a cursor veloxe wrote, it is that cursor, a value
-	// only a connection reads, and Type and Terms are zero.
+	// After UnmarshalGQL of a msgpack cursor, entgql's format, it is that
+	// cursor, a value only a connection reads, and Type and Terms are zero.
 	Key any
 }
 
@@ -276,11 +276,10 @@ func (c Cursor) MarshalGQLContext(_ context.Context, w io.Writer) error {
 
 // UnmarshalGQLContext decodes a cursor from v, a string; see DecodeCursor.
 //
-// It also takes a cursor veloxe wrote, which DecodeCursor refuses, with no
-// error: a Cursor whose Key holds the legacy cursor and DecodeCursor's
-// error. Only the connection knows whether its type takes such a cursor
-// (compat=veloxe): one whose type does reads it as a cursor of its own
-// order, and any other fails with that error.
+// It also takes a msgpack cursor, entgql's format, which DecodeCursor
+// refuses: a Cursor whose Key holds the msgpack cursor. A connection reads
+// it as a cursor of its own order, as entgql does. Text that is neither
+// fails with DecodeCursor's error.
 func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error {
 	s, ok := v.(string)
 	if !ok {
@@ -288,12 +287,11 @@ func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error {
 	}
 	d, err := DecodeCursor(s)
 	if err != nil {
-		l, ok := gqlcore.DecodeLegacyCursor(s)
+		m, ok := gqlcore.DecodeMsgpackCursor(s)
 		if !ok {
 			return err
 		}
-		l.Err = err
-		*c = Cursor{Key: l}
+		*c = Cursor{Key: m}
 		return nil
 	}
 	*c = d

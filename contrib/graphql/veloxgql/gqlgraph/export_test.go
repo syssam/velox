@@ -154,18 +154,6 @@ func PageWith[E any](ctx context.Context, q velox.Query[E], typ string, args Arg
 	return c.Page(ctx)
 }
 
-// VeloxePageWith is PageWith of a Type with Veloxe set, as compat=veloxe
-// generates it.
-func VeloxePageWith[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*PageOf[E], error) {
-	conn, o := TypeOf(typ, order, key)
-	conn.Veloxe = true
-	c, err := newConnection(ctx, untyped.FromQuery(q), conn, args, o)
-	if err != nil {
-		return nil, err
-	}
-	return ConnectionOf[E]{c}.Page(ctx)
-}
-
 // CursorOrder and CheckCursor export the cursor's unexported checks to the
 // tests.
 type CursorOrder = cursorOrder

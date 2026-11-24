@@ -270,7 +270,8 @@ func TestBadIDs(t *testing.T) {
 
 // TestPaging pages the root connection to User forward, then backward, in
 // its default order, the key's. Each page reads one row more than it returns,
-// to set hasNextPage or hasPreviousPage.
+// to set hasNextPage or hasPreviousPage; a page at a cursor has a page on
+// the cursor's side, as entgql says.
 func TestPaging(t *testing.T) {
 	s := newServer(t)
 	const q = `query($first: Int, $after: Cursor, $last: Int, $before: Cursor) {
@@ -293,7 +294,7 @@ func TestPaging(t *testing.T) {
 		vars:  map[string]any{"first": 2, "after": userCursor(2)},
 		want: fmt.Sprintf(`{"data": {"users": {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[2]q, "name": "Chen"}}],
-			"pageInfo": {"hasNextPage": false, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[1]q}
+			"pageInfo": {"hasNextPage": false, "hasPreviousPage": true, "startCursor": %[1]q, "endCursor": %[1]q}
 		}}}`, userCursor(3), user3),
 		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" > ?) ORDER BY "id" LIMIT 3 [2]`},
 	})
@@ -312,7 +313,7 @@ func TestPaging(t *testing.T) {
 		vars:  map[string]any{"last": 2, "before": userCursor(3)},
 		want: fmt.Sprintf(`{"data": {"users": {
 			"edges": [{"cursor": %[1]q, "node": {"id": %[3]q, "name": "Ada"}}, {"cursor": %[2]q, "node": {"id": %[4]q, "name": "Brian"}}],
-			"pageInfo": {"hasNextPage": false, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[2]q}
+			"pageInfo": {"hasNextPage": true, "hasPreviousPage": false, "startCursor": %[1]q, "endCursor": %[2]q}
 		}}}`, userCursor(1), userCursor(2), user1, user2),
 		stmts: []string{`SELECT "id", "name" FROM "users" WHERE ("id" < ?) ORDER BY "id" DESC LIMIT 3 [3]`},
 	})
@@ -342,7 +343,7 @@ func TestOrderAndWhere(t *testing.T) {
 		) { edges { node { name } } } }`,
 		want: `{"data": {"users": {"edges": [{"node": {"name": "Brian"}}, {"node": {"name": "Ada"}}]}}}`,
 		stmts: []string{
-			`SELECT "id", "name" FROM "users" WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT 101 [G% 1 admin]`,
+			`SELECT "id", "name" FROM "users" WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" DESC LIMIT 101 [G% 1 admin]`,
 		},
 	})
 }
@@ -359,8 +360,9 @@ func countCursor(key int64, dir veloxgql.OrderDirection) string {
 
 // TestOrderByCount orders users by their number of posts, POSTS_COUNT: a
 // subquery under the posts' org scope, so acme counts Ada's two posts and
-// globex only her one there. A tie is broken by the key; the next page
-// compares each row's count with the cursor row's, computed from its key.
+// globex only her one there. A tie is broken by the key, in the term's
+// direction as entgql breaks it; the next page compares each row's count
+// with the cursor row's, computed from its key.
 func TestOrderByCount(t *testing.T) {
 	s := newServer(t)
 	const q = `query($after: Cursor, $dir: OrderDirection!) {
@@ -374,22 +376,22 @@ func TestOrderByCount(t *testing.T) {
 		org:   "1",
 		query: q,
 		vars:  map[string]any{"dir": "DESC"},
-		want: fmt.Sprintf(`{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Ada"}}, {"node": {"name": "Brian"}}],
-			"pageInfo": {"hasNextPage": true, "endCursor": %q}}}}`, countCursor(2, desc)),
+		want: fmt.Sprintf(`{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Ada"}}, {"node": {"name": "Chen"}}],
+			"pageInfo": {"hasNextPage": true, "endCursor": %q}}}}`, countCursor(3, desc)),
 		stmts: []string{
 			`SELECT COUNT(*) FROM "users" []`,
-			`SELECT "id", "name" FROM "users" ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + ` DESC, "id" LIMIT 3 [1]`,
+			`SELECT "id", "name" FROM "users" ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + ` DESC, "id" DESC LIMIT 3 [1]`,
 		},
 	})
 	s.do(t, request{
 		org:   "1",
 		query: q,
-		vars:  map[string]any{"dir": "DESC", "after": countCursor(2, desc)},
-		want:  `{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Chen"}}], "pageInfo": {"hasNextPage": false, "endCursor": ` + fmt.Sprintf("%q", countCursor(3, desc)) + `}}}}`,
+		vars:  map[string]any{"dir": "DESC", "after": countCursor(3, desc)},
+		want:  `{"data": {"users": {"totalCount": 3, "edges": [{"node": {"name": "Brian"}}], "pageInfo": {"hasNextPage": false, "endCursor": ` + fmt.Sprintf("%q", countCursor(2, desc)) + `}}}}`,
 		stmts: []string{
 			`SELECT COUNT(*) FROM "users" []`,
 			`SELECT "id", "name" FROM "users" WHERE ((` + fmt.Sprintf(count, `"users"."id"`) + ` < ` + fmt.Sprintf(count, `?`) + `) OR ((` +
-				fmt.Sprintf(count, `"users"."id"`) + ` = ` + fmt.Sprintf(count, `?`) + `) AND "id" > ?)) ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + ` DESC, "id" LIMIT 3 [1 2 1 1 2 1 2 1]`,
+				fmt.Sprintf(count, `"users"."id"`) + ` = ` + fmt.Sprintf(count, `?`) + `) AND "id" < ?)) ORDER BY ` + fmt.Sprintf(count, `"users"."id"`) + ` DESC, "id" DESC LIMIT 3 [1 3 1 1 3 1 3 1]`,
 		},
 	})
 	// Globex: Brian and Chen have none, Ada one; ascending, the tie of 0 by

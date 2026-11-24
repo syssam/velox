@@ -104,27 +104,18 @@ type Type struct {
 	// such a column as BAD_USER_INPUT naming the field. CreateInputs and
 	// UpdateInputs stand for it in one input when the two inputs differ.
 	Inputs, CreateInputs, UpdateInputs []string
-	// VeloxeFilters gives the type's where input veloxe's semantics, as
-	// velox-graphql's option filters=veloxe generates it, and compat=veloxe
-	// by default, for clients built against veloxe's API: an empty In or
-	// NotIn list, a false IsNil, NotNil or IsEmpty, and an or of no inputs
-	// add nothing, where they otherwise match no node or the negated test;
-	// a null entry of an and, an or or a has<Edge>With is left out; a
-	// nested input that sets no predicate is an error (BAD_USER_INPUT) in a
-	// not, an or or a has<Edge>With, and left out of an and; and
-	// MaxFilterWidth does not apply, as veloxe had no such limit.
-	// MaxFilterDepth does, and a where argument's budget is 10 times
+	// LenientFilters gives the type's where input entgql's lenient
+	// semantics, as velox-graphql's option filters=lenient generates it: an
+	// empty In or NotIn list, a false IsNil, NotNil or IsEmpty, and an or of
+	// no inputs add nothing, where they otherwise match no node or the
+	// negated test; a null entry of an and, an or or a has<Edge>With is left
+	// out; a nested input that sets no predicate is an error
+	// (BAD_USER_INPUT) in a not, an or or a has<Edge>With, and left out of
+	// an and; and MaxFilterWidth does not apply, as entgql has no such
+	// limit. MaxFilterDepth does, and a where argument's budget is 10 times
 	// MaxFilterNodes, 10000 by default. Without it a where input fails
-	// closed, whatever Veloxe is (ADR 0150).
-	VeloxeFilters bool
-	// Veloxe gives the type's connections and foreign keys veloxe's
-	// semantics, as velox-graphql's option compat=veloxe generates it
-	// (ADR 0108): a connection takes a cursor veloxe wrote (see Paginate);
-	// an order of one term breaks ties by the key in that term's
-	// direction, where it is otherwise ASC; a page after a cursor has
-	// hasPreviousPage, and one before a cursor hasNextPage; and
-	// EdgeIDField's predicates are the column's alone.
-	Veloxe bool
+	// closed, as SQL reads it (ADR 0155).
+	LenientFilters bool
 
 	fieldsOnce sync.Once
 	fieldCol   map[string]int // Fields and Edges by name: a column, or -1
@@ -461,9 +452,6 @@ type Connection struct {
 	terms []term             // the order's terms, then the key's columns
 	key   int                // the index in terms of the key's first column
 	after any                // the row the page starts after, in the paging direction
-	// veloxe is the Type's Veloxe: a cursor veloxe wrote is read, and a
-	// page that starts at a cursor has a page on the cursor's side.
-	veloxe bool
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
@@ -506,12 +494,10 @@ type Connection struct {
 // another type, taken under another order, or whose
 // values are not of the order's types.
 //
-// Under Type.Veloxe a cursor veloxe wrote, which veloxgql.Cursor's
-// UnmarshalGQL keeps, is read as veloxe read it: its key as the key, and
-// its values as the order's, whatever order it was taken under. One whose
-// number of values is not the order's number of terms fails with
-// ErrBadCursor. Without Veloxe such a cursor fails with the error
-// veloxgql.DecodeCursor gives its text.
+// A msgpack cursor, entgql's format, which veloxgql.Cursor's UnmarshalGQL
+// keeps, is read as entgql reads one: its key as the key, and its values
+// as the order's, whatever order it was taken under. One whose number of
+// values is not the order's number of terms fails with ErrBadCursor.
 func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
 	if err := needSource(ctx); err != nil {
 		return nil, err
@@ -593,8 +579,8 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 		return nil, InputErrorf("%s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
 	}
 	keyDir := veloxgql.OrderDirectionAsc
-	if c.Veloxe && len(order) == 1 && order[0].Direction == veloxgql.OrderDirectionDesc {
-		// veloxe's tie-break: the key in the one term's direction.
+	if len(order) == 1 && order[0].Direction == veloxgql.OrderDirectionDesc {
+		// entgql's tie-break: with one term, the key in its direction.
 		keyDir = veloxgql.OrderDirectionDesc
 	}
 	for i := range c.Key {
@@ -604,7 +590,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 		}
 		terms = append(terms, t)
 	}
-	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order), veloxe: c.Veloxe}
+	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order)}
 	var joined []int
 	for _, t := range terms {
 		if t.edge != 0 && !t.isCount && !slices.Contains(joined, t.edge) {
@@ -640,10 +626,10 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 //     continues after the cursor with velox's Query.After on that order, and
 //     reverses the rows read.
 //   - It reads one row more than the page: that row's presence is
-//     hasNextPage forward and hasPreviousPage backward. The other is false:
-//     Relay lets a server say false when it cannot tell cheaply. Under
-//     Type.Veloxe it is true when the page starts at a cursor, after or
-//     before, as veloxe said.
+//     hasNextPage forward and hasPreviousPage backward. The other is true
+//     when the page starts at a cursor, after or before, as entgql says,
+//     and false otherwise: Relay lets a server say false when it cannot
+//     tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap: the
 // MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
@@ -726,11 +712,11 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	}
 	if c.back {
 		p.Info.HasPreviousPage = more
-		// veloxe's: a page before a cursor has one after it.
-		p.Info.HasNextPage = c.veloxe && c.after != nil
+		// entgql's: a page before a cursor has one after it.
+		p.Info.HasNextPage = c.after != nil
 	} else {
 		p.Info.HasNextPage = more
-		p.Info.HasPreviousPage = c.veloxe && c.after != nil
+		p.Info.HasPreviousPage = c.after != nil
 	}
 	if n > 0 {
 		p.Info.StartCursor, p.Info.EndCursor = &p.Cursors[0], &p.Cursors[n-1]
@@ -761,12 +747,9 @@ func (c *Connection) field(i int) string {
 // row it stands for: a zero row with the order's and the key's columns set
 // from it, for Query.After.
 func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
-	if l, ok := cur.Key.(*gqlcore.LegacyCursor); ok {
-		if !c.veloxe {
-			return nil, l.Err
-		}
+	if m, ok := cur.Key.(*gqlcore.MsgpackCursor); ok {
 		var err error
-		if cur, err = c.legacy(l); err != nil {
+		if cur, err = c.msgpack(m); err != nil {
 			return nil, err
 		}
 	}
@@ -791,15 +774,15 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 	return x, nil
 }
 
-// legacy is l, a cursor veloxe wrote, as a cursor of the connection's own
-// type and order, as veloxe read one: its key is the key, and its values
-// are the order's, whatever order it was taken under. A cursor whose number
-// of values is not the order's number of terms, or a connection whose key
-// has more than one column, which veloxe's cursors never had, is refused as
-// a cursor taken under another order. A term on the key's own column, as
-// orderBy ID, whose value is nil takes the key: veloxe wrote the key alone
-// for it.
-func (c *Connection) legacy(l *gqlcore.LegacyCursor) (veloxgql.Cursor, error) {
+// msgpack is l, a msgpack cursor, as a cursor of the connection's own type
+// and order, as entgql reads one: its key is the key, and its values are
+// the order's, whatever order it was taken under. A cursor whose number of
+// values is not the order's number of terms, or a connection whose key has
+// more than one column, which a msgpack cursor cannot hold, is refused as a
+// cursor taken under another order. A term on the key's own column, as
+// orderBy ID, whose value is nil takes the key: such a cursor holds the key
+// alone for it.
+func (c *Connection) msgpack(l *gqlcore.MsgpackCursor) (veloxgql.Cursor, error) {
 	last := len(c.terms) - 1
 	vs, ok := l.Values(c.key)
 	if !ok || c.key != last {

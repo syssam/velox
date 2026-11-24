@@ -49,7 +49,7 @@ func RenderSurface(m *plugin.Model, s *sdl.Surface, outPath, outPkg string, cfg 
 		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
 	}
 	r := newRenderer(m, outPath, outPkg)
-	r.veloxe, r.veloxeFilters, r.node, r.graphqlGo = cfg.Veloxe, cfg.VeloxeFilters(), cfg.NodeOn(), cfg.GraphQLGo
+	r.lenient, r.node, r.graphqlGo = cfg.VeloxeFilters(), cfg.NodeOn(), cfg.GraphQLGo
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t
@@ -155,18 +155,17 @@ func newRenderer(m *plugin.Model, outPath, outPkg string) *renderer {
 var pkgNames = map[string]string{veloxPath: "velox"}
 
 type renderer struct {
-	m             *plugin.Model
-	outPath       string
-	outPkg        string
-	veloxEnums    map[string]*plugin.Enum // the enum types velox-gen declares
-	names         map[string]string       // Go name in the package → what declares it
-	types         map[string]*sdl.Type    // the GraphQL types by name
-	typeOf        map[string]*sdl.Type    // the GraphQL types by their entity's name
-	ents          map[string]*plugin.Entity
-	veloxe        bool // sdl.Config.Veloxe: veloxe's connections and foreign keys
-	node          bool // sdl.Config.NodeOn: the Noder file
-	veloxeFilters bool // sdl.Config.VeloxeFilters: veloxe's where semantics
-	graphqlGo     bool // sdl.Config.GraphQLGo: inputs graphql-go binds by name
+	m          *plugin.Model
+	outPath    string
+	outPkg     string
+	veloxEnums map[string]*plugin.Enum // the enum types velox-gen declares
+	names      map[string]string       // Go name in the package → what declares it
+	types      map[string]*sdl.Type    // the GraphQL types by name
+	typeOf     map[string]*sdl.Type    // the GraphQL types by their entity's name
+	ents       map[string]*plugin.Entity
+	node       bool // sdl.Config.NodeOn: the Noder file
+	lenient    bool // sdl.Config.LenientFilters: entgql's where semantics
+	graphqlGo  bool // sdl.Config.GraphQLGo: inputs graphql-go binds by name
 }
 
 // reserve records the Go names velox-gen declares in the package that a name

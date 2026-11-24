@@ -232,11 +232,8 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		}
 	}
 	writeInputNames(f, t)
-	if r.veloxe {
-		f.p("\tVeloxe: true,")
-	}
-	if r.veloxeFilters {
-		f.p("\tVeloxeFilters: true,")
+	if r.lenient {
+		f.p("\tLenientFilters: true,")
 	}
 	f.p("}")
 	return nil

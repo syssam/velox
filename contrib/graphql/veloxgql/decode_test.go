@@ -23,7 +23,7 @@ import (
 )
 
 // account is an entity as velox-gen writes one, for DecodeWhere's tests: a
-// foreign key owner_id filtered as a field (as compat=veloxe does when the
+// foreign key owner_id filtered as a field (as velox-graphql does when the
 // key's edge is not in GraphQL), an enum, a city GraphQL names addressCity,
 // a time and a decimal.
 type account struct {
@@ -91,15 +91,14 @@ func (d dec) Value() (driver.Value, error) { return d.s, nil }
 func (d *dec) Scan(v any) error { d.s = fmt.Sprint(v); return nil }
 
 // accountType is the gqlgraph type velox-graphql writes for account, under
-// compat=veloxe.
+// filters=lenient.
 var accountType = gqlgraph.Type{
-	Name:          "Account",
-	Table:         untyped.TableOf[account],
-	Key:           []gqlgraph.Column{{Name: "id", Index: 0}},
-	AlwaysRead:    []int{0},
-	Fields:        []string{"id", "ownerId", "status", "addressCity", "openedAt", "balance"},
-	Veloxe:        true,
-	VeloxeFilters: true,
+	Name:           "Account",
+	Table:          untyped.TableOf[account],
+	Key:            []gqlgraph.Column{{Name: "id", Index: 0}},
+	AlwaysRead:     []int{0},
+	Fields:         []string{"id", "ownerId", "status", "addressCity", "openedAt", "balance"},
+	LenientFilters: true,
 	WhereFields: []gqlgraph.WhereField{
 		{Name: "not", Kind: gqlgraph.WhereNot},
 		{Name: "and", Kind: gqlgraph.WhereAnd},

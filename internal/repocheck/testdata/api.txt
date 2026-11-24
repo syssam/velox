@@ -1725,7 +1725,7 @@ const CodeNotFound
 const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion29
+const GeneratedCodeIsVersion30
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (b *Bytes) UnmarshalGQL(v any) error

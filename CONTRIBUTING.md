@@ -138,7 +138,7 @@ group.
 - `scale` (gate): `scripts/scale-check.sh`, which runs `bench/scale` against
   `bench/scale/thresholds.json`.
 - `graphql` (graphql): the tidy check, `go vet`, govulncheck, golangci-lint, the
-  tests with a coverage profile, `FuzzCost` and `FuzzLegacyCursor`, in
+  tests with a coverage profile, `FuzzCost` and `FuzzMsgpackCursor`, in
   `contrib/graphql`.
 - `examples_graphql` (graphql): `examples/graphql`'s generated files, its tests,
   and gqlgen's output, which waits for the `examples` lane, whose vet builds
@@ -328,7 +328,7 @@ The targets are `FuzzRender`, `FuzzRenderWrite`, `FuzzQuote` and `FuzzScope`
 in `internal/engine`, `FuzzConstraint` in `internal/dberr`, `FuzzColumnScan`
 in `internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and
 `FuzzDiff` in `migrate`, and, run from `contrib/graphql`, `FuzzCost` in
-`veloxgql/internal/cost` and `FuzzLegacyCursor` in
+`veloxgql/internal/cost` and `FuzzMsgpackCursor` in
 `veloxgql/internal/gqlcore`. `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
 them with their packages and times.
 

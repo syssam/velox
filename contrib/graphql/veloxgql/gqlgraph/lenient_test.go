@@ -16,10 +16,11 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-// vWhere is a where input of person as compat=veloxe generates it: its type
-// has Veloxe, or with def not, the same input under velox's semantics.
+// vWhere is a where input of person as filters=lenient generates it: its
+// type has LenientFilters, or with def not, the same input under strict
+// semantics.
 type vWhere struct {
-	def bool // velox's own semantics, for the contrast
+	def bool // strict semantics, for the contrast
 
 	Not *vWhere
 	And []*vWhere
@@ -32,8 +33,7 @@ type vWhere struct {
 
 func (w *vWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 	typ := gqlgraph.TableType[person]("Person")
-	typ.Veloxe = w == nil || !w.def
-	typ.VeloxeFilters = typ.Veloxe
+	typ.LenientFilters = w == nil || !w.def
 	f := gqlgraph.NewFilter(ctx, typ)
 	if w == nil {
 		return f.Pred()
@@ -74,12 +74,12 @@ func span(from, to int64) []int64 {
 	return out
 }
 
-// TestVeloxeWhere: under Type.Veloxe a where input means what veloxe's
-// generated P() meant: an empty In or NotIn, an empty or and a null entry
+// TestLenientWhere: under Type.LenientFilters a where input means what
+// entgql's generated P() means: an empty In or NotIn, an empty or and a null entry
 // add nothing; an and leaves out an entry that sets nothing, and a not or an
 // or with one fails; no width or node cap applies. Each case also holds what
-// velox's own semantics give, so the default is shown unchanged.
-func TestVeloxeWhere(t *testing.T) {
+// strict semantics give, the default.
+func TestLenientWhere(t *testing.T) {
 	db, _ := peopleDB(t)
 	wide := span(1, 150) // over MaxFilterWidth
 	var many []*vWhere   // over MaxFilterNodes, in width 100 each
@@ -93,9 +93,9 @@ func TestVeloxeWhere(t *testing.T) {
 	for _, c := range []struct {
 		name    string
 		w       vWhere
-		want    []int64 // under Veloxe; nil with wantErr
-		wantErr string  // under Veloxe
-		def     []int64 // under velox's own; nil with defErr
+		want    []int64 // under LenientFilters; nil with wantErr
+		wantErr string  // under LenientFilters
+		def     []int64 // strict; nil with defErr
 		defErr  error
 	}{
 		{name: "nothing", want: all, def: all},
@@ -112,7 +112,7 @@ func TestVeloxeWhere(t *testing.T) {
 		{name: "and [{not: {}}]", w: vWhere{And: []*vWhere{{Not: &vWhere{}}}}, wantErr: "empty predicate", def: []int64{}},
 		{name: "idIn of 150", w: vWhere{IDIn: wide}, want: all, defErr: veloxgql.ErrFilterTooWide},
 		{name: "1200 nodes", w: vWhere{And: many}, want: all, defErr: veloxgql.ErrFilterTooLarge},
-		// The budget under Veloxe is 10 times MaxFilterNodes.
+		// The budget under LenientFilters is 10 times MaxFilterNodes.
 		{name: "idIn of 9000", w: vWhere{IDIn: span(1, 9000)}, want: all, defErr: veloxgql.ErrFilterTooWide},
 		{name: "idIn of 10000", w: vWhere{IDIn: span(1, 10000)}, wantErr: "filter is too large", defErr: veloxgql.ErrFilterTooWide},
 	} {
@@ -140,12 +140,12 @@ func TestVeloxeWhere(t *testing.T) {
 	}
 }
 
-// TestVeloxeBindLimit: under Veloxe, a where argument whose In lists hold
+// TestLenientBindLimit: under LenientFilters, a where argument whose In lists hold
 // more values than any dialect binds is BAD_USER_INPUT ErrFilterTooLarge,
 // before any statement, even when MaxFilterNodes allows them; the
 // statement would otherwise fail with the driver's limit, an internal
 // error.
-func TestVeloxeBindLimit(t *testing.T) {
+func TestLenientBindLimit(t *testing.T) {
 	db, _ := peopleDB(t)
 	ctx := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxFilterNodes: 10000})).NewContext(context.Background())
 	w := &vWhere{IDIn: span(1, 40000)}
@@ -184,9 +184,8 @@ func setDef(w *vWhere) {
 	}
 }
 
-// TestVeloxeDepth: MaxFilterDepth applies under Veloxe too, as veloxe's
-// depth 5 did.
-func TestVeloxeDepth(t *testing.T) {
+// TestLenientDepth: MaxFilterDepth applies under LenientFilters too.
+func TestLenientDepth(t *testing.T) {
 	db, _ := peopleDB(t)
 	w := &vWhere{ID: new(int64(1))}
 	for range 6 {
@@ -197,7 +196,7 @@ func TestVeloxeDepth(t *testing.T) {
 	}
 }
 
-// vNoteWhere is noteWhere under Veloxe.
+// vNoteWhere is noteWhere under LenientFilters.
 type vNoteWhere struct {
 	TagsHasSome  []string
 	TagsHasEvery []string
@@ -208,7 +207,7 @@ type vNoteWhere struct {
 
 func (w *vNoteWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 	typ := gqlgraph.TableType[note]("Note")
-	typ.Veloxe, typ.VeloxeFilters = true, true
+	typ.LenientFilters = true
 	f := gqlgraph.NewFilter(ctx, typ)
 	gqlgraph.ArrayField(f, "tags", 1, gqlgraph.ArrayOps[string]{
 		HasSome: w.TagsHasSome, HasEvery: w.TagsHasEvery, IsEmpty: w.TagsIsEmpty, IsNil: w.TagsIsNil, NotNil: w.TagsNotNil,
@@ -216,9 +215,9 @@ func (w *vNoteWhere) predicate(ctx context.Context) (velox.Predicate, error) {
 	return f.Pred()
 }
 
-// TestVeloxeNullTests: under Veloxe a false IsNil, NotNil or IsEmpty and an
-// empty HasSome or HasEvery add nothing, as veloxe's did; a true one tests.
-func TestVeloxeNullTests(t *testing.T) {
+// TestLenientNullTests: under LenientFilters a false IsNil, NotNil or IsEmpty and an
+// empty HasSome or HasEvery add nothing, as entgql's do; a true one tests.
+func TestLenientNullTests(t *testing.T) {
 	db := notesDB(t)
 	no, yes := false, true
 	every := []int64{1, 2, 3, 4, 5}

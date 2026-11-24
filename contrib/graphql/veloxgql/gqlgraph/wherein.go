@@ -187,7 +187,7 @@ func Predicate(ctx context.Context, c *Type, w any) (velox.Predicate, error) {
 		case WhereID:
 			IDField(f, d.Name, d.Col, ops(s, i, d.Ops))
 		case WhereEdgeID:
-			edgeIDs(f, d.Name, d.Col, d.Edge, d.Target(), ops(s, i, d.Ops))
+			edgeIDs(f, d.Name, d.Col, ops(s, i, d.Ops))
 		default:
 			Field(f, d.Name, d.Col, ops(s, i, d.Ops))
 		}

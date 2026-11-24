@@ -18,11 +18,12 @@ import (
 // errors.Is.
 var (
 	// ErrNodeNotFound: no type of Node has a row of the ID that the caller
-	// may read. Its text is veloxe's. ResolveNode returns it in an error
-	// with the code NOT_FOUND, which gqlgenx.ErrorPresenter shows the client.
+	// may read. Its text follows entgql's. ResolveNode returns it in an
+	// error with the code NOT_FOUND, which gqlgenx.ErrorPresenter shows the
+	// client.
 	ErrNodeNotFound = errors.New("could not resolve to a node with the global ID")
-	// ErrAmbiguousNodeID: more than one type of Node has a row of the ID, as
-	// veloxe refused it. A Node's ID holds no type, so node(id:) needs IDs
+	// ErrAmbiguousNodeID: more than one type of Node has a row of the ID. A
+	// Node's ID holds no type, so node(id:) needs IDs
 	// that are unique across tables, as a snowflake is. ResolveNode returns
 	// it in an error with the code BAD_USER_INPUT, which names the types the
 	// caller may read and not the ID.
@@ -134,7 +135,7 @@ func nodeOptionsOf(opts []NodeOption) nodeOptions {
 }
 
 // ResolveNode returns the one row of the types that has the key id, as
-// veloxe's Client.Noder did. One statement finds which types hold the key,
+// entgql's generated Client.Noder does. One statement finds which types hold the key,
 // reading keys only, under no policy; then LoadNode reads each type found,
 // in the order given, so a row that a policy hides or denies is none, as
 // is one that is not there. A type whose key is not an integer or a string
@@ -190,8 +191,8 @@ func ResolveNode(ctx context.Context, db *velox.DB, types []*Type, id any, opts 
 	return nil, gqlcore.InputErrorf("%w: the ID is a %s; node(id:) needs IDs unique across types", ErrAmbiguousNodeID, strings.Join(found, " and a "))
 }
 
-// ResolveNodes returns the row of each of ids, in order, as veloxe's
-// Client.Noders did, with nil for an ID that no type has, as Relay's
+// ResolveNodes returns the row of each of ids, in order, as entgql's
+// generated Client.Noders does, with nil for an ID that no type has, as Relay's
 // nodes(ids:) asks. One statement finds which types hold any of the IDs,
 // as ResolveNode's does; then it reads each type found once, with one IN
 // query of every ID its key column can hold, under the type's policies, as

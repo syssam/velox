@@ -264,7 +264,7 @@ lane_graphql() (
   go test -race -count=1 -coverprofile="$root/cover-graphql.out" ./...
   export GOMAXPROCS=4 # CI's 4 workers, as the fuzz lane's
   go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql/internal/cost
-  go test -run XXX -fuzz '^FuzzLegacyCursor$' -fuzztime 10s ./veloxgql/internal/gqlcore
+  go test -run XXX -fuzz '^FuzzMsgpackCursor$' -fuzztime 10s ./veloxgql/internal/gqlcore
 )
 
 # examples/graphql: its generated files, with the plugin, its tests, and

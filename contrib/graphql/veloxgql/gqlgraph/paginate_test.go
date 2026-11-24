@@ -160,7 +160,7 @@ func TestPaginate(t *testing.T) {
 			[]int64{2, 4, 3, 6, 8, 1, 5, 9, 7, 10}},
 		{"name DESC", func() []gqlgraph.OrderTerm[person] {
 			return []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}
-		}, []int64{10, 7, 5, 9, 1, 3, 6, 8, 2, 4}},
+		}, []int64{10, 7, 9, 5, 1, 8, 6, 3, 4, 2}}, // ties by the key DESC, as entgql
 		{"name DESC, age ASC", func() []gqlgraph.OrderTerm[person] {
 			return []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc), ageTerm(veloxgql.OrderDirectionAsc)}
 		}, []int64{10, 7, 9, 5, 1, 8, 6, 3, 4, 2}},
@@ -211,12 +211,13 @@ func TestPaginate(t *testing.T) {
 				cur := wire(t, all.Cursors[i])
 				// first 3 after each cursor.
 				end := min(i+4, len(c.want))
-				check("first 3 after "+names[c.want[i]], page(gqlgraph.Args{First: new(3), After: cur}), c.want[i+1:end], end < len(c.want), false)
+				check("first 3 after "+names[c.want[i]], page(gqlgraph.Args{First: new(3), After: cur}), c.want[i+1:end], end < len(c.want), true)
 				// last 3 before each cursor: last 2 before the first row is
-				// empty, with no page before it.
+				// empty, with no page before it. A page at a cursor has one
+				// on the cursor's side, as entgql says.
 				start := max(i-3, 0)
-				check("last 3 before "+names[c.want[i]], page(gqlgraph.Args{Last: new(3), Before: cur}), c.want[start:i], false, start > 0)
-				check("last 2 before", page(gqlgraph.Args{Last: new(2), Before: cur}), c.want[max(i-2, 0):i], false, i > 2)
+				check("last 3 before "+names[c.want[i]], page(gqlgraph.Args{Last: new(3), Before: cur}), c.want[start:i], true, start > 0)
+				check("last 2 before", page(gqlgraph.Args{Last: new(2), Before: cur}), c.want[max(i-2, 0):i], true, i > 2)
 			}
 
 			// Walking the pages forward, then backward, gives every row once.
@@ -266,8 +267,8 @@ func TestPaginateDefaultPage(t *testing.T) {
 	}
 	// before alone pages backward, MaxPage rows.
 	p, err = gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{Before: wire(t, p.Cursors[3])}, nil, personKey())
-	if err != nil || !slices.Equal(ids(p.Rows), []int64{4, 5, 6, 7}) || !p.Info.HasPreviousPage || p.Info.HasNextPage {
-		t.Fatalf("before 8: %v %+v, want 4 to 7 and a previous page", err, p)
+	if err != nil || !slices.Equal(ids(p.Rows), []int64{4, 5, 6, 7}) || !p.Info.HasPreviousPage || !p.Info.HasNextPage {
+		t.Fatalf("before 8: %v %+v, want 4 to 7, a previous page and a next one", err, p)
 	}
 	if _, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{First: new(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 5 over MaxPage 4: %v, want ErrPageTooLarge", err)
@@ -550,7 +551,8 @@ func TestJoinedTermPages(t *testing.T) {
 	if got := childIDs(all.Rows); !reflect.DeepEqual(got, []int64{1, 2, 3, 4, 5, 6, 7}) || n != 7 {
 		t.Errorf("ascending: %v, totalCount %d", got, n)
 	}
-	if all, _ = page(gqlgraph.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{7, 5, 6, 1, 2, 3, 4}) {
+	// One term DESC: the key breaks its ties DESC, as entgql's does.
+	if all, _ = page(gqlgraph.Args{}, desc); !reflect.DeepEqual(childIDs(all.Rows), []int64{7, 6, 5, 4, 3, 2, 1}) {
 		t.Errorf("descending: %v", childIDs(all.Rows))
 	}
 
@@ -571,7 +573,7 @@ func TestJoinedTermPages(t *testing.T) {
 			t.Fatalf("the cursor's value is %v, the owner's name", v)
 		}
 	}
-	if !reflect.DeepEqual(got, []int64{7, 5, 6, 1, 2, 3, 4}) {
+	if !reflect.DeepEqual(got, []int64{7, 6, 5, 4, 3, 2, 1}) {
 		t.Errorf("descending by twos: %v", got)
 	}
 
@@ -646,7 +648,8 @@ func TestOrderViaKeepsRows(t *testing.T) {
 	}{
 		// Owner 1 ("a") is hidden: only children 5 and 6 have an owner's name.
 		{veloxgql.OrderDirectionAsc, []int64{5, 6, 1, 2, 3, 4, 7}},
-		{veloxgql.OrderDirectionDesc, []int64{1, 2, 3, 4, 7, 5, 6}},
+		// DESC: the key breaks ties DESC too, as entgql's does.
+		{veloxgql.OrderDirectionDesc, []int64{7, 4, 3, 2, 1, 6, 5}},
 	} {
 		order := ownerNameOrder(c.dir)
 		all, n := conn(gqlgraph.Args{}, order)

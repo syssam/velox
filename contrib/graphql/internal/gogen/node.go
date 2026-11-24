@@ -9,12 +9,12 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// nodeFile is noder_gql.go, under node=on, which compat=veloxe presets: the
+// nodeFile is noder_gql.go, under node=on: the
 // Go side of Relay's interface Node, which every type with an ID
 // implements. gqlgen binds Node to Noder (the SDL's @goModel) and requires
 // each implementing type's Go type to satisfy it, so each gets IsNode, as
-// veloxe's generated entities had. ResolveNode and ResolveNodes answer
-// node(id:) and nodes(ids:) as veloxe's Client.Noder and Client.Noders did,
+// entgql's generated entities have. ResolveNode and ResolveNodes answer
+// node(id:) and nodes(ids:) as entgql's Client.Noder and Client.Noders do,
 // after one statement that finds the types holding the IDs, for the
 // application's resolvers; WithNodeType and WithFixedNodeType, as entgql's,
 // give an ID's type so that no statement looks it up. NodeTypes is for an
@@ -83,7 +83,7 @@ func (r *renderer) nodeFile(types []*sdl.Type) (file plugin.File, ok bool, err e
 	f.doc("", "WithFixedNodeType gives every ID the type name, the GraphQL name of a type of Node, so that no statement looks it up.")
 	f.p("func WithFixedNodeType(name string) NodeOption { return %s.WithFixedNodeType(name) }", impl)
 	f.p("")
-	f.doc("", "ResolveNode answers node(id:) as veloxe's Client.Noder did: the one node of any type whose key is id, read with db, so each type's Read policy applies, a hidden or denied row counting as none. One statement finds which types hold the ID, unless an option gives its type; only those are read. Its error wraps gqlgraph.ErrNodeNotFound (NOT_FOUND) when no type has the ID, and gqlgraph.ErrAmbiguousNodeID when more than one does.")
+	f.doc("", "ResolveNode answers node(id:) as entgql's generated Client.Noder does: the one node of any type whose key is id, read with db, so each type's Read policy applies, a hidden or denied row counting as none. One statement finds which types hold the ID, unless an option gives its type; only those are read. Its error wraps gqlgraph.ErrNodeNotFound (NOT_FOUND) when no type has the ID, and gqlgraph.ErrAmbiguousNodeID when more than one does.")
 	f.p("func ResolveNode(ctx %s.Context, db *%s.DB, id %s, opts ...NodeOption) (Noder, error) {", ctx, velox, key.typ)
 	f.p("\tn, err := %s.ResolveNode(ctx, db, nodeTypes, id, opts...)", impl)
 	f.p("\tif err != nil {")
@@ -92,7 +92,7 @@ func (r *renderer) nodeFile(types []*sdl.Type) (file plugin.File, ok bool, err e
 	f.p("\treturn n.(Noder), nil")
 	f.p("}")
 	f.p("")
-	f.doc("", "ResolveNodes answers nodes(ids:) as veloxe's Client.Noders did: the node of each ID, in order, nil for one no type has. One statement finds which types hold the IDs whose type no option gives, then it reads each type with one IN query of its IDs, and each type's nodes batch their edges. More IDs than Limits.MaxPage is veloxgql.ErrPageTooLarge (BAD_USER_INPUT); an ID of two types is gqlgraph.ErrAmbiguousNodeID. Any other error stops it.")
+	f.doc("", "ResolveNodes answers nodes(ids:) as entgql's generated Client.Noders does: the node of each ID, in order, nil for one no type has. One statement finds which types hold the IDs whose type no option gives, then it reads each type with one IN query of its IDs, and each type's nodes batch their edges. More IDs than Limits.MaxPage is veloxgql.ErrPageTooLarge (BAD_USER_INPUT); an ID of two types is gqlgraph.ErrAmbiguousNodeID. Any other error stops it.")
 	f.p("func ResolveNodes(ctx %s.Context, db *%s.DB, ids []%s, opts ...NodeOption) ([]Noder, error) {", ctx, velox, key.typ)
 	f.p("\tns, err := %s.ResolveNodes(ctx, db, nodeTypes, ids, opts...)", impl)
 	f.p("\tif err != nil {")

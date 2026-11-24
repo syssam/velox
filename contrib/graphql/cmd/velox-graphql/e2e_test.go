@@ -589,11 +589,12 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{5}) || info.HasNextPage {
 		t.Errorf("by author ASC after 3: %v %+v", got, info)
 	}
-	// Descending, and backward from the end.
+	// Descending, and backward from the end: ann's posts tie, broken by the
+	// key DESC, as entgql breaks them.
 	if ps, err = db.Query[gen.Post]().Paginate(ctx, nil, nil, nil, intp(2), gen.WithPostOrder(by(veloxgql.OrderDirectionDesc))); err != nil {
 		t.Fatal(err)
 	}
-	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{2, 4}) || !info.HasPreviousPage {
+	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{2, 1}) || !info.HasPreviousPage {
 		t.Errorf("by author DESC, last 2: %v %+v", got, info)
 	}
 	// A cursor of this order is refused under the key's.
@@ -1323,11 +1324,12 @@ func TestWhereOps(t *testing.T) {
 		ac("displayNameHasSuffix", &gen.AccountWhereInput{DisplayNameHasSuffix: ptr("n")}, 1, 4),
 		ac("displayNameEqualFold", &gen.AccountWhereInput{DisplayNameEqualFold: ptr("ANN")}, 1),
 		ac("displayNameContainsFold", &gen.AccountWhereInput{DisplayNameContainsFold: ptr("N")}, 1, 4),
-		// A required foreign key, by the IDs of its edge's node.
+		// A required foreign key, by its column's value alone: 4's author is
+		// in another org, and its key still reads as itself.
 		po("authorID", &gen.PostWhereInput{AuthorID: ptr(int64(1))}, 1, 2),
-		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(int64(1))}, 3), // 4's author is in another org: it reads as null, as a policy's hidden row does
+		po("authorIDNEQ", &gen.PostWhereInput{AuthorIDNEQ: ptr(int64(1))}, 3, 4),
 		po("authorIDIn", &gen.PostWhereInput{AuthorIDIn: []int64{1, 2}}, 1, 2, 3),
-		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []int64{1}}, 3),
+		po("authorIDNotIn", &gen.PostWhereInput{AuthorIDNotIn: []int64{1}}, 3, 4),
 		po("title", &gen.PostWhereInput{Title: ptr("b")}, 2),
 		po("titleContains", &gen.PostWhereInput{TitleContains: ptr("x")}, 1, 4),
 		// An optional foreign key to the entity itself.
