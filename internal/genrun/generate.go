@@ -185,7 +185,7 @@ func LoadModel(ctx context.Context, dir, pattern, out, pkg string, env []string)
 	}
 	o, err := codegen.Lower(g, codegen.Config{Package: pkg, SchemaPath: importPath, SchemaName: name})
 	if err != nil {
-		return nil, err
+		return nil, RelErrors(dir, err)
 	}
 	gm := &Model{Graph: g, Out: o, ImportPath: importPath, Name: name}
 	for _, e := range o.Entities {

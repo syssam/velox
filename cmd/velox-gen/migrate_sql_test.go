@@ -272,6 +272,38 @@ func (Post) Fields() []schema.Field {
 	})
 }
 
+// A name clash, found after the schemas are built, prints its position as
+// a path relative to the working directory too.
+func TestGeneratePositionsAreRelative(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	post := `package veloxschema
+
+import (
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+)
+
+type Post struct{ schema.Schema }
+
+func (Post) Fields() []schema.Field {
+	return []schema.Field{field.Enum("status").Values("draft", "live")}
+}
+
+// PostStatus is also the Go name of Post's status enum.
+type PostStatus struct{ schema.Schema }
+`
+	dir := tempModule(t, map[string]string{"veloxschema/post.go": post})
+	code, out, errs := runCLI(t, dir, "-out", "veloxgen", "./veloxschema")
+	if code != 1 || out != "" || !strings.Contains(errs, "veloxschema/post.go:") {
+		t.Errorf("exit %d, want 1 and a position\nstdout:\n%s\nstderr:\n%s", code, out, errs)
+	}
+	if strings.Contains(errs, dir) {
+		t.Errorf("an absolute path is printed:\n%s", errs)
+	}
+}
+
 // relErrors leaves alone what is not inside the working directory: a file
 // outside it, a path that only ends like it, and an error with no position.
 func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {

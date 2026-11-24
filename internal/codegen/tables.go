@@ -293,7 +293,7 @@ func (t *tabler) symbol(name string, derived bool) string {
 func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey) bool {
 	pos := fk.Edge.Pos
 	if t.d == velox.MySQL && tb.Schema != "" && fk.Ref.TableSchema == "" {
-		t.fail(edgePlace(fk.Owner, fk.Edge), "table %s.%s references %s in the connection's default database, which MySQL cannot name from another database; give %s a schema.TableIn",
+		t.fail(edgePlace(fk.Owner, fk.Edge), "table %s.%s references %s in the connection's default database, which MySQL cannot name from another database; give %s a sqlschema.Schema",
 			tb.Schema, tb.Name, fk.Ref.Table, fk.Ref.Table)
 	}
 	name := t.symbol(fk.Name, fk.Derived)

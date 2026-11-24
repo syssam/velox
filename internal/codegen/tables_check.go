@@ -78,7 +78,7 @@ func (t *tabler) fail(p place, format string, args ...any) {
 func (t *tabler) check(e *Entity, tb *migrate.Table, at []place) {
 	table := place{e, rankTable, 0, loc{pos: tb.Pos}}
 	if t.d == velox.SQLite && e.TableSchema != "" {
-		t.fail(table, "schema.TableIn puts the table in database schema %s, which SQLite does not have", e.TableSchema)
+		t.fail(table, "sqlschema.Schema puts the table in database schema %s, which SQLite does not have", e.TableSchema)
 	}
 	if n := utf8.RuneCountInString(tb.Comment); t.d == velox.MySQL && n > mysqlTableComment {
 		t.fail(table, "the table comment is %d characters on MySQL, over its %d", n, mysqlTableComment)

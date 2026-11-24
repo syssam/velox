@@ -63,7 +63,7 @@ type Entity struct {
 	Label       string   `json:"label"`                  // snake_case of Name
 	Handles     string   `json:"handles"`                // GoPlural of Name, e.g. "Users", "StatusSlice"
 	Table       string   `json:"table"`                  // the table's name
-	TableSchema string   `json:"table_schema,omitempty"` // the database schema that holds Table, from schema.TableIn; "" for the connection's default
+	TableSchema string   `json:"table_schema,omitempty"` // the database schema that holds Table, from sqlschema.Schema; "" for the connection's default
 	Join        bool     `json:"join,omitempty"`         // a many-to-many join entity
 	EdgeSchema  bool     `json:"edge_schema,omitempty"`  // a schema whose rows are a many-to-many relation's links (edge.Through); Join is false
 	Comment     string   `json:"comment,omitempty"`      // the Comment annotation's text, for descriptions

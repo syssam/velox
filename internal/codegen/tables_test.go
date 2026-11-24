@@ -1153,11 +1153,11 @@ func TestTablesRefusals(t *testing.T) {
 		{"pg enum name", velox.Postgres, tbRfPGEnumBadName{}, `field "e"`, "My Mood is not a lower-case identifier", 0, nil},
 		{"nul default", velox.Postgres, tbRfNULDefault{}, `field "s"`, "PostgreSQL text cannot hold a NUL byte", 0, nil},
 		{"nul value", velox.Postgres, tbRfNULValue{}, `field "e"`, "PostgreSQL text cannot hold a NUL byte", 0, nil},
-		{"table in", velox.SQLite, tbRfTableIn{}, "", "schema.TableIn puts the table in database schema billing, which SQLite does not have", 0, nil},
+		{"table in", velox.SQLite, tbRfTableIn{}, "", "sqlschema.Schema puts the table in database schema billing, which SQLite does not have", 0, nil},
 		{"other", velox.MySQL, tbRfOther{}, `field "o"`, "an Other field needs a SchemaType for MySQL", 0, nil},
 		{"id type", velox.MySQL, tbRfIDType{}, `field "id"`, "the ID is an integer, but its SchemaType varchar(20) is not an integer type on MySQL; Tables makes the column an identity itself", 0, nil},
 		{"sqlite id type", velox.SQLite, tbRfIDTypeSQLite{}, `field "id"`, "the ID is an integer, but its SchemaType text is not an integer type on SQLite; Tables makes the column an identity itself", 0, nil},
-		{"cross database", velox.MySQL, tbRfCrossDB{}, `edge "payer"`, "table billing.rf_cross references tb_rf_cross_refs in the connection's default database, which MySQL cannot name from another database; give tb_rf_cross_refs a schema.TableIn", velox.SQLite, tbRfCrossRef{}},
+		{"cross database", velox.MySQL, tbRfCrossDB{}, `edge "payer"`, "table billing.rf_cross references tb_rf_cross_refs in the connection's default database, which MySQL cannot name from another database; give tb_rf_cross_refs a sqlschema.Schema", velox.SQLite, tbRfCrossRef{}},
 	} {
 		t.Run(c.line, func(t *testing.T) {
 			ss := []schema.Interface{c.s}

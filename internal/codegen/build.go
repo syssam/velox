@@ -804,7 +804,7 @@ func (b *builder) nameLengths() {
 		e := n.ent
 		hint := ""
 		if e.Table == tableName(e.Name) {
-			hint = "; name it with schema.Table"
+			hint = "; name it with sqlschema.Table"
 		}
 		b.long(e.Name, tableLoc(e), "table name", e.Table, hint)
 		for _, f := range e.Fields {
