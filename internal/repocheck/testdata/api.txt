@@ -138,6 +138,8 @@ const LockForUpdate
 const LockNoWait
 const LockSkipLocked
 const MySQL
+const NullsFirst
+const NullsLast
 const OpDelete
 const OpInsert
 const OpRawExec
@@ -597,6 +599,8 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E]
 func (o One[T]) Get[_ Lazy[T]]() (*T, bool)
 func (o One[T]) MarshalJSON() ([]byte, error)
 func (o Order[E]) Descending[_ Lazy[E]]() bool
+func (o Order[E]) NullsFirst[_ Lazy[E]]() Order[E]
+func (o Order[E]) NullsLast[_ Lazy[E]]() Order[E]
 func (o Order[E]) Term[_ Lazy[E]]() Term[E]
 func (p MutationPolicy) EvalMutation(ctx context.Context, m PrivacyMutation) error
 func (p QueryPolicy) EvalQuery(ctx context.Context, q PrivacyQuery) error
@@ -1017,6 +1021,8 @@ const LockForUpdate Lock
 const LockNoWait
 const LockSkipLocked LockWait
 const MySQL
+const NullsFirst
+const NullsLast
 const OpDelete
 const OpInsert
 const OpRawExec
@@ -1059,7 +1065,7 @@ type IndexInfo struct { Columns []int Unique bool }
 type Lock uint8
 type LockWait uint8
 type Op uint8
-type OrderTerm struct { Column int Desc bool Rel int32 Expr any }
+type OrderTerm struct { Column int Desc bool Nulls uint8 Rel int32 Expr any }
 type PolicyError struct { Entity string Op Op Err error }
 type Result struct { Rows int64 Affected int64 LoopBody time.Duration }
 type Route struct { Shard string Replica int Fallback bool }

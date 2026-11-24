@@ -650,6 +650,24 @@ They read as `All` does: the policies, the scope, the filters, `Limit`,
 `Columns(I.ID, I.Number)` reads only the named columns, and `Omit(...)` reads
 all but the named ones. The other fields keep their zero values.
 
+### Ordering and NULL
+
+`OrderBy` takes a handle's `Asc()` or `Desc()`, a Term's, or a joined
+column's `rel.By(...)`. NULL sorts after every value ascending and before
+them descending, as PostgreSQL sorts it, on every dialect. `NullsFirst()`
+and `NullsLast()` put it before or after every value, in either direction:
+
+```go
+T := veloxgen.Tasks
+db.Query[veloxgen.Task]().OrderBy(T.DueAt.Desc().NullsLast(), T.ID.Asc()).Limit(20)
+```
+
+PostgreSQL and SQLite write `"due_at" DESC NULLS LAST`. MySQL has no NULLS
+clause, so velox writes `` `due_at` IS NULL, `due_at` DESC ``; an
+expression with bound values is written, and bound, twice. The rows come
+back in the same order on all three, and `After` pages that order. A column
+that cannot be NULL is ordered as if neither were called.
+
 ### Pagination
 
 `Offset(n)` works, but keyset pagination is better for large tables.

@@ -99,6 +99,13 @@ type IndexInfo = veloxtype.IndexInfo
 // OrderTerm is an ordering by one column of a Statement's entity.
 type OrderTerm = veloxtype.OrderTerm
 
+// The places of NULL in an ordering, for OrderTerm.Nulls; Order's
+// NullsFirst and NullsLast set them.
+const (
+	NullsFirst = veloxtype.NullsFirst // before every value
+	NullsLast  = veloxtype.NullsLast  // after every value
+)
+
 // ColumnEQ returns the condition column = v, for hooks that add conditions;
 // column is an index into the statement's EntityInfo.Columns.
 func ColumnEQ(column int, v any) Predicate { return engine.ColumnEQ(column, v) }

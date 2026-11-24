@@ -416,9 +416,9 @@ func (w *writer) orderBy(os []OrderTerm, qualified bool) {
 		// NULL sorts after every value, ascending, as PostgreSQL sorts it:
 		// MySQL and SQLite sort it first, so a term of IS NULL goes before.
 		// After's condition counts on it.
-		null := w.in.Columns[o.Column].Nullable && w.d != Postgres
+		emulate, native := w.nullsWay(o, w.in.Columns[o.Column].Nullable)
 		for k := range 2 {
-			if k == 0 && !null {
+			if k == 0 && !emulate {
 				continue
 			}
 			if qualified {
@@ -426,16 +426,62 @@ func (w *writer) orderBy(os []OrderTerm, qualified bool) {
 				w.str(".")
 			}
 			w.col(int32(o.Column))
-			if k == 0 {
-				w.str(" IS NULL")
-			}
-			if o.Desc {
-				w.str(" DESC")
-			}
-			if k == 0 {
-				w.str(", ")
-			}
+			w.orderDir(o, k == 0, native)
 		}
+	}
+}
+
+// nullsFirst reports whether o sorts NULL before every value: as its Nulls
+// says, or, by default, when it descends, as PostgreSQL sorts it.
+func nullsFirst(o OrderTerm) bool {
+	switch o.Nulls {
+	case NullsFirst:
+		return true
+	case NullsLast:
+		return false
+	}
+	return o.Desc
+}
+
+// nullsWay returns how w places NULL for o, whose term can be NULL when
+// nullable says so. emulate is a term of IS NULL before o's: PostgreSQL
+// needs none by default, and MySQL has no NULLS clause. native is NULLS
+// FIRST or LAST after it, which PostgreSQL and SQLite write when o's Nulls
+// is set. By default SQLite keeps the IS NULL term, so that the SQL of an
+// ordering without Nulls does not change.
+func (w *writer) nullsWay(o OrderTerm, nullable bool) (emulate, native bool) {
+	switch {
+	case !nullable:
+		return false, false
+	case o.Nulls == 0:
+		return w.d != Postgres, false
+	case w.d == MySQL:
+		return true, false
+	}
+	return false, true
+}
+
+// orderDir writes what follows an ordering's term. Of the IS NULL term
+// before it, when isNull says so, it is DESC when o sorts NULL first. Else
+// it is o's direction, then NULLS FIRST or LAST when native says so.
+func (w *writer) orderDir(o OrderTerm, isNull, native bool) {
+	if isNull {
+		w.str(" IS NULL")
+		if nullsFirst(o) {
+			w.str(" DESC")
+		}
+		w.str(", ")
+		return
+	}
+	if o.Desc {
+		w.str(" DESC")
+	}
+	switch {
+	case !native:
+	case nullsFirst(o):
+		w.str(" NULLS FIRST")
+	default:
+		w.str(" NULLS LAST")
 	}
 }
 
@@ -456,23 +502,15 @@ func (w *writer) joinedOrder(o OrderTerm) {
 	}
 	// NULL sorts after every value here too, as orderBy puts it. The column
 	// is NULL when it is nullable, or when a left join found no target.
-	null := (t.Columns[o.Column].Nullable || w.joins[i].Left) && w.d != Postgres
+	emulate, native := w.nullsWay(o, t.Columns[o.Column].Nullable || w.joins[i].Left)
 	for k := range 2 {
-		if k == 0 && !null {
+		if k == 0 && !emulate {
 			continue
 		}
 		w.ident(joinAlias(i + 1))
 		w.str(".")
 		w.ident(t.Columns[o.Column].Name)
-		if k == 0 {
-			w.str(" IS NULL")
-		}
-		if o.Desc {
-			w.str(" DESC")
-		}
-		if k == 0 {
-			w.str(", ")
-		}
+		w.orderDir(o, k == 0, native)
 	}
 }
 

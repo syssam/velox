@@ -567,11 +567,12 @@ func (w *writer) resultTerm(t Term, distinct bool) {
 // orderTerm writes the ordering o by an expression term. NULL sorts after
 // every value, ascending, as orderBy puts it: PostgreSQL sorts so, and where
 // the database sorts it first, a term of IS NULL goes before. A term may be
-// NULL whatever its columns are, so there it always does.
+// NULL whatever its columns are, so there it always does. o's Nulls places
+// NULL as orderBy's does (nullsWay).
 func (w *writer) orderTerm(o OrderTerm) {
 	t, _ := o.Expr.(Term)
 	// A relation's count is never NULL.
-	null := w.d != Postgres && (t.kind != termRel || relNullable(t))
+	null, native := w.nullsWay(o, t.kind != termRel || relNullable(t))
 	// MySQL's ONLY_FULL_GROUP_BY takes an expression of the GROUP BY keys
 	// only as GROUP BY writes it: x IS NULL is refused where the key is x.
 	// ANY_VALUE of a key is the group's value, and lifts the check.
@@ -594,15 +595,7 @@ func (w *writer) orderTerm(o OrderTerm) {
 		case null || !w.repeatSpan(t): // PostgreSQL writes the term once
 			w.term(t)
 		}
-		if k == 0 {
-			w.str(" IS NULL")
-		}
-		if o.Desc {
-			w.str(" DESC")
-		}
-		if k == 0 {
-			w.str(", ")
-		}
+		w.orderDir(o, k == 0, native)
 	}
 }
 
@@ -813,9 +806,13 @@ func hasSubquery(n Node) bool {
 	return slices.ContainsFunc(n.Kids, hasSubquery)
 }
 
-// checkOrderExprs checks the ordering terms of st that are expressions.
+// checkOrderExprs checks the ordering terms of st that are expressions,
+// and every term's Nulls.
 func checkOrderExprs(st *Statement, who string) error {
 	for _, o := range st.OrderBy {
+		if o.Nulls > NullsLast {
+			return fmt.Errorf("velox: %s: an ordering's Nulls is %d, which is neither NullsFirst nor NullsLast", st.Entity.Name, o.Nulls)
+		}
 		if o.Expr == nil {
 			continue
 		}

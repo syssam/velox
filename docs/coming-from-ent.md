@@ -257,6 +257,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
 | an update that must not fire `UpdateDefault` on `updated_at` | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
+| `client.Task.Query().Order(task.ByDueAt(sql.OrderDesc(), sql.OrderNullsLast()))`, `sql.OrderNullsFirst()` | `OrderBy(T.DueAt.Desc().NullsLast(), T.ID.Asc())`, `.NullsFirst()`: the same rows in the same order on every dialect, `After` included; without either, NULL sorts after every value ascending and before them descending (decision 0163) |
 | `client.User.Query().Order(user.ByPostsCount(sql.OrderDesc()))` | `db.Query[veloxgen.User]().OrderBy(U.Posts.Count().Desc(), U.ID.Asc())`: the posts the reader may not see are not counted (decision 0112) |
 | `client.User.Query().Order(user.ByPosts(sql.OrderBySum(post.FieldViews)))` | `OrderBy(U.Posts.Sum(P.Views).Asc(), U.ID.Asc())`; `Avg`, `Min` and `Max` too, NULL for a user with no posts |
 | `user.HasPostsWith(...)` with a count, `sql.P` by hand | `velox.Expr[veloxgen.User]("? >= ?", U.Posts.Count(), 3)` in a `Where` |
@@ -768,8 +769,9 @@ replacement.
   MySQL and SQLite alike, and a cursor holds it as null, so cursor pages over
   NULL keys are exact. ent leaves the place of NULL to the database, which on
   MySQL and SQLite is first ascending, and offers `sql.OrderNullsFirst()`;
-  velox has one place for NULL and no such option. The core's `OrderBy`, and a
-  joined column's `rel.By`, sort NULL the same way.
+  a connection's order has one place for NULL and no such option. The core's
+  `OrderBy`, and a joined column's `rel.By`, sort NULL the same way unless
+  the ordering says `NullsFirst()` or `NullsLast()` (decision 0163).
 - **Limits apply to every request.** A connection with no `first` or
   `last` reads `MaxPage` rows, 100 by default, and a `first` or `last`
   above it fails with `ErrPageTooLarge`; under graphql-go `MaxPage` is

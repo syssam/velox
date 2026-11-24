@@ -47,6 +47,9 @@ const (
 
 	AssignAppend = veloxtype.AssignAppend
 
+	NullsFirst = veloxtype.NullsFirst
+	NullsLast  = veloxtype.NullsLast
+
 	ConstraintUnique     = veloxtype.ConstraintUnique
 	ConstraintForeignKey = veloxtype.ConstraintForeignKey
 	ConstraintNotNull    = veloxtype.ConstraintNotNull

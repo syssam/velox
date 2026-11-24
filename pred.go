@@ -8,6 +8,20 @@ import (
 // Descriptor. It is the typed form of OrderTerm, as Pred is of Predicate.
 type Order[E any] struct{ t OrderTerm }
 
+// NullsFirst returns o with NULL sorted before every value, in either
+// direction, on every dialect: ent's sql.OrderNullsFirst.
+//
+//	OrderBy(veloxgen.Tasks.DueAt.Asc().NullsFirst())
+//
+// PostgreSQL and SQLite write NULLS FIRST; MySQL, which has no such
+// clause, orders by IS NULL before the term. A column that cannot be NULL
+// is ordered as without it.
+func (o Order[E]) NullsFirst[_ Lazy[E]]() Order[E] { o.t.Nulls = NullsFirst; return o }
+
+// NullsLast returns o with NULL sorted after every value, in either
+// direction, on every dialect: ent's sql.OrderNullsLast. See NullsFirst.
+func (o Order[E]) NullsLast[_ Lazy[E]]() Order[E] { o.t.Nulls = NullsLast; return o }
+
 // Column is any column handle of entity E, for Columns and Omit.
 type Column[E any] interface{ column(*E) int32 }
 

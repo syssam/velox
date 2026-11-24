@@ -154,9 +154,10 @@ func orderTerm(o OrderTerm, op op, v any) Node {
 // row srcs read from in st's OrderBy.
 //
 // It is (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending
-// columns. NULL sorts after every value (the order puts it there, orderBy),
-// so past a value ascending is > v OR IS NULL, past NULL ascending is
-// nothing, and past NULL descending is IS NOT NULL; NULL equals NULL. A
+// columns. Where a term sorts NULL last (nullsFirst, as orderBy puts it),
+// past a value is > v OR IS NULL and past NULL is nothing; where it sorts
+// NULL first, past a value is > v and past NULL is IS NOT NULL. NULL
+// equals NULL. A
 // column of a left join is NULL where the join found no row, as a nullable
 // column is.
 func afterCondition(st *Statement, srcs []afterSource) Node {
@@ -214,19 +215,21 @@ func relEqual(t, b Term) Node {
 }
 
 // relPast is the condition that the relation's aggregate o orders by is
-// past b, its value for the After row: NULL sorts after every value
-// ascending, as orderTerm puts it.
+// past b, its value for the After row: NULL sorts where o puts it
+// (nullsFirst), as orderTerm writes it.
 func relPast(o OrderTerm, b Term) Node {
 	t := o.Expr.(Term)
-	switch {
-	case !relNullable(t) && o.Desc:
-		return relExpr("? < ?", t, b)
-	case !relNullable(t):
-		return relExpr("? > ?", t, b)
-	case o.Desc:
-		return relExpr("((? IS NULL AND ? IS NOT NULL) OR ? < ?)", b, t, t, b)
+	cmp := ">"
+	if o.Desc {
+		cmp = "<"
 	}
-	return relExpr("(? IS NOT NULL AND (? > ? OR ? IS NULL))", b, t, b, t)
+	switch {
+	case !relNullable(t):
+		return relExpr("? "+cmp+" ?", t, b)
+	case nullsFirst(o):
+		return relExpr("((? IS NULL AND ? IS NOT NULL) OR ? "+cmp+" ?)", b, t, t, b)
+	}
+	return relExpr("(? IS NOT NULL AND (? "+cmp+" ? OR ? IS NULL))", b, t, b, t)
 }
 
 // relExpr is the condition text with each ? filled by the next of ts.
@@ -239,23 +242,24 @@ func relExpr(text string, ts ...Term) Node {
 }
 
 // pastValue returns the condition on o's column for the rows past the
-// value v, and false when no row is past it: v is NULL and o ascends.
-// nullable says whether the column can be NULL.
+// value v, and false when no row is past it: v is NULL, and o sorts NULL
+// last (nullsFirst). nullable says whether the column can be NULL.
 func pastValue(o OrderTerm, v any, nullable bool) (Node, bool) {
-	past := orderTerm(o, OpGT, v)
+	cmp := OpGT
 	if o.Desc {
-		past = orderTerm(o, OpLT, v)
+		cmp = OpLT
 	}
+	past := orderTerm(o, cmp, v)
 	if !nullable {
 		return past, true
 	}
-	switch null := nullValue(v); {
-	case null && !o.Desc:
+	switch null, first := nullValue(v), nullsFirst(o); {
+	case null && !first:
 		return Node{}, false
 	case null:
 		past = orderTerm(o, OpNotNull, nil)
-	case !o.Desc:
-		past = onOrderRow(o, Group(OpOr, []Node{{Op: OpGT, Col: int32(o.Column), V: v}, {Op: OpIsNull, Col: int32(o.Column)}}))
+	case !first:
+		past = onOrderRow(o, Group(OpOr, []Node{{Op: cmp, Col: int32(o.Column), V: v}, {Op: OpIsNull, Col: int32(o.Column)}}))
 	}
 	return past, true
 }

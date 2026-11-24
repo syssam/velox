@@ -105,6 +105,13 @@ type Assignment struct {
 type OrderTerm struct {
 	Column int  // index into velox.EntityInfo.Columns
 	Desc   bool // descending; ascending when false
+	// Nulls is where NULL sorts: NullsFirst before every value, NullsLast
+	// after every value, in either direction. 0 puts it after every value
+	// ascending and before them descending, on every dialect. It is a plain
+	// uint8, not a type of its own, which would cost every entity package
+	// that names velox.Order about 90 bytes (ADR 0163). Order's NullsFirst
+	// and NullsLast set it.
+	Nulls uint8
 	// Rel, when not 0, is the index of a joined relation plus one: Column is
 	// then a column of that relation's target, and the statement must join it
 	// (Statement.Joins). 0 orders by the statement's own entity.
@@ -116,6 +123,12 @@ type OrderTerm struct {
 	// statement computes from the row's key.
 	Expr any
 }
+
+// The places of NULL in an ordering, for OrderTerm.Nulls.
+const (
+	NullsFirst = 1 // before every value
+	NullsLast  = 2 // after every value
+)
 
 // Result is what executing a statement did: a velox.Statement's, which an Around
 // hook reads. An entity hook reads the rows its whole write affected from
