@@ -24,9 +24,9 @@ velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
 ```
 
 - `fn`'s `ctx` is the transaction's: it carries its deadline. A statement on
-  `db` (or any other `*velox.DB` but `tx`) under it, where `tx` was meant,
-  fails with `velox.ErrOutsideTx` before anything is sent, until the
-  transaction ends. `velox.WithoutTx(ctx)` lifts that for work that must not
+  `db` under it runs in the transaction, as on `tx`, and `db.Tx` makes a
+  savepoint. One on any other `*velox.DB` fails with `velox.ErrOutsideTx`
+  before anything is sent, until the transaction ends. `velox.WithoutTx(ctx)` lifts that for work that must not
   join the transaction, such as an audit row that survives a rollback.
 - A locking read, `tx.Query[veloxgen.Account]().Where(…).ForUpdate().One(ctx)`,
   runs inside a transaction only, on PostgreSQL and MySQL. MySQL's

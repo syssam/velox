@@ -109,7 +109,8 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// fn returning nil commits. tx is a *velox.DB like db, and ctx is the
 	// transaction's: Tx's, with its deadline. Under it, a statement on db
-	// instead of tx fails with velox.ErrOutsideTx.
+	// runs in the transaction too, and one on another DB fails with
+	// velox.ErrOutsideTx.
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return transfer(ctx, tx, "alice", "bob", 30) })
 	say("commit:   %s (err=%v)", balances(), err)
 

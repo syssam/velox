@@ -76,14 +76,35 @@ the HundredRows benchmark.
   into one object). `UseTx` points at the adopted transaction.
 - The field is written only on an entity with edges: one without has no
   `QueryX` to read it, so it stays a plain struct.
-- `velox.QueryEdge(src, owner, rel)` is the generic body of every
-  `QueryX`, so each generated method is one line.
+- `velox.QueryEdge[T](src, owner, Handles.X.I)` is the body of every
+  `QueryX`, one line. It is generic in the target alone and takes the
+  owner as an `any`, whose metadata the engine finds by its type (every
+  entity with a Source had its metadata built first), so it is compiled
+  once per target type, not once per edge: a `QueryEdge[E, T]` with the
+  `Rel` handle cost an entity package about 27 KB per edge (the relations
+  example's 12 edges: +327 KB, then +167 KB).
 - A `velox.Query[T]` has no write, and `untyped.FromQuery` none either,
   so read only needs no check of its own.
-- `velox.Scan[T]` and a recorded `Change` give no source.
+- `velox.Scan[T]` and a recorded `Change` give no source. `db.Rows`
+  yields untyped rows, not entities; `db.Raw`, which scans into an
+  entity, gives its rows the source.
+- The DB that began a transaction joins it. Under the context of a live
+  transaction, a statement on the DB that began it (same Source, same
+  WithoutPolicy reason, same recording) runs on the transaction's handle,
+  or on the savepoint's whose fn got the context, and its `Tx` makes a
+  savepoint. Any other DB still fails with `ErrOutsideTx`, as before
+  (amends the rule 0132, 0135 and 0137 rely on: a filter or policy that
+  captured the DB now reads in the transaction too). The engine redirects
+  at its entry points (`Plain`, `Run`, `DryRun`, `Tx`, the write and load
+  entries, raw SQL); the context carries the innermost frame beside the
+  root (`txCtx.self`). It costs a statement on a DB outside a transaction
+  one more context lookup. `TxFrom` stays for a helper whose DB differs from
+  the beginner's.
 - velox-graphql: an edge's DB is its row's (`untyped.SourceDB`), else the
   request's. A connection of a query still fails without an adapter or
-  `veloxgql.Service` (0105, 0121). A gqlgen mutation runs in a
-  transaction and a statement on another DB under its context fails with
-  `ErrOutsideTx`, so a mutation's resolver keeps writing on
-  `veloxgql.DB(ctx)`; a query's resolver reads on `r.DB`.
+  `veloxgql.Service` (0105, 0121). A resolver reads and writes on the one
+  DB the server serves (`r.DB`): in a gqlgen mutation, which runs in a
+  transaction gqlgenx begins on that DB, its statements under the
+  resolver's ctx run in that transaction, serialised by the extension's
+  per-field lock as `veloxgql.DB(ctx)`'s were. `veloxgql.DB(ctx)` is for
+  code outside a resolver.

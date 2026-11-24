@@ -73,7 +73,9 @@ Each rule names the test that backs it.
   and similar filters still apply (`TestWithoutPolicyKeepsInterceptors`,
   `TestWithoutPolicyKeepsSoftDelete`).
 - **Inside `db.Tx`, use the `tx` and the `ctx` you were given.** A statement on
-  the outer `db` fails with `ErrOutsideTx` (`TestStatementOutsideItsTx`).
+  the outer `db` under that `ctx` joins the transaction; one on another DB
+  fails with `ErrOutsideTx` (`TestStatementOutsideItsTx`,
+  `TestBeginnerJoinsItsTx`).
 - **SQLite has a pool of one connection.** Finish an `Iter` loop before you
   start another statement (`TestIterNestedStatementFails`).
 - **A MySQL DSN needs `parseTime=true` and `clientFoundRows=true`**

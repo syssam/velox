@@ -274,8 +274,9 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 
 `Count` returns an `int64`, where ent's returns an `int`.
 
-Inside `db.Tx`, a statement on the outer `db` fails with `ErrOutsideTx`
-rather than running outside the transaction. To mix raw SQL and velox in one
+Inside `db.Tx`, a statement on the outer `db` under fn's `ctx` runs in the
+transaction, where ent's client runs it outside; one on another DB fails
+with `ErrOutsideTx`. To mix raw SQL and velox in one
 transaction, begin it on the `*sql.DB` and run velox on it with
 `velox.UseTx(db, tx)`.
 
@@ -444,7 +445,7 @@ a table rebuild on SQLite.
 | `OpDelete \| OpDeleteOne` | `OpDelete` |
 | an op tested as a bit set | an op compared with `==`; `velox.On(h, ops...)` runs `h` for the ops listed |
 | a hook's or an interceptor's lookup on the client inside a transaction | a read through the filter's `db` parameter, the statement's DB ([guide](guide.md#hooks-and-filters-for-every-entity), [ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)) |
-| a client read inside a transaction that must not join it | a read on `db` under `velox.WithoutTx(ctx)`; under fn's `ctx` it fails with `ErrOutsideTx` |
+| a client read inside a transaction that must not join it | a read on `db` under `velox.WithoutTx(ctx)`; under fn's `ctx` it joins the transaction |
 | a test's `tx, _ := c.Tx(ctx); defer tx.Rollback()` that never commits | `veloxtest.RolledBack(t, ctx, db, func(ctx context.Context, tx *velox.DB) { … })`: fn's writes roll back, a `t.Fatal` in fn included |
 | a failed COMMIT, told apart by its message | `errors.Is(err, velox.ErrCommitUnknown)`: the outcome is unknown, so retry nothing. A COMMIT that says it rolled back does not match, such as PostgreSQL's answer to an aborted transaction, `pgx.ErrTxCommitRollback` ([ADR 0134](decisions/0134-commit-unknown.md)) |
 | a helper returning a `nil` predicate for "no condition", checked with `p == nil` | the zero `velox.Predicate{}` or `Pred[E]{}`, checked with `velox.IsZero(p)`: a `Pred` holds a slice, so it has no `nil` and no `==`. A zero `Pred` that reaches a query fails the statement |
@@ -588,10 +589,10 @@ columns by name: it asks `e.HasColumn("deleted_at")` of the
 `velox.FilterEntity` it is given, in place of a generated list of entity
 names.
 
-**A read on the client inside a transaction fails.** Inside `db.Tx`, a
-statement on `db` under fn's `ctx` fails with `ErrOutsideTx`, where ent's
-client runs it outside the transaction. Run it on `tx`, or on `db` under
-`velox.WithoutTx(ctx)` when it must not join the transaction; on SQLite's
+**A read on the client inside a transaction joins it.** Inside `db.Tx`, a
+statement on `db` under fn's `ctx` runs in the transaction, where ent's
+client runs it outside; on another DB it fails with `ErrOutsideTx`. Run it
+on `db` under `velox.WithoutTx(ctx)` when it must not join the transaction; on SQLite's
 pool of one connection that fails too, rather than wait for the
 transaction. A `WithTx(ctx, db, fn)` helper that kept its own transaction
 key in the context, so that a nested call joined the outer transaction,
@@ -725,8 +726,10 @@ replacement.
   calls `db.Query[veloxgen.Todo]().Paginate(ctx, after, first, before, last,
   veloxgen.WithTodoOrder(orderBy), veloxgen.WithTodoFilter(where))`, with `db`
   the resolver's `r.DB`, as entgql's `r.client`. A mutation's resolver
-  writes on `veloxgql.DB(ctx)`, the mutation's transaction, as entgql's
-  `ent.FromContext(ctx)`. The filter
+  writes on `r.DB` too: under its `ctx` a statement on that DB runs in the
+  mutation's transaction, where entgql's resolver asks
+  `ent.FromContext(ctx)`. `veloxgql.DB(ctx)` is for code outside a
+  resolver. The filter
   option takes the where input itself. `Paginate` is generic and calls
   the entity's generated `PaginateQuery`, so it does not compile for an
   entity with no connection. The connection is lazy: it sends nothing

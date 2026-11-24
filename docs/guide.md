@@ -830,7 +830,7 @@ The query is a read like any other: it needs a `Limit`, takes `Where`,
 `With` and `Join`, and runs under the DB's filters, scope, interceptors
 and limits. Every path that makes an entity gives it its DB: `All`,
 `First`, `One`, `Iter`, `With`, a join's target, `Insert`, upserts,
-`UpdateQuery.One`, `Save`, `Paginate` and `db.Rows`. Two rules keep the
+`UpdateQuery.One`, `Save`, `Paginate` and `db.Raw`. Two rules keep the
 DB from outliving what it should:
 
 - An entity read on a `WithoutPolicy` DB reads its edges with the policy
@@ -1737,9 +1737,16 @@ err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 ```
 
 Inside the function, use `tx` and the `ctx` you were given. A statement on
-the outer `db` under that context fails with `velox.ErrOutsideTx`, which
-catches a common bug. Work that must not join the transaction, such as an
-audit row that must survive a rollback, runs on `db` under
+the outer `db` under that context joins the transaction, as one on `tx`
+does, and `db.Tx` there makes a savepoint: code that holds only `db`, such
+as a GraphQL resolver, runs in its caller's transaction. Only the DB that
+began the transaction joins it: one from another `Open`, another
+transaction's `tx`, or a copy of `db` with another `WithoutPolicy` reason
+or recording fails with `velox.ErrOutsideTx`, which catches a statement
+meant for another transaction
+([ADR 0171](decisions/0171-entities-carry-their-source.md)). Work that must
+not join the transaction, such as an audit row that must survive a
+rollback, runs on `db` under
 `velox.WithoutTx(ctx)`. It needs a second connection, so on SQLite's pool
 of one it fails rather than wait for the transaction.
 
@@ -2155,7 +2162,8 @@ members or an organization's subtree, reads through the `db` parameter,
 the DB the statement runs on, with the `ctx` it was given. It is never nil,
 as `m.DB()` is not for a hook. Inside `Tx` it is the transaction, so the
 statement gets the same condition inside a transaction as outside; a read
-on a DB captured at `Connect` would fail there with `ErrOutsideTx`. The filter's reads are not narrowed by the filter itself,
+on a DB captured at `Connect` joins a transaction that DB began, and fails
+with `ErrOutsideTx` in any other. The filter's reads are not narrowed by the filter itself,
 so it does not call itself without end; the other filters, interceptors
 and policies apply to them
 ([ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)).
@@ -2652,7 +2660,7 @@ The ones you will meet most:
 | `ErrNoWhere` | an update or delete with no `Where` or `All()` |
 | `ErrDenied`, `*PolicyError` | a policy refused |
 | `ErrStale` | `Save` lost an optimistic-locking race |
-| `ErrOutsideTx` | a statement on `db` instead of `tx` inside `Tx` |
+| `ErrOutsideTx` | a statement inside `Tx` on a DB that is not the transaction's and did not begin it |
 | `ErrTimeout` | a deadline passed |
 | `*ConstraintError` | a unique, foreign-key, not-null or check constraint failed |
 | `*ValidationError` | a value failed a field's validator; `Name` is the schema field's name, `Field` its Go name |
@@ -2763,8 +2771,18 @@ Most resolvers are one line. The generated code imports the engine-free
 runtime `veloxgql` and its package `gqlgraph`; gqlgen's adapter is
 `veloxgql/gqlgenx`. `gqlgenx.Setup` wraps the gqlgen server with limits on
 a request's size, depth and cost, and `gqlgenx.ErrorPresenter` keeps
-database and velox error text away from clients. A connection or an edge
-read in a context no adapter made fails with
+database and velox error text away from clients.
+
+A resolver reads and writes on the one DB the server serves, which its
+`Resolver` holds: `r.DB.Query[veloxgen.User]()`, `r.DB.Insert(x)`. A
+mutation runs in a transaction the adapter begins on that DB, and a
+statement on `r.DB` under the resolver's `ctx` runs in it, so the
+mutation's writes roll back together. The rows a resolver returns carry
+the DB that read them, and a generated edge reads on it: batched with its
+siblings in a request, alone outside one. `veloxgql.DB(ctx)` is for code
+outside a resolver that has only the context.
+
+A connection of a query read in a context no adapter made fails with
 `veloxgql.ErrNoSelectionSource`. A service that pages outside a request,
 in its own list method, a call from another service or a test, asks for
 it with `ctx = veloxgql.Service(ctx, db)`: there generated code reads

@@ -897,6 +897,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- The DB that began a transaction joins it: under the transaction's
+  context, a statement on that DB runs in the transaction (in the
+  savepoint whose function got the context), and its `Tx` makes a
+  savepoint. A statement on another DB (another `Open`, another
+  transaction's, or a copy with another `WithoutPolicy` reason or
+  recording) still fails with `ErrOutsideTx`. A GraphQL resolver writes on
+  the DB it holds, `r.DB`, in a gqlgen mutation's transaction too;
+  `veloxgql.DB(ctx)` is for code outside a resolver (ADR 0171).
 - `migrate drift` reports a primary key that differs from the snapshot's,
   in its columns or in having a name, as an `alter-primary-key` change, and
   two expression defaults that both parse and differ as `alter-column
