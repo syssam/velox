@@ -192,8 +192,8 @@ default; ent leaves that to the database.
 **An edge schema is keyed by its own `id`.** ent's
 `field.ID("user_id", "group_id")` annotation, a composite key, is not in
 velox, so a port that uses it fails to compile. Remove it: velox keys the
-rows by `id` and adds a unique index over the two keys. Composite keys are
-left to ADR 0110.
+rows by `id` and adds a unique index over the two keys. Composite keys on
+an edge schema are deferred; ADR 0109 lists what they need.
 
 **A bidirectional edge cannot go through an edge schema.** ent's
 `edge.To("friends", User.Type).Through("friendships", Friendship.Type)`,
@@ -245,7 +245,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
 | `client.User.Get(ctx, id)` | `db.Query[veloxgen.User]().Where(U.ID.EQ(id)).One(ctx)` |
 | `client.User.UpdateOneID(id).SetAge(3).ClearNick().Save(ctx)` | `db.Update[veloxgen.User]().Where(U.ID.EQ(id)).Set(U.Age.Set(3), U.Nick.SetNull()).One(ctx)`, the row as written; or, with the user in hand, `db.Save(&u, U.Age, U.Nick).Exec(ctx)` |
-| `client.User.DeleteOneID(id).Exec(ctx)` | `db.Delete[veloxgen.User]().Where(U.ID.EQ(id)).One(ctx)`: `ErrNotFound` when no row went (decision 0121) |
+| `client.User.DeleteOneID(id).Exec(ctx)` | `db.Delete[veloxgen.User]().Where(U.ID.EQ(id)).One(ctx)`: `ErrNotFound` when no row went (decision 0122) |
 | `client.User.Delete().Exec(ctx)` (every row) | `db.Delete[veloxgen.User]().All().Exec(ctx)` |
 | `client.User.Create().OnConflict(...).UpdateNewValues()` | `db.Insert(&u).OnConflict(U.Email).UpdateAll().Exec(ctx)` |
 | `.OnConflict(...).UpdateAge()`, `.AddAge(1)`, `.SetAge(3)` on the upsert | `.OnConflict(U.Email).Update(U.Age)`, `.UpdateSet(U.Age.Add(1))`, `.UpdateSet(U.Age.Set(3))` |
@@ -388,9 +388,9 @@ confined, and that its column is immutable, NOT NULL and of the key's type.
 The layout is ent's, with no runtime package (decisions 0037, 0039 and
 0040): `veloxgen` holds every entity, handle and descriptor, and imports the
 schema package by its own name for its defaults, validators and
-behaviour. A descriptor names the schema's value, `Schema: schema.Issue{}`,
+behaviour. A descriptor names the schema's value, `Schema: veloxschema.Issue{}`,
 and velox reads the behaviour from it as ent's generated runtime reads
-`schema.Issue{}.Policy()`: each `Mixin()` value's, in order, then the
+`veloxschema.Issue{}.Policy()`: each `Mixin()` value's, in order, then the
 schema's own. An entity with no behaviour, its own or a mixin's, names no
 schema. There is no `veloxgen/runtime` and no blank import. The schema package may not
 import `veloxgen`, directly or through another package: velox-gen refuses it,

@@ -350,19 +350,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   uint32, and Uint64 to uint, as gqlgen.yml's models do. `veloxgql.GeneratedCodeIsVersion27` stays: code generated
   before runs as it did, and the new output needs nothing new of the
   runtime.
-- Under velox-graphql's old compat option, a connection behaves for
-  clients as the predecessor's did (ADR 0108). It takes a cursor the
-  predecessor wrote, so a list a client paged before the deploy pages
-  on. The cursor's key is the key, and its values are the current order's;
-  a cursor with another number of values fails as one taken under another
-  order. Connections still write velox's cursors. An order of one term
-  breaks ties by the key in that term's direction. A page after a cursor
-  has `hasPreviousPage`, and a page before a cursor `hasNextPage`. A
-  foreign key's predicates (`customerId`, `customerIdIn`,
-  `customerIdIsNil`, …) are the column's alone, with no EXISTS on the
-  target. Without compat, such a cursor fails with the same error as
-  before, when the connection is built rather than when the argument is
-  decoded. Generated code does not change.
+- A connection takes the msgpack cursors entgql writes, its time values
+  (extension -1) included, so a list a client paged before moving from ent
+  pages on (ADRs 0108, 0156). The cursor's key is the key, and its values
+  are the current order's; a cursor with another number of values fails as
+  one taken under another order. Connections still write velox's cursors.
+  An order of one term breaks ties by the key in that term's direction. A
+  page after a cursor has `hasPreviousPage`, and a page before a cursor
+  `hasNextPage`, as entgql's do. A foreign key's predicates (`customerId`,
+  `customerIdIn`, `customerIdIsNil`, …) are the column's alone, with no
+  EXISTS on the target. Generated code does not change.
 - Package `contrib/graphql/veloxgql/graphqlgo` serves velox-graphql's
   generated code under github.com/syssam/graphql-go (ADR 0106), with
   graphql-go's own option types: `graphqlgo.With(db)` is the executor
@@ -411,8 +408,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   A rollback, a failed COMMIT or a retried attempt runs none; a nested `Tx`
   that rolls back drops what was queued while it ran. Outside a transaction
   and on a `UseTx` DB it returns an error.
-- `velox.Values(ctx, q, I.Number.Key())` and `velox.IDs[int64](ctx, q)`
-  (ADR 0100) read one column, or the key, of the rows `q` reads, under the
+- `q.Values(ctx, I.Number)` and `q.IDs(ctx)` (ADRs 0100, 0158, 0162)
+  read one column, or the key, of the rows `q` reads, under the
   Read policy, the scope, the interceptors, `WithFilter` and the Limit rule.
 - `velox.WithLog(logger, velox.LogArgs())` (ADR 0100) logs each statement
   at Debug with its SQL, duration, rows and error, and its arguments with
@@ -521,27 +518,29 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   decimal column, ADR 0096): GT, GTE, LT, LTE, Between, Min and Max,
   compared by its SQL type. velox-graphql's WhereOps
   gives such a field equality and comparison predicates (ADR 0087).
-- velox-graphql's compat option makes the API the predecessor's generator
-  made: names from the schema name (`customerId`, `imageUrl`), foreign keys in
-  the type as IDs beside their edges, and their where predicates named from
-  the field. `graphql.Type` on a field is the field's GraphQL type: an enum field's enum name, or a scalar or list the application
+- velox-graphql's `names=schema` names from the schema name (`customerId`,
+  `imageUrl`). A foreign key bound to a declared field is in the type as an
+  ID beside its edge, and its where predicates are named from the field
+  (ADR 0156). `graphql.Type` on a field is the field's GraphQL type: an enum field's enum name, or a scalar or list the application
   declares (`Map`, `[ID!]`) (ADR 0087).
-- Under the compat option the rest of the predecessor's surface follows: every orderable
-  field in the order enum, Optional fields nullable in the type, Required
-  unique edges non-null, a root Query field for every type (a list for a
+- velox-graphql options cover the rest of an existing API's surface (ADR
+  0156): `orderfields=all` puts every orderable field in the order enum,
+  `optional=nullable` makes Optional fields nullable in the type,
+  `requirededges=nonnull` makes Required unique edges non-null,
+  `queryfields=all` gives every type a root Query field (a list for a
   `QueryField` without `RelayConnection`, which `graphql.RelayConnection()`
-  now records), nullable connection edges and nodes, only `Cursor`, `Time`
-  and `Bytes` declared, equality-only defaults on keys and Other fields,
-  explicit WhereOps over WhereInput, no directives on inputs, a json field of
-  a named Go type typed by its name, and silence where the predecessor
-  ignored an annotation. The option `where=whitelist` filters only fields with
-  `WhereInput` (ADR 0087).
-- Under velox-graphql's compat option, every type with an ID implements
-  `Node`, the root query has `node(id:)` and `nodes(ids:)`, and the generated
+  records), `apptypes=` leaves scalars to the application, `idops=equality`
+  gives keys and Other fields equality-only defaults, and
+  `jsontypes=named` types a json field of a named Go type by its name.
+  Nullable connection edges and nodes, exact WhereOps, no directives on
+  inputs, and a warning for an annotation with no effect are the defaults.
+  `where=whitelist` filters only fields with `WhereInput` (ADR 0087).
+- Under velox-graphql's `node=on`, every type with an ID implements `Node`,
+  the root query has `node(id:)` and `nodes(ids:)`, and the generated
   `ResolveNode` and `ResolveNodes` answer them through each type's Read
-  policy; a where input is lenient: an empty `In`, a false
-  `IsNil` and an empty `or` add nothing, `not: {}` is an error, and no width
-  or node cap applies (ADR 0088).
+  policy. Under `filters=lenient`, an empty `In`, a false `IsNil` and an
+  empty `or` add nothing, `not: {}` is an error, and no width or node cap
+  applies (ADRs 0088, 0152, 0156).
 - Two enum fields whose types get one name (`Asset.depreciation_method`,
   `AssetDepreciation.method`) and hold the same values share one Go type and
   one GraphQL enum (ADR 0086).
@@ -913,8 +912,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   - `apptypes=` works without `entities=`, and leaves the vocabulary
     scalars it lists (`JSON`, `UUID`, `Uint64`, `Bytes`, `Time`) to the
     application.
-- velox-graphql's `node(id:)` and `nodes(ids:)` under the compat option find
-- `q.Values(ctx, I.Number)` and `q.IDs[int64](ctx)` (ADR 0158) are methods
+- `q.Values(ctx, I.Number)` and `q.IDs(ctx)` (ADRs 0158, 0162) are methods
   of `Query` that end its chain, as `All` does, and replace the functions
   `velox.Values(ctx, q, I.Number.Key())` and `velox.IDs[int64](ctx, q)`.
   `Values` takes the bare handle and infers its value type, a pointer for a
@@ -930,17 +928,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `velox.SumBy(ctx, q, I.OrgID, I.Total)`, not `I.OrgID.Key()`. A JSON
   handle and another entity's handle do not compile as a key.
 
-- velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
+- velox-graphql's `node(id:)` and `nodes(ids:)` (under `node=on`) find
   the types that hold the IDs with one statement, then read only those
   types under their policies: `node(id:)` is 2 statements, not one per
   type of Node. Results, policy denials and ambiguity are unchanged; the
   lookup is raw SQL, which Around hooks see as "Rows". No generated code
   changes (ADR 0149).
-- A flag of `gqlgraph.Type` gives a where input lenient semantics; the
-  compat flag keeps the predecessor's connections and plain foreign-key
-  predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
-  `GeneratedCodeIsVersion28`: regenerate, since code generated under
-  the compat option before sets only the compat flag (ADR 0150).
+- `gqlgraph.Type.LenientFilters` gives a where input lenient semantics
+  (ADR 0150; named by ADR 0156).
 - `gqlgraph.ResolveNode` and `gqlgraph.ResolveNodes` take
   `...gqlgraph.NodeOption`: `gqlgraph.WithNodeType[K]` and
   `gqlgraph.WithFixedNodeType`. The generated `ResolveNode` and
@@ -1165,7 +1160,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox-graphql: a connection reads the column of an order field only when
   its orderBy names it. `AlwaysRead` holds the key and the foreign keys, so
   a selection reads its own fields' columns and no more; before, every
-  orderable column was read, which under the compat option (every field
+  orderable column was read, which under `orderfields=all` (every field
   orderable) was every column. An `XOrderField`'s `IsValid` and
   `UnmarshalGQL` are one call each to `gqlgraph.Type.IsOrderField` and
   `gqlgraph.UnmarshalOrderField`, with the same values and error text.
@@ -1689,7 +1684,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 ### Removed
 
 - The functions `velox.Values` and `velox.IDs`: call `q.Values(ctx, h)`
-  and `q.IDs[K](ctx)` (ADR 0158).
+  and `q.IDs(ctx)` (ADRs 0158, 0162).
 - The handles' `Key()` method and the type `velox.GroupKey`: a grouped
   aggregate takes the handle itself (ADR 0158).
 
@@ -1831,17 +1826,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   policy hid. Such a row sorts as NULL: last ascending, first descending.
   `After` of a `LeftJoin` pages from a row with no joined entity as NULL,
   where it failed.
-- GraphQL, compat option: a where argument has a budget of 10 times
+- GraphQL, `filters=lenient`: a where argument has a budget of 10 times
   `Limits.MaxFilterNodes` (10000 by default), where it had none; and any
   where argument's budget is held to 30000, so a huge `idIn` is
   `ErrFilterTooLarge` (BAD_USER_INPUT), not the driver's bind-parameter
   limit as an internal error.
-- GraphQL, compat option: `nodes(ids:)` reads each type of Node with one
+- GraphQL, `node=on`: `nodes(ids:)` reads each type of Node with one
   `IN` query, as entgql does, not one query per ID per type; each type's
   rows batch their edges; more IDs than `Limits.MaxPage` is
   `ErrPageTooLarge`; and the cost model charges it by the number of IDs,
   and `node`/`nodes` 100 for each type of Node.
-- GraphQL, compat option: `node(id:)` of an ID that more than one type has
+- GraphQL, `node=on`: `node(id:)` of an ID that more than one type has
   (`gqlgraph.ErrAmbiguousNodeID`) reaches the client as BAD_USER_INPUT, not
   INTERNAL_SERVER_ERROR.
 - veloxotel: a failed statement's or transaction's span no longer holds the

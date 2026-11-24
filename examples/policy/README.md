@@ -36,7 +36,7 @@ func (Doc) Policy() velox.Policy {
   it is not an error.
 - Inheritance through `Has`: `Comment`'s `Read` is `velox.HasEdge("doc")`,
   and velox applies `Doc`'s own `Read` inside that `EXISTS`. velox-gen links
-  the `doc` edge in `veloxgen.Comment`'s descriptor (`velox.Linked`), so the name
+  the `doc` edge in `veloxgen.Comment`'s descriptor (`Descriptor.Entities`), so the name
   resolves.
 - `SQL(ctx)` prints the conditions the policy adds for that context.
 - `db.WithoutPolicy(reason)` returns a DB with every policy switched off,

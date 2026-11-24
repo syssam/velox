@@ -11,7 +11,7 @@ go run ./tour
 
 ## Layout
 
-- `schema/` declares the entities in the ent-style DSL. `invoice.go` declares
+- `veloxschema/` declares the entities in the ent-style DSL. `invoice.go` declares
   `Invoice`, which lists the `mixin.Time` mixin (`created_at` and
   `updated_at`), the `InOrg` mixin (`inorg.go`: an `Immutable` `org_id`, and the
   policy and hook that confine every statement to one organization), the
@@ -20,17 +20,17 @@ go run ./tour
   `invoice_behaviour.go` declares `Invoice`'s `Policy()` and `Hooks()`, and
   `line_policy.go` `Line`'s `Policy()`. They name columns by their schema
   names (`velox.FieldEQ("status", s)`, `r.Value("number")`) and do not import `veloxgen`.
-- `gen/` is written entirely by `go tool velox-gen -out ./tour/gen ./tour/schema`.
+- `veloxgen/` is written entirely by `go tool velox-gen -out ./tour/veloxgen ./tour/veloxschema`.
   Each entity's descriptor lists the mixins' `Policy` and `Hooks`, then the
   entity's own.
 - `role/` holds the billing role a request acts with.
 - `migrations/` holds the tables, made by `go tool velox-gen migrate diff
-  -dialect sqlite -dir ./tour/migrations ./tour/schema`; `main.go` applies it
+  -dialect sqlite -dir ./tour/migrations ./tour/veloxschema`; `main.go` applies it
   with `migrate.Up` to a fresh SQLite file and runs the walkthrough.
 
 ## What it shows
 
-1. A context carrying the organization (`schema.OrgKey.With`) and a role for the
+1. A context carrying the organization (`veloxschema.OrgKey.With`) and a role for the
    policy; `Insert` and `InsertAll` fill the `org_id` column from it, and the
    insert hook refuses an invalid invoice.
 2. Reads: `Where`, `OrderBy`, `Limit` and `All`; `One`; `Count`; `Iter`;

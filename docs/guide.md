@@ -66,6 +66,7 @@ package veloxschema
 
 import (
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
@@ -686,8 +687,8 @@ nullable column, nil for NULL. A JSON column cannot be read this way, and
 keys, typed as the key field is:
 
 ```go
-numbers, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100).Values(ctx, I.Number)
-ids, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).AllowUnbounded().IDs(ctx)
+numbers, err := db.Query[veloxgen.Invoice]().Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)).Limit(100).Values(ctx, I.Number)
+ids, err := db.Query[veloxgen.Invoice]().Where(I.Status.EQ(veloxgen.InvoiceStatusPaid)).AllowUnbounded().IDs(ctx)
 ```
 
 They read as `All` does: the policies, the scope, the filters, `Limit`,
@@ -2358,7 +2359,7 @@ List it in an entity's `Mixin()`, and set the organization once per request,
 usually in middleware:
 
 ```go
-ctx = schema.OrgKey.With(ctx, orgID)
+ctx = veloxschema.OrgKey.With(ctx, orgID)
 ```
 
 From then on, reads, updates and deletes see only that organization's rows,
@@ -2712,7 +2713,9 @@ line. gqlc does not read
 `@goField(name:)` yet, so velox-gen refuses a field or edge renamed with
 `graphql.FieldName`, a non-null bytes field and a key not named ID, naming
 each. The adapter is `veloxgql/graphqlgo`,
-whose functions are graphql-go options:
+whose functions are graphql-go options. `velox` and `app` below are the
+packages gqlc writes from `velox.graphql` and the application's
+`app.graphql`, not velox's root package:
 
 ```go
 s, err := graph.NewSchema(velox.Bindings(root), app.Bindings(root), graphqlgo.Scalars())

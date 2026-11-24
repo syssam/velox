@@ -104,7 +104,9 @@ When `v1.0.0` is tagged, the root module, `contrib/graphql` and
   are for generated code and extensions, and outside the 1.0 compatibility
   promise. They show how velox builds a statement, so a minor release may
   change them, with a changelog line. The "Generated code" section of the
-  root package's godoc lists them.
+  root package's godoc lists them. The fields of `EntityInfo` and
+  `ColumnInfo` that `velox.Entities` is for, an entity's table, columns and
+  primary key, are inside the promise.
 - **Deprecation before removal.** A deprecated identifier carries a
   `// Deprecated:` comment that names its replacement, and stays through
   every release of its major version

@@ -54,7 +54,7 @@ lift the scope. `scope_test.go` checks it with `scopetest.Isolates`, which
 also checks that `org_id` is `Immutable`, NOT NULL and an `int64`.
 
 ```go
-ctx = schema.OrgKey.With(ctx, acme)          // acme is an int64, the column's type
+ctx = veloxschema.OrgKey.With(ctx, acme)          // acme is an int64, the column's type
 
 db.Insert(&p).Exec(ctx)                // fills p.OrgID
 db.Query[veloxgen.Project]().Count(ctx)     // ... WHERE "org_id" = ?

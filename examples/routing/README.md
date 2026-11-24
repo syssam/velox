@@ -25,7 +25,7 @@ velox.WithShard(ctx, "us")                             // name a shard without a
 ```
 
 - `WithShardFor` gets the context (here it reads the organization that
-  `schema.OrgKey.With` put there) and returns a shard name. A statement is sent to that shard's primary, or for a read, to one of
+  `veloxschema.OrgKey.With` put there) and returns a shard name. A statement is sent to that shard's primary, or for a read, to one of
   its replicas in turn. Nothing runs on two shards.
 - A statement whose shard cannot be found fails with `ErrNoShard` and is not
   sent. `WithShardFor` returns "" for a context that names none. On a scoped

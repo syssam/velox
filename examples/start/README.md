@@ -8,7 +8,7 @@ go run ./start
 ```
 
 `veloxschema/user.go` is the whole schema: a struct that embeds `velox.Schema` and
-lists the entity's fields. `go tool velox-gen -out ./start/gen ./start/schema`
+lists the entity's fields. `go tool velox-gen -out ./start/veloxgen ./start/veloxschema`
 writes the `veloxgen` package from it: `veloxgen.User`, the struct a query returns, and
 `veloxgen.Users`, the typed handle of every column.
 
@@ -33,7 +33,7 @@ unless it says `AllowUnbounded()`, and an update or delete with no `Where` fails
 with `velox.ErrNoWhere` unless it says `All()`.
 
 The table comes from `migrations/`. `go tool velox-gen migrate diff -dialect
-sqlite -name init -dir ./start/migrations ./start/schema` wrote it, and
+sqlite -name init -dir ./start/migrations ./start/veloxschema` wrote it, and
 `main.go` applies it with `migrate.Up` to a temporary SQLite file. After a
 schema change, run `migrate diff` again without `-name init`, and regenerate.
 

@@ -1,7 +1,7 @@
 # velox examples
 
 Small runnable programs, one topic each but for tracker, a whole service, on SQLite files in a temporary directory (routing uses one per database).
-Each directory is a `main` package with its own `schema/` and `gen/` packages,
+Each directory is a `main` package with its own `veloxschema/` and `veloxgen/` packages,
 a README, and a golden test of its output (tracker's and graphql's tests check the
 responses of their servers instead).
 
@@ -28,13 +28,13 @@ go run ./start
 
 ## How the examples are built
 
-- Entities are declared in `schema/` with the ent-style DSL: a struct that
+- Entities are declared in `veloxschema/` with the ent-style DSL: a struct that
   embeds `velox.Schema`, with `Fields`, `Edges`, `Indexes` and `Mixin`
   methods. As in ent, a schema also declares its entity's `Policy()` and
   `Hooks()`, and a mixin its own. They name columns and edges by their
   schema names (`velox.FieldEQ("owner", u)`, `velox.HasEdge("doc")`,
   `m.Fill("org_id", org)`), so the schema never imports `veloxgen`.
-- `gen/` is written entirely by velox-gen from the schema; never edit it. It
+- `veloxgen/` is written entirely by velox-gen from the schema; never edit it. It
   holds every entity. Each entity's descriptor lists the `Policy` and
   `Hooks` methods of its mixins and of its schema, so `main.go` needs no
   extra import. A hook that needs a `veloxgen` type, such as the hooks example's
@@ -125,12 +125,12 @@ velox-gen is a tool dependency of this module (the `tool` line in `go.mod`).
 After changing a schema, run from `examples/`, for the example `<x>`:
 
 ```sh
-go tool velox-gen -out ./<x>/gen ./<x>/schema
+go tool velox-gen -out ./<x>/veloxgen ./<x>/veloxschema
 ```
 
-`go tool velox-gen -check -out ./<x>/gen ./<x>/schema`
+`go tool velox-gen -check -out ./<x>/veloxgen ./<x>/veloxschema`
 writes nothing and exits 3 when a generated file is out of date, and
-`go tool velox-gen verify -out ./<x>/gen ./<x>/schema` builds every entity's
+`go tool velox-gen verify -out ./<x>/veloxgen ./<x>/veloxschema` builds every entity's
 schema and reports its mistakes. CI runs both for every example, with
 `go vet`, `gofmt`, golangci-lint and the tests.
 
@@ -138,7 +138,7 @@ The graphql example also runs the velox-graphql plugin, and gqlgen after it
 (see [its README](graphql/README.md)):
 
 ```sh
-go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+go tool velox-gen -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
 go -C graphql tool gqlgen generate
 ```
 

@@ -5,8 +5,8 @@ a change has to keep true. Go 1.27 is required. The database tests need Docker.
 
 ## Layout
 
-There are five Go modules, and one more that only pins a tool. A change that touches more than one is checked in
-each.
+There are five Go modules, and one more that only pins a tool. A change
+that touches more than one is checked in each.
 
 - The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
   `plugin`, `veloxtype` (the plain data types the root re-exports), `veloxpgx`
@@ -19,14 +19,16 @@ each.
     generator (`codegen`), velox-gen's generate run and its all-or-nothing
     writer (`genrun`), the DDL writer (`ddl`), the reader of the drivers'
     errors (`dberr`), the entity a Filter is called for (`filterent`), the
-    writer of the root's `handles.go` (`handlegen`) and the name of the
-    module a program is built from (`buildinfo`).
+    writer of the root's `handles.go` (`handlegen`, run by
+    `internal/cmd/handlegen`) and the name of the module a program is built
+    from (`buildinfo`).
   - The tests: of the public API (`apitest`), against real databases
     (`integration`) and of the repository itself (`repocheck`).
   - What the tests use: the generated models (`testmodel`, `testbind`), a fake
     executor (`fakeconn`), a repository layer for caller capture (`testrepo`),
-    temporary modules (`tempmod`), build measurement (`buildcost`) and the
-    database variables (`dbenv`).
+    temporary modules (`tempmod`), build measurement (`buildcost`), the
+    500-schema model of the benchmarks (`benchschema`) and the database
+    variables (`dbenv`).
 - `contrib/graphql`: the annotations, the `velox-graphql` plugin (its answer
   in `internal/gqlplugin`, and in the process as `graphqlgen`) and the
   `veloxgql` runtime.
@@ -287,7 +289,8 @@ CI fails when a generated file is stale.
 
   The root module's packages with the flag are `internal/codegen`, `internal/ddl`,
   `migrate` and `cmd/velox-gen`. In `contrib/graphql` they are
-  `internal/gogen` and `internal/sdl`. Each example's test has it too, for its
+  `internal/gogen`, `internal/sdl` and `internal/gqlplugin` (its
+  `testdata/oldvelox` goldens). Each example's test has it too, for its
   `testdata/output.golden`: run `go test ./start -update` in `examples`.
 
 A change to the generated code's shape replaces `GeneratedCodeIsVersionN` with

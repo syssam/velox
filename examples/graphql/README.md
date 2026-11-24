@@ -49,13 +49,13 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    would go into a NOT NULL column, which MySQL's strict mode refuses.
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
    below.
-2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
+2. velox-gen with the plugin, which writes `veloxgen/`: the entities, the GraphQL
    schema `veloxgen/velox.graphql`, and the `*_gql.go` files it binds to
    (connections, edges, orders, where inputs, and mutation inputs with their
    `Setters` method):
 
    ```sh
-   go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+   go tool velox-gen -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
    ```
 3. `graph/app.graphql`, the application's own schema: `type Mutation`,
    with `createPost`, `updatePost`, `deletePost`, `createLabel`,
@@ -419,7 +419,7 @@ After changing the schema, run both generators, in this order, from
 `examples/`:
 
 ```sh
-go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+go tool velox-gen -out ./graphql/veloxgen -plugin velox-graphql ./graphql/veloxschema
 go -C graphql tool gqlgen generate
 ```
 
