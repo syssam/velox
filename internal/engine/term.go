@@ -351,7 +351,15 @@ func (w *writer) term(t Term) {
 		}
 		w.excluded(t.col)
 	case termExpr:
+		if !t.agg {
+			w.exprBody(t.x)
+			return
+		}
+		// A marked aggregate's terms are its arguments, as termAgg's are.
+		having := w.having
+		w.having = false
 		w.exprBody(t.x)
+		w.having = having
 	case termJSON:
 		if !w.in.Columns[t.col].Codec {
 			w.fail(fmt.Errorf("velox: %s: column %s is not a JSON column, which a JSON path needs", w.in.Name, w.in.Columns[t.col].Name))

@@ -364,13 +364,17 @@ func distinctRepeat(p *Projection, t Term) bool {
 
 // havingTerms calls f with each term of p's HAVING that the writer checks
 // (havingTerm): each Expr's terms, and the terms inside them, but not
-// inside an aggregate or a relation's term, in the order written.
+// inside an aggregate, marked (AggMarkTerm) or not, or a relation's term,
+// in the order written.
 func havingTerms(p *Projection, f func(Term)) {
 	var term func(Term)
 	term = func(t Term) {
 		f(t)
 		switch t.kind {
 		case termExpr:
+			if t.agg {
+				return
+			}
 			for _, s := range t.x.slots {
 				if s.Term != nil {
 					term(*s.Term)

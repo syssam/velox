@@ -323,6 +323,25 @@ func TestHavingRepeatedTerm(t *testing.T) {
 			t.Errorf("no value %v:\n got %s %v\nwant %s", tc.d, text, err, tc.sql)
 		}
 	}
+	// A key inside a marked aggregate is the aggregate's argument, not a
+	// HAVING term: MIN of it inside COUNT is MySQL's error 1111.
+	distinct := velox.Agg(velox.Calc[inv]("COUNT(DISTINCT ?)", next))
+	for _, tc := range []struct {
+		d   velox.Dialect
+		sql string
+	}{
+		{velox.Postgres, `SELECT COUNT(*) FROM "invoices" GROUP BY ("org_id" + 1), "paid" HAVING ((COUNT(DISTINCT ("org_id" + 1))) > 2) LIMIT 5`},
+		{velox.MySQL, "SELECT COUNT(*) FROM `invoices` GROUP BY (`org_id` + 1), `paid` HAVING ((COUNT(DISTINCT (`org_id` + 1))) > 2) LIMIT 5"},
+	} {
+		db := openFake(tc.d, &fakeconn.Exec{})
+		for range 2 {
+			text, _, err := db.Query[inv]().Select(velox.CountAll[inv]()).GroupBy(next, I.Paid).
+				Having(velox.Expr[inv]("? > 2", distinct)).Limit(5).SQL(ctx)
+			if err != nil || text != tc.sql {
+				t.Errorf("marked aggregate %v:\n got %s %v\nwant %s", tc.d, text, err, tc.sql)
+			}
+		}
+	}
 	// Under MySQL's WITH ROLLUP MIN of a copy is not a subtotal row's NULL
 	// key, so the statement fails; PostgreSQL reuses the placeholders.
 	q := func(d velox.Dialect) (string, error) {

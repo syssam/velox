@@ -108,7 +108,8 @@ func TestSelectRepeatedBoundTerm(t *testing.T) {
 // 42803; velox writes it with the key's placeholders. MySQL's HAVING names
 // no column outside an aggregate unless it is a key column, so a key
 // expression there failed with error 1054, bound or not; velox writes it
-// as MIN of the key, which is the group's value (decision 0138).
+// as MIN of the key, which is the group's value (decision 0138), but not
+// inside an aggregate, marked or not (decision 0151).
 func TestHavingRepeatedTerm(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		type inv = testmodel.Invoice
@@ -126,6 +127,13 @@ func TestHavingRepeatedTerm(t *testing.T) {
 			Select(next, I.Total.Sum()).GroupBy(next).
 			Having(velox.Expr[inv]("? > 2", next)).Limit(10), 2),
 			[]string{"3 50"})
+		// A key inside a marked aggregate is its argument: MIN of it there
+		// was MySQL's error 1111.
+		wantRows(t, "key inside a marked aggregate", rowsOf(t, ctx, tg.db.Query[inv]().
+			Select(I.Paid, velox.CountAll[inv]()).GroupBy(next, I.Paid).
+			Having(velox.Expr[inv]("? > 0", velox.Agg(velox.Calc[inv]("COUNT(DISTINCT ?)", next)))).
+			OrderBy(I.Paid.Asc(), velox.CountAll[inv]().Asc()).Limit(10), 2),
+			[]string{"0 2", "1 1", "1 2"})
 	})
 }
 
