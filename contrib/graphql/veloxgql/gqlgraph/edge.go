@@ -328,7 +328,7 @@ func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args a
 	if name == "" || f.Object != typ || f.Name != name {
 		return nil, nil, 0
 	}
-	t := gqlcore.TableFromContext(ctx)
+	t := f.Table
 	g, ps, i, ok := gqlcore.Find(t, e.x)
 	if !ok {
 		return nil, nil, 0

@@ -110,7 +110,7 @@ func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 // benchHandler is the example's endpoint on a database seeded for the
 // benchmark, and the counter of the statements it sends. The handler is
 // called directly: no network.
-func benchHandler(t testing.TB) (http.Handler, *atomic.Int64) {
+func benchHandler(t testing.TB, serve func(*velox.DB) http.Handler) (http.Handler, *atomic.Int64) {
 	t.Helper()
 	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")))
 	if err != nil {
@@ -130,7 +130,7 @@ func benchHandler(t testing.TB) (http.Handler, *atomic.Int64) {
 	}
 	seedBench(t, db, benchUsers, benchPosts, benchTags)
 	counting.Store(true)
-	return orgFromHeader(server(db)), &stmts
+	return orgFromHeader(serve(db)), &stmts
 }
 
 // serveNested sends nested with n users to h and returns the response's body.
@@ -185,30 +185,52 @@ func countNodes(tb testing.TB, resp []byte) int {
 	return walk(doc.Data)
 }
 
-// BenchmarkNestedRequest serves nested at 10 and at 50 users. stmts/op is the
-// statements a request sends, which must not grow with the users, and
-// nodes/op the nodes the response holds, which the allocations follow.
+// benchServers are the two servers the nested request is measured on: the
+// example's, behind gqlgenx.Setup, and minimalServer, with no setup
+// (decision 0173), which must send the same statements.
+var benchServers = []struct {
+	name  string
+	serve func(*velox.DB) http.Handler
+}{
+	{"setup", func(db *velox.DB) http.Handler { return server(db) }},
+	{"nosetup", minimalServer},
+}
+
+// BenchmarkNestedRequest serves nested at 10 and at 50 users, through each
+// of benchServers. stmts/op is the statements a request sends, which must
+// not grow with the users, and nodes/op the nodes the response holds, which
+// the allocations follow.
 func BenchmarkNestedRequest(b *testing.B) {
-	h, stmts := benchHandler(b)
-	for _, n := range []int{10, 50} {
-		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
-			nodes := countNodes(b, serveNested(b, h, n))
-			stmts.Store(0)
-			b.ReportAllocs()
-			for b.Loop() {
-				serveNested(b, h, n)
-			}
-			b.ReportMetric(float64(stmts.Load())/float64(b.N), "stmts/op")
-			b.ReportMetric(float64(nodes), "nodes/op")
-		})
+	for _, s := range benchServers {
+		h, stmts := benchHandler(b, s.serve)
+		for _, n := range []int{10, 50} {
+			b.Run(fmt.Sprintf("%s/n=%d", s.name, n), func(b *testing.B) {
+				nodes := countNodes(b, serveNested(b, h, n))
+				stmts.Store(0)
+				b.ReportAllocs()
+				for b.Loop() {
+					serveNested(b, h, n)
+				}
+				b.ReportMetric(float64(stmts.Load())/float64(b.N), "stmts/op")
+				b.ReportMetric(float64(nodes), "nodes/op")
+			})
+		}
 	}
 }
 
-// TestNestedRequestBudget is the benchmark's target as a test: the statements
-// of a nested request do not grow with its parents, and its allocations grow
-// with its rows and not with its parents.
+// TestNestedRequestBudget is the benchmark's target as a test, for each of
+// benchServers: the statements of a nested request do not grow with its
+// parents, the server with no setup sends as many as the one with, and its
+// allocations grow with its rows and not with its parents.
 func TestNestedRequestBudget(t *testing.T) {
-	h, stmts := benchHandler(t)
+	for _, s := range benchServers {
+		t.Run(s.name, func(t *testing.T) { nestedBudget(t, s.serve) })
+	}
+}
+
+// nestedBudget is TestNestedRequestBudget of the server serve makes.
+func nestedBudget(t *testing.T, serve func(*velox.DB) http.Handler) {
+	h, stmts := benchHandler(t, serve)
 	type measure struct {
 		stmts  int64
 		nodes  int

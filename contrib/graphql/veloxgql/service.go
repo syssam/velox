@@ -10,22 +10,23 @@ import (
 )
 
 // Service returns ctx with db, DefaultLimits() and a selection source that
-// selects nothing, for generated code a service calls outside a GraphQL
-// request: a list method, a call from another service, a test.
+// selects nothing, for code outside a GraphQL request that wants DB(ctx), or
+// the limits of ServiceWithLimits: a list method, a call from another
+// service, a test.
 //
 //	ctx = veloxgql.Service(ctx, db)
 //	conn, err := db.Query[veloxgen.Post]().Paginate(ctx, after, first, before, last,
 //		veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
 //
-// Under it, a connection, an edge's connection, gqlgraph.EdgeOne and
-// gqlgraph.EdgeList read every column of their rows, and an edge reads
-// alone for each row: there is no field to batch for. DB and DBFromContext
-// return db. A
-// caller without it still fails with ErrNoSelectionSource.
+// Generated code does not need it (decision 0173): outside any GraphQL
+// field a connection reads the same with or without it. Under it, a
+// connection, an edge's connection, gqlgraph.EdgeOne and gqlgraph.EdgeList
+// read every column of their rows, and an edge reads alone for each row:
+// there is no field to batch for. DB and DBFromContext return db.
 //
-// It replaces the state an adapter put in ctx, so a resolver does not call
-// it: under the adapter's context, the same code reads only what the field
-// selects, and batches. It panics on a nil db.
+// It replaces any state an adapter put in ctx and hides the engine's field,
+// so a resolver does not call it: there the same code reads only what the
+// field selects, and batches. It panics on a nil db.
 func Service(ctx context.Context, db *velox.DB) context.Context {
 	return ServiceWithLimits(ctx, db, Limits{})
 }

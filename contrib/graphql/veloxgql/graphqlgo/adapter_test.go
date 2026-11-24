@@ -57,29 +57,27 @@ func bareExecutor(t *testing.T, db *velox.DB, opts ...graphql.ExecutorOption) *g
 	return newExecutor(s, opts...)
 }
 
-// TestNoWith: under graphql-go without graphqlgo.With, a connection of a
-// query fails with veloxgql.ErrNoSelectionSource, and ErrNoDB, and an edge
-// of a row built by hand, which has no DB of its own, with velox.ErrNoSource
-// and ErrNoDB; neither sends a statement. With it, the same reads succeed.
+// TestNoWith (decision 0173): under graphql-go without graphqlgo.With, a
+// connection of a query reads on its query's DB; an edge of a row built by
+// hand, which has no DB of its own, fails with velox.ErrNoSource and
+// ErrNoDB, naming graphqlgo.With, and sends no statement. With it, both
+// reads succeed.
 func TestNoWith(t *testing.T) {
 	db, log := modelDB(t)
 	ctx := context.Background()
 	resp := bareExecutor(t, db).Execute(ctx, &graphql.Request{Query: `{ page { totalCount } one { name } }`})
 	defer resp.Release()
-	if len(resp.Errors) != 2 {
-		t.Fatalf("errors %v, want one for each read", resp.Errors)
+	if len(resp.Errors) != 1 {
+		t.Fatalf("errors %v, want one, the edge of a row built by hand", resp.Errors)
 	}
-	for _, e := range resp.Errors {
-		want := veloxgql.ErrNoSelectionSource
-		if strings.Contains(e.Message, "Post.author") {
-			want = velox.ErrNoSource
-		}
-		if !errors.Is(e.Err, want) || !errors.Is(e.Err, veloxgql.ErrNoDB) || !strings.Contains(e.Message, "graphqlgo.With") {
-			t.Errorf("%v at %v, want %v and ErrNoDB, naming graphqlgo.With", e.Err, e.Path, want)
-		}
+	if e := resp.Errors[0]; !errors.Is(e.Err, velox.ErrNoSource) || !errors.Is(e.Err, veloxgql.ErrNoDB) || !strings.Contains(e.Message, "graphqlgo.With") {
+		t.Errorf("%v at %v, want ErrNoSource and ErrNoDB, naming graphqlgo.With", e.Err, e.Path)
 	}
-	if st, _ := log.take(); len(st) != 0 {
-		t.Errorf("sent %q", st)
+	if b, _ := resp.MarshalJSON(); !strings.Contains(string(b), `"page":{"totalCount":3}`) {
+		t.Errorf("the connection of a query: %s", b)
+	}
+	if st, _ := log.take(); len(st) != 1 {
+		t.Errorf("sent %q, want the connection's count alone", st)
 	}
 	out := executorServer(bareExecutor(t, db, graphqlgo.With(db)))(t, ctx, `{ page { totalCount } one { name } }`, nil)
 	if want := `{"data":{"page":{"totalCount":3},"one":{"name":"ann"}}}`; out != want {
@@ -152,7 +150,7 @@ func TestWaitParks(t *testing.T) {
 	s, err := graphql.NewSchema(graphql.SDL(`type Query { wait: Boolean! }`),
 		graphql.Query(graphql.Resolve("wait", func(ctx context.Context, _ graphql.Root) (bool, error) {
 			graphql.OperationFrom(ctx).Waves().OnReady(func() { fired.Store(true) })
-			src = gqlcore.Source(ctx)
+			src = gqlcore.SourceOf(ctx)
 			done := src.Wait(ctx)
 			parked := fired.Load()
 			done()
@@ -195,7 +193,8 @@ type Tick { authors(first: Int): AuthorConnection }
 		})),
 		graphql.Object[tick]("Tick", graphql.ResolveArgs("authors", func(ctx context.Context, _ *tick, a struct{ First *int }) (*conn[author], error) {
 			mu.Lock()
-			tables = append(tables, gqlcore.TableFromContext(ctx))
+			f, _ := gqlcore.FieldOf(ctx)
+			tables = append(tables, f.Table)
 			mu.Unlock()
 			return authors(ctx, a.First, nil, nil)
 		})),

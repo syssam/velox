@@ -67,9 +67,6 @@ func Query(q untyped.TableQuery) Source { return query{q} }
 type query struct{ q untyped.TableQuery }
 
 func (s query) paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error) {
-	if err := needSource(ctx); err != nil {
-		return nil, err
-	}
 	return paginate(ctx, s.q, c, args, order)
 }
 
@@ -498,9 +495,11 @@ type Connection struct {
 // newXConnection, which the entity's PaginateQuery calls with a Query and an
 // edge method with an Edge. It checks the query and the arguments, decodes
 // the cursor, and runs no query. An Edge's connection batches (see Edge's
-// paginate). It fails with veloxgql.ErrNoSelectionSource, and
-// veloxgql.ErrNoDB, in a context no adapter made (gqlgenx.NewExtension,
-// graphqlgo.With), which tells it nothing of the field it resolves.
+// paginate). It needs no setup (decision 0173): inside a GraphQL field, the
+// engine's registered source (gqlgenx's or graphqlgo's) tells it the field's
+// selection and keeps the operation's table, where its rows group; outside
+// any field, as in a service's call, it reads every column, as there is no
+// selection to narrow to.
 //
 // A Query's q keeps its filters, its With loads and the scope the
 // application gave it. It may be ordered by expressions (a Calc, a JSON

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -14,9 +13,8 @@ import (
 )
 
 // TestPaginateInAService: a service pages through generated code outside a
-// GraphQL request under veloxgql.Service, by a filter, an order and a
-// cursor, and reads an edge of a row; without it the same call fails with
-// ErrNoSelectionSource.
+// GraphQL request, by a filter, an order and a cursor, and reads an edge of
+// a row, with no setup and under veloxgql.Service alike.
 func TestPaginateInAService(t *testing.T) {
 	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "service.db")))
 	if err != nil {
@@ -56,20 +54,19 @@ func TestPaginateInAService(t *testing.T) {
 		return titles, info, edges, nil
 	}
 
-	if _, _, _, err := page(org, nil); !errors.Is(err, veloxgql.ErrNoSelectionSource) || !errors.Is(err, veloxgql.ErrNoDB) {
-		t.Fatalf("Paginate with no veloxgql.Service: %v, want ErrNoSelectionSource and ErrNoDB", err)
-	}
-
-	ctx := veloxgql.Service(org, db)
-	titles, info, edges, err := page(ctx, nil)
-	if err != nil || !slices.Equal(titles, []string{"Alpha", "Delta"}) || !info.HasNextPage {
-		t.Fatalf("first page: %v %q %+v, want Alpha and Delta and a next page", err, titles, info)
-	}
-	if author, err := edges[1].Node.Author(ctx); err != nil || author == nil || author.Name != "Chen" {
-		t.Errorf("Delta's author: %+v, %v, want Chen", author, err)
-	}
-	titles, info, _, err = page(ctx, info.EndCursor)
-	if err != nil || !slices.Equal(titles, []string{"Gamma"}) || info.HasNextPage {
-		t.Fatalf("after Delta: %v %q %+v, want Gamma alone", err, titles, info)
+	// With no setup (decision 0173), and under veloxgql.Service, which a
+	// service may still call: the same pages and the same edge.
+	for name, ctx := range map[string]context.Context{"no setup": org, "veloxgql.Service": veloxgql.Service(org, db)} {
+		titles, info, edges, err := page(ctx, nil)
+		if err != nil || !slices.Equal(titles, []string{"Alpha", "Delta"}) || !info.HasNextPage {
+			t.Fatalf("%s: first page: %v %q %+v, want Alpha and Delta and a next page", name, err, titles, info)
+		}
+		if author, err := edges[1].Node.Author(ctx); err != nil || author == nil || author.Name != "Chen" {
+			t.Errorf("%s: Delta's author: %+v, %v, want Chen", name, author, err)
+		}
+		titles, info, _, err = page(ctx, info.EndCursor)
+		if err != nil || !slices.Equal(titles, []string{"Gamma"}) || info.HasNextPage {
+			t.Fatalf("%s: after Delta: %v %q %+v, want Gamma alone", name, err, titles, info)
+		}
 	}
 }

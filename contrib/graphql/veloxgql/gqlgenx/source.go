@@ -49,9 +49,14 @@ func (s *source) Field(ctx context.Context) (gqlcore.Field, bool) {
 	if fc == nil {
 		return gqlcore.Field{}, false
 	}
+	return s.field(ctx, fc), true
+}
+
+// field is Field of fc, gqlgen's field context in ctx.
+func (s *source) field(ctx context.Context, fc *graphql.FieldContext) gqlcore.Field {
 	f := gqlcore.Field{Object: fc.Object, Name: fc.Field.Name}
 	if fc.Field.Field == nil {
-		return f, true
+		return f
 	}
 	var oc *graphql.OperationContext
 	if graphql.HasOperationContext(ctx) {
@@ -62,7 +67,7 @@ func (s *source) Field(ctx context.Context) (gqlcore.Field, bool) {
 	if oc != nil && fc.Field.Definition != nil {
 		f.Type, f.Sel = fc.Field.Definition.Type.Name(), sel
 	}
-	return f, true
+	return f
 }
 
 // Wait does nothing.
@@ -120,10 +125,51 @@ func collect(oc *graphql.OperationContext, schema *ast.Schema, sels ast.Selectio
 		for _, i := range schema.GetImplements(d) {
 			sat = append(sat, i.Name)
 		}
-	} else if abstractFragment(oc, sels, sat, map[string]bool{}) {
-		return nil, false
+	} else {
+		// No schema (the registered source): the interfaces of typ are
+		// those the validator's definition of typ lists, found on a field
+		// selected on it. A union is not among them, and a fragment on one
+		// fails, as one on an interface the definition does not name.
+		if d := objectDef(oc, sels, typ, map[string]bool{}); d != nil {
+			sat = append(sat, d.Interfaces...)
+		}
+		if abstractFragment(oc, sels, sat, map[string]bool{}) {
+			return nil, false
+		}
 	}
 	return graphql.CollectFields(oc, sels, sat), true
+}
+
+// objectDef is the definition of the object type typ that the validator
+// gave a field of sels selected on it, through its fragments; nil when no
+// field has one.
+func objectDef(oc *graphql.OperationContext, sels ast.SelectionSet, typ string, seen map[string]bool) *ast.Definition {
+	for _, sel := range sels {
+		var sub ast.SelectionSet
+		switch sel := sel.(type) {
+		case *ast.Field:
+			if d := sel.ObjectDefinition; d != nil && d.Name == typ && d.Kind == ast.Object {
+				return d
+			}
+			continue
+		case *ast.InlineFragment:
+			sub = sel.SelectionSet
+		case *ast.FragmentSpread:
+			if seen[sel.Name] || oc == nil || oc.Doc == nil {
+				continue
+			}
+			seen[sel.Name] = true
+			fd := oc.Doc.Fragments.ForName(sel.Name)
+			if fd == nil {
+				continue
+			}
+			sub = fd.SelectionSet
+		}
+		if d := objectDef(oc, sub, typ, seen); d != nil {
+			return d
+		}
+	}
+	return nil
 }
 
 // schemaType is typ's definition in schema; nil when schema is nil or has

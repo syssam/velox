@@ -96,8 +96,10 @@ func TestSelectedAppFields(t *testing.T) {
 }
 
 // TestSelectedInterfaces: fragments on every interface and union of the
-// type count, read from the server's schema; without the schema, a
-// fragment on an interface or a union gives ok false.
+// type count, read from the server's schema; without the schema (the
+// registered source's), the interfaces are those the validator's
+// definition of the type lists, found on a field selected on it, and a
+// fragment on any other interface or a union gives ok false.
 func TestSelectedInterfaces(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	for _, c := range []struct {
@@ -108,7 +110,7 @@ func TestSelectedInterfaces(t *testing.T) {
 		{`{ owner { ... on Named { name } } }`, "owner", []string{"name"}, nil},
 		{`{ owners { edges { node { ... on Named { name } } } } }`, "owners", []string{"name"}, nil},
 		{`{ owner { ...T } } fragment T on Thing { ... on Owner { age } }`, "owner", []string{"age"}, nil},
-		{`{ owner { id ... on Keyed { id } } }`, "owner", []string{"id"}, nil},
+		{`{ owner { id ... on Keyed { id } } }`, "owner", []string{"id"}, []string{"id"}},
 		{`{ owner { ... on Owner { name } } }`, "owner", []string{"name"}, []string{"name"}},
 	} {
 		for _, s := range []struct {

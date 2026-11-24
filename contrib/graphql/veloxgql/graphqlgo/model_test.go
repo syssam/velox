@@ -25,6 +25,8 @@ type author struct {
 	ID    int64
 	Name  string
 	Posts velox.Many[post]
+	// source is the DB that read the row, which its edges read on.
+	source velox.Source
 }
 
 var authorMeta velox.MetaOnce[author]
@@ -39,6 +41,7 @@ func authorDescriptor() velox.Descriptor[author] {
 		Edges:        []velox.EdgeDescriptor{velox.EdgeTo[post]("posts", 0, 1)},
 		FieldPtr:     func(x *author, i int) any { return [...]any{&x.ID, &x.Name}[i] },
 		EdgeFieldPtr: func(x *author, _ int) any { return &x.Posts },
+		SourcePtr:    func(x *author) *velox.Source { return &x.source },
 	}
 }
 
@@ -48,6 +51,7 @@ type post struct {
 	Title    string
 	Author   velox.One[author]
 	Tags     velox.Many[tag]
+	source   velox.Source
 }
 
 var postMeta velox.MetaOnce[post]
@@ -61,6 +65,7 @@ func postDescriptor() velox.Descriptor[post] {
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[author]("author", 1, 0), velox.EdgeThrough[postTag, tag]("tags", 0, 0, 1, 0)},
 		FieldPtr:   func(x *post, i int) any { return [...]any{&x.ID, &x.AuthorID, &x.Title}[i] },
+		SourcePtr:  func(x *post) *velox.Source { return &x.source },
 		EdgeFieldPtr: func(x *post, i int) any {
 			if i == 0 {
 				return &x.Author
@@ -189,7 +194,7 @@ func (c *conn[E]) totalCount(ctx context.Context) (int, error) { return c.c.Tota
 // root resolvers are.
 
 func authors(ctx context.Context, first *int, after *veloxgql.Cursor, where *authorWhere) (*conn[author], error) {
-	q := untyped.FromQuery(veloxgql.DB(ctx).Query[author]())
+	q := untyped.FromQuery(resolverDB(ctx).Query[author]())
 	c, err := gqlgraph.Paginate(ctx, gqlgraph.Query(q), &authorType, gqlgraph.Args{First: first, After: after, Where: gqlgraph.WhereOf(where, (*authorWhere).Predicate)})
 	if err != nil {
 		return nil, err
@@ -229,7 +234,7 @@ func node(ctx context.Context, id int64) (any, error) {
 // fail is set.
 func addPost(ctx context.Context, authorID int64, title string, fail bool) (*post, error) {
 	p := &post{AuthorID: authorID, Title: title}
-	if err := veloxgql.DB(ctx).Insert(p).Exec(ctx); err != nil {
+	if err := resolverDB(ctx).Insert(p).Exec(ctx); err != nil {
 		return nil, err
 	}
 	if fail {

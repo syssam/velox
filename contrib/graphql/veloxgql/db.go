@@ -8,14 +8,14 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// DBFromContext returns the DB an adapter put in ctx. It fails with ErrNoDB
-// when there is none: the schema is served without an adapter
-// (gqlgenx.NewExtension for gqlgen, graphqlgo.With for graphql-go), which
-// puts it there; outside a request, veloxgql.Service puts it there.
+// DBFromContext returns the DB an adapter (gqlgenx.NewExtension,
+// graphqlgo.With) or Service put in ctx. It fails with ErrNoDB when there is
+// none. Generated code does not need it (decision 0173): a query carries
+// its DB, and a row the DB that read it.
 func DBFromContext(ctx context.Context) (*velox.DB, error) {
 	db := gqlcore.DB(ctx)
 	if db == nil {
-		return nil, fmt.Errorf("veloxgql: %w: serve the schema through gqlgenx.NewExtension or graphqlgo.With, which puts the DB in each request's context, or, outside a request, call veloxgql.Service", ErrNoDB)
+		return nil, fmt.Errorf("veloxgql: %w: use the DB the resolver holds, or put one in the context with veloxgql.Service, gqlgenx.NewExtension or graphqlgo.With", ErrNoDB)
 	}
 	return db, nil
 }
@@ -26,14 +26,14 @@ func DBFromContext(ctx context.Context) (*velox.DB, error) {
 //
 //	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
 //
-// A resolver reads and writes on the DB its Resolver holds (r.DB), the one
-// the adapter serves: in a mutation, under the resolver's ctx, a statement
-// on it runs in the mutation's transaction. The rows either returns carry
-// the DB that read them, and their edges read on it.
+// A resolver reads and writes on the DB its Resolver holds (r.DB): under
+// gqlgenx's extension, in a mutation, a statement on it under the
+// resolver's ctx runs in the mutation's transaction. The rows either
+// returns carry the DB that read them, and their edges read on it.
 //
-// It panics where DBFromContext fails, with DBFromContext's error: only a
-// schema served without an adapter has no DB, a mistake in the program,
-// which the server's recover reports as an internal error.
+// It panics where DBFromContext fails, with DBFromContext's error: a
+// context nothing put a DB in. A server with no adapter has none, and its
+// code uses the DB it holds.
 func DB(ctx context.Context) *velox.DB {
 	db, err := DBFromContext(ctx)
 	if err != nil {

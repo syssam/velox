@@ -113,6 +113,10 @@ func WithTable(ctx context.Context, scope func(context.Context) any) context.Con
 	return context.WithValue(ctx, tableKey{}, &Table{scope: scope})
 }
 
+// NewTable returns a new, empty Table with no batch scope: a registered
+// source's, for an operation or a response.
+func NewTable() *Table { return new(Table) }
+
 // Scope returns the value gqlgenx.WithBatchScope's function gives ctx; nil
 // when t is nil or has no function.
 func (t *Table) Scope(ctx context.Context) any {
@@ -133,11 +137,12 @@ func TableFromContext(ctx context.Context) *Table {
 // table, or is in no field its source knows: there nothing batches, and a
 // context kept long must not keep its rows.
 func Add(ctx context.Context, rows []any) {
-	t := TableFromContext(ctx)
-	if t == nil || len(rows) == 0 {
+	if len(rows) == 0 {
 		return
 	}
-	if _, ok := FieldOf(ctx); !ok {
+	f, ok := FieldOf(ctx)
+	t := f.Table
+	if !ok || t == nil {
 		return
 	}
 	rows = slices.DeleteFunc(slices.Clone(rows), nilRow)

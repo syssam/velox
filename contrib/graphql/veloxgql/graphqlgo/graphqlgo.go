@@ -11,25 +11,26 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// With is the executor option that serves velox's generated code on db.
-// Give it to every executor whose schema binds generated code:
+// The package registers its selection source when it is linked.
+func init() { gqlcore.Register(source{}) }
+
+// With is an executor option that puts db in every operation's context, for
+// code that reads it there (veloxgql.DB), and runs a mutation in a velox
+// session. It is optional (decision 0173): generated code needs no option,
+// as a query carries its DB, a row the DB that read it, and the package's
+// registered source gives the field and the operation's table.
 //
 //	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
 //
-// For each operation it puts db, veloxgql.DefaultLimits() (velox's fixed
-// backstop: see the package doc) and the selection source in the context,
-// where veloxgql.DB reads the DB and generated code finds the field it
-// resolves, with a new table of rows, so that edges batch. A
-// subscription's source opens with the same state, and each of its events
-// gets a table of its own. A mutation runs in a velox session
-// (velox.WithSession), so on a DB with replicas it reads its own writes
-// from the primary. It runs in no transaction: a resolver that needs one
-// opens it (db.Tx, velox.UseTx).
-//
-// Without With, generated code fails with veloxgql.ErrNoSelectionSource and
-// veloxgql.ErrNoDB before any statement. Given twice, the later one's state
-// is the one resolvers see, as graphql-go runs the later interceptor
-// inside the earlier. It panics on a nil db.
+// For each operation it puts db and veloxgql.DefaultLimits() in the context,
+// where veloxgql.DB and veloxgql.LimitsFromContext read them; a
+// subscription's source opens with them. A mutation runs in a velox session
+// (velox.WithSession), so on a DB with replicas it reads its own writes from
+// the primary; without With, a mutation's reads after its writes may go to
+// a replica. It runs in no transaction: a resolver that needs one opens it
+// (db.Tx, velox.UseTx). Given twice, the later one's DB is the one resolvers
+// see, as graphql-go runs the later interceptor inside the earlier. It
+// panics on a nil db.
 func With(db *velox.DB) graphql.ExecutorOption {
 	if db == nil {
 		panic("graphqlgo.With: nil DB")
@@ -56,24 +57,23 @@ var (
 	_ graphql.SubscriptionInterceptor = (*with)(nil)
 )
 
-// install is ctx with the operation's state.
+// install is ctx with the DB and the limits, and no selection source of its
+// own: the registered one gives the field.
 func (w *with) install(ctx context.Context) context.Context {
-	return gqlcore.Install(ctx, w.db, &defaultLimits, source{})
+	return gqlcore.InstallDB(ctx, w.db, &defaultLimits)
 }
 
 // InterceptSubscription implements graphql.SubscriptionInterceptor: the
-// subscription's source opens with the state in its context. Each event's
-// resolvers get the state, and a table of their own, from
-// InterceptOperation.
+// subscription's source opens with the DB in its context. Each event's
+// resolvers get it from InterceptOperation.
 func (w *with) InterceptSubscription(ctx context.Context, oc *graphql.OperationContext, next graphql.SubscriptionHandler) (<-chan *graphql.Response, error) {
 	return next(w.install(ctx), oc)
 }
 
 // InterceptOperation implements graphql.OperationInterceptor: it puts the
-// operation's state and a new table of rows in its context, and runs a
-// mutation in a velox session.
+// DB in the operation's context, and runs a mutation in a velox session.
 func (w *with) InterceptOperation(ctx context.Context, oc *graphql.OperationContext, next graphql.OperationHandler) *graphql.Response {
-	ctx = gqlcore.WithTable(w.install(ctx), nil)
+	ctx = w.install(ctx)
 	if op := oc.Operation; op != nil && op.Operation == ast.Mutation {
 		pin := velox.PinnedUntil(ctx)
 		ctx = velox.WithSession(ctx)

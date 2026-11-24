@@ -94,7 +94,8 @@ func TestWithLimitsZeroIsDefault(t *testing.T) {
 }
 
 // TestNothingRunsAtStart pins the rule that nothing runs at program start, in
-// the core or in gqlgenx: no file of either has an init function, and no package-level variable
+// the core or in gqlgenx: no file of either has an init function but an
+// adapter's gqlcore.Register of its source (registers), and no package-level variable
 // is initialised by a call or by a map literal (the compiler builds a map in
 // init). Two calls are allowed, because the compiler initialises them
 // statically (go build -gcflags=-S shows veloxgql's init empty, with the
@@ -216,7 +217,7 @@ func startWork(t *testing.T, srcs []source) []string {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
-				if d.Recv == nil && d.Name.Name == "init" {
+				if d.Recv == nil && d.Name.Name == "init" && !registers(d, imports) {
 					out = append(out, fset.Position(d.Pos()).String()+": func init")
 				}
 			case *ast.GenDecl:
@@ -236,6 +237,34 @@ func startWork(t *testing.T, srcs []source) []string {
 		}
 	}
 	return out
+}
+
+// registers reports whether init is an adapter's registration of its
+// selection source (decision 0173), the one init allowed: a single call of
+// gqlcore.Register with a composite literal, which takes a lock and stores a
+// slice of one element.
+func registers(init *ast.FuncDecl, imports map[string]string) bool {
+	if init.Body == nil || len(init.Body.List) != 1 {
+		return false
+	}
+	es, ok := init.Body.List[0].(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	call, ok := es.X.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Register" {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || imports[pkg.Name] != "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore" {
+		return false
+	}
+	_, lit := call.Args[0].(*ast.CompositeLit)
+	return lit
 }
 
 // runs says what in e runs at start, outside function literals: a call other

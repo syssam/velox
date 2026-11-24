@@ -281,6 +281,22 @@ func cursorArg(v any) (*veloxgql.Cursor, error) {
 // mutation's root fields one after another, every other object's fields
 // concurrently, each through the field middleware, its children after it.
 func gqlgenServer(t testing.TB, db *velox.DB, opts ...gqlgenx.Option) server {
+	srv := gqlgenHandler()
+	srv.Use(gqlgenx.NewExtension(db, opts...))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+	return handlerServer(srv)
+}
+
+// gqlgenPlainServer serves paritySDL through gqlgen with no extension and
+// no setup (decision 0173), and gqlgenx.ErrorPresenter.
+func gqlgenPlainServer() server {
+	srv := gqlgenHandler()
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+	return handlerServer(srv)
+}
+
+// gqlgenHandler is gqlgen's server of paritySDL, with the POST transport.
+func gqlgenHandler() *handler.Server {
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: paritySDL})
 	resolvers := gqlgenResolvers()
 	es := &gqlgen.ExecutableSchemaMock{
@@ -309,8 +325,11 @@ func gqlgenServer(t testing.TB, db *velox.DB, opts ...gqlgenx.Option) server {
 	}
 	srv := handler.New(es)
 	srv.AddTransport(transport.POST{})
-	srv.Use(gqlgenx.NewExtension(db, opts...))
-	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+	return srv
+}
+
+// handlerServer runs queries on srv.
+func handlerServer(srv *handler.Server) server {
 	return func(t testing.TB, ctx context.Context, query string, vars map[string]any) string {
 		t.Helper()
 		body, err := json.Marshal(map[string]any{"query": query, "variables": vars})

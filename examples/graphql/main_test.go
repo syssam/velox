@@ -84,7 +84,7 @@ func newServer(t *testing.T, opts ...gqlgenx.Option) *testServer {
 		t.Fatal(err)
 	}
 	recording = true
-	srv := httptest.NewServer(orgFromHeader(roleFromHeader(userFromHeader(server(db, opts...)))))
+	srv := httptest.NewServer(orgFromHeader(roleFromHeader(userFromHeader(testServe(db, opts...)))))
 	t.Cleanup(srv.Close)
 	s.url = srv.URL
 	return s

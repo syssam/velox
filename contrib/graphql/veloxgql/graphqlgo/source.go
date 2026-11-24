@@ -8,11 +8,16 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// source is graphql-go's selection source, which With installs with each
-// operation's state. The field of a context is graphql-go's field context
+// source is graphql-go's selection source, which the package registers with
+// the core when it is linked (decision 0173): an executor needs no option
+// for generated code to find the field it resolves and batch its edges. The
+// code velox-graphql writes for graphql-go imports the package for this,
+// blank. The field of a context is graphql-go's field context
 // (graphql.FieldFrom), which graphql-go gives a Resolve or a ResolveArgs
 // function and not a Field accessor: generated code reaches gqlgraph only
-// from methods that take a context, which gqlc binds with Resolve.
+// from methods that take a context, which gqlc binds with Resolve. Its
+// table is in the operation's values (tableOf), so each operation, and
+// each event of a subscription, has its own.
 //
 // A field's occurrence is its parent type, its name and its sub-selection,
 // a graphql.Selection: a struct of one pointer to the plan's selection set,
@@ -30,7 +35,13 @@ import (
 // holds back the wave of an application's loader.
 type source struct{}
 
-var _ gqlcore.SelectionSource = source{}
+var _ gqlcore.Reader = source{}
+
+// In reports whether ctx is in a graphql-go field.
+func (source) In(ctx context.Context) bool {
+	fc := graphql.FieldFrom(ctx)
+	return fc != nil && fc.Field != nil && fc.Object != nil
+}
 
 // occurrence is the Key of a field: its parent type, its name and its
 // sub-selection.
@@ -50,7 +61,7 @@ func (source) Field(ctx context.Context) (gqlcore.Field, bool) {
 	if fc == nil || fc.Field == nil || fc.Object == nil {
 		return gqlcore.Field{}, false
 	}
-	f := gqlcore.Field{Object: fc.Object.Name, Name: fc.Field.Name}
+	f := gqlcore.Field{Object: fc.Object.Name, Name: fc.Field.Name, Table: tableOf(graphql.OperationFrom(ctx))}
 	if fc.Field.Type != nil {
 		f.Type = fc.Field.Type.Name()
 	}
@@ -75,6 +86,23 @@ func (source) Wait(ctx context.Context) func() {
 
 // noWait is Wait's done function outside an operation.
 func noWait() {}
+
+// tableKey is the key of the table in an operation's values.
+type tableKey struct{}
+
+// tableOf is oc's table, kept in its values (OperationContext.GetOrSet),
+// which graphql-go makes anew for each operation and each event of a
+// subscription: so are the tables. It is nil for a nil oc.
+func tableOf(oc *graphql.OperationContext) *gqlcore.Table {
+	if oc == nil {
+		return nil
+	}
+	if v, ok := oc.Get(tableKey{}); ok {
+		return v.(*gqlcore.Table)
+	}
+	v, _ := oc.GetOrSet(tableKey{}, gqlcore.NewTable())
+	return v.(*gqlcore.Table)
+}
 
 // On is the fields s selects on an object of the type typ, each with its
 // sub-selection; a leaf's is nil.

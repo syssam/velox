@@ -13,14 +13,15 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-// TestNoSelectionSource: in a context no adapter made, a connection of a
-// query fails with ErrNoSelectionSource, and ErrNoDB, though the query has
-// its own DB, and sends no statement; so do the edges (a connection of an
-// edge, a to-one edge and a list edge) of a row built by hand, which has no
-// DB of its own, with velox.ErrNoSource and ErrNoDB. A context an adapter
-// made reads, and so does one veloxgql.Service made. (An edge of a row a
-// statement read reads on its DB: TestEdgeReadsOnItsRowsDB.)
-func TestNoSelectionSource(t *testing.T) {
+// TestNoSetup (decision 0173): in a context nothing was put in, outside any
+// GraphQL field, a connection of a query reads on the query's DB, every
+// column, in one statement, as under veloxgql.Service; the edges (a
+// connection of an edge, a to-one edge and a list edge) of a row built by
+// hand, which has no DB of its own, fail with velox.ErrNoSource and ErrNoDB
+// and send no statement. A context an adapter made reads, and so does one
+// veloxgql.Service made. (An edge of a row a statement read reads on its
+// DB: TestEdgeReadsOnItsRowsDB.)
+func TestNoSetup(t *testing.T) {
 	db, _, log := edgeDB(t)
 	bare := context.Background()
 	kids := gqlgraph.EdgeOf(&owner{ID: 1}, owners.Children, "Owner.children")
@@ -56,15 +57,15 @@ func TestNoSelectionSource(t *testing.T) {
 	for name, read := range reads {
 		log.take("")
 		err := read(bare)
-		want := velox.ErrNoSource
 		if name == "Paginate of a query" {
-			want = veloxgql.ErrNoSelectionSource
-		}
-		if !errors.Is(err, want) || !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "gqlgenx.NewExtension or graphqlgo.With") {
-			t.Errorf("%s with no source: %v, want %v and ErrNoDB, naming both adapters", name, err, want)
-		}
-		if sent := log.sent(); len(sent) != 0 {
-			t.Errorf("%s with no source sent %q", name, sent)
+			const want = `SELECT "id", "owner_id", "title", "editor_id" FROM "children" ORDER BY "id" LIMIT 101`
+			if sent := log.sent(); err != nil || len(sent) != 1 || sent[0] != want {
+				t.Errorf("%s with no setup: %v, sent %q; want one statement, %s", name, err, sent, want)
+			}
+		} else if !errors.Is(err, velox.ErrNoSource) || !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "veloxgql.Service, gqlgenx.NewExtension or graphqlgo.With") {
+			t.Errorf("%s of a row built by hand: %v, want ErrNoSource and ErrNoDB, naming Service and both adapters", name, err)
+		} else if sent := log.sent(); len(sent) != 0 {
+			t.Errorf("%s of a row built by hand sent %q", name, sent)
 		}
 		if err := read(adapted); err != nil {
 			t.Errorf("%s in an adapter's context: %v", name, err)

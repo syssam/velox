@@ -97,24 +97,42 @@ func serve(ctx context.Context, ln net.Listener) error {
 	return nil
 }
 
-// server is the GraphQL endpoint: gqlgen's server on the generated schema,
-// made safe by gqlgenx.Setup. Every operation's context holds db and the default
-// limits, where the generated code reads them; a request has a limit on its body,
-// its query's tokens and fields, what it costs and its introspection, before any
-// of it is validated or run. gqlgenx.ErrorPresenter shows a client only what is
-// safe, with a code: gqlgen's default presenter would show it every error's text,
-// the driver's and velox's, which name tables, entities and constraints. It logs
-// the rest with slog, and says "internal error". The directive @admin is the
-// function admin.
+// minimalServer is all that velox's generated code needs of a gqlgen server:
+// the executable schema, whose resolver holds db, and a transport. No
+// extension and no setup: a connection pages on the DB of its query, an edge
+// reads on its row's, and gqlgenx, which the generated code imports, gives
+// each field's selection and batches the edges of a page (decision 0173).
+// It is what a server behind an authenticating gateway may serve; one open
+// to clients adds gqlgenx.Setup, as server does.
+func minimalServer(db *velox.DB) http.Handler {
+	srv := gqlgenServer(db)
+	srv.AddTransport(transport.POST{})
+	return srv
+}
+
+// server is the GraphQL endpoint: minimalServer made safe by gqlgenx.Setup,
+// which is opt-in. A request has a limit on its body, its query's tokens and
+// fields, what it costs, its response and its time, before any of it is
+// validated or run; each mutation runs in one transaction; and
+// gqlgenx.ErrorPresenter shows a client only what is safe, with a code:
+// gqlgen's default presenter would show it every error's text, the driver's
+// and velox's, which name tables, entities and constraints. It logs the rest
+// with slog, and says "internal error".
 func server(db *velox.DB, opts ...gqlgenx.Option) http.Handler {
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{
-		Resolvers:  &graph.Resolver{DB: db},
-		Directives: graph.DirectiveRoot{Admin: admin},
-	}))
+	srv := gqlgenServer(db)
 	h := gqlgenx.Setup(srv, db, opts...)
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
 	return h
+}
+
+// gqlgenServer is gqlgen's server on the generated schema, with no transport
+// yet. The directive @admin is the function admin.
+func gqlgenServer(db *velox.DB) *handler.Server {
+	return handler.New(graph.NewExecutableSchema(graph.Config{
+		Resolvers:  &graph.Resolver{DB: db},
+		Directives: graph.DirectiveRoot{Admin: admin},
+	}))
 }
 
 // orgFromHeader puts the organization the X-Org-ID header names in the
