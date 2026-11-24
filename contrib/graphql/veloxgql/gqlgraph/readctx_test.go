@@ -115,10 +115,11 @@ func TestConnectionReadCancellation(t *testing.T) {
 
 // TestConnectionReadsInPaginateTx: a transaction's mark is a value of
 // Paginate's context. A connection on tx made in fn's context reads in the
-// transaction under a reading context without the mark. One on db made in
-// fn's context is refused with ErrOutsideTx under such a reading context,
-// as the mark asks. One on db made under velox.WithoutTx(fn's) is not, read
-// under fn's context: the reading context's mark is dropped.
+// transaction under a reading context without the mark. So does one on
+// db, which began the transaction and joins it (ADR 0171); one on another
+// DB is refused with ErrOutsideTx, as the mark asks. One on db made under
+// velox.WithoutTx(fn's) is not, read under fn's context: the reading
+// context's mark is dropped.
 func TestConnectionReadsInPaginateTx(t *testing.T) {
 	db, _ := peopleDB(t)
 	conn := func(ctx context.Context, on *velox.DB) gqlgraph.ConnectionOf[person] {
@@ -140,14 +141,20 @@ func TestConnectionReadsInPaginateTx(t *testing.T) {
 		if n, err := conn(tctx, tx).TotalCount(read); err != nil || n != 11 {
 			t.Errorf("on tx: totalCount %d, %v; want 11", n, err)
 		}
-		if _, err := conn(tctx, db).TotalCount(read); !errors.Is(err, velox.ErrOutsideTx) {
-			t.Errorf("on db in fn's context: %v, want ErrOutsideTx", err)
+		if n, err := conn(tctx, db).TotalCount(read); err != nil || n != 11 {
+			t.Errorf("on db in fn's context: totalCount %d, %v; want 11, in the transaction it began", n, err)
+		}
+		if _, err := conn(tctx, db.WithoutPolicy("test")).TotalCount(read); !errors.Is(err, velox.ErrOutsideTx) {
+			t.Errorf("on another DB in fn's context: %v, want ErrOutsideTx", err)
 		}
 		// It waits for the transaction, until its context ends.
 		inTx, cancel := context.WithTimeout(tctx, 100*time.Millisecond)
 		defer cancel()
-		if _, err := conn(velox.WithoutTx(tctx), db).TotalCount(inTx); errors.Is(err, velox.ErrOutsideTx) {
-			t.Errorf("on db under WithoutTx, read under fn's context: %v", err)
+		// Had the reading context's mark reached it, db would join the
+		// transaction and count 11 at once; outside it, it waits for the
+		// transaction's connection until inTx ends.
+		if n, err := conn(velox.WithoutTx(tctx), db).TotalCount(inTx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("on db under WithoutTx, read under fn's context: totalCount %d, %v; want it to wait outside the transaction", n, err)
 		}
 		return errRollback
 	})
