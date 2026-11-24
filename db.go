@@ -98,6 +98,11 @@ func (db *DB) Close() error { return db.e.Close() }
 // without an error. Connect turns them on. Open panics on a d that is not Postgres, MySQL or
 // SQLite. Connect does the opening too, for an application that does not need a
 // *sql.DB of its own.
+//
+// A nil db makes a DB that renders d's SQL with no database: the SQL
+// methods of Query, UpdateQuery, DeleteQuery and the rest send nothing,
+// and a statement or Tx it would run fails with an error. A policy that
+// reads the database fails SQL on it, with that error.
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB { return &DB{e: engine.Open(d, db, opts)} }
 
 // OpenConn returns a DB of dialect d whose primary is c. veloxpgx.Open is this

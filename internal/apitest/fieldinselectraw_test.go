@@ -21,6 +21,10 @@ func ticketsOf(raw bool, ps ...velox.Predicate) velox.Pred[testmodel.Invoice] {
 	return velox.Pred[testmodel.Invoice](velox.FieldInSelect("note", "Ticket", "id", ps...))
 }
 
+// noteIsTicket is ticketsOf's correlation on PostgreSQL: the ticket's id
+// bare, the note cast when it spells an int64 (ADR 0161).
+const noteIsTicket = `"vx1"."id" = CASE WHEN "invoices"."note" COLLATE "C" ~ '^(0|-{0,1}[1-9][0-9]{0,17}|-{0,1}[1-8][0-9]{18}|-{0,1}9([01][0-9]{17}|2[01][0-9]{16}|22[0-2][0-9]{15}|223[0-2][0-9]{14}|2233[0-6][0-9]{13}|22337[01][0-9]{12}|2233720[0-2][0-9]{10}|22337203[0-5][0-9]{9}|223372036[0-7][0-9]{8}|2233720368[0-4][0-9]{7}|22337203685[0-3][0-9]{6}|223372036854[0-6][0-9]{5}|2233720368547[0-6][0-9]{4}|22337203685477[0-4][0-9]{3}|223372036854775[0-7][0-9]{2}|22337203685477580[0-7])|-9223372036854775808)$' THEN CAST("invoices"."note" AS BIGINT) END`
+
 // noDoneTickets is a WithFilter filter that hides done tickets.
 func noDoneTickets(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
 	if fe.Name() == "Ticket" {
@@ -32,7 +36,7 @@ func noDoneTickets(_ context.Context, _ *velox.DB, fe velox.FilterEntity, _ velo
 // TestFieldInSelectRawSkipsInner: inside FieldInSelectRaw's subquery only
 // its own conditions apply, not the target's Read policy, its scope or a
 // WithFilter filter, which FieldInSelect adds; the outer statement keeps
-// its own policy. The key, an integer, is made text to meet the column.
+// its own policy. The key stays bare against the text column (ADR 0161).
 func TestFieldInSelectRawSkipsInner(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openPolicied(velox.Postgres, e, velox.WithFilter(noDoneTickets))
@@ -46,32 +50,32 @@ func TestFieldInSelectRawSkipsInner(t *testing.T) {
 	}
 	title := velox.FieldEQ("title", "x")
 	raw := sqlOf(ticketsOf(true, title))
-	want := `SELECT "id" FROM "invoices" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE CAST("vx1"."id" AS TEXT) = "invoices"."note" AND "title" = $1) AND "org_id" = $2 LIMIT 1`
+	want := `SELECT "id" FROM "invoices" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE ` + noteIsTicket + ` AND "title" = $1) AND "org_id" = $2 LIMIT 1`
 	if raw != want {
 		t.Errorf("raw:\n got %s\nwant %s", raw, want)
 	}
 	plain := sqlOf(ticketsOf(false, title))
-	for _, s := range []string{`CAST("vx1"."id" AS TEXT) = "invoices"."note" AND "title" = $1 AND`, `"owner" = `, `NOT "done"`} {
+	for _, s := range []string{noteIsTicket + ` AND "title" = $1 AND`, `"owner" = `, `NOT "done"`} {
 		if !strings.Contains(plain, s) {
 			t.Errorf("FieldInSelect %s lacks %s", plain, s)
 		}
 	}
 	// Or, And and Not hold it; the outer policy stays.
 	or := sqlOf(velox.Or(I.Paid.EQ(true), velox.Not(velox.And(ticketsOf(true), I.Total.GT(1)))))
-	if !strings.Contains(or, `("paid" OR NOT ((EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE CAST("vx1"."id" AS TEXT) = "invoices"."note") AND "total" > $1))) AND "org_id" = $2`) {
+	if !strings.Contains(or, `("paid" OR NOT ((EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE `+noteIsTicket+`) AND "total" > $1))) AND "org_id" = $2`) {
 		t.Errorf("Or, And, Not: %s", or)
 	}
 	// Writes: the Write policy's scope stays on the outer rows.
 	if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(ticketsOf(true)).Exec(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(e.SQL, `WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE CAST("vx1"."id" AS TEXT) = "invoices"."note") AND "org_id" = `) {
+	if !strings.Contains(e.SQL, `WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE `+noteIsTicket+`) AND "org_id" = `) {
 		t.Errorf("update: %s", e.SQL)
 	}
 	if _, err := db.Delete[testmodel.Invoice]().Where(ticketsOf(true)).Exec(asUser("ann")); err != nil {
 		t.Fatal(err)
 	}
-	if e.SQL != `DELETE FROM "invoices" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE CAST("vx1"."id" AS TEXT) = "invoices"."note") AND "org_id" = $1` {
+	if e.SQL != `DELETE FROM "invoices" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE `+noteIsTicket+`) AND "org_id" = $1` {
 		t.Errorf("delete: %s", e.SQL)
 	}
 }

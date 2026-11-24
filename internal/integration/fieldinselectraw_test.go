@@ -2,7 +2,10 @@ package integration
 
 import (
 	"context"
+	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -78,4 +81,88 @@ func TestFieldInSelectRaw(t *testing.T) {
 		}
 		wantIDs(t, owners(in1, velox.Allow()), []int64{1, 3})
 	}, around)
+}
+
+// TestFieldInSelectTextColumnForms: a text column meets an integer key as
+// the key's text would (ADR 0161). An owner's name matches a note's id
+// exactly when it is the id as strconv.FormatInt writes it: "01", " 1",
+// "+1", "1.0", "-0", "" and numbers past int64 match nothing, and no text
+// fails the statement, an UPDATE's and a DELETE's included (MySQL's strict
+// mode turns a bad cast there into an error). On SQLite the key's index
+// serves the subquery.
+func TestFieldInSelectTextColumnForms(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		interceptorTables(t, tg)
+		notes := []int64{1, 3, 4, 0, -5, math.MaxInt64, math.MinInt64} // note 2 is hidden by INote's interceptor
+		tg.exec(t, "INSERT INTO notes (id, owner_id, body, hidden) VALUES (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?), (?, ?, ?, ?)",
+			int64(0), 1, "zero", false, int64(-5), 1, "neg", false, int64(math.MaxInt64), 1, "max", false, int64(math.MinInt64), 1, "min", false)
+		names := []string{
+			"1", "01", " 1", "1 ", "+1", "1.0", "1e0", "1\n", "", "abc", "-0", "0", "-5", "-05", "2", "3",
+			"9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809",
+			"18446744073709551615", "99999999999999999999",
+		}
+		var want []int64
+		for i, n := range names {
+			id := int64(100 + i)
+			tg.exec(t, "INSERT INTO owners (id, name, pinned_id) VALUES (?, ?, ?)", id, n, nil)
+			for _, k := range notes {
+				if n == strconv.FormatInt(k, 10) {
+					want = append(want, id)
+				}
+			}
+		}
+		bg := context.Background()
+		O := fixture.IOwners
+		for _, p := range []velox.Predicate{
+			velox.FieldInSelect("name", "INote", "id"),
+			velox.FieldInSelectRaw("forms", "name", "INote", "id", velox.FieldEQ("hidden", false)),
+		} {
+			q := tg.db.Query[fixture.IOwner]().Where(O.ID.GTE(100), velox.Pred[fixture.IOwner](p)).OrderBy(O.ID.Asc()).AllowUnbounded()
+			os, err := q.All(bg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantIDs(t, ownerIDs(os), want)
+			if tg.d == velox.SQLite {
+				text, args, err := q.SQL(bg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if plan := sqlitePlan(t, tg, text, args); !strings.Contains(plan, "SEARCH vx1 ") || !strings.Contains(plan, "(id=?)") {
+					t.Errorf("the key's index does not serve the subquery:\n%s", plan)
+				}
+			}
+			n, err := tg.db.Update[fixture.IOwner]().Set(O.PinnedID.Set(1)).Where(O.ID.GTE(100), velox.Pred[fixture.IOwner](p)).Exec(bg)
+			if err != nil || n != int64(len(want)) {
+				t.Errorf("update: %d, %v; want %d", n, err, len(want))
+			}
+		}
+		n, err := tg.db.Delete[fixture.IOwner]().Where(O.ID.GTE(100), velox.Pred[fixture.IOwner](velox.Not(velox.FieldInSelect("name", "INote", "id")))).Exec(bg)
+		if err != nil || n != int64(len(names)-len(want)) {
+			t.Errorf("delete: %d, %v; want %d", n, err, len(names)-len(want))
+		}
+	})
+}
+
+// sqlitePlan returns SQLite's query plan of text, one step a line.
+func sqlitePlan(t *testing.T, tg target, text string, args []any) string {
+	t.Helper()
+	rows, err := tg.direct.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+text, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var b strings.Builder
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		b.WriteString(detail + "\n")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
 }

@@ -119,9 +119,16 @@ func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFo
 // can read as constants. A name that is no entity or table, or that is one
 // entity's name and another's table, a column that is not there, or two
 // columns of different types fail the statement that holds it. An integer
-// and a text column are the exception: they are compared as text, the
-// integer cast (CONCAT on MySQL, so the text takes the column's collation),
-// for a column or a key that holds ids as text. The column
+// and a text column are the exception, for a column or a key that holds
+// ids as text, and they match as the integer's text would. An integer
+// column against a text key is cast to text (CONCAT on MySQL, so the text
+// takes the key's collation), and the key stays bare. A text column
+// against an integer key is the integer it spells, so the key stays bare
+// and its index serves: a text that is not an int64 as Go's strconv
+// writes it ("07", " 7", "+7", "7.0", "", one past int64) matches nothing
+// and fails nothing, as a guard keeps it from the cast (a regular
+// expression on PostgreSQL and MySQL, a round trip on SQLite). An
+// unsigned 64-bit key is cast to text instead. The column
 // must not be an encoded (JSON) column. On MySQL a subquery that reads the table
 // an UPDATE or DELETE changes fails with error 1093.
 func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
@@ -138,8 +145,9 @@ func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
 //	velox.FieldInSelectRaw("activity trail: a deleted lead keeps its history",
 //		"entity_id", "Lead", "lead_id", velox.FieldIn("org_id", orgs...))
 //
-// The names resolve as FieldInSelect's, and the columns compare as its do.
-// A relation or FieldInSelect among ps keeps its own target's policies.
+// The names resolve as FieldInSelect's, and the columns compare as its do:
+// the text entity_id is cast to lead_id's type when it spells an int64,
+// so lead_id's index serves each row. A relation or FieldInSelect among ps keeps its own target's policies.
 // The statement around it keeps its own Read or Write policy, filters and
 // interceptors, on its own rows. It works in Or, And and Not, and in an
 // update's or a delete's Where.

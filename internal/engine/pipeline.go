@@ -67,13 +67,16 @@ type DB struct {
 	batch *batch
 }
 
-// Open is velox.Open's DB, opts given as a slice.
+// Open is velox.Open's DB, opts given as a slice. A nil db makes a DB that
+// renders statements and fails each one it would send (conn.NewSQL).
 func Open(d Dialect, db *sql.DB, opts []Option) DB {
 	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
 	e := newDB(d, conn.NewSQL(db), opts)
-	e.pool = db
+	if db != nil {
+		e.pool = db
+	}
 	return e
 }
 

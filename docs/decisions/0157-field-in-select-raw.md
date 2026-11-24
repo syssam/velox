@@ -1,6 +1,9 @@
 # 0157. FieldInSelectRaw: a subquery by name with no policy inside
 
 - Status: accepted, 2026-11-24. Amends 0079 and 0091.
+- Amended 2026-11-24 by [0161](0161-text-column-integer-key.md): a text
+  column against an integer key keeps the key bare and casts the column,
+  behind a guard, so the key's index serves; the rows are the same.
 
 ## Context
 

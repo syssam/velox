@@ -66,29 +66,37 @@ func TestFieldInSelectTextKey(t *testing.T) {
 	}
 }
 
-// A text column against an integer key is compared as text too, the key
-// cast on the inner side (ADR 0157), by FieldInSelect and FieldInSelectRaw.
+// nmInt64Text is the guard of a text column against an integer key, as
+// rendered (ADR 0161).
+const nmInt64Text = `^(0|-{0,1}[1-9][0-9]{0,17}|-{0,1}[1-8][0-9]{18}|-{0,1}9([01][0-9]{17}|2[01][0-9]{16}|22[0-2][0-9]{15}|223[0-2][0-9]{14}|2233[0-6][0-9]{13}|22337[01][0-9]{12}|2233720[0-2][0-9]{10}|22337203[0-5][0-9]{9}|223372036[0-7][0-9]{8}|2233720368[0-4][0-9]{7}|22337203685[0-3][0-9]{6}|223372036854[0-6][0-9]{5}|2233720368547[0-6][0-9]{4}|22337203685477[0-4][0-9]{3}|223372036854775[0-7][0-9]{2}|22337203685477580[0-7])|-9223372036854775808)$`
+
+// A text column against an integer key keeps the key bare, so its index
+// serves, and casts the column when it spells an int64, NULL otherwise
+// (ADR 0161), by FieldInSelect and FieldInSelectRaw, and in a Not.
 func TestFieldInSelectTextColumn(t *testing.T) {
+	want := map[velox.Dialect]string{
+		velox.Postgres: `SELECT "id", "org_id", "title", "note", "rank", "status", "at", "score", "peer_id", "visible" FROM "nm_docs" WHERE EXISTS (SELECT 1 FROM "nm_orgs" AS "vx1" WHERE "vx1"."id" = CASE WHEN "nm_docs"."title" COLLATE "C" ~ '` + nmInt64Text + `' THEN CAST("nm_docs"."title" AS BIGINT) END) LIMIT 1`,
+		velox.MySQL:    "SELECT `id`, `org_id`, `title`, `note`, `rank`, `status`, `at`, `score`, `peer_id`, `visible` FROM `nm_docs` WHERE EXISTS (SELECT 1 FROM `nm_orgs` AS `vx1` WHERE `vx1`.`id` = CASE WHEN `nm_docs`.`title` REGEXP '" + nmInt64Text + "' AND `nm_docs`.`title` NOT REGEXP '[^-0-9]' THEN CAST(`nm_docs`.`title` AS SIGNED) END) LIMIT 1",
+		velox.SQLite:   `SELECT "id", "org_id", "title", "note", "rank", "status", "at", "score", "peer_id", "visible" FROM "nm_docs" WHERE EXISTS (SELECT 1 FROM "nm_orgs" AS "vx1" WHERE "vx1"."id" = CASE WHEN CAST(CAST("nm_docs"."title" AS INTEGER) AS TEXT) = "nm_docs"."title" THEN CAST("nm_docs"."title" AS INTEGER) END) LIMIT 1`,
+	}
 	for _, p := range []velox.Predicate{
 		velox.FieldInSelect("title", "Org", "id"),
 		velox.FieldInSelectRaw("r", "title", "Org", "id"),
 	} {
-		s, _, err := nmSQL(t, p)
-		if want := `CAST("vx1"."id" AS TEXT) = "nm_docs"."title"`; err != nil || !strings.Contains(s, want) {
-			t.Errorf("got %s, %v; want it to hold %s", s, err, want)
-		}
-		s, _, err = nmSQLOn(t, velox.SQLite, p)
-		if want := `CAST("vx1"."id" AS TEXT) = "nm_docs"."title"`; err != nil || !strings.Contains(s, want) {
-			t.Errorf("SQLite: got %s, %v; want it to hold %s", s, err, want)
-		}
-		s, _, err = nmSQLOn(t, velox.MySQL, p)
-		if want := "CONCAT(`vx1`.`id`) = `nm_docs`.`title`"; err != nil || !strings.Contains(s, want) {
-			t.Errorf("MySQL: got %s, %v; want it to hold %s", s, err, want)
+		for d, w := range want {
+			s, args, err := nmSQLOn(t, d, p)
+			if err != nil || s != w || len(args) != 0 {
+				t.Errorf("%s:\n got %s, %v, %v\nwant %s", d, s, args, err, w)
+			}
+			s, _, err = nmSQLOn(t, d, velox.Not(p))
+			if w := strings.Replace(strings.Replace(w, "WHERE EXISTS", "WHERE NOT (EXISTS", 1), ") LIMIT", ")) LIMIT", 1); err != nil || s != w {
+				t.Errorf("%s Not:\n got %s, %v\nwant %s", d, s, err, w)
+			}
 		}
 	}
 	// A nullable text column too.
 	s, _, err := nmSQL(t, velox.FieldInSelect("note", "Org", "id"))
-	if want := `CAST("vx1"."id" AS TEXT) = "nm_docs"."note"`; err != nil || !strings.Contains(s, want) {
+	if want := `"vx1"."id" = CASE WHEN "nm_docs"."note" COLLATE "C" ~ '` + nmInt64Text + `' THEN CAST("nm_docs"."note" AS BIGINT) END`; err != nil || !strings.Contains(s, want) {
 		t.Errorf("nullable: got %s, %v; want it to hold %s", s, err, want)
 	}
 }

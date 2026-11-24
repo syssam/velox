@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"sync"
 	"time"
 )
@@ -22,11 +23,28 @@ type SQL struct {
 	cols bool
 }
 
-// NewSQL returns the SQL executor for db, outside a transaction.
+// NewSQL returns the SQL executor for db, outside a transaction. For a nil
+// db, every statement and transaction fails with errNoDB: velox.Open(d,
+// nil) is a DB that renders statements and sends none.
 func NewSQL(db *sql.DB) SQL { return NewSQLCols(db, PgxStdlib(db)) }
 
 // NewSQLCols is NewSQL with cols, ColumnScanning's answer, given.
-func NewSQLCols(db *sql.DB, cols bool) SQL { return SQL{c: db, db: db, cols: cols} }
+func NewSQLCols(db *sql.DB, cols bool) SQL {
+	if db == nil {
+		return SQL{c: noDB{}, cols: cols}
+	}
+	return SQL{c: db, db: db, cols: cols}
+}
+
+// errNoDB is the error of a statement or transaction on a DB opened on a
+// nil *sql.DB.
+var errNoDB = errors.New("velox: the DB was opened on a nil *sql.DB; it renders statements (their SQL methods) and sends none")
+
+// noDB is the sqlConn of a nil *sql.DB: it fails every statement.
+type noDB struct{}
+
+func (noDB) QueryContext(context.Context, string, ...any) (*sql.Rows, error) { return nil, errNoDB }
+func (noDB) ExecContext(context.Context, string, ...any) (sql.Result, error) { return nil, errNoDB }
 
 // ColumnScanning reports whether e's rows are colRows.
 func (e SQL) ColumnScanning() bool { return e.cols }
@@ -71,6 +89,9 @@ func (e SQL) Adopt(tx *sql.Tx) (Executor, bool) { return SQL{c: tx, cols: e.cols
 
 // Begin starts a transaction, whose statements the returned Executor runs.
 func (e SQL) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, error) {
+	if e.db == nil {
+		return nil, nil, errNoDB
+	}
 	tx, err := e.db.BeginTx(ctx, &o)
 	if err != nil {
 		return nil, nil, err
@@ -91,6 +112,9 @@ type Setting struct{ Read, On, Off string }
 // s is off for the BEGIN and on after it, as a setting such as SQLite's query_only
 // would refuse a driver's BEGIN IMMEDIATE.
 func (e SQL) BeginOnConn(ctx context.Context, o sql.TxOptions, s Setting) (Executor, Tx, error) {
+	if e.db == nil {
+		return nil, nil, errNoDB
+	}
 	c, err := e.db.Conn(ctx)
 	if err != nil {
 		return nil, nil, err

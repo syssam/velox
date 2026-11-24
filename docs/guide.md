@@ -901,9 +901,26 @@ It is the same `EXISTS`, so `Org`'s own Read policy applies inside it, and it
 is resolved when the statement is prepared: an unknown column or entity, or
 two columns of different types, is an error and never a dropped condition.
 One mismatch is allowed: an integer and a text column, such as an
-approval's `entity_id` that holds the ids of several entities, are compared
-as text, the integer cast (`CAST(id AS TEXT)`, on MySQL `CONCAT(id)`), on
-whichever side it is.
+approval's `entity_id` that holds the ids of several entities, match as the
+integer's text would. The key column stays bare either way, so its index
+serves each outer row. An integer column against a text key is cast to text
+(`CAST(id AS TEXT)`, on MySQL `CONCAT(id)`). A text column against an
+integer key is cast to the integer it spells, behind a guard, so a text
+such as `"07"`, `" 7"`, `"+7"`, `""` or one past int64 matches nothing and
+never fails the statement:
+
+```sql
+-- PostgreSQL; MySQL is alike with REGEXP and CAST(… AS SIGNED)
+"vx1"."id" = CASE WHEN "activity"."entity_id" COLLATE "C" ~ '^(0|-{0,1}[1-9]…)$'
+	THEN CAST("activity"."entity_id" AS BIGINT) END
+-- SQLite, which has no regular expressions: only an integer's own text
+-- comes back from the round trip
+"vx1"."id" = CASE WHEN CAST(CAST("activity"."entity_id" AS INTEGER) AS TEXT) = "activity"."entity_id"
+	THEN CAST("activity"."entity_id" AS INTEGER) END
+```
+
+An unsigned 64-bit key, whose values pass int64's, is cast to text instead
+([ADR 0161](decisions/0161-text-column-integer-key.md)).
 A rule that reaches its own entity again, as a participant's "a conversation
 I take part in" read through the participants' own policy does, is cut where
 it loops: that inner subquery gets none of the entity's own conditions, while
@@ -929,7 +946,8 @@ func (ActivityLog) Policy() velox.Policy {
 		if err != nil {
 			return velox.Predicate{}, err
 		}
-		// entity_id IN (SELECT CAST(lead_id AS TEXT) FROM lead WHERE org_id IN (…))
+		// entity_id IN (SELECT lead_id FROM lead WHERE org_id IN (…)), entity_id
+		// cast to lead_id's type when it spells an integer
 		return velox.FieldInSelectRaw("activity trail: a deleted lead keeps its history",
 			"entity_id", "Lead", "lead_id", velox.FieldIn("org_id", orgs...)), nil
 	}}
@@ -1866,8 +1884,11 @@ A helper that builds a condition and may have none to add returns the zero
 condition fails.
 
 To assert a helper's SQL in a test, render a query that holds it on a DB
-with no connection. `SQL` sends nothing; `WithoutPolicy` keeps the Read
-policy out of the text, while an interceptor's condition stays in it:
+with no connection, `velox.Open(dialect, nil)`, on any dialect. The `SQL`
+methods of a query, an update and a delete send nothing; a statement or
+`Tx` run on that DB fails with an error, and so does `SQL` when a policy
+reads the database. `WithoutPolicy` keeps the Read policy out of the text,
+while an interceptor's condition stays in it:
 
 ```go
 db := velox.Open(velox.Postgres, nil).WithoutPolicy("render a condition")

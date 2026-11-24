@@ -1087,12 +1087,18 @@ func linkCast(l Link) int {
 // in.Columns[col] = from.Columns[fromCol], where from is the table of w.alias,
 // or the statement's table when there is no alias yet. With castOwner, the
 // outer column is an integer made text, to meet a text key (Link.TextKey):
-// the cast is on the outer side, so an index on the key still serves. With
-// castTarget, the key is an integer made text, to meet a text column
-// (Link.TextTarget). On MySQL it is CONCAT(x), not CAST(x AS CHAR): a CAST's
-// text has the connection's collation as firmly as the column has its own,
-// and MySQL refuses to compare the two when they differ (error 1267), while
-// CONCAT's yields to the column's. It leaves w writing conditions on in.
+// the cast is on the outer side, so an index on the key still serves. On
+// MySQL it is CONCAT(x), not CAST(x AS CHAR): a CAST's text has the
+// connection's collation as firmly as the column has its own, and MySQL
+// refuses to compare the two when they differ (error 1267), while CONCAT's
+// yields to the column's.
+//
+// With castTarget, a text column meets an integer key (Link.TextTarget).
+// The key stays bare, so its index serves each outer row, and the column
+// is the integer it spells (intOf), or NULL when it spells none (ADR
+// 0161). An unsigned 64-bit key, whose values pass int64's, is the
+// exception: the key is made text, as castOwner makes the column. It
+// leaves w writing conditions on in.
 func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int, cast int) {
 	w.depth++
 	alias := "vx" + strconv.Itoa(w.depth)
@@ -1102,16 +1108,94 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 	w.str(" AS ")
 	w.ident(alias)
 	w.str(" WHERE ")
-	w.castOpen(cast == castTarget)
+	textKey := cast == castTarget && !int64Key(in.Columns[col])
+	w.castOpen(textKey)
 	w.ident(alias)
 	w.str(".")
 	w.col(int32(col))
-	w.castClose(cast == castTarget)
+	w.castClose(textKey)
 	w.str(" = ")
 	w.in = from
-	w.outerCol(w.alias, fromCol, cast == castOwner)
+	if cast == castTarget && !textKey {
+		w.intOf(w.alias, fromCol)
+	} else {
+		w.outerCol(w.alias, fromCol, cast == castOwner)
+	}
 	w.in = in
 	w.alias = alias
+}
+
+// int64Key reports whether every value of the integer column c is an
+// int64: a signed integer, or an unsigned one of 32 bits or fewer.
+func int64Key(c ColumnInfo) bool {
+	switch base(c.Type).Kind() {
+	case reflect.Uint, reflect.Uint64, reflect.Uintptr:
+		return false
+	}
+	return true
+}
+
+// int64Text is a regular expression that a text matches exactly when it is
+// an int64 written as strconv.FormatInt writes it: "0", or an optional "-"
+// and digits with no leading zero, from -9223372036854775808 to
+// 9223372036854775807. It holds no "?", which MySQL's driver would count
+// as a parameter, and no backslash, which MySQL's NO_BACKSLASH_ESCAPES
+// reads differently. TestInt64Text checks it against strconv.
+const int64Text = `^(0|-{0,1}[1-9][0-9]{0,17}|-{0,1}[1-8][0-9]{18}|-{0,1}9(` +
+	`[01][0-9]{17}|2[01][0-9]{16}|22[0-2][0-9]{15}|223[0-2][0-9]{14}|` +
+	`2233[0-6][0-9]{13}|22337[01][0-9]{12}|2233720[0-2][0-9]{10}|` +
+	`22337203[0-5][0-9]{9}|223372036[0-7][0-9]{8}|2233720368[0-4][0-9]{7}|` +
+	`22337203685[0-3][0-9]{6}|223372036854[0-6][0-9]{5}|` +
+	`2233720368547[0-6][0-9]{4}|22337203685477[0-4][0-9]{3}|` +
+	`223372036854775[0-7][0-9]{2}|22337203685477580[0-7])|` +
+	`-9223372036854775808)$`
+
+// intOf writes column col of w.in, a text column around a subquery, as the
+// int64 it spells, or NULL when it spells none, so that "7" meets the key
+// 7 and "07", " 7", "+7", "7.0", "" or a number past int64 meet nothing,
+// as when the key is compared as text. The guard comes first, in a CASE,
+// so no other text reaches the cast, which would fail on PostgreSQL, and
+// on MySQL in a write's Where under strict mode:
+//
+//   - PostgreSQL: CASE WHEN c COLLATE "C" ~ 'int64Text' THEN CAST(c AS
+//     BIGINT) END. "C" because a nondeterministic collation refuses a
+//     regular expression. An int2 or int4 key meets the bigint through
+//     PostgreSQL's integer operator family, which its index serves.
+//   - MySQL: CASE WHEN c REGEXP 'int64Text' AND c NOT REGEXP '[^-0-9]'
+//     THEN CAST(c AS SIGNED) END. The second test refuses a final line
+//     break, before which ICU's "$" can also match.
+//   - SQLite: CASE WHEN CAST(CAST(c AS INTEGER) AS TEXT) = c THEN CAST(c
+//     AS INTEGER) END. SQLite has no regular expressions, and its cast
+//     never fails: it reads a text's leading integer, 0 when there is
+//     none, clamped to int64's range, so only an int64's own text comes
+//     back unchanged. The text compare is the column's, as the key's text
+//     was.
+func (w *writer) intOf(outer string, col int) {
+	c := func() { w.outerCol(outer, col, false) }
+	w.str("CASE WHEN ")
+	switch w.d {
+	case Postgres:
+		c()
+		w.str(` COLLATE "C" ~ '` + int64Text + `' THEN CAST(`)
+		c()
+		w.str(" AS BIGINT)")
+	case MySQL:
+		c()
+		w.str(" REGEXP '" + int64Text + "' AND ")
+		c()
+		w.str(" NOT REGEXP '[^-0-9]' THEN CAST(")
+		c()
+		w.str(" AS SIGNED)")
+	default:
+		w.str("CAST(CAST(")
+		c()
+		w.str(" AS INTEGER) AS TEXT) = ")
+		c()
+		w.str(" THEN CAST(")
+		c()
+		w.str(" AS INTEGER)")
+	}
+	w.str(" END")
 }
 
 // outerCol writes column col of w.in, the table around a subquery, named by

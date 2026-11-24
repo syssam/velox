@@ -11,6 +11,8 @@
   against an integer key is compared as text too, the key cast, and
   `FieldInSelectRaw` is the same subquery with no policy, filter or
   interceptor of the target inside.
+- Amended 2026-11-24 by [0161](0161-text-column-integer-key.md): that text
+  column is cast to the key's integer behind a guard, the key bare.
 
 ## Context
 

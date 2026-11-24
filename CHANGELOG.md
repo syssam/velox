@@ -34,9 +34,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   there, soft delete included; the statement around it keeps its own. The
   reason is required and `Statement.RawReasons()` reports it. velox-gen
   checks its names as it checks `FieldInSelect`'s (ADR 0157).
-- `FieldInSelect` compares a text column with an integer key as text too,
-  the key cast (`CAST(k AS TEXT)`, `CONCAT(k)` on MySQL), as it already did
-  an integer column with a text key (ADR 0157).
+- `FieldInSelect` compares a text column with an integer key as the key's
+  text would, as it already did an integer column with a text key (ADR
+  0157, ADR 0161).
 - `velox.LoadedOne(p)` and `velox.LoadedMany(s)` return a loaded relation,
   so code that builds an entity itself, such as a test's fixture, can set
   `x.Edges.Foo` as ent's `x.Edges.Foo = y` does. A nil `p` or `s` is a
@@ -831,6 +831,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `FieldInSelect` and `FieldInSelectRaw` keep an integer key bare against
+  a text column, so the key's index serves each outer row: the column is
+  cast to the integer it spells behind a guard (a regular expression on
+  PostgreSQL and MySQL, a round trip on SQLite), and a text that is not an
+  int64 as strconv writes it matches nothing and fails nothing, as before.
+  An unsigned 64-bit key is still cast to text (ADR 0161).
+- A DB from `velox.Open(d, nil)` fails a statement or `Tx` it would run
+  with an error instead of a nil-pointer panic; its `SQL` methods render
+  with no database, as before.
 - A gqlgraph connection pages as entgql's does on every type: a cursor
   in entgql's msgpack format is read, its `-1` time extension included;
   under one order term the key breaks ties in that term's direction; and
