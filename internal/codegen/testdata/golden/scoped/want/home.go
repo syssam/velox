@@ -40,6 +40,9 @@ var homeMeta velox.MetaOnce[Home]
 // VeloxMeta is called by velox, not by applications.
 func (*Home) VeloxMeta() *velox.Meta[Home] { return homeMeta.Load(homeDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Home) VeloxKey(int64) {}
+
 // homeDescriptor describes Home to velox: its table, columns and behaviour.
 func homeDescriptor() velox.Descriptor[Home] {
 	return velox.Descriptor[Home]{

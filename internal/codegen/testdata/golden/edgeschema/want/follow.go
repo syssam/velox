@@ -71,6 +71,9 @@ var followMeta velox.MetaOnce[Follow]
 // VeloxMeta is called by velox, not by applications.
 func (*Follow) VeloxMeta() *velox.Meta[Follow] { return followMeta.Load(followDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Follow) VeloxKey(int64) {}
+
 // followDescriptor describes Follow to velox: its table, columns and edges.
 func followDescriptor() velox.Descriptor[Follow] {
 	return velox.Descriptor[Follow]{

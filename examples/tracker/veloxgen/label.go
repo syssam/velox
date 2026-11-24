@@ -62,6 +62,9 @@ var labelMeta velox.MetaOnce[Label]
 // VeloxMeta is called by velox, not by applications.
 func (*Label) VeloxMeta() *velox.Meta[Label] { return labelMeta.Load(labelDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Label) VeloxKey(int64) {}
+
 // labelDescriptor describes Label to velox: its table, columns, edges, checks and behaviour.
 func labelDescriptor() velox.Descriptor[Label] {
 	return velox.Descriptor[Label]{

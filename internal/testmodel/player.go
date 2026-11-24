@@ -61,6 +61,9 @@ var playerMeta velox.MetaOnce[Player]
 // VeloxMeta is called by velox, not by applications.
 func (*Player) VeloxMeta() *velox.Meta[Player] { return playerMeta.Load(playerDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Player) VeloxKey(int64) {}
+
 // playerDescriptor describes Player to velox: its table, columns and edges.
 func playerDescriptor() velox.Descriptor[Player] {
 	return velox.Descriptor[Player]{

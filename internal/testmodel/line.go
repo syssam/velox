@@ -55,6 +55,9 @@ var lineMeta velox.MetaOnce[Line]
 // VeloxMeta is called by velox, not by applications.
 func (*Line) VeloxMeta() *velox.Meta[Line] { return lineMeta.Load(lineDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Line) VeloxKey(int64) {}
+
 // lineDescriptor describes Line to velox: its table, columns and edges.
 func lineDescriptor() velox.Descriptor[Line] {
 	return velox.Descriptor[Line]{

@@ -54,6 +54,9 @@ var ownerMeta velox.MetaOnce[Owner]
 // VeloxMeta is called by velox, not by applications.
 func (*Owner) VeloxMeta() *velox.Meta[Owner] { return ownerMeta.Load(ownerDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Owner) VeloxKey(int64) {}
+
 // ownerDescriptor describes Owner to velox: its table and columns.
 func ownerDescriptor() velox.Descriptor[Owner] {
 	return velox.Descriptor[Owner]{

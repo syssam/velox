@@ -55,6 +55,9 @@ var sessionMeta velox.MetaOnce[Session]
 // VeloxMeta is called by velox, not by applications.
 func (*Session) VeloxMeta() *velox.Meta[Session] { return sessionMeta.Load(sessionDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Session) VeloxKey(int64) {}
+
 // sessionDescriptor describes Session to velox: its table and columns.
 func sessionDescriptor() velox.Descriptor[Session] {
 	return velox.Descriptor[Session]{

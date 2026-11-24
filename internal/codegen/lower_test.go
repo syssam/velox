@@ -1066,13 +1066,14 @@ func TestLowerOneToOneDescriptor(t *testing.T) {
 type LwReserved struct{ schema.Schema }
 
 func (LwReserved) Fields() []schema.Field {
-	return []schema.Field{field.String("velox_meta"), field.String("policy"), field.String("go_string")}
+	return []schema.Field{field.String("velox_meta"), field.String("velox_key"), field.String("policy"), field.String("go_string")}
 }
 
 func TestLowerReservedNames(t *testing.T) {
 	_, err := lower(t, Config{}, LwReserved{})
 	for _, w := range []string{
 		`schema LwReserved: field "velox_meta": its Go name VeloxMeta is reserved`,
+		`schema LwReserved: field "velox_key": its Go name VeloxKey is reserved`,
 		`schema LwReserved: field "policy": its Go name Policy is reserved`,
 		`schema LwReserved: field "go_string": its Go name GoString is reserved`,
 	} {

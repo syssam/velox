@@ -840,6 +840,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - A DB from `velox.Open(d, nil)` fails a statement or `Tx` it would run
   with an error instead of a nil-pointer panic; its `SQL` methods render
   with no database, as before.
+- `q.IDs(ctx)` takes no type argument: Go infers the key's type from the
+  entity, through the `VeloxKey` method velox-gen now writes for a
+  one-column key. A type argument, a result of another type and an entity
+  with a composite key no longer compile; they failed at run time.
+  Regenerate: `velox.GeneratedCodeIsVersion31` replaces Version30, and
+  `.IDs[K](ctx)` becomes `.IDs(ctx)`. A field whose Go name is `VeloxKey`
+  is refused. The empty method costs nothing bench/scale can measure at
+  500 entities, and its service binary is 16 KB smaller (ADR 0162).
 - A gqlgraph connection pages as entgql's does on every type: a cursor
   in entgql's msgpack format is read, its `-1` time extension included;
   under one order term the key breaks ties in that term's direction; and

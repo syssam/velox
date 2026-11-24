@@ -35,7 +35,7 @@ func TestValuesAllocationsPerRow(t *testing.T) {
 			return err
 		},
 		"IDs": func(db *velox.DB) error {
-			_, err := db.Query[testmodel.Invoice]().Limit(100).IDs[int64](ctx)
+			_, err := db.Query[testmodel.Invoice]().Limit(100).IDs(ctx)
 			return err
 		},
 	} {

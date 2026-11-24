@@ -168,6 +168,9 @@ var bindMeta velox.MetaOnce[Bind]
 // VeloxMeta is called by velox, not by applications.
 func (*Bind) VeloxMeta() *velox.Meta[Bind] { return bindMeta.Load(bindDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Bind) VeloxKey(int64) {}
+
 // bindDescriptor describes Bind to velox: its table, columns and checks.
 func bindDescriptor() velox.Descriptor[Bind] {
 	return velox.Descriptor[Bind]{

@@ -261,7 +261,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Query().Order(user.ByPosts(sql.OrderBySum(post.FieldViews)))` | `OrderBy(U.Posts.Sum(P.Views).Asc(), U.ID.Asc())`; `Avg`, `Min` and `Max` too, NULL for a user with no posts |
 | `user.HasPostsWith(...)` with a count, `sql.P` by hand | `velox.Expr[veloxgen.User]("? >= ?", U.Posts.Count(), 3)` in a `Where` |
 | a predicate `func(s *sql.Selector)` whose subquery `HasWith` and `InSelect` cannot say (a cast key, a table no entity maps, a table read without its policy) | `velox.ExprRaw[veloxgen.User](reason, "? IN (SELECT CAST(b.id AS TEXT) FROM bill b WHERE b.org_id = ?)", U.EntityID, org)`: no policy inside the text, the outer statement's kept; a handle is the qualified outer column, for a correlated subquery; `Statement.RawReasons()` shows the reason to hooks (decision 0155); in a schema's Policy, by name and with no policy of the other entity inside, `velox.FieldInSelectRaw(reason, "entity_id", "Bill", "id", velox.FieldEQ("org_id", org))`, a text column against an integer key cast to the integer, the key bare (decisions 0157, 0161) |
-| `client.User.Query().IDs(ctx)` | `db.Query[veloxgen.User]().Limit(n).IDs[int64](ctx)` |
+| `client.User.Query().IDs(ctx)` | `db.Query[veloxgen.User]().Limit(n).IDs(ctx)` |
 | `tx.OnCommit(...)` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed (decision 0100) |
 | a commit hook (`tx.OnCommit` returning a `Committer` that runs before `next.Commit`) | `velox.BeforeCommit(tx, fn)`: its error rolls back (decision 0111) |
 | `tx.OnRollback(...)` | `velox.AfterRollback(tx, fn)`: also runs when the nested `Tx` it was queued in rolls back (decision 0111) |

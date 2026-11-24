@@ -67,6 +67,9 @@ var categoryMeta velox.MetaOnce[Category]
 // VeloxMeta is called by velox, not by applications.
 func (*Category) VeloxMeta() *velox.Meta[Category] { return categoryMeta.Load(categoryDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Category) VeloxKey(int64) {}
+
 // categoryDescriptor describes Category to velox: its table, columns, edges and behaviour.
 func categoryDescriptor() velox.Descriptor[Category] {
 	return velox.Descriptor[Category]{

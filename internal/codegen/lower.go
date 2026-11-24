@@ -21,7 +21,7 @@ import (
 
 // reserved are the Go names of the methods an entity has, which no field or
 // edge may take.
-var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": true, "Policy": true, "Hooks": true, "Interceptors": true}
+var reserved = map[string]bool{"VeloxMeta": true, "VeloxKey": true, "String": true, "GoString": true, "Policy": true, "Hooks": true, "Interceptors": true}
 
 // Lower maps g to the model Render writes: Go names and types, handle kinds,
 // enums, the join entities of many-to-many relations, and the code of

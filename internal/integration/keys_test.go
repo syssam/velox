@@ -204,21 +204,18 @@ func TestIDsOfNonIntegerKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ids, err := db.Query[testmodel.Paper]().OrderBy(P.Title.Asc()).Limit(5).IDs[bindtype.UUID](ctx)
+		ids, err := db.Query[testmodel.Paper]().OrderBy(P.Title.Asc()).Limit(5).IDs(ctx)
 		if err != nil || !slices.Equal(ids, []bindtype.UUID{a.ID, b.ID}) {
 			t.Errorf("paper IDs: %v, %v", ids, err)
 		}
 		if err := db.Insert(&testmodel.Topic{ID: "go", Name: "Go"}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		tids, err := db.Query[testmodel.Topic]().Limit(5).IDs[string](ctx)
+		tids, err := db.Query[testmodel.Topic]().Limit(5).IDs(ctx)
 		if err != nil || !slices.Equal(tids, []string{"go"}) {
 			t.Errorf("topic IDs: %v, %v", tids, err)
 		}
-		if _, err := db.Query[testmodel.Paper]().Limit(5).IDs[int64](ctx); err == nil {
-			t.Error("IDs[int64] of a UUID key: no error")
-		}
-		none, err := db.Query[testmodel.Paper]().Where(P.Title.EQ("none")).Limit(5).IDs[bindtype.UUID](ctx)
+		none, err := db.Query[testmodel.Paper]().Where(P.Title.EQ("none")).Limit(5).IDs(ctx)
 		if err != nil || none != nil {
 			t.Errorf("no rows: %v, %v", none, err)
 		}

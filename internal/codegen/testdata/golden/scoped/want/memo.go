@@ -40,6 +40,9 @@ var memoMeta velox.MetaOnce[Memo]
 // VeloxMeta is called by velox, not by applications.
 func (*Memo) VeloxMeta() *velox.Meta[Memo] { return memoMeta.Load(memoDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Memo) VeloxKey(int64) {}
+
 // memoDescriptor describes Memo to velox: its table, columns and behaviour.
 func memoDescriptor() velox.Descriptor[Memo] {
 	return velox.Descriptor[Memo]{

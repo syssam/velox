@@ -45,6 +45,9 @@ var ledgerMeta velox.MetaOnce[Ledger]
 // VeloxMeta is called by velox, not by applications.
 func (*Ledger) VeloxMeta() *velox.Meta[Ledger] { return ledgerMeta.Load(ledgerDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Ledger) VeloxKey(int64) {}
+
 // ledgerDescriptor describes Ledger to velox: its table and columns.
 func ledgerDescriptor() velox.Descriptor[Ledger] {
 	return velox.Descriptor[Ledger]{

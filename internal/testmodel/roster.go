@@ -90,6 +90,9 @@ var rosterMeta velox.MetaOnce[Roster]
 // VeloxMeta is called by velox, not by applications.
 func (*Roster) VeloxMeta() *velox.Meta[Roster] { return rosterMeta.Load(rosterDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Roster) VeloxKey(int64) {}
+
 // rosterDescriptor describes Roster to velox: its table, columns, edges, checks and behaviour.
 func rosterDescriptor() velox.Descriptor[Roster] {
 	return velox.Descriptor[Roster]{

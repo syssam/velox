@@ -44,6 +44,9 @@ var accountMeta velox.MetaOnce[Account]
 // VeloxMeta is called by velox, not by applications.
 func (*Account) VeloxMeta() *velox.Meta[Account] { return accountMeta.Load(accountDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Account) VeloxKey(int64) {}
+
 // accountDescriptor describes Account to velox: its table and columns.
 func accountDescriptor() velox.Descriptor[Account] {
 	return velox.Descriptor[Account]{

@@ -132,7 +132,7 @@ const EdgeClear
 const EdgePage
 const EdgeRemove
 const EdgeSet
-const GeneratedCodeIsVersion30
+const GeneratedCodeIsVersion31
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -624,7 +624,7 @@ func (q Query[E]) ForShare[_ Lazy[E]]() Query[E]
 func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E]
 func (q Query[E]) GroupBy[_ Lazy[E]](ts ...Selectable[E]) Query[E]
 func (q Query[E]) Having[_ Lazy[E]](ps ...Pred[E]) Query[E]
-func (q Query[E]) IDs[K any](ctx context.Context) ([]K, error)
+func (q Query[E]) IDs[P keyed[E, K], K any](ctx context.Context) ([]K, error)
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q Query[E]) Join[T any](r Rel[E, T]) Query[E]
 func (q Query[E]) LeftJoin[T any](r Rel[E, T]) Query[E]

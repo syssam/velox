@@ -61,6 +61,9 @@ var clubMeta velox.MetaOnce[Club]
 // VeloxMeta is called by velox, not by applications.
 func (*Club) VeloxMeta() *velox.Meta[Club] { return clubMeta.Load(clubDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Club) VeloxKey(int64) {}
+
 // clubDescriptor describes Club to velox: its table, columns and edges.
 func clubDescriptor() velox.Descriptor[Club] {
 	return velox.Descriptor[Club]{

@@ -65,6 +65,9 @@ var itemMeta velox.MetaOnce[Item]
 // VeloxMeta is called by velox, not by applications.
 func (*Item) VeloxMeta() *velox.Meta[Item] { return itemMeta.Load(itemDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Item) VeloxKey(int64) {}
+
 // itemDescriptor describes Item to velox: its table, columns and edges.
 func itemDescriptor() velox.Descriptor[Item] {
 	return velox.Descriptor[Item]{

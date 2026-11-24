@@ -46,6 +46,9 @@ var noteMeta velox.MetaOnce[Note]
 // VeloxMeta is called by velox, not by applications.
 func (*Note) VeloxMeta() *velox.Meta[Note] { return noteMeta.Load(noteDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Note) VeloxKey(int64) {}
+
 // noteDescriptor describes Note to velox: its table, columns and behaviour.
 func noteDescriptor() velox.Descriptor[Note] {
 	return velox.Descriptor[Note]{

@@ -67,6 +67,9 @@ var authorMeta velox.MetaOnce[Author]
 // VeloxMeta is called by velox, not by applications.
 func (*Author) VeloxMeta() *velox.Meta[Author] { return authorMeta.Load(authorDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Author) VeloxKey(int64) {}
+
 // authorDescriptor describes Author to velox: its table, columns and edges.
 func authorDescriptor() velox.Descriptor[Author] {
 	return velox.Descriptor[Author]{

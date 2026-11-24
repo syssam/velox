@@ -55,6 +55,9 @@ var invoiceMeta velox.MetaOnce[Invoice]
 // VeloxMeta is called by velox, not by applications.
 func (*Invoice) VeloxMeta() *velox.Meta[Invoice] { return invoiceMeta.Load(invoiceDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Invoice) VeloxKey(int64) {}
+
 // invoiceDescriptor describes Invoice to velox: its table, columns and checks.
 func invoiceDescriptor() velox.Descriptor[Invoice] {
 	return velox.Descriptor[Invoice]{

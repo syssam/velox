@@ -55,6 +55,9 @@ var teamMeta velox.MetaOnce[Team]
 // VeloxMeta is called by velox, not by applications.
 func (*Team) VeloxMeta() *velox.Meta[Team] { return teamMeta.Load(teamDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Team) VeloxKey(int64) {}
+
 // teamDescriptor describes Team to velox: its table, columns and edges.
 func teamDescriptor() velox.Descriptor[Team] {
 	return velox.Descriptor[Team]{

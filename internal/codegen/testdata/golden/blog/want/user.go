@@ -147,6 +147,9 @@ var userMeta velox.MetaOnce[User]
 // VeloxMeta is called by velox, not by applications.
 func (*User) VeloxMeta() *velox.Meta[User] { return userMeta.Load(userDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*User) VeloxKey(int64) {}
+
 // userDescriptor describes User to velox: its table, columns, edges and checks.
 func userDescriptor() velox.Descriptor[User] {
 	fds := veloxschema.FieldDescriptors(&schema.User{}, "created_by")

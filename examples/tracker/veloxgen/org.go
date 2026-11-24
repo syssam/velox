@@ -46,6 +46,9 @@ var orgMeta velox.MetaOnce[Org]
 // VeloxMeta is called by velox, not by applications.
 func (*Org) VeloxMeta() *velox.Meta[Org] { return orgMeta.Load(orgDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Org) VeloxKey(int64) {}
+
 // orgDescriptor describes Org to velox: its table, columns and checks.
 func orgDescriptor() velox.Descriptor[Org] {
 	return velox.Descriptor[Org]{

@@ -61,6 +61,9 @@ var remarkMeta velox.MetaOnce[Remark]
 // VeloxMeta is called by velox, not by applications.
 func (*Remark) VeloxMeta() *velox.Meta[Remark] { return remarkMeta.Load(remarkDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Remark) VeloxKey(int64) {}
+
 // remarkDescriptor describes Remark to velox: its table, columns and edges.
 func remarkDescriptor() velox.Descriptor[Remark] {
 	return velox.Descriptor[Remark]{

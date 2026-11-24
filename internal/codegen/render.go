@@ -282,6 +282,11 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("// VeloxMeta is called by velox, not by applications.")
 	w.p("func (*%s) VeloxMeta() *velox.Meta[%[1]s] { return %sMeta.Load(%[2]sDescriptor) }", e.Name, id)
 	w.p("")
+	if len(e.PrimaryKey) == 1 {
+		w.p("// VeloxKey names the key's type for Query.IDs. It does nothing.")
+		w.p("func (*%s) VeloxKey(%s) {}", e.Name, e.Fields[e.PrimaryKey[0]].GoType)
+		w.p("")
+	}
 	entityDescriptor(&w, o, e)
 	w.p("")
 	entityString(&w, e)

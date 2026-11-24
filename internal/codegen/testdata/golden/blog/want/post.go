@@ -99,6 +99,9 @@ var postMeta velox.MetaOnce[Post]
 // VeloxMeta is called by velox, not by applications.
 func (*Post) VeloxMeta() *velox.Meta[Post] { return postMeta.Load(postDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Post) VeloxKey(int64) {}
+
 // postDescriptor describes Post to velox: its table, columns, edges, checks and behaviour.
 func postDescriptor() velox.Descriptor[Post] {
 	fds := veloxschema.FieldDescriptors(&schema.Post{}, "slug")

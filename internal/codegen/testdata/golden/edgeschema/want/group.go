@@ -61,6 +61,9 @@ var groupMeta velox.MetaOnce[Group]
 // VeloxMeta is called by velox, not by applications.
 func (*Group) VeloxMeta() *velox.Meta[Group] { return groupMeta.Load(groupDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Group) VeloxKey(int64) {}
+
 // groupDescriptor describes Group to velox: its table, columns and edges.
 func groupDescriptor() velox.Descriptor[Group] {
 	return velox.Descriptor[Group]{

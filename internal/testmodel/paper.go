@@ -70,6 +70,9 @@ var paperMeta velox.MetaOnce[Paper]
 // VeloxMeta is called by velox, not by applications.
 func (*Paper) VeloxMeta() *velox.Meta[Paper] { return paperMeta.Load(paperDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Paper) VeloxKey(bindtype.UUID) {}
+
 // paperDescriptor describes Paper to velox: its table, columns and edges.
 func paperDescriptor() velox.Descriptor[Paper] {
 	return velox.Descriptor[Paper]{

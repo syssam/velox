@@ -97,15 +97,15 @@ type valueShape[V any] = struct {
 }
 
 // IDs returns the primary keys of the rows q reads, as Values reads a
-// column: the same policies, filters, Limit rule and row cap apply. K is
-// the key's Go type, which E's type does not say, so the caller names it:
+// column: the same policies, filters, Limit rule and row cap apply. The
+// result's element type is the key's, which Go infers from E:
 //
-//	ids, err := db.Query[veloxgen.User]().Where(U.Active.EQ(true)).AllowUnbounded().IDs[int64](ctx)
+//	ids, err := db.Query[veloxgen.User]().Where(U.Active.EQ(true)).AllowUnbounded().IDs(ctx)
 //
-// The result is nil when no row matches. A K other than the key field's
-// type, and an entity whose primary key has more than one column, fail
-// with an error before anything is sent.
-func (q Query[E]) IDs[K any](ctx context.Context) ([]K, error) {
+// The result is nil when no row matches. An entity whose primary key has
+// more than one column has no IDs: velox-gen writes VeloxKey, which IDs
+// needs, only for a one-column key.
+func (q Query[E]) IDs[P keyed[E, K], K any](ctx context.Context) ([]K, error) {
 	if q.meta.Err != nil {
 		return nil, q.meta.Err
 	}
@@ -113,15 +113,12 @@ func (q Query[E]) IDs[K any](ctx context.Context) ([]K, error) {
 	if err != nil {
 		return nil, err
 	}
-	var e E
-	if p := q.meta.Addr(&e, col); !isPtrTo[K](p) {
-		return nil, engine.KeyTypeError(q.meta.Info.Name, (*K)(nil), p)
-	}
 	return columnValues[E, K](ctx, q, col, "IDs")
 }
 
-// isPtrTo reports whether p is a *K.
-func isPtrTo[K any](p any) bool {
-	_, ok := p.(*K)
-	return ok
+// keyed is satisfied by *E when E's generated VeloxKey method names its
+// one-column key's type K, so IDs infers K.
+type keyed[E, K any] interface {
+	*E
+	VeloxKey(K)
 }

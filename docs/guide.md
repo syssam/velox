@@ -406,7 +406,7 @@ A `//go:generate go run generate.go` line in another file of the package
 runs it.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion30`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion31`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -634,12 +634,12 @@ cap every read with `velox.WithMaxLimit` and `velox.WithMaxRows`.
 primary keys. Both end the query's chain, as `All` does. `Values` takes the
 column's handle, and the result's type is the column's: a pointer for a
 nullable column, nil for NULL. A JSON column cannot be read this way, and
-`Values` refuses its handle when the program compiles. `IDs` takes the key's
-type, which `E` does not say:
+`Values` refuses its handle when the program compiles. `IDs` returns the
+keys, typed as the key field is:
 
 ```go
 numbers, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100).Values(ctx, I.Number)
-ids, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).AllowUnbounded().IDs[int64](ctx)
+ids, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).AllowUnbounded().IDs(ctx)
 ```
 
 They read as `All` does: the policies, the scope, the filters, `Limit`,

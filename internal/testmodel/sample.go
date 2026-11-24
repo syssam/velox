@@ -124,6 +124,9 @@ var sampleMeta velox.MetaOnce[Sample]
 // VeloxMeta is called by velox, not by applications.
 func (*Sample) VeloxMeta() *velox.Meta[Sample] { return sampleMeta.Load(sampleDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Sample) VeloxKey(int64) {}
+
 // sampleDescriptor describes Sample to velox: its table, columns and edges.
 func sampleDescriptor() velox.Descriptor[Sample] {
 	return velox.Descriptor[Sample]{

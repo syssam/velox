@@ -66,6 +66,9 @@ var docMeta velox.MetaOnce[Doc]
 // VeloxMeta is called by velox, not by applications.
 func (*Doc) VeloxMeta() *velox.Meta[Doc] { return docMeta.Load(docDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Doc) VeloxKey(int64) {}
+
 // docDescriptor describes Doc to velox: its table, columns, edges and behaviour.
 func docDescriptor() velox.Descriptor[Doc] {
 	return velox.Descriptor[Doc]{

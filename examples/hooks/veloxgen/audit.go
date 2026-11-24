@@ -44,6 +44,9 @@ var auditMeta velox.MetaOnce[Audit]
 // VeloxMeta is called by velox, not by applications.
 func (*Audit) VeloxMeta() *velox.Meta[Audit] { return auditMeta.Load(auditDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Audit) VeloxKey(int64) {}
+
 // auditDescriptor describes Audit to velox: its table and columns.
 func auditDescriptor() velox.Descriptor[Audit] {
 	return velox.Descriptor[Audit]{

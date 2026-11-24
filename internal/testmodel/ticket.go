@@ -98,6 +98,9 @@ var ticketMeta velox.MetaOnce[Ticket]
 // VeloxMeta is called by velox, not by applications.
 func (*Ticket) VeloxMeta() *velox.Meta[Ticket] { return ticketMeta.Load(ticketDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Ticket) VeloxKey(int64) {}
+
 // ticketDescriptor describes Ticket to velox: its table, columns, edges and behaviour.
 func ticketDescriptor() velox.Descriptor[Ticket] {
 	return velox.Descriptor[Ticket]{

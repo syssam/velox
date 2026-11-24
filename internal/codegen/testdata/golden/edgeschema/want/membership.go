@@ -86,6 +86,9 @@ func (*Membership) VeloxMeta() *velox.Meta[Membership] {
 	return membershipMeta.Load(membershipDescriptor)
 }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Membership) VeloxKey(int64) {}
+
 // membershipDescriptor describes Membership to velox: its table, columns, edges and checks.
 func membershipDescriptor() velox.Descriptor[Membership] {
 	fds := veloxschema.FieldDescriptors(&schema.Membership{}, "joined_at")

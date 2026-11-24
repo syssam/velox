@@ -50,6 +50,9 @@ var eventMeta velox.MetaOnce[Event]
 // VeloxMeta is called by velox, not by applications.
 func (*Event) VeloxMeta() *velox.Meta[Event] { return eventMeta.Load(eventDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Event) VeloxKey(int64) {}
+
 // eventDescriptor describes Event to velox: its table and columns.
 func eventDescriptor() velox.Descriptor[Event] {
 	return velox.Descriptor[Event]{

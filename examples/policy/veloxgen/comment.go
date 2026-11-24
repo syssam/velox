@@ -61,6 +61,9 @@ var commentMeta velox.MetaOnce[Comment]
 // VeloxMeta is called by velox, not by applications.
 func (*Comment) VeloxMeta() *velox.Meta[Comment] { return commentMeta.Load(commentDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Comment) VeloxKey(int64) {}
+
 // commentDescriptor describes Comment to velox: its table, columns, edges and behaviour.
 func commentDescriptor() velox.Descriptor[Comment] {
 	return velox.Descriptor[Comment]{

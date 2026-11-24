@@ -128,6 +128,9 @@ var issueMeta velox.MetaOnce[Issue]
 // VeloxMeta is called by velox, not by applications.
 func (*Issue) VeloxMeta() *velox.Meta[Issue] { return issueMeta.Load(issueDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Issue) VeloxKey(int64) {}
+
 // issueDescriptor describes Issue to velox: its table, columns, edges, checks and behaviour.
 func issueDescriptor() velox.Descriptor[Issue] {
 	return velox.Descriptor[Issue]{

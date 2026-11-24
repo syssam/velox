@@ -1,6 +1,7 @@
 # 0158. Values and IDs are methods of Query, and Values and the grouped aggregates take the handle
 
-- Status: accepted, 2026-11-24. Supersedes the section "Values and IDs" of
+- Status: accepted, 2026-11-24; `IDs`' type argument superseded by
+  [0162](0162-ids-infers-the-key-type.md). Supersedes the section "Values and IDs" of
   [0100](0100-after-commit-values-and-log.md), and 0022's choice of `Key()`
   for a grouped aggregate's key.
 

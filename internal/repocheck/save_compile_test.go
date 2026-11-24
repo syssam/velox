@@ -193,7 +193,7 @@ func values(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[
 		g, _ = q.Values(ctx, S.MaybeWhen)
 		h, _ = q.Values(ctx, S.Name)
 		i, _ = q.Values(ctx, S.Price)
-		k, _ = q.IDs[int64](ctx)
+		k, _ = q.IDs(ctx)
 	)
 	var _ []int64 = a
 	var _ []kind.Status = b
@@ -216,6 +216,9 @@ func values(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[
 		"another entity's column":  `q.Values(ctx, I.OrgID)`,
 		"a handle's pointer":       `q.Values(ctx, &S.Status)`,
 		"a result of another type": `func() (_ []string, err error) { return q.Values(ctx, S.ID) }()`,
+		"IDs of another key type":  `func() (_ []string, err error) { return q.IDs(ctx) }()`,
+		"IDs of a composite key":   `velox.Query[testmodel.PaperTopic]{}.IDs(ctx)`,
+		"IDs with a type argument": `q.IDs[int64](ctx)`,
 	} {
 		if errs := typeCheck(t, head+"\t_, _ = "+bad+"\n}\n"); len(errs) == 0 {
 			t.Errorf("%s compiles: %s", name, bad)

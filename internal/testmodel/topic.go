@@ -56,6 +56,9 @@ var topicMeta velox.MetaOnce[Topic]
 // VeloxMeta is called by velox, not by applications.
 func (*Topic) VeloxMeta() *velox.Meta[Topic] { return topicMeta.Load(topicDescriptor) }
 
+// VeloxKey names the key's type for Query.IDs. It does nothing.
+func (*Topic) VeloxKey(string) {}
+
 // topicDescriptor describes Topic to velox: its table, columns, edges and checks.
 func topicDescriptor() velox.Descriptor[Topic] {
 	return velox.Descriptor[Topic]{

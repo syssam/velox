@@ -31,7 +31,7 @@ func TestValuesUnderPolicyAndFilter(t *testing.T) {
 	wantSent(t, e, `SELECT "title" FROM "tickets" WHERE "invoice_id" = $1 AND NOT "done" AND "org_id" = $2 AND "owner" = $3 ORDER BY "title" LIMIT 5 OFFSET $4`, int64(9), int64(1), "ann", 2)
 
 	e.Rows = [][]any{{int64(4)}, {int64(7)}}
-	ids, err := db.Query[testmodel.Ticket]().AllowUnbounded().IDs[int64](asUser("ann"))
+	ids, err := db.Query[testmodel.Ticket]().AllowUnbounded().IDs(asUser("ann"))
 	if err != nil || !slices.Equal(ids, []int64{4, 7}) {
 		t.Fatalf("IDs: %v, %v", ids, err)
 	}
@@ -40,7 +40,7 @@ func TestValuesUnderPolicyAndFilter(t *testing.T) {
 	}
 
 	// WithoutPolicy lifts the policy, not the filter.
-	if _, err := db.WithoutPolicy("test").Query[testmodel.Ticket]().Limit(1).IDs[int64](ctx); err != nil || !strings.Contains(e.SQL, `WHERE NOT "done" LIMIT`) {
+	if _, err := db.WithoutPolicy("test").Query[testmodel.Ticket]().Limit(1).IDs(ctx); err != nil || !strings.Contains(e.SQL, `WHERE NOT "done" LIMIT`) {
 		t.Errorf("WithoutPolicy: %s, %v", e.SQL, err)
 	}
 }
@@ -63,11 +63,8 @@ func TestValuesRefusals(t *testing.T) {
 	if _, err := db.Query[testmodel.Ticket]().Values(ctx, Tk.Title); !errors.Is(err, velox.ErrUnbounded) {
 		t.Errorf("Values without Limit: %v", err)
 	}
-	if _, err := db.Query[testmodel.Ticket]().IDs[int64](ctx); !errors.Is(err, velox.ErrUnbounded) {
+	if _, err := db.Query[testmodel.Ticket]().IDs(ctx); !errors.Is(err, velox.ErrUnbounded) {
 		t.Errorf("IDs without Limit: %v", err)
-	}
-	if _, err := db.Query[testmodel.Ticket]().Limit(1).IDs[string](ctx); err == nil || !strings.HasSuffix(err.Error(), "IDs[string] of a key whose field is int64") {
-		t.Errorf("IDs[string]: %v", err)
 	}
 	if _, err := db.Query[testmodel.Ticket]().Join(Tk.Invoice).Limit(1).Values(ctx, Tk.Title); err == nil || !strings.Contains(err.Error(), "cannot join") {
 		t.Errorf("a join: %v", err)
@@ -87,11 +84,11 @@ func TestValuesOnSQLite(t *testing.T) {
 	if err != nil || !slices.Equal(numbers, []string{"c", "b"}) {
 		t.Errorf("Values: %v, %v", numbers, err)
 	}
-	ids, err := db.Query[testmodel.Invoice]().Where(I.ID.GT(1)).OrderBy(I.ID.Asc()).AllowUnbounded().IDs[int64](ctx)
+	ids, err := db.Query[testmodel.Invoice]().Where(I.ID.GT(1)).OrderBy(I.ID.Asc()).AllowUnbounded().IDs(ctx)
 	if err != nil || !slices.Equal(ids, []int64{2, 3}) {
 		t.Errorf("IDs: %v, %v", ids, err)
 	}
-	none, err := db.Query[testmodel.Invoice]().Where(I.ID.GT(9)).Limit(1).IDs[int64](ctx)
+	none, err := db.Query[testmodel.Invoice]().Where(I.ID.GT(9)).Limit(1).IDs(ctx)
 	if err != nil || len(none) != 0 {
 		t.Errorf("no rows: %v, %v", none, err)
 	}

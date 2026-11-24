@@ -3,7 +3,6 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"reflect"
 )
 
 // ColumnRead makes st, a read's prepared statement, read column col alone,
@@ -34,10 +33,4 @@ func KeyColumn(in *EntityInfo) (int, error) {
 		return 0, fmt.Errorf("velox: %s: IDs reads a one-column primary key, and the key has %d columns; read them with Select and Rows", in.Name, len(in.PrimaryKey))
 	}
 	return in.PrimaryKey[0], nil
-}
-
-// KeyTypeError is IDs' error for a type argument that is not the type of
-// the key's field: want is a nil *K, and got the field's address.
-func KeyTypeError(entity string, want, got any) error {
-	return fmt.Errorf("velox: %s: IDs[%v] of a key whose field is %v", entity, reflect.TypeOf(want).Elem(), reflect.TypeOf(got).Elem())
 }
