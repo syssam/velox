@@ -26,6 +26,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   serves) and MySQL's `JSON_CONTAINS`. `doc` is encoded with `encoding/json`
   when `Contains` is called. SQLite has no JSON containment, so the statement
   fails there with an error naming it (ADR 0154).
+- `db.InsertBulk(qs...)`, ent's `CreateBulk`, and `untyped.InsertBulk`: a
+  bulk of single-row inserts, each stored as its `Insert` alone would
+  store it (a setter's zero kept, an unset column given its default, its
+  hooks and Insert policy run, its key read back), with rows naming the
+  same columns in one multi-row INSERT and several statements in one
+  transaction. `InsertQuery.SQL`'s work moved into the engine, which
+  took about 7.5 KB off each entity package (ADR 0153).
+
 - velox-graphql: `node=on|off` declares Relay's `Node`, with `node(id:)`
   and `nodes(ids:)` and `noder_gql.go`, apart from `compat=veloxe`, which
   presets `on`; `off` is the default, and `compat=veloxe,node=off` drops

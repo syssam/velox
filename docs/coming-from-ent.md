@@ -239,6 +239,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | ent | velox |
 | --- | --- |
 | `client.User.Create().SetName("a").Save(ctx)` | `db.Insert(&veloxgen.User{Name: "a"}).Exec(ctx)` |
+| `client.User.CreateBulk(builders...).Save(ctx)` | `db.InsertBulk(qs...).Exec(ctx)`, each `qs[i]` a `db.Insert(&us[i]).Set(...)`: a setter's zero is stored per row, and the keys come back into `us`; rows naming the same columns share one INSERT (decision 0153). `db.InsertAll(us)` takes values and cannot tell a zero from unset |
 | `client.User.Query().All(ctx)` | `db.Query[veloxgen.User]().AllowUnbounded().All(ctx)`, or with a `Limit` |
 | `client.User.Update().Where(...).SetAge(3).Save(ctx)` | `db.Update[veloxgen.User]().Where(...).Set(U.Age.Set(3)).Exec(ctx)` |
 | `client.User.Get(ctx, id)` | `db.Query[veloxgen.User]().Where(U.ID.EQ(id)).One(ctx)` |

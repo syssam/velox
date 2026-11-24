@@ -1222,6 +1222,30 @@ err := db.InsertAll(lines).Exec(ctx)
 
 Both fill defaults and run hooks and policies first.
 
+`InsertAll` takes values, so a zero field is unset and gets its default.
+`InsertBulk`, ent's `CreateBulk`, takes one `Insert` a row, each with its
+own setters, and stores each row as that `Insert` alone would: a setter's
+`false`, `0` or `""` is kept, and a column no setter names gets its
+default
+([ADR 0153](decisions/0153-insert-bulk.md)):
+
+```go
+L := veloxgen.Lines
+lines := make([]veloxgen.Line, len(amounts))
+qs := make([]velox.InsertQuery[veloxgen.Line], len(amounts))
+for i, cents := range amounts {
+	qs[i] = db.Insert(&lines[i]).Set(L.InvoiceID.Set(inv.ID), L.AmountCents.Set(cents)) // 0 is stored as 0
+}
+err := db.InsertBulk(qs...).Exec(ctx)
+// each lines[i].ID is set now.
+```
+
+Each row's hooks and Insert policy run as for its `Insert`. Rows whose
+setters name the same columns share one multi-row INSERT, chunked as
+`InsertAll`'s; rows of another column set go in another statement, and
+several statements run in one transaction. An upsert option goes on the
+`InsertBulk` and applies to every row.
+
 ### Upsert
 
 `OnConflict` names the conflicting columns, followed by `Update(cols...)` or

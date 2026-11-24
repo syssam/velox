@@ -224,6 +224,9 @@ type TableRows struct {
 	// explicit is, for an insert of the rows, the columns its setters
 	// store a value in (SetExplicit).
 	explicit []int
+	// ptrs, when not nil, are the rows themselves, wherever they are in
+	// memory: a group of an InsertBulk's rows. p and size are then unused.
+	ptrs []unsafe.Pointer
 }
 
 // Len returns the number of rows.
@@ -237,6 +240,9 @@ func (r TableRows) At(i int) any { return r.info.kit.Ptr(r.at(i)) }
 func (r TableRows) at(i int) unsafe.Pointer {
 	if i < 0 || i >= r.n {
 		panic(fmt.Sprintf("velox: TableRows.At(%d) of %d rows", i, r.n))
+	}
+	if r.ptrs != nil {
+		return r.ptrs[i]
 	}
 	return unsafe.Add(r.p, uintptr(i)*r.size)
 }

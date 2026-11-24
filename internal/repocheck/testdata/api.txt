@@ -558,6 +558,7 @@ func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E]
 func (db *DB) Dialect() Dialect
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E]
+func (db *DB) InsertBulk[E any, PE Entity[E]](qs ...InsertQuery[E]) InsertQuery[E]
 func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
 func (db *DB) PolicyBypass() string
 func (db *DB) Query[E any, PE Entity[E]]() Query[E]
@@ -1606,6 +1607,7 @@ func Delete(db *velox.DB, t Table) TableDelete
 func Expr(text string, args ...any) velox.Predicate
 func FromQuery[E any](q velox.Query[E]) TableQuery
 func Insert(db *velox.DB, t Table, row any) TableInsert
+func InsertBulk(db *velox.DB, t Table, qs ...TableInsert) TableInsert
 func InsertRows(db *velox.DB, t Table, rows Rows) TableInsert
 func Max(t Term) Term
 func Min(t Term) Term

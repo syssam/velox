@@ -282,14 +282,14 @@ func refuseBidiUpsert(in *EntityInfo, cf *ConflictClause) error {
 	return nil
 }
 
-// RefuseBidiRows refuses an InsertAll of the n rows of in, size bytes apart
-// from base, when one sets a bidirectional key (refuseBidiInsert).
-func RefuseBidiRows(in *EntityInfo, base unsafe.Pointer, size uintptr, n int) error {
+// refuseBidiRows refuses an InsertAll or InsertBulk of the rows xs of in
+// when one sets a bidirectional key (refuseBidiInsert).
+func refuseBidiRows(in *EntityInfo, xs TableRows) error {
 	if len(in.bidiKeys) == 0 {
 		return nil
 	}
-	for i := range n {
-		if err := refuseBidiInsert(in, unsafe.Add(base, uintptr(i)*size), true); err != nil {
+	for i := range xs.n {
+		if err := refuseBidiInsert(in, xs.at(i), true); err != nil {
 			return err
 		}
 	}

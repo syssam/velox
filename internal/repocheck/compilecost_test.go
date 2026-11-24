@@ -399,11 +399,23 @@ var genericObjects = []struct {
 	// not the engine's; and the policy functions EntityInfo reaches take
 	// the DB as engine.StmtDB, an any, since a *DB in them cost
 	// entityDescriptor 25 KB.
-	{"entityDescUse", "", entityDescUseSrc, 796160}, // measured 795500
+	//
+	// InsertBulk (ADR 0153) moved InsertQuery.SQL's work into the engine
+	// (engine.InsertSQL): an entity's package that calls Insert(...).Exec
+	// carried SQL's body too, uncalled. entityDescUse went from 795072 to
+	// 787420 bytes, entityDescHooks from 880840 to 873342 and
+	// entityDescMixin from 926312 to 918822, with InsertBulk's own cost
+	// in: about 1.4 KB for the method's declaration, which every package
+	// naming DB carries. Its rows ride in InsertQuery's Setters, and Exec
+	// and SQL reach them through the engine calls they already make
+	// (engine.Insert, engine.InsertSQL): a branch of its own cost Exec 1.5
+	// KB and SQL 0.8 KB. A method of the engine's table cost 0.75 KB, so
+	// the bulk's helpers are functions.
+	{"entityDescUse", "", entityDescUseSrc, 788480}, // measured 787420
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.
-	{"entityDescHooks", "", entityDescHooksBound, 882176}, // measured 881170
+	{"entityDescHooks", "", entityDescHooksBound, 874496}, // measured 873342
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -411,7 +423,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 928768}, // measured 916638
+	{"entityDescMixin", "", entityDescMixinSrc, 920576}, // measured 918822
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

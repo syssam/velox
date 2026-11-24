@@ -117,6 +117,7 @@ type TableInsert struct {
 	err      error // the row's: not one of t's entity
 	many     TableRows
 	conflict *ConflictClause
+	bulk     Setters // InsertBulkTable's rows (BulkSetters)
 }
 
 // InsertTable starts an INSERT of row, a *E of t's entity, through e:
@@ -134,6 +135,21 @@ func InsertTable(e *DB, t Table, row any) TableInsert {
 // e: untyped.InsertRows.
 func InsertRows(e *DB, t Table, rows TableRows) TableInsert {
 	return TableInsert{e: e, t: t.state(), many: rows}
+}
+
+// InsertBulkTable starts an INSERT of the rows of qs, each an insert of
+// one row of t's entity through e: untyped.InsertBulk.
+func InsertBulkTable(e *DB, t Table, qs []TableInsert) TableInsert {
+	s := t.state()
+	rows := make([]BulkRow, len(qs))
+	for i, x := range qs {
+		err := x.err
+		if err != nil {
+			err = fmt.Errorf("velox: %s: Insert: %w", s.info.Name, err)
+		}
+		rows[i] = BulkElem(x.one, Setters{}, err, x.single, x.e == e && x.t == s, x.conflict != nil)
+	}
+	return TableInsert{e: e, t: s, bulk: BulkSetters(rows)}
 }
 
 // OnConflict is InsertQuery.OnConflict, of column indexes.
@@ -174,6 +190,9 @@ func (q TableInsert) Exec(ctx context.Context) error {
 	if err := q.check(); err != nil {
 		return err
 	}
+	if IsBulk(q.bulk) {
+		return InsertBulk(ctx, q.e, q.t.info, q.bulk, q.conflict)
+	}
 	if q.one == nil && q.many.n == 0 {
 		return nil
 	}
@@ -190,6 +209,9 @@ func (q TableInsert) SQL(ctx context.Context) (string, []any, error) {
 	ctx = DryRunContext(ctx)
 	if err := q.check(); err != nil {
 		return "", nil, err
+	}
+	if IsBulk(q.bulk) {
+		return InsertBulkSQL(ctx, q.e, q.t.info, q.bulk, q.conflict)
 	}
 	if q.one == nil && q.many.n == 0 {
 		return "", nil, nil
@@ -354,7 +376,7 @@ func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, set []i
 }
 
 func (t *table) prepareMany(db *DB, xs TableRows, cf *ConflictClause) (cols []int, per int, err error) {
-	if err := RefuseBidiRows(t.info, xs.p, xs.size, xs.n); err != nil {
+	if err := refuseBidiRows(t.info, xs); err != nil {
 		return nil, 0, err
 	}
 	gen := t.generatedKey(xs.at(0))

@@ -23,6 +23,7 @@ type Setters struct {
 	Set     []Assignment
 	Edges   []*EdgeSet
 	Skipped []int
+	bulk    *bulkRows // InsertBulk's rows (BulkSetters)
 }
 
 // Add returns s with the setters ss, each in its list. s's lists are not
@@ -205,8 +206,8 @@ func upsertSkips(cf *ConflictClause) *ConflictClause {
 	return &out
 }
 
-// Empty reports whether s holds no setter.
-func (s Setters) Empty() bool { return len(s.Set) == 0 && len(s.Edges) == 0 }
+// Empty reports whether s holds no setter, and is no InsertBulk's.
+func (s Setters) Empty() bool { return len(s.Set) == 0 && len(s.Edges) == 0 && s.bulk == nil }
 
 // CheckInsert refuses a column setter of an insert into in that is not a
 // Set: Add, Sub and an expression need a row.
@@ -283,11 +284,16 @@ func PrepareInsert(in *EntityInfo, s Setters, rows []unsafe.Pointer, upsert, man
 	return p, nil
 }
 
-// Insert runs an insert of rows of in with the setters s: PrepareInsert,
-// then send, the insert's work inside the entity's hooks, which it runs
-// through them. An insert with edge setters runs as InsertEdges says.
-func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsafe.Pointer, upsert, many bool, send func(ctx context.Context, db *DB, mu *MutationState) error) error {
-	p, err := PrepareInsert(in, s, rows, upsert, many)
+// Insert runs an insert of rows of in with the setters s and the conflict
+// clause cf: PrepareInsert, then send, the insert's work inside the
+// entity's hooks, which it runs through them. An insert with edge setters
+// runs as InsertEdges says. An InsertBulk's s (BulkSetters) runs as
+// InsertBulk, its rows in place of rows.
+func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsafe.Pointer, cf *ConflictClause, many bool, send func(ctx context.Context, db *DB, mu *MutationState) error) error {
+	if s.bulk != nil {
+		return InsertBulk(ctx, db, in, s, cf)
+	}
+	p, err := PrepareInsert(in, s, rows, cf != nil, many)
 	if err != nil {
 		return err
 	}
@@ -305,6 +311,32 @@ func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsaf
 		return err
 	}
 	return InsertEdges(ctx, db, p, rows, run)
+}
+
+// InsertSQL is InsertQuery.SQL's work for rows of in (mu.Rows, an
+// InsertAll's when many) with the setters s and the conflict clause cf,
+// after the defaults are filled: PrepareInsert, then render, inside the
+// entity's hooks when it has any, and the statement render put in mu. An
+// InsertBulk's s (BulkSetters) is InsertBulkSQL's.
+func InsertSQL(ctx context.Context, db *DB, in *EntityInfo, s Setters, mu *MutationState, cf *ConflictClause, many bool, render MutateFn) (string, []any, error) {
+	if s.bulk != nil {
+		return InsertBulkSQL(ctx, db, in, s, cf)
+	}
+	if !s.Empty() {
+		if _, err := PrepareInsert(in, s, mu.Rows, cf != nil, many); err != nil {
+			return "", nil, err
+		}
+	}
+	if !db.HasHooks(in) {
+		if err := render(ctx, mu); err != nil {
+			return "", nil, err
+		}
+		return mu.SQL, mu.Args, nil
+	}
+	if err := Mutate(ctx, db, in, mu, render); err != nil && !DryRefused(mu, err) {
+		return "", nil, err
+	}
+	return mu.SQL, mu.Args, nil
 }
 
 // Update runs st, an update, with the edge setters edges, as UpdateEdges

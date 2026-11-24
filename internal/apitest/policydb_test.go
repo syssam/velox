@@ -267,6 +267,46 @@ func TestInsertPolicyInImplicitTx(t *testing.T) {
 	}
 }
 
+// TestInsertBulkPolicy: InsertBulk asks the Insert policy about every row,
+// on the statement's DB inside the transaction its statements share; a
+// denied row fails the bulk, and no row of it is stored.
+func TestInsertBulkPolicy(t *testing.T) {
+	resetPNote(t)
+	ctx := context.Background()
+	db := interceptorDB(t)
+	var bodies []any
+	fixture.PNoteInsert = func(ctx context.Context, pdb *velox.DB, r velox.Row) error {
+		bodies = append(bodies, r.Value("body"))
+		if _, inTx := velox.TxFrom(ctx, db); !inTx || pdb == db {
+			t.Errorf("%v: the policy ran outside the bulk's transaction (TxFrom %v), or on the outer DB (%v)", r.Value("body"), inTx, pdb == db)
+		}
+		if r.Value("owner_id") == int64(2) {
+			return velox.Deny("not owner 2's")
+		}
+		return nil
+	}
+	P := fixture.PNotes
+	ok := db.InsertBulk(db.Insert(&fixture.PNote{OwnerID: 1, Body: "b1"}), db.Insert(&fixture.PNote{OwnerID: 1, Body: "b2"}).Set(P.OwnerID.Set(1)))
+	if err := ok.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	bodies = nil
+	err := db.InsertBulk(
+		db.Insert(&fixture.PNote{OwnerID: 1, Body: "b3"}),
+		db.Insert(&fixture.PNote{OwnerID: 2, Body: "b4"}).Set(P.Body.Set("b4")),
+	).Exec(ctx)
+	if !errors.Is(err, velox.ErrDenied) {
+		t.Fatalf("%v, want ErrDenied", err)
+	}
+	if len(bodies) != 2 || bodies[0] != "b3" || bodies[1] != "b4" {
+		t.Errorf("the policy was asked about %v; want b3 and b4", bodies)
+	}
+	n, err := db.Query[fixture.PNote]().Where(P.Body.In("b1", "b2", "b3", "b4")).Count(ctx)
+	if err != nil || n != 2 {
+		t.Errorf("%d of the bulks' rows stored, %v; want b1 and b2", n, err)
+	}
+}
+
 // TestInsertPolicyReadsInTx: an Insert policy that reads through its db
 // judges a row inside a Tx as outside it.
 func TestInsertPolicyReadsInTx(t *testing.T) {

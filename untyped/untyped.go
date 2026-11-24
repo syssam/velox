@@ -256,7 +256,7 @@ func OrderByTerm(t Term, desc bool) velox.OrderTerm { return velox.OrderTerm{Exp
 
 // TableInsert is an INSERT of rows of a Table's entity: InsertQuery with the
 // entity's type erased and columns by index.
-// Insert and InsertRows start one. It builds the statements an
+// Insert, InsertRows and InsertBulk start one. It builds the statements an
 // InsertQuery builds, through the same hooks, policies and scope.
 //
 // Its methods are InsertQuery's:
@@ -360,6 +360,14 @@ func Insert(db *velox.DB, t Table, row any) TableInsert {
 // TableInsert.
 func InsertRows(db *velox.DB, t Table, rows Rows) TableInsert {
 	return engine.InsertRows(engineOf(db), t, rows)
+}
+
+// InsertBulk starts an INSERT of the rows of qs, each an Insert of one row
+// of t's entity built on db: velox's InsertBulk, untyped. A query of
+// another DB or Table, an InsertRows or InsertBulk, or one with its own
+// OnConflict fails the insert. See TableInsert.
+func InsertBulk(db *velox.DB, t Table, qs ...TableInsert) TableInsert {
+	return engine.InsertBulkTable(engineOf(db), t, qs)
 }
 
 // Update starts an UPDATE of t's entity: velox's Update, untyped. See

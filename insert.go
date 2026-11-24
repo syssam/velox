@@ -18,7 +18,7 @@ type InsertQuery[E any] struct {
 	all      bool // UpdateAll, which check resolves into conflict's Update
 	many     []E
 	conflict *ConflictClause
-	set      engine.Setters // Set's setters
+	set      engine.Setters // Set's setters, and InsertBulk's rows
 	err      error          // SetInput's error
 }
 
@@ -39,6 +39,59 @@ func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E] {
 // own slice elements, and leaves those changes in place even when the insert then fails.
 func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
 	return InsertQuery[E]{db: db, meta: stateOf(PE(nil).VeloxMeta()), many: xs}
+}
+
+// InsertBulk starts an INSERT of the rows of qs, each an Insert built on
+// db, as ent's CreateBulk does:
+//
+//	err := db.InsertBulk(
+//		db.Insert(&a).Set(Users.Name.Set("a"), Users.Admin.Set(false)),
+//		db.Insert(&b).SetInput(input),
+//	).Exec(ctx)
+//
+// Each row is inserted as its query alone would insert it: a column its
+// setters name is written, its zero included, and a column they leave
+// unset gets its Default, or its declared database default, which is read
+// back (ADR 0136, 0082). Each row's hooks run as for an Insert of it, row
+// 0's outermost, as ent chains a bulk's hooks; each mutation's Affected
+// is the whole bulk's. The validators run and the policy's Insert is
+// asked for each row. Exec reads each row's key, and what the database
+// filled, back into the entity its Insert points to.
+//
+// Rows whose setters and hooks name the same columns, and whose key is
+// set or left to the database alike, are one InsertAll: one multi-row
+// INSERT, or one per WithMaxParams chunk, with InsertAll's handling of
+// declared database defaults. Rows of another column set go in another
+// statement. The groups go in the order their first row comes in qs, so
+// the database's keys follow qs only within a group. With more than one
+// statement the bulk runs in one transaction: a savepoint inside the
+// caller's. A recording DB reports a Change for every row.
+//
+// OnConflict, Update, UpdateAll, UpdateSet, UpdateWhere, OnConflictWhere,
+// DoNothing and OnConstraint go on the InsertBulk and apply to every row,
+// as an InsertAll's do; a row's skipped SetPtr setter leaves its own
+// column out of Update, as alone. A query of qs that carries an upsert
+// option of its own, that was built on another DB, that is an InsertAll or
+// an InsertBulk, or that has edge setters fails Exec and SQL before
+// anything is sent, and so does Set on the InsertBulk; SetInput's error of
+// a query is returned as it is. An InsertBulk of no queries sends nothing
+// and returns nil, as an InsertAll of no entities does. SQL returns the
+// INSERT of the first row's group, its first chunk.
+func (db *DB) InsertBulk[E any, PE Entity[E]](qs ...InsertQuery[E]) InsertQuery[E] {
+	q := InsertQuery[E]{db: db, meta: stateOf(PE(nil).VeloxMeta())}
+	rows := make([]engine.BulkRow, len(qs))
+	for i, x := range qs {
+		rows[i] = engine.BulkElem(unsafe.Pointer(x.one), x.set, x.err, x.single, x.db == db, x.conflict != nil || x.all)
+	}
+	if len(qs) > 0 {
+		// Exec takes the bulk for an Insert of its first row, and
+		// engine.Insert sends every row (BulkSetters).
+		if q.one = qs[0].one; q.one == nil {
+			q.one = new(E)
+		}
+	}
+	q.set = engine.BulkSetters(rows)
+	return q
 }
 
 func columnIndexes[E any](cs []Column[E]) []int {
@@ -348,7 +401,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 		var mu engine.MutationState
 		return q.send(ctx, &q.db.e, &mu)
 	}
-	return engine.Insert(ctx, &q.db.e, q.meta.Info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil, q.send)
+	return engine.Insert(ctx, &q.db.e, q.meta.Info, q.set, q.mutation(false).Rows, q.conflict, q.one == nil, q.send)
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or
@@ -382,23 +435,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 		return "", nil, nil
 	}
 	q.fillDefaults()
-	if !q.set.Empty() {
-		if _, err := engine.PrepareInsert(q.meta.Info, q.set, q.mutation(false).Rows, q.conflict != nil, q.one == nil); err != nil {
-			return "", nil, err
-		}
-	}
-	if q.db.e.HasHooks(q.meta.Info) {
-		mu := q.mutation(true)
-		if err := engine.Mutate(ctx, &q.db.e, q.meta.Info, mu, q.render); err != nil && !engine.DryRefused(mu, err) {
-			return "", nil, err
-		}
-		return mu.SQL, mu.Args, nil
-	}
-	mu := engine.MutationState{Dry: true}
-	if err := q.render(ctx, &mu); err != nil {
-		return "", nil, err
-	}
-	return mu.SQL, mu.Args, nil
+	return engine.InsertSQL(ctx, &q.db.e, q.meta.Info, q.set, q.mutation(true), cf, q.one == nil, q.render)
 }
 
 // fillDefaults fills the defaults of every row, before Set's setters and the
