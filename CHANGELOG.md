@@ -825,12 +825,23 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - An `Interceptor`'s `Filter` is `func(ctx, db *velox.DB)`: `db` is the
   statement's DB, the transaction's inside `Tx`, as a `Policy` function's
   and a `WithFilter` filter's are. A Filter that read joined with
-  `velox.TxFrom` reads through `db` (ADR 0151).
+  `velox.TxFrom` reads through `db` (ADR 0151). WithoutPolicy does not
+  lift an interceptor, so its `db` has no WithoutPolicy reason, and a read
+  through it is judged by the policies (ADR 0151).
+- An insert that velox runs in a transaction of its own (a batch of
+  several statements, a recording DB's insert, MySQL's upsert that reads
+  its row back) asks the Insert policy and the Mutation rules inside it,
+  with its DB, where it asked them on the outer DB before it began
+  (ADR 0151).
 - A `Calc` that aggregates is marked with `velox.Agg` (`untyped.Agg`):
   velox no longer scans the text for SUM, MAX and the rest, which took
   SQLite's two-argument `MAX(a, b)` for an aggregate and missed
   `PERCENTILE_CONT` and user aggregates. `GroupBy` refuses an aggregate key.
   `SetExpr` no longer refuses aggregate text; the database does (ADR 0151).
+  `velox.Agg` of an expression holding an aggregate Term, such as
+  `Calc("SUM(?)", x.Sum())`, fails the statement. A HAVING writes a GROUP
+  BY key inside a marked aggregate as it is: on MySQL it wrote `MIN` of
+  it there, which MySQL refused with error 1111 (ADR 0151).
 - `veloxtest.Open` on SQLite with an empty DSN, or one of a database in
   memory such as enttest's `file:ent?mode=memory&cache=shared&_fk=1`, gives
   each call a file of its own in `t.TempDir()`, a copy of the tables
