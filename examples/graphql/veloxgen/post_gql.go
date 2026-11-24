@@ -9,11 +9,12 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -61,12 +62,14 @@ func (p *Post) Tags(
 // PostConnection is the GraphQL type PostConnection. Its fields run their
 // queries when gqlgen resolves them.
 type PostConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +84,7 @@ func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
 
 // PageInfo is the page info of the page.
 func (c *PostConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +93,7 @@ func (c *PostConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 
 // TotalCount is the number of Post nodes in the whole connection, not only on
 // this page.
-func (c *PostConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *PostConnection) TotalCount(ctx context.Context) (int, error) { return c.Conn.TotalCount(ctx) }
 
 // PostEdge is the GraphQL type PostEdge.
 type PostEdge struct {
@@ -152,7 +155,7 @@ func newPostConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: c}, nil
+	return &PostConnection{Conn: c}, nil
 }
 
 // postType describes the GraphQL type Post to gqlgraph.

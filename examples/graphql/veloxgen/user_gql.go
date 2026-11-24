@@ -9,11 +9,12 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -53,12 +54,14 @@ func (u *User) Posts(
 // UserConnection is the GraphQL type UserConnection. Its fields run their
 // queries when gqlgen resolves them.
 type UserConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *UserConnection) Edges(ctx context.Context) ([]*UserEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +76,7 @@ func (c *UserConnection) Edges(ctx context.Context) ([]*UserEdge, error) {
 
 // PageInfo is the page info of the page.
 func (c *UserConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +85,7 @@ func (c *UserConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 
 // TotalCount is the number of User nodes in the whole connection, not only on
 // this page.
-func (c *UserConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *UserConnection) TotalCount(ctx context.Context) (int, error) { return c.Conn.TotalCount(ctx) }
 
 // UserEdge is the GraphQL type UserEdge.
 type UserEdge struct {
@@ -144,7 +147,7 @@ func newUserConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &UserConnection{c: c}, nil
+	return &UserConnection{Conn: c}, nil
 }
 
 // userType describes the GraphQL type User to gqlgraph.

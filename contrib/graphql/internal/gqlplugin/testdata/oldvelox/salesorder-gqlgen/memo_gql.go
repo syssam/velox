@@ -6,21 +6,24 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // MemoConnection is the GraphQL type MemoConnection. Its fields run their
 // queries when gqlgen resolves them.
 type MemoConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *MemoConnection) Edges(ctx context.Context) ([]*MemoEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +38,7 @@ func (c *MemoConnection) Edges(ctx context.Context) ([]*MemoEdge, error) {
 
 // PageInfo is the page info of the page.
 func (c *MemoConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +47,7 @@ func (c *MemoConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, erro
 
 // TotalCount is the number of Memo nodes in the whole connection, not only on
 // this page.
-func (c *MemoConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *MemoConnection) TotalCount(ctx context.Context) (int, error) { return c.Conn.TotalCount(ctx) }
 
 // MemoEdge is the GraphQL type MemoEdge.
 type MemoEdge struct {
@@ -96,7 +99,7 @@ func newMemoConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &MemoConnection{c: c}, nil
+	return &MemoConnection{Conn: c}, nil
 }
 
 // memoType describes the GraphQL type Memo to gqlgraph.

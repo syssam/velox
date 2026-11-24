@@ -6,10 +6,11 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // Children is the edge children: a connection to the Category nodes it leads
 // to. Its queries batch with the same edge of every row on c's page.
@@ -35,12 +36,14 @@ func (c *Category) Parent(ctx context.Context) (*Category, error) {
 // CategoryConnection is the GraphQL type CategoryConnection. Its fields run
 // their queries when they are resolved.
 type CategoryConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +58,7 @@ func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error)
 
 // PageInfo is the page info of the page.
 func (c *CategoryConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +67,9 @@ func (c *CategoryConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, 
 
 // TotalCount is the number of Category nodes in the whole connection, not only
 // on this page.
-func (c *CategoryConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *CategoryConnection) TotalCount(ctx context.Context) (int, error) {
+	return c.Conn.TotalCount(ctx)
+}
 
 // CategoryEdge is the GraphQL type CategoryEdge.
 type CategoryEdge struct {
@@ -112,7 +117,7 @@ func newCategoryConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &CategoryConnection{c: c}, nil
+	return &CategoryConnection{Conn: c}, nil
 }
 
 // categoryType describes the GraphQL type Category to gqlgraph.

@@ -9,7 +9,10 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	"github.com/syssam/velox/examples/graphql/veloxgen"
 )
 
 // testServe makes the server newServer serves: the example's, unless a test
@@ -50,5 +53,24 @@ func TestNoSetupServer(t *testing.T) {
 		}
 	}) {
 		t.Run(name, tests[name])
+	}
+}
+
+// TestConnectionFromRows: a test's fake builds a generated connection of
+// rows it has, with no DB: its fields resolve from them.
+func TestConnectionFromRows(t *testing.T) {
+	posts := []*veloxgen.Post{{ID: 1, Title: "Alpha"}, {ID: 2, Title: "Beta"}}
+	conn := &veloxgen.PostConnection{Conn: gqlgraph.ConnectionFromRows(posts, 5, veloxgql.PageInfo{HasNextPage: true})}
+	ctx := t.Context()
+	edges, err := conn.Edges(ctx)
+	if err != nil || len(edges) != 2 || edges[1].Node != posts[1] {
+		t.Fatalf("Edges: %v, %v", edges, err)
+	}
+	info, err := conn.PageInfo(ctx)
+	if err != nil || !info.HasNextPage || info.EndCursor == nil {
+		t.Errorf("PageInfo: %+v, %v", info, err)
+	}
+	if n, err := conn.TotalCount(ctx); n != 5 || err != nil {
+		t.Errorf("TotalCount: %d, %v, want 5", n, err)
 	}
 }

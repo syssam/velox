@@ -8,11 +8,12 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -31,12 +32,14 @@ func (t *Tag) Posts(
 // LabelConnection is the GraphQL type LabelConnection. Its fields run their
 // queries when gqlgen resolves them.
 type LabelConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *LabelConnection) Edges(ctx context.Context) ([]*LabelEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +54,7 @@ func (c *LabelConnection) Edges(ctx context.Context) ([]*LabelEdge, error) {
 
 // PageInfo is the page info of the page.
 func (c *LabelConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +63,7 @@ func (c *LabelConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, err
 
 // TotalCount is the number of Label nodes in the whole connection, not only on
 // this page.
-func (c *LabelConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *LabelConnection) TotalCount(ctx context.Context) (int, error) { return c.Conn.TotalCount(ctx) }
 
 // LabelEdge is the GraphQL type LabelEdge.
 type LabelEdge struct {
@@ -122,7 +125,7 @@ func newLabelConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &LabelConnection{c: c}, nil
+	return &LabelConnection{Conn: c}, nil
 }
 
 // tagType describes the GraphQL type Label to gqlgraph.

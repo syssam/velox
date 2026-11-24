@@ -9,10 +9,11 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // UsingPredicateGQL is the field using_predicate as JSON, the GraphQL scalar it
 // is: the field's resolver may return it.
@@ -43,12 +44,14 @@ func (d *Device) SLADefinition(ctx context.Context) (*SLADefinition, error) {
 // DeviceConnection is the GraphQL type DeviceConnection. Its fields run their
 // queries when they are resolved.
 type DeviceConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *DeviceConnection) Edges(ctx context.Context) ([]*DeviceEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +66,7 @@ func (c *DeviceConnection) Edges(ctx context.Context) ([]*DeviceEdge, error) {
 
 // PageInfo is the page info of the page.
 func (c *DeviceConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +75,9 @@ func (c *DeviceConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, er
 
 // TotalCount is the number of Device nodes in the whole connection, not only on
 // this page.
-func (c *DeviceConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *DeviceConnection) TotalCount(ctx context.Context) (int, error) {
+	return c.Conn.TotalCount(ctx)
+}
 
 // DeviceEdge is the GraphQL type DeviceEdge.
 type DeviceEdge struct {
@@ -134,7 +139,7 @@ func newDeviceConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &DeviceConnection{c: c}, nil
+	return &DeviceConnection{Conn: c}, nil
 }
 
 // deviceType describes the GraphQL type Device to gqlgraph.

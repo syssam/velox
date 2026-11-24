@@ -897,6 +897,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- GraphQL needs no setup (ADR 0173): a gqlgen or graphql-go server with
+  only the resolver's DB pages and batches nested edges as with
+  `gqlgenx.Setup`, in as many statements, and a service's `Paginate`
+  reads outside any request. `gqlgenx.Setup`, `NewExtension`,
+  `graphqlgo.With` and `veloxgql.Service` still work, for request limits,
+  the mutation transaction, the error presenter and `veloxgql.DB(ctx)`.
+  velox-graphql's files import the engine's adapter, and a connection's
+  `Conn` field is exported: `gqlgraph.ConnectionFromRows` builds one of
+  rows given for a test's fake. `veloxgql.GeneratedCodeIsVersion30` is now
+  `GeneratedCodeIsVersion31`: regenerate.
 - The DB that began a transaction joins it: under the transaction's
   context, a statement on that DB runs in the transaction (in the
   savepoint whose function got the context), and its `Tx` makes a

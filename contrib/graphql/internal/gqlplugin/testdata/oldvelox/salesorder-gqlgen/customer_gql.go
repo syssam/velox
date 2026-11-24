@@ -6,21 +6,24 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // CustomerConnection is the GraphQL type CustomerConnection. Its fields run
 // their queries when gqlgen resolves them.
 type CustomerConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *CustomerConnection) Edges(ctx context.Context) ([]*CustomerEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +38,7 @@ func (c *CustomerConnection) Edges(ctx context.Context) ([]*CustomerEdge, error)
 
 // PageInfo is the page info of the page.
 func (c *CustomerConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +47,9 @@ func (c *CustomerConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, 
 
 // TotalCount is the number of Customer nodes in the whole connection, not only
 // on this page.
-func (c *CustomerConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *CustomerConnection) TotalCount(ctx context.Context) (int, error) {
+	return c.Conn.TotalCount(ctx)
+}
 
 // CustomerEdge is the GraphQL type CustomerEdge.
 type CustomerEdge struct {
@@ -96,7 +101,7 @@ func newCustomerConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &CustomerConnection{c: c}, nil
+	return &CustomerConnection{Conn: c}, nil
 }
 
 // customerType describes the GraphQL type Customer to gqlgraph.

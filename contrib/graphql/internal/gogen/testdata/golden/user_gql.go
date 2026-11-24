@@ -10,11 +10,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion30
+const _ = veloxgql.GeneratedCodeIsVersion31
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -87,12 +88,14 @@ func (u *User) Likes(
 // AccountConnection is the GraphQL type AccountConnection. Its fields run their
 // queries when gqlgen resolves them.
 type AccountConnection struct {
-	c *gqlgraph.Connection
+	// Conn reads the page and the count. gqlgraph.ConnectionFromRows makes one
+	// of rows given, with no query, for a test's fake of a service.
+	Conn *gqlgraph.Connection
 }
 
 // Edges are the edges of the page, in the connection's order.
 func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +110,7 @@ func (c *AccountConnection) Edges(ctx context.Context) ([]*AccountEdge, error) {
 
 // PageInfo is the page info of the page.
 func (c *AccountConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
-	p, err := c.c.Page(ctx)
+	p, err := c.Conn.Page(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +119,9 @@ func (c *AccountConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, e
 
 // TotalCount is the number of Account nodes in the whole connection, not only
 // on this page.
-func (c *AccountConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
+func (c *AccountConnection) TotalCount(ctx context.Context) (int, error) {
+	return c.Conn.TotalCount(ctx)
+}
 
 // AccountEdge is the GraphQL type AccountEdge.
 type AccountEdge struct {
@@ -164,7 +169,7 @@ func newAccountConnection(
 	if err != nil {
 		return nil, err
 	}
-	return &AccountConnection{c: c}, nil
+	return &AccountConnection{Conn: c}, nil
 }
 
 // userType describes the GraphQL type Account to gqlgraph.
