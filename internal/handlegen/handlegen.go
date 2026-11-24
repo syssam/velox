@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
-	"strings"
 )
 
 type method struct{ name, doc, sig, body string }
@@ -85,14 +84,6 @@ var (
 			"return changePtr[E, V](ch, ch.row.Old, c.I)"},
 		{"NewPtr", "returns a fresh pointer to the column's value in ch's new row (slice and map contents are shared with the snapshot); nil for NULL, a delete, or ch of another entity.", "(ch Change) *V",
 			"return changePtr[E, V](ch, ch.row.New, c.I)"},
-	}
-	key = []method{
-		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.", "() GroupKey[E, V]",
-			"return GroupKey[E, V]{c.I}"},
-	}
-	nullKey = []method{
-		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.", "() GroupKey[E, *V]",
-			"return GroupKey[E, *V]{c.I}"},
 	}
 	count = []method{
 		{"Count", "is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.", "() Term[E]",
@@ -205,22 +196,26 @@ var newValue = method{"New", "returns the column's value in ch's new row, as Old
 
 type kind struct {
 	name, tparams, doc string
-	methods            [][]method
+	// read is the type of the values that Query.Values and the grouped
+	// aggregates read from the column: V, *V for a nullable column, or
+	// empty for an encoded column, which neither reads.
+	read    string
+	methods [][]method
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", [][]method{base, key, count, set, values, hook}},
-	{"TimeCol", "[E, V any]", "is the handle of a time column: a time field, of time.Time or a type defined on it.", [][]method{base, key, ordered, count, extremes, set, values, hook}},
-	{"OtherCol", "[E, V any]", "is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database.", [][]method{base, key, ordered, count, extremes, set, values, hook}},
-	{"NumberCol", "[E, V any]", "is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal.", [][]method{base, key, ordered, count, extremes, sums, set, arith, values, hook}},
-	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, count, extremes, text, set, values, hook}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, count, nullSet, null, nullValues, ptrs, nullHook}},
-	{"NullTimeCol", "[E, V any]", "is TimeCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
-	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs, nullHook}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, count, extremes, text, nullSet, null, nullValues, ptrs, nullHook}},
-	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", [][]method{set, appendJSON, jsonPaths, values, hook}},
-	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{nullSet, appendJSON, jsonPaths, null, nullValues, ptrs, nullHook}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types.", "V", [][]method{base, count, set, values, hook}},
+	{"TimeCol", "[E, V any]", "is the handle of a time column: a time field, of time.Time or a type defined on it.", "V", [][]method{base, ordered, count, extremes, set, values, hook}},
+	{"OtherCol", "[E, V any]", "is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database.", "V", [][]method{base, ordered, count, extremes, set, values, hook}},
+	{"NumberCol", "[E, V any]", "is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal.", "V", [][]method{base, ordered, count, extremes, sums, set, arith, values, hook}},
+	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", "V", [][]method{base, ordered, count, extremes, text, set, values, hook}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", "*V", [][]method{base, count, nullSet, null, nullValues, ptrs, nullHook}},
+	{"NullTimeCol", "[E, V any]", "is TimeCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
+	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs, nullHook}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, text, nullSet, null, nullValues, ptrs, nullHook}},
+	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", "", [][]method{set, appendJSON, jsonPaths, values, hook}},
+	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", "", [][]method{nullSet, appendJSON, jsonPaths, null, nullValues, ptrs, nullHook}},
 }
 
 // Generate returns the source of handles.go.
@@ -228,15 +223,13 @@ func Generate() ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString("// Code generated by internal/handlegen. DO NOT EDIT.\n\npackage velox\n\nimport \"github.com/syssam/velox/internal/engine\"\n")
 	for _, k := range kinds {
-		// A handle that Query.Values reads, one with a Key, names the type
-		// of the values it reads in a field that is always nil: *V, or **V
-		// for a nullable column. Values infers V from the struct.
+		// A handle that Query.Values and the grouped aggregates read names
+		// the type of the values it reads in a field that is always nil:
+		// *V, or **V for a nullable column. They infer that type from the
+		// struct.
 		fields := "{ I int32 }"
-		for _, ms := range k.methods {
-			if len(ms) > 0 && ms[0].name == "Key" {
-				v := strings.TrimSuffix(strings.TrimPrefix(ms[0].sig, "() GroupKey[E, "), "]")
-				fields = "{\n\t_ *" + v + "\n\tI int32\n}"
-			}
+		if k.read != "" {
+			fields = "{\n\t_ *" + k.read + "\n\tI int32\n}"
 		}
 		fmt.Fprintf(&b, "\n// %s %s I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.\ntype %s%s struct%s\n", k.name, k.doc, k.name, k.tparams, fields)
 		fmt.Fprintf(&b, "\nfunc (c %s[E, V]) column(*E) int32 { return c.I }\n", k.name)

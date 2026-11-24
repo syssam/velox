@@ -80,9 +80,9 @@ func save(db *velox.DB, x *testmodel.Invoice) {
 	}
 }
 
-// TestGroupKeyAtCompileTime: a grouped aggregate infers K from the key's handle
-// and refuses, when it compiles, a JSON column, another entity's column, a bare
-// handle and a value column of another entity.
+// TestGroupKeyAtCompileTime: a grouped aggregate infers K from the bare key
+// handle and refuses, when it compiles, a JSON column, another entity's
+// column, a handle's pointer and a value column of another entity.
 func TestGroupKeyAtCompileTime(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -111,18 +111,18 @@ func group(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[f
 	good := head + `
 	var (
 		_ []velox.Group[int64, int64]
-		a, _ = velox.CountBy(ctx, q, S.ID.Key())
-		b, _ = velox.CountBy(ctx, q, S.Status.Key())
-		c, _ = velox.CountBy(ctx, q, S.Prev.Key())
-		d, _ = velox.CountBy(ctx, q, S.Flag.Key())
-		e, _ = velox.CountBy(ctx, q, S.MaybeFlag.Key())
-		f, _ = velox.CountBy(ctx, q, S.When.Key())
-		g, _ = velox.CountBy(ctx, q, S.MaybeWhen.Key())
-		h, _ = velox.CountBy(ctx, q, S.Ratio.Key())
-		i, _ = velox.SumBy(ctx, q, S.Status.Key(), S.Price)
-		k, _ = velox.AvgBy(ctx, q, S.Status.Key(), S.Price)
-		l, _ = velox.MinBy(ctx, q, S.Prev.Key(), S.Price)
-		m, _ = velox.MaxBy(ctx, q, S.Prev.Key(), S.Price)
+		a, _ = velox.CountBy(ctx, q, S.ID)
+		b, _ = velox.CountBy(ctx, q, S.Status)
+		c, _ = velox.CountBy(ctx, q, S.Prev)
+		d, _ = velox.CountBy(ctx, q, S.Flag)
+		e, _ = velox.CountBy(ctx, q, S.MaybeFlag)
+		f, _ = velox.CountBy(ctx, q, S.When)
+		g, _ = velox.CountBy(ctx, q, S.MaybeWhen)
+		h, _ = velox.CountBy(ctx, q, S.Ratio)
+		i, _ = velox.SumBy(ctx, q, S.Status, S.Price)
+		k, _ = velox.AvgBy(ctx, q, S.Status, S.Price)
+		l, _ = velox.MinBy(ctx, q, S.Prev, S.Price)
+		m, _ = velox.MaxBy(ctx, q, S.Prev, S.Price)
 	)
 	var _ []velox.Group[int64, int64] = a
 	var _ []velox.Group[kind.Status, int64] = b
@@ -138,12 +138,12 @@ func group(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[f
 		t.Fatalf("the control does not compile: %q", errs)
 	}
 	for name, bad := range map[string]string{
-		"a JSON column":          `velox.CountBy(ctx, j, fixture.JDocs.Tags.Key())`,
-		"a nullable JSON column": `velox.CountBy(ctx, j, fixture.JDocs.Maybe.Key())`,
-		"another entity's key":   `velox.CountBy(ctx, q, I.OrgID.Key())`,
-		"a bare handle":          `velox.CountBy(ctx, q, S.Status)`,
-		"another entity's value": `velox.SumBy(ctx, q, S.Status.Key(), I.Total)`,
-		"a text value":           `velox.SumBy(ctx, q, S.Status.Key(), S.Name)`,
+		"a JSON column":          `velox.CountBy(ctx, j, fixture.JDocs.Tags)`,
+		"a nullable JSON column": `velox.CountBy(ctx, j, fixture.JDocs.Maybe)`,
+		"another entity's key":   `velox.CountBy(ctx, q, I.OrgID)`,
+		"a handle's pointer":     `velox.CountBy(ctx, q, &S.Status)`,
+		"another entity's value": `velox.SumBy(ctx, q, S.Status, I.Total)`,
+		"a text value":           `velox.SumBy(ctx, q, S.Status, S.Name)`,
 	} {
 		if errs := typeCheck(t, head+"\t_, _ = "+bad+"\n}\n"); len(errs) == 0 {
 			t.Errorf("%s compiles: %s", name, bad)
@@ -215,7 +215,6 @@ func values(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[
 		"a nullable JSON column":   `j.Values(ctx, fixture.JDocs.Maybe)`,
 		"another entity's column":  `q.Values(ctx, I.OrgID)`,
 		"a handle's pointer":       `q.Values(ctx, &S.Status)`,
-		"a Key":                    `q.Values(ctx, S.Status.Key())`,
 		"a result of another type": `func() (_ []string, err error) { return q.Values(ctx, S.ID) }()`,
 	} {
 		if errs := typeCheck(t, head+"\t_, _ = "+bad+"\n}\n"); len(errs) == 0 {

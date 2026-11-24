@@ -1,7 +1,8 @@
-# 0158. Values and IDs are methods of Query, and Values takes the handle
+# 0158. Values and IDs are methods of Query, and Values and the grouped aggregates take the handle
 
 - Status: accepted, 2026-11-24. Supersedes the section "Values and IDs" of
-  [0100](0100-after-commit-values-and-log.md).
+  [0100](0100-after-commit-values-and-log.md), and 0022's choice of `Key()`
+  for a grouped aggregate's key.
 
 ## Context
 
@@ -29,8 +30,8 @@ Limit-or-AllowUnbounded rule and the row cap.
 
       numbers, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100).Values(ctx, I.Number)
 
-- Each column handle kind that has a `Key` names the type of the values it
-  reads in its struct, in a field that is always nil:
+- Each column handle kind but the JSON ones names the type of the values
+  it reads in its struct, in a field that is always nil:
   `StringCol[E, V]` is `struct{ _ *V; I int32 }` and `NullStringCol[E, V]`
   is `struct{ _ **V; I int32 }`. `JSONCol` and `NullJSONCol` stay
   `struct{ I int32 }`: their stored bytes are not their value.
@@ -45,7 +46,7 @@ Limit-or-AllowUnbounded rule and the row cap.
   - another entity's handle: `does not satisfy velox.valueColumn[E, V]
     (wrong type for method column) have column(*T) int32 want
     column(*E) int32`;
-  - a handle's pointer, and a `Key()`, which is a `GroupKey`.
+  - a handle's pointer.
 - `func (q Query[E]) IDs[K any](ctx) ([]K, error)`, called as
   `q.IDs[int64](ctx)`: Go 1.27 instantiates a generic method explicitly.
   K is still the caller's, as nothing in E's type says the key's type; a
@@ -135,6 +136,42 @@ Generated code calls no Values, so the rise is the handles' new field. `internal
 took 3,894,530 bytes, up from 3,863,902 (+0.8%), where 0022 measured +4.0%
 for a phantom field that named E.
 
+## Grouped aggregates
+
+0022 made a grouped aggregate's key `handle.Key()`, a `GroupKey[E, K]`,
+because K could not come from the bare handle at a cost it accepted. The
+field above gives K at that cost, so the API asked for `.Key()` where a
+bare handle now works. The key takes the handle, as Values does:
+
+    func CountBy[E any, H valueColumn[E, K], K any](ctx, q Query[E], key H) ([]Group[K, int64], error)
+    func SumBy[E any, H valueColumn[E, K], K, V any](ctx, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error)
+
+and so for `AvgBy`, `MinBy`, `MaxBy`, `SumByNull`, `AvgByNull`,
+`MinByNull` and `MaxByNull`. The call is
+`velox.SumBy(ctx, q, I.OrgID, I.Total)`. A nullable key still makes K a
+pointer.
+
+- **`Key()` and `GroupKey` are removed.** A `GroupKey` came only from a
+  handle's `Key()`: nothing else made one, not a Term, a date part nor an
+  expression. A key that is not one column, and several keys, are
+  `Query.Select` with `GroupBy` and `Rows` (0074), which take any
+  `Selectable` term. So there is no second source to keep a path for, and
+  one way to name a key is left.
+- **They stay functions**, as 0022 and Sum have them. A method of
+  `Query` costs every package that names `Query` its declaration: Values
+  and IDs took 4.7 KB, and ten more would take more.
+- Measured as above, with a call package that runs `CountBy` on a text
+  and a nullable key and `SumBy` on the text key:
+
+  | | handle | 20 entities | entityDescUse | call |
+  | --- | --- | --- | --- | --- |
+  | with `Key()` | 17,000 | 1,286,814 | 794,992 | 89,674 |
+  | the bare handle | 17,000 | 1,284,738 | 794,992 | 86,522 |
+
+  `Key` was a lazy method, so removing it changes no handle row; the 20
+  entities' package lost 2,076 bytes of declarations, and the call 3,152
+  bytes.
+
 ## Consequences
 
 - `internal/apitest/values_test.go` covers Values and IDs under a policy,
@@ -143,16 +180,14 @@ for a phantom field that named E.
   key and a string key on every database.
   `internal/repocheck/save_compile_test.go`'s `TestValuesAtCompileTime`
   checks the inferred type of every readable kind, and that a JSON
-  handle, another entity's handle, a handle's pointer, a `Key()` and a
-  result of another type do not compile.
+  handle, another entity's handle, a handle's pointer and a result of
+  another type do not compile. `TestGroupKeyAtCompileTime` checks the
+  same for a grouped aggregate's key.
 - `TestGenericTypesCompileSmall`'s handle rows grew by about 2.8 KB each,
   within their bounds; its entity package bounds were raised by the
   measured growth.
 - A conversion between a nullable and a non-nullable handle kind no
   longer compiles, as their structs differ: `SumNull` and the other
   aggregates of a `NullNumberCol` build a `NumberCol` from its `I`.
-- The grouped aggregates still take `Key()`. The field now in every
-  readable handle would let `CountBy` and the others take the bare handle
-  too; that is left for another decision.
 - veloxe's `Strings(ctx)`, `Ints(ctx)` and the like map to
   `q.Values(ctx, T.F)`; `IDs(ctx)` maps to `q.IDs[int64](ctx)`.

@@ -27,7 +27,7 @@ func TestGroupedSQL(t *testing.T) {
 			t.Errorf("sent %s %v, want %s", e.SQL, e.Args, want)
 		}
 	}
-	key := I.OrgID.Key()
+	key := I.OrgID
 	counts, err := velox.CountBy(ctx, q, key)
 	if want := []velox.Group[int64, int64]{{Key: 1, Value: 30}, {Key: 2, Value: 50}}; err != nil || !reflect.DeepEqual(counts, want) {
 		t.Errorf("CountBy: %v, %v", counts, err)
@@ -64,16 +64,16 @@ func TestGroupKeyTypes(t *testing.T) {
 	S := testmodel.Samples
 	e := &fakeconn.Exec{Rows: [][]any{{"new", int64(2)}}}
 	q := openFake(velox.Postgres, e).Query[testmodel.Sample]().AllowUnbounded()
-	if got, err := velox.CountBy(ctx, q, S.Status.Key()); err != nil || !reflect.DeepEqual(got, []velox.Group[kind.Status, int64]{{Key: "new", Value: 2}}) {
+	if got, err := velox.CountBy(ctx, q, S.Status); err != nil || !reflect.DeepEqual(got, []velox.Group[kind.Status, int64]{{Key: "new", Value: 2}}) {
 		t.Errorf("a named key: %v, %v", got, err)
 	}
 	e.Rows = [][]any{{nil, int64(1)}, {"new", int64(2)}}
-	got, err := velox.CountBy(ctx, q, S.Prev.Key())
+	got, err := velox.CountBy(ctx, q, S.Prev)
 	if err != nil || len(got) != 2 || got[0].Key != nil || got[1].Key == nil || *got[1].Key != "new" || got[1].Value != 2 {
 		t.Errorf("a nullable key: %v, %v", got, err)
 	}
 	e.Rows = [][]any{{true, int64(350)}}
-	if got, err := velox.SumBy(ctx, q, S.Flag.Key(), S.Price); err != nil || !reflect.DeepEqual(got, []velox.Group[bool, kind.Cents]{{Key: true, Value: 350}}) {
+	if got, err := velox.SumBy(ctx, q, S.Flag, S.Price); err != nil || !reflect.DeepEqual(got, []velox.Group[bool, kind.Cents]{{Key: true, Value: 350}}) {
 		t.Errorf("a named value: %v, %v", got, err)
 	}
 }
@@ -83,7 +83,7 @@ func TestGroupKeyTypes(t *testing.T) {
 func TestGroupOfNulls(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1), nil}, {int64(2), 7.0}}}
 	q := openFake(velox.Postgres, e).Query[testmodel.Invoice]().AllowUnbounded()
-	key := I.OrgID.Key()
+	key := I.OrgID
 	if got, err := velox.SumBy(ctx, q, key, I.Total); err != nil || !reflect.DeepEqual(got, []velox.Group[int64, float64]{{Key: 1, Value: 0}, {Key: 2, Value: 7}}) {
 		t.Errorf("SumBy: %v, %v", got, err)
 	}
@@ -105,10 +105,10 @@ func TestGroupedNeedsUnbounded(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	for name, q := range map[string]velox.Query[testmodel.Invoice]{"plain": db.Query[testmodel.Invoice](), "limited": db.Query[testmodel.Invoice]().Limit(5)} {
-		if _, err := velox.CountBy(ctx, q, I.OrgID.Key()); !errors.Is(err, velox.ErrUnbounded) || !strings.Contains(err.Error(), "grouped") {
+		if _, err := velox.CountBy(ctx, q, I.OrgID); !errors.Is(err, velox.ErrUnbounded) || !strings.Contains(err.Error(), "grouped") {
 			t.Errorf("%s CountBy: %v", name, err)
 		}
-		if _, err := velox.SumBy(ctx, q, I.OrgID.Key(), I.Total); !errors.Is(err, velox.ErrUnbounded) {
+		if _, err := velox.SumBy(ctx, q, I.OrgID, I.Total); !errors.Is(err, velox.ErrUnbounded) {
 			t.Errorf("%s SumBy: %v", name, err)
 		}
 	}
@@ -123,19 +123,19 @@ func TestGroupsAreRowCapped(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{int64(1), int64(1)}, {int64(2), int64(1)}, {int64(3), int64(1)}}}
 	db := openFake(velox.Postgres, e, velox.WithMaxRows(2))
 	q := db.Query[testmodel.Invoice]().AllowUnbounded()
-	_, err := velox.CountBy(ctx, q, I.OrgID.Key())
+	_, err := velox.CountBy(ctx, q, I.OrgID)
 	if !errors.Is(err, velox.ErrTooManyRows) {
 		t.Errorf("past the cap: %v", err)
 	}
 	wantSent(t, e, `SELECT "org_id", COUNT(*) FROM "invoices" GROUP BY "org_id" ORDER BY "org_id" LIMIT 3`)
-	if _, err := velox.MinBy(ctx, db.Query[testmodel.Item]().AllowUnbounded(), testmodel.Items.InvoiceID.Key(), testmodel.Items.Qty); !errors.Is(err, velox.ErrTooManyRows) {
+	if _, err := velox.MinBy(ctx, db.Query[testmodel.Item]().AllowUnbounded(), testmodel.Items.InvoiceID, testmodel.Items.Qty); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Errorf("MinBy past the cap: %v", err)
 	}
-	if got, err := velox.CountBy(ctx, q.MaxRows(10), I.OrgID.Key()); err != nil || len(got) != 3 {
+	if got, err := velox.CountBy(ctx, q.MaxRows(10), I.OrgID); err != nil || len(got) != 3 {
 		t.Errorf("MaxRows(10): %v, %v", got, err)
 	}
 	e.Rows = e.Rows[:2]
-	if got, err := velox.CountBy(ctx, q, I.OrgID.Key()); err != nil || len(got) != 2 {
+	if got, err := velox.CountBy(ctx, q, I.OrgID); err != nil || len(got) != 2 {
 		t.Errorf("at the cap: %v, %v", got, err)
 	}
 }
@@ -145,22 +145,22 @@ func TestGroupedIsScoped(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{{"ann", int64(3)}}}
 	db := openPolicied(velox.Postgres, e)
 	q := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).AllowUnbounded()
-	got, err := velox.SumBy(asUser("ann"), q, Tk.Owner.Key(), Tk.InvoiceID)
+	got, err := velox.SumBy(asUser("ann"), q, Tk.Owner, Tk.InvoiceID)
 	if err != nil || !reflect.DeepEqual(got, []velox.Group[string, int64]{{Key: "ann", Value: 3}}) {
 		t.Fatalf("%v, %v", got, err)
 	}
 	wantSent(t, e, `SELECT "owner", SUM("invoice_id") FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 GROUP BY "owner" ORDER BY "owner"`, int64(1), "ann")
-	if _, err := velox.CountBy(asUser("ann"), q, Tk.Owner.Key()); err != nil {
+	if _, err := velox.CountBy(asUser("ann"), q, Tk.Owner); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT "owner", COUNT(*) FROM "tickets" WHERE NOT "done" AND "org_id" = $1 AND "owner" = $2 GROUP BY "owner" ORDER BY "owner"`, int64(1), "ann")
 
 	// No org, no statement; a Read policy that refuses, no statement.
 	calls := e.Calls
-	if _, err := velox.CountBy(context.Background(), q, Tk.Owner.Key()); !errors.Is(err, scope.ErrNoScope) {
+	if _, err := velox.CountBy(context.Background(), q, Tk.Owner); !errors.Is(err, scope.ErrNoScope) {
 		t.Errorf("no org: %v", err)
 	}
-	if _, err := velox.CountBy(asUser(""), q, Tk.Owner.Key()); !errors.Is(err, velox.ErrDenied) {
+	if _, err := velox.CountBy(asUser(""), q, Tk.Owner); !errors.Is(err, velox.ErrDenied) {
 		t.Errorf("no user: %v", err)
 	}
 	if e.Calls != calls {
@@ -172,20 +172,20 @@ func TestGroupedRefusals(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
 	after := db.Query[testmodel.Invoice]().After(&testmodel.Invoice{ID: 3}).AllowUnbounded()
-	if _, err := velox.CountBy(ctx, after, I.OrgID.Key()); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") {
+	if _, err := velox.CountBy(ctx, after, I.OrgID); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") {
 		t.Errorf("After: %v", err)
 	}
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		_, err := velox.CountBy(ctx, tx.Query[testmodel.Invoice]().ForUpdate().AllowUnbounded(), I.OrgID.Key())
+		_, err := velox.CountBy(ctx, tx.Query[testmodel.Invoice]().ForUpdate().AllowUnbounded(), I.OrgID)
 		return err
 	})
 	if err == nil || !strings.Contains(err.Error(), "cannot lock rows") {
 		t.Errorf("a lock: %v", err)
 	}
-	// An encoded column has no Key; a handle made by hand does not get past
+	// An encoded column's handle does not compile as a key; one made by hand does not get past
 	// the rendering.
 	bad := velox.Col[fixture.JDoc, []string]{I: fixture.JDocs.Tags.I}
-	_, err = velox.CountBy(ctx, db.Query[fixture.JDoc]().AllowUnbounded(), bad.Key())
+	_, err = velox.CountBy(ctx, db.Query[fixture.JDoc]().AllowUnbounded(), bad)
 	if err == nil || !strings.Contains(err.Error(), "cannot group by") {
 		t.Errorf("an encoded key: %v", err)
 	}
@@ -204,10 +204,10 @@ func TestRewriteMayNotChangeGroupBy(t *testing.T) {
 	})
 	for name, o := range map[string]velox.Option{"moves": move, "drops": drop} {
 		q := openFake(velox.Postgres, e, o).Query[testmodel.Invoice]().AllowUnbounded()
-		if _, err := velox.SumBy(ctx, q, I.OrgID.Key(), I.Total); err == nil || err.Error() != want {
+		if _, err := velox.SumBy(ctx, q, I.OrgID, I.Total); err == nil || err.Error() != want {
 			t.Errorf("SumBy, a hook that %s: %v", name, err)
 		}
-		if _, err := velox.CountBy(ctx, q, I.OrgID.Key()); err == nil || err.Error() != want {
+		if _, err := velox.CountBy(ctx, q, I.OrgID); err == nil || err.Error() != want {
 			t.Errorf("CountBy, a hook that %s: %v", name, err)
 		}
 	}
@@ -223,7 +223,7 @@ func TestRewriteMayNotChangeGroupBy(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	wq := openFake(velox.Postgres, e, wipe).Query[testmodel.Invoice]().AllowUnbounded()
-	if _, err := velox.CountBy(ctx, wq, I.OrgID.Key()); err == nil {
+	if _, err := velox.CountBy(ctx, wq, I.OrgID); err == nil {
 		t.Error("a hook that wipes the statement: no error")
 	}
 	// An unrelated hook passes, and an Around hook that retries reads anew.
@@ -235,7 +235,7 @@ func TestRewriteMayNotChangeGroupBy(t *testing.T) {
 	})
 	nop := velox.WithRewrite(func(context.Context, *velox.Statement) error { return nil })
 	hq := openFake(velox.Postgres, e, nop, retry).Query[testmodel.Invoice]().AllowUnbounded()
-	if got, err := velox.CountBy(ctx, hq, I.OrgID.Key()); err != nil || !reflect.DeepEqual(got, []velox.Group[int64, int64]{{Key: 1, Value: 1}}) {
+	if got, err := velox.CountBy(ctx, hq, I.OrgID); err != nil || !reflect.DeepEqual(got, []velox.Group[int64, int64]{{Key: 1, Value: 1}}) {
 		t.Errorf("hooks: %v, %v", got, err)
 	}
 	// The hooks see the key, and the summary's readers the plain SELECT.
@@ -245,7 +245,7 @@ func TestRewriteMayNotChangeGroupBy(t *testing.T) {
 		seen = *st
 		return err
 	})
-	if _, err := velox.CountBy(ctx, openFake(velox.Postgres, e, see).Query[testmodel.Invoice]().AllowUnbounded(), I.OrgID.Key()); err != nil {
+	if _, err := velox.CountBy(ctx, openFake(velox.Postgres, e, see).Query[testmodel.Invoice]().AllowUnbounded(), I.OrgID); err != nil {
 		t.Fatal(err)
 	}
 	if !seen.Count || seen.GroupBy != int(I.OrgID.I)+1 || seen.Result.Rows != 1 || seen.Op != velox.OpSelect {

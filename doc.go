@@ -66,9 +66,9 @@
 // return the same.
 //
 // CountBy, SumBy, AvgBy, MinBy and MaxBy do the same per value of a key column,
-// made by the column handle's Key method, in the order of the key:
+// named by its handle, in the order of the key:
 //
-//	totals, err := velox.SumBy(ctx, db.Query[veloxgen.Invoice]().AllowUnbounded(), veloxgen.Invoices.OrgID.Key(), veloxgen.Invoices.TotalCents)
+//	totals, err := velox.SumBy(ctx, db.Query[veloxgen.Invoice]().AllowUnbounded(), veloxgen.Invoices.OrgID, veloxgen.Invoices.TotalCents)
 //
 // Each returns a []Group[K, V]; SumByNull, AvgByNull, MinByNull and MaxByNull
 // take a NullNumberCol. The groups can be as many as the rows, so the

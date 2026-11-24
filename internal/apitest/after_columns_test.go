@@ -22,11 +22,11 @@ func TestAfterWithColumnsOnWhatIgnoresThem(t *testing.T) {
 		"Exists": {[][]any{{int64(1)}}, func(q velox.Query[testmodel.Invoice]) error { _, err := q.Exists(ctx); return err }},
 		"Sum":    {[][]any{{float64(3)}}, func(q velox.Query[testmodel.Invoice]) error { _, err := velox.Sum(ctx, q, I.Total); return err }},
 		"CountBy": {nil, func(q velox.Query[testmodel.Invoice]) error {
-			_, err := velox.CountBy(ctx, q, I.OrgID.Key())
+			_, err := velox.CountBy(ctx, q, I.OrgID)
 			return err
 		}},
 		"SumBy": {nil, func(q velox.Query[testmodel.Invoice]) error {
-			_, err := velox.SumBy(ctx, q, I.OrgID.Key(), I.Total)
+			_, err := velox.SumBy(ctx, q, I.OrgID, I.Total)
 			return err
 		}},
 	} {

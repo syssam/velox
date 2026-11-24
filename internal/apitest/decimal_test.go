@@ -121,7 +121,7 @@ func TestDecimalSQLiteSQL(t *testing.T) {
 			if _, _, err := velox.Avg(ctx, q, L.Amount); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := velox.SumBy(ctx, q.AllowUnbounded(), L.ID.Key(), L.Amount); err != nil {
+			if _, err := velox.SumBy(ctx, q.AllowUnbounded(), L.ID, L.Amount); err != nil {
 				t.Fatal(err)
 			}
 			for _, err := range q.Select(L.Amount.Sum(), L.ID.Sum(), L.Amount.Min()).GroupBy(L.Fee).Having(

@@ -177,7 +177,6 @@ func (c Col[E, V]) Fill[_ Lazy[V]](m *Mutation, v V) error
 func (c Col[E, V]) Get[_ Lazy[V]](r Row) V
 func (c Col[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c Col[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c Col[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
 func (c Col[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
 func (c Col[E, V]) New[_ Lazy[V]](ch Change) V
 func (c Col[E, V]) NotInSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
@@ -222,7 +221,6 @@ func (c NullCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c NullCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
 func (c NullCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
 func (c NullCol[E, V]) NewPtr[_ Lazy[V]](ch Change) *V
 func (c NullCol[E, V]) New[_ Lazy[V]](ch Change) V
@@ -287,7 +285,6 @@ func (c NullNumberCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullNumberCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullNumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullNumberCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c NullNumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
 func (c NullNumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c NullNumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c NullNumberCol[E, V]) Max[_ Lazy[V]]() Term[E]
@@ -326,7 +323,6 @@ func (c NullOtherCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullOtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullOtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullOtherCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c NullOtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
 func (c NullOtherCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c NullOtherCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c NullOtherCol[E, V]) Max[_ Lazy[V]]() Term[E]
@@ -368,7 +364,6 @@ func (c NullStringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E]
 func (c NullStringCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullStringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullStringCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c NullStringCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
 func (c NullStringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c NullStringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c NullStringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E]
@@ -406,7 +401,6 @@ func (c NullTimeCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NullTimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NullTimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
 func (c NullTimeCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
-func (c NullTimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
 func (c NullTimeCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c NullTimeCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c NullTimeCol[E, V]) Max[_ Lazy[V]]() Term[E]
@@ -442,7 +436,6 @@ func (c NumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
 func (c NumberCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c NumberCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c NumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c NumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
 func (c NumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c NumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c NumberCol[E, V]) Max[_ Lazy[V]]() Term[E]
@@ -472,7 +465,6 @@ func (c OtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
 func (c OtherCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c OtherCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c OtherCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c OtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
 func (c OtherCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c OtherCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c OtherCol[E, V]) Max[_ Lazy[V]]() Term[E]
@@ -505,7 +497,6 @@ func (c StringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E]
 func (c StringCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c StringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c StringCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
 func (c StringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c StringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E]
@@ -534,7 +525,6 @@ func (c TimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
 func (c TimeCol[E, V]) Get[_ Lazy[V]](r Row) V
 func (c TimeCol[E, V]) InSelect[_ Lazy[V]](s Subquery[V]) Pred[E]
 func (c TimeCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
-func (c TimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
 func (c TimeCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
 func (c TimeCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
 func (c TimeCol[E, V]) Max[_ Lazy[V]]() Term[E]
@@ -726,8 +716,8 @@ func AfterRollback(tx *DB, fn func(context.Context)) error
 func Agg[E any](t Term[E]) Term[E]
 func Allow() Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
-func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error)
-func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
+func AvgByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, float64], error)
+func AvgBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, float64], error)
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func Before(f MutateFunc, ops ...Op) Hook
@@ -739,7 +729,7 @@ func ColumnByName[E any](name string) (Term[E], bool)
 func ColumnEQ(column int, v any) Predicate
 func Connect(driver, dsn string, opts ...Option) (*DB, error)
 func CountAll[E any]() Term[E]
-func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error)
+func CountBy[E any, H valueColumn[E, K], K any](ctx context.Context, q Query[E], key H) ([]Group[K, int64], error)
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
 func CountStatements(ctx context.Context) (context.Context, *StatementCounter)
 func Cube[E any](ts ...Selectable[E]) GroupingSet[E]
@@ -791,12 +781,12 @@ func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*
 func LoadedMany[T any](s []T) Many[T]
 func LoadedOne[T any](p *T) One[T]
 func LogArgs() LogOption
-func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
-func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func MaxByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, V], error)
+func MaxBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error)
 func MaxNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Max[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
-func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
-func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func MinByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, V], error)
+func MinBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
 func None() Predicate
@@ -820,8 +810,8 @@ func ScanOne[T, E any](ctx context.Context, q Query[E]) (T, error)
 func Scan[T, E any](ctx context.Context, q Query[E]) ([]T, error)
 func SetExpr[E any](c Column[E], text string, args ...any) Setter[E]
 func Show[T any](p *T) any
-func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
-func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func SumByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, V], error)
+func SumBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error)
 func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, error)
 func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error)
 func TxFrom(ctx context.Context, db *DB) (*DB, bool)
@@ -898,7 +888,6 @@ type Field = schema.Field
 type FieldChange = veloxtype.FieldChange
 type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
 type FilterEntity = filterent.Entity
-type GroupKey[E, K any] struct { }
 type Group[K, V any] struct { Key K Value V }
 type GroupingSet[E any] struct { }
 type Hook func(next Mutator) Mutator

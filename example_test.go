@@ -276,7 +276,7 @@ func ExampleSumBy() {
 		}
 	}
 	all := db.WithoutPolicy("the example's report")
-	groups, err := velox.SumBy(context.Background(), all.Query[testmodel.Invoice]().AllowUnbounded(), testmodel.Invoices.OrgID.Key(), testmodel.Invoices.Total)
+	groups, err := velox.SumBy(context.Background(), all.Query[testmodel.Invoice]().AllowUnbounded(), testmodel.Invoices.OrgID, testmodel.Invoices.Total)
 	if err != nil {
 		fmt.Println(err)
 		return

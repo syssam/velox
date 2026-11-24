@@ -153,7 +153,7 @@ func TestEveryOperation(t *testing.T) {
 			name: "count by",
 			f:    &fakeDB{cols: []string{"org_id", "count"}, rows: [][]driver.Value{{int64(1), int64(4)}}},
 			run: func(db *velox.DB) error {
-				_, err := velox.CountBy(ctx, db.Query[testmodel.Invoice]().AllowUnbounded(), I.OrgID.Key())
+				_, err := velox.CountBy(ctx, db.Query[testmodel.Invoice]().AllowUnbounded(), I.OrgID)
 				return err
 			},
 			span: "SELECT invoices",
@@ -166,7 +166,7 @@ func TestEveryOperation(t *testing.T) {
 			name: "sum by",
 			f:    &fakeDB{cols: []string{"org_id", "sum"}, rows: [][]driver.Value{{int64(1), 4.0}}},
 			run: func(db *velox.DB) error {
-				_, err := velox.SumBy(ctx, db.Query[testmodel.Invoice]().AllowUnbounded(), I.OrgID.Key(), I.Total)
+				_, err := velox.SumBy(ctx, db.Query[testmodel.Invoice]().AllowUnbounded(), I.OrgID, I.Total)
 				return err
 			},
 			span: "SELECT invoices",

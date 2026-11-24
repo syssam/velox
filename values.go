@@ -68,10 +68,10 @@ func (q Query[E]) Values[H valueColumn[E, V], V any](ctx context.Context, h H) (
 	return columnValues[E, V](ctx, q, int(valueShape[V](h).I), "Values")
 }
 
-// valueColumn is satisfied by each column handle of E that Values reads:
-// every kind but JSONCol and NullJSONCol. Its struct names V, the type
-// Values returns elements of, in a field of no size, from which a call
-// infers V.
+// valueColumn is satisfied by each column handle of E that Values reads
+// and that keys a grouped aggregate: every kind but JSONCol and
+// NullJSONCol. Its struct names V, the type of the column's values, in a
+// field that is always nil, from which a call infers V.
 type valueColumn[E, V any] interface {
 	Column[E]
 	~valueShape[V]

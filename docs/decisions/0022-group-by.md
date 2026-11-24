@@ -2,6 +2,10 @@
 
 Date: 2026-10-31
 
+The key is the bare handle since
+[0158](0158-values-and-ids-are-query-methods.md), which supersedes the
+choice of `Key()` below; the rest stands.
+
 Several keys, `HAVING` and an ordering by an aggregate are `Query.Select` (0074); this record stands for the one-key forms.
 
 ## Context

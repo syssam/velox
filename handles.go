@@ -49,9 +49,6 @@ func (c Col[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
 
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
-func (c Col[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
-
 // Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
 func (c Col[E, V]) Count[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
@@ -140,9 +137,6 @@ func (c TimeCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{Col
 func (c TimeCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
-func (c TimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
 
 // GT is column > v.
 func (c TimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
@@ -272,9 +266,6 @@ func (c OtherCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
 
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
-func (c OtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
-
 // GT is column > v.
 func (c OtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
@@ -402,9 +393,6 @@ func (c NumberCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{C
 func (c NumberCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
-func (c NumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
 
 // GT is column > v.
 func (c NumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
@@ -553,9 +541,6 @@ func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm{C
 func (c StringCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.
-func (c StringCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V] { return GroupKey[E, V]{c.I} }
 
 // GT is column > v.
 func (c StringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
@@ -713,9 +698,6 @@ func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
 
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
-func (c NullCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
-
 // Count is COUNT of the column, as a Term for Select, Having and OrderBy: the rows where it is not NULL.
 func (c NullCol[E, V]) Count[_ Lazy[V]]() Term[E] {
 	return Term[E]{engine.AggTerm(engine.TermCount, engine.ColumnTerm(c.I))}
@@ -845,9 +827,6 @@ func (c NullTimeCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTerm
 func (c NullTimeCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
-func (c NullTimeCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
 
 // GT is column > v.
 func (c NullTimeCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
@@ -1019,9 +998,6 @@ func (c NullOtherCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTer
 func (c NullOtherCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
-func (c NullOtherCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
 
 // GT is column > v.
 func (c NullOtherCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
@@ -1197,9 +1173,6 @@ func (c NullNumberCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTe
 func (c NullNumberCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
-func (c NullNumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
 
 // GT is column > v.
 func (c NullNumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
@@ -1397,9 +1370,6 @@ func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E] { return Order[E]{OrderTe
 func (c NullStringCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 	return Order[E]{OrderTerm{Column: int(c.I), Desc: true}}
 }
-
-// Key is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.
-func (c NullStringCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V] { return GroupKey[E, *V]{c.I} }
 
 // GT is column > v.
 func (c NullStringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {

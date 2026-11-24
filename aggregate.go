@@ -131,11 +131,6 @@ type Group[K, V any] struct {
 	Value V
 }
 
-// GroupKey is the key column of a grouped aggregate, made by a handle's Key
-// method. K is the column's value type, *V for a nullable column. A JSON
-// column has no Key: its values compare differently by dialect.
-type GroupKey[E, K any] struct{ i int32 }
-
 // groupRun is the state of one grouped aggregate. sum says that a NULL is V's
 // zero, as for Sum; otherwise a group with no value has no entry, as Avg, Min
 // and Max report none.
@@ -167,7 +162,7 @@ func readGroups[K, V any](g *groupRun[K, V], r engine.Rows) error {
 
 // grouped runs fn, or COUNT(*) with fn 0, over column c of q's rows per value
 // of key, in the order of the key.
-func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key GroupKey[E, K], c int32) ([]Group[K, V], error) {
+func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key, c int32) ([]Group[K, V], error) {
 	if q.meta.Err != nil {
 		return nil, q.meta.Err
 	}
@@ -180,7 +175,7 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 		return nil, err
 	}
 	st.Columns, st.Limit, st.Offset = nil, 0, 0
-	st.GroupBy, st.OrderBy = int(key.i)+1, []OrderTerm{{Column: int(key.i)}}
+	st.GroupBy, st.OrderBy = int(key)+1, []OrderTerm{{Column: int(key)}}
 	if fn == 0 {
 		st.Count = true
 	} else {
@@ -209,58 +204,62 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 // does not stand in for it, or CountBy fails with ErrUnbounded. They count
 // against WithMaxRows and q's MaxRows: more fails with ErrTooManyRows.
 //
-// A nullable column's Key makes K a pointer, and NULL one group with a nil
-// Key, last on every dialect, as OrderBy sorts NULL. Text keys order by the
-// database's collation.
-func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error) {
-	return grouped[E, K, int64](ctx, q, 0, key, 0)
+// key is one of E's column handles, and K its value type: a pointer for a
+// nullable column, whose NULL is one group with a nil Key, last on every
+// dialect, as OrderBy sorts NULL. Text keys order by the database's
+// collation. A JSON column is no key, as its values compare differently by
+// dialect: its handle does not compile here, nor does another entity's.
+//
+//	counts, err := velox.CountBy(ctx, db.Query[veloxgen.Invoice]().AllowUnbounded(), I.Status)
+func CountBy[E any, H valueColumn[E, K], K any](ctx context.Context, q Query[E], key H) ([]Group[K, int64], error) {
+	return grouped[E, K, int64](ctx, q, 0, valueShape[K](key).I, 0)
 }
 
 // SumBy returns the sum of column c per value of the key column, as CountBy
 // groups. A group with only NULLs sums to 0, as for Sum. A sum that does not
 // fit V is an error, not a wrapped value.
-func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error) {
-	return grouped[E, K, V](ctx, q, AggregateSum, key, c.I)
+func SumBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateSum, valueShape[K](key).I, c.I)
 }
 
 // AvgBy returns the average of column c per value of the key column, as
 // CountBy groups and as Avg computes it. A group with only NULLs has no
 // average, and no entry.
-func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error) {
-	return grouped[E, K, float64](ctx, q, AggregateAvg, key, c.I)
+func AvgBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, float64], error) {
+	return grouped[E, K, float64](ctx, q, AggregateAvg, valueShape[K](key).I, c.I)
 }
 
 // MinBy returns the least value of column c per value of the key column, as
 // CountBy groups. A group with only NULLs has no least value, and no entry.
-func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error) {
-	return grouped[E, K, V](ctx, q, AggregateMin, key, c.I)
+func MinBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateMin, valueShape[K](key).I, c.I)
 }
 
 // MaxBy returns the greatest value of column c per value of the key column,
 // as MinBy does.
-func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error) {
-	return grouped[E, K, V](ctx, q, AggregateMax, key, c.I)
+func MaxBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateMax, valueShape[K](key).I, c.I)
 }
 
 // SumByNull is SumBy over a nullable numeric column: a group with only NULLs
 // sums to 0, as for SumNull.
-func SumByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error) {
-	return grouped[E, K, V](ctx, q, AggregateSum, key, c.I)
+func SumByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateSum, valueShape[K](key).I, c.I)
 }
 
 // AvgByNull is AvgBy over a nullable numeric column: a group with only NULLs
 // has no average, and no entry.
-func AvgByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, float64], error) {
-	return grouped[E, K, float64](ctx, q, AggregateAvg, key, c.I)
+func AvgByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, float64], error) {
+	return grouped[E, K, float64](ctx, q, AggregateAvg, valueShape[K](key).I, c.I)
 }
 
 // MinByNull is MinBy over a nullable numeric column: a group with only NULLs
 // has no least value, and no entry.
-func MinByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error) {
-	return grouped[E, K, V](ctx, q, AggregateMin, key, c.I)
+func MinByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateMin, valueShape[K](key).I, c.I)
 }
 
 // MaxByNull is MaxBy over a nullable numeric column, as MinByNull is MinBy.
-func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error) {
-	return grouped[E, K, V](ctx, q, AggregateMax, key, c.I)
+func MaxByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, V], error) {
+	return grouped[E, K, V](ctx, q, AggregateMax, valueShape[K](key).I, c.I)
 }

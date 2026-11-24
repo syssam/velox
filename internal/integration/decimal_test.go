@@ -147,7 +147,7 @@ func TestDecimalSumExact(t *testing.T) {
 		}
 		wantDec(t, "Sum of integers", ints, "15")
 
-		groups, err := velox.SumBy(ctx, tg.db.Query[testmodel.Ledger]().AllowUnbounded(), L.Fee.Key(), L.Amount)
+		groups, err := velox.SumBy(ctx, tg.db.Query[testmodel.Ledger]().AllowUnbounded(), L.Fee, L.Amount)
 		if err != nil || len(groups) != 2 || groups[0].Key == nil || groups[1].Key != nil {
 			t.Fatalf("SumBy: %v %v", groups, err)
 		}

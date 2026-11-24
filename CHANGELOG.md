@@ -878,6 +878,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   The generated code is unchanged: no regeneration, no new
   `GeneratedCodeIsVersionN`. A package that calls `IDs` no longer
   instantiates `reflect.TypeFor` for its key type.
+- `CountBy`, `SumBy`, `AvgBy`, `MinBy`, `MaxBy` and the `…ByNull` forms
+  take the bare key handle, as `Values` does (ADR 0158):
+  `velox.SumBy(ctx, q, I.OrgID, I.Total)`, not `I.OrgID.Key()`. A JSON
+  handle and another entity's handle do not compile as a key.
 
 - velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
   the types that hold the IDs with one statement, then read only those
@@ -1639,6 +1643,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 - The functions `velox.Values` and `velox.IDs`: call `q.Values(ctx, h)`
   and `q.IDs[K](ctx)` (ADR 0158).
+- The handles' `Key()` method and the type `velox.GroupKey`: a grouped
+  aggregate takes the handle itself (ADR 0158).
 
 - `velox.NoFilter()`, which was `velox.Allow()` under a second name. A
   `WithFilter` filter returns `velox.Allow()` for an entity it does not

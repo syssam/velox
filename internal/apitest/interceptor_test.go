@@ -107,7 +107,7 @@ func TestInterceptorFiltersEveryRead(t *testing.T) {
 	if m, ok, err := velox.Max(ctx, q, fixture.INotes.ID); err != nil || !ok || m != 4 {
 		t.Errorf("Max: %d, %v, %v", m, ok, err)
 	}
-	groups, err := velox.CountBy(ctx, q, fixture.INotes.OwnerID.Key())
+	groups, err := velox.CountBy(ctx, q, fixture.INotes.OwnerID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -112,7 +112,7 @@ func TestFilterEveryRead(t *testing.T) {
 	if sum, err := velox.Sum(ctx, q, fixture.INotes.ID); err != nil || sum != 4 {
 		t.Errorf("Sum: %d, %v", sum, err)
 	}
-	groups, err := velox.CountBy(ctx, q, fixture.INotes.OwnerID.Key())
+	groups, err := velox.CountBy(ctx, q, fixture.INotes.OwnerID)
 	if err != nil || len(groups) != 1 || groups[0].Value != 1 {
 		t.Errorf("CountBy: %v, %v", groups, err)
 	}

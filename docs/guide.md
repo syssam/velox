@@ -575,7 +575,7 @@ Conditions passed to one `Where` are ANDed. Combine them with `velox.Or`,
 `velox.And` and `velox.Not`. A field's handle is named by what its column
 holds, and has the methods that make sense for it:
 
-| Field | Handle | Beyond `EQ`, `NEQ`, `In`, `NotIn`, `Asc`, `Desc`, `Set`, `Count`, `Key` |
+| Field | Handle | Beyond `EQ`, `NEQ`, `In`, `NotIn`, `Asc`, `Desc`, `Set`, `Count` |
 |---|---|---|
 | bool, enum, bytes | `Col` | nothing more |
 | time | `TimeCol` | `GT`, `GTE`, `LT`, `LTE`, `Between`, `Min`, `Max` |
@@ -1031,13 +1031,13 @@ paid, err := velox.Sum(ctx,
 Nillable columns use `SumNull`, `AvgNull` and so on.
 
 `CountBy`, `SumBy`, `AvgBy`, `MinBy` and `MaxBy` group by one key column,
-made with the handle's `Key()` method. Groups can be as many as the rows, so
-the query says `AllowUnbounded()`:
+named by its handle, as `Values` names it. Groups can be as many as the
+rows, so the query says `AllowUnbounded()`:
 
 ```go
 totals, err := velox.SumBy(ctx,
 	db.Query[veloxgen.Invoice]().AllowUnbounded(),
-	I.OrgID.Key(), I.TotalCents)
+	I.OrgID, I.TotalCents)
 for _, g := range totals {
 	fmt.Println(g.Key, g.Value)
 }

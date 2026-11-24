@@ -408,7 +408,7 @@ func (t *tour) withoutPolicy() error {
 	// SumBy does so per value of a key column, here per organization: no drafts.
 	// AllowUnbounded says that the groups may be as many as the rows; the row cap,
 	// if any, still applies.
-	totals, err := velox.SumBy(ctx, report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).AllowUnbounded(), I.OrgID.Key(), I.TotalCents)
+	totals, err := velox.SumBy(ctx, report.Query[veloxgen.Invoice]().Where(I.Status.NEQ(veloxgen.InvoiceStatusDraft)).AllowUnbounded(), I.OrgID, I.TotalCents)
 	if err != nil {
 		return err
 	}

@@ -518,7 +518,7 @@ func TestSelectRefused(t *testing.T) {
 		{"Count", func() error { _, err := base().Count(ctx); return err }, "Rows"},
 		{"Exists", func() error { _, err := base().Exists(ctx); return err }, "Rows"},
 		{"Sum", func() error { _, err := velox.Sum(ctx, base(), I.Total); return err }, "Rows"},
-		{"CountBy", func() error { _, err := velox.CountBy(ctx, base().AllowUnbounded(), I.OrgID.Key()); return err }, "Rows"},
+		{"CountBy", func() error { _, err := velox.CountBy(ctx, base().AllowUnbounded(), I.OrgID); return err }, "Rows"},
 		{"Columns", func() error { return rowsErr(base().Columns(I.ID)) }, "Columns"},
 		{"Omit", func() error { return rowsErr(base().Omit(I.Note)) }, "Omit"},
 		{"With", func() error { return rowsErr(base().With(I.Items)) }, "With"},
