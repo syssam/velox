@@ -69,9 +69,10 @@ func Expr[E any](text string, args ...any) Pred[E] {
 // it. So the column's validators do not run on it, as on Add and Sub, and a
 // hook's Mutation.Value reports false for the column. An Immutable or
 // Version column, an encoded (JSON) column, a key that One must read back
-// and an insert refuse it, as does an aggregate in the text. On MySQL an
-// expression reads the values earlier assignments of the same UPDATE wrote;
-// PostgreSQL and SQLite read the row as it was.
+// and an insert refuse it, as does an aggregate Term argument. velox does
+// not read the text: an aggregate written in it is refused by the database.
+// On MySQL an expression reads the values earlier assignments of the same
+// UPDATE wrote; PostgreSQL and SQLite read the row as it was.
 func SetExpr[E any](c Column[E], text string, args ...any) Setter[E] {
 	slots, vals, err := slotsOf[E](text, args)
 	if err != nil {

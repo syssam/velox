@@ -195,7 +195,7 @@ func Calc(text string, args ...any) Term {
 }
 
 // Agg marks t, an expression such as Calc("SUM(?)", Col(2)), as an
-// aggregate, as velox.Term's Agg does. velox does not read the text.
+// aggregate, as velox.Agg does. velox does not read the text.
 func Agg(t Term) Term { return engine.AggMarkTerm(t) }
 
 // Expr is velox.Expr with terms for columns: the SQL text as a condition for

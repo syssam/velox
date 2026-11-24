@@ -1037,12 +1037,13 @@ builder; use [raw SQL](#raw-sql) for those
 
 A `Calc` that computes one value of each group, such as
 `Calc("PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ?)", I.TotalCents)` or
-a user's aggregate, is marked with `Agg()`. velox then places it as an
+a user's aggregate, is marked with `velox.Agg`. velox then places it as an
 aggregate term: beside `GroupBy` without being a key, and on MySQL in an
 ordering as written. velox does not read the text to find an aggregate:
-`Calc("SUM(?)", x)` needs `Agg()` too, and SQLite's two-argument
-`MAX(?, ?)`, a value of each row, does not. `Agg()` of a window function
-or of a term that is not an expression fails the statement
+`Calc("SUM(?)", x)` needs `velox.Agg` too, and SQLite's two-argument
+`MAX(?, ?)`, a value of each row, does not. `velox.Agg` of a window
+function, of a term that is not an expression or of an expression that
+holds an aggregate Term fails the statement
 ([ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
 
 A `Calc` or `SelectRaw` may be a window function, such as `COUNT(*) OVER ()`

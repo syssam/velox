@@ -1,6 +1,9 @@
 # 95. SQL where the builders end: SetExpr, and Calc as the term
 
-Status: accepted, 2026-11-20.
+Status: accepted, 2026-11-20. Amended by
+[0151](0151-explicit-aggregates-filter-entity-policy-db.md): velox does
+not read the text, so an aggregate in it is refused by the database; an
+aggregate Term argument is still refused.
 
 ## Context
 

@@ -48,7 +48,13 @@ an aggregate, a joined term or a Rollup. velox does not read the text, so
 value of each row to velox; the database refuses it where SQL does.
 
 The mark is in the term's shape and in `sameTerm`. `Agg` of a term that is
-not an expression, or of a window function, fails the statement.
+not an expression, of a window function, or of an expression that holds
+an aggregate Term (`Calc("SUM(?)", x.Sum())`) fails the statement, the
+last as an aggregate of an aggregate, as `Sum` of a `Sum` does. A marked
+term's arguments are inside an aggregate, as a `Sum`'s are: a HAVING
+writes a GROUP BY key there as it is, not as MySQL's `MIN` of it
+(0138), which inside `COUNT(DISTINCT …)` was error 1111
+(`TestHavingRepeatedTerm`).
 `GroupBy` now refuses an aggregate key, marked or not, before anything is
 sent. `SetExpr` takes text, not a term, so it no longer refuses aggregate
 text itself; the database does (`TestCalcAgg`).
