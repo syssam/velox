@@ -353,7 +353,7 @@ func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, set []i
 	return InsertRow(ctx, db, p, &st, gen, out)
 }
 
-func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows, cf *ConflictClause) (cols []int, per int, err error) {
+func (t *table) prepareMany(db *DB, xs TableRows, cf *ConflictClause) (cols []int, per int, err error) {
 	if err := RefuseBidiRows(t.info, xs.p, xs.size, xs.n); err != nil {
 		return nil, 0, err
 	}
@@ -397,7 +397,7 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	if db.Foreign(ctx) {
 		return fmt.Errorf("velox: %s: %w", t.info.Name, ErrOutsideTx)
 	}
-	cols, per, err := t.prepareMany(ctx, db, xs, cf)
+	cols, per, err := t.prepareMany(db, xs, cf)
 	if err != nil {
 		return err
 	}
@@ -466,7 +466,7 @@ func (t *table) recordMany(ctx context.Context, db *DB, xs TableRows, cols []int
 // firstBatch prepares xs as insertMany does and returns the first statement
 // it would send, for SQL(ctx).
 func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *ConflictClause) (Statement, error) {
-	cols, per, err := t.prepareMany(ctx, db, xs, cf)
+	cols, per, err := t.prepareMany(db, xs, cf)
 	if err != nil {
 		return Statement{}, err
 	}
