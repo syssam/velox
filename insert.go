@@ -77,6 +77,10 @@ func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E] {
 // a query is returned as it is. An InsertBulk of no queries sends nothing
 // and returns nil, as an InsertAll of no entities does. SQL returns the
 // INSERT of the first row's group, its first chunk.
+//
+// With a concrete entity, E and PE are inferred from qs. Generic code over
+// E names both, db.InsertBulk[E, PE](qs...): its *E is not known to be an
+// Entity[E], so PE is not inferred.
 func (db *DB) InsertBulk[E any, PE Entity[E]](qs ...InsertQuery[E]) InsertQuery[E] {
 	q := InsertQuery[E]{db: db, meta: stateOf(PE(nil).VeloxMeta())}
 	rows := make([]engine.BulkRow, len(qs))

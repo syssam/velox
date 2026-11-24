@@ -1244,7 +1244,9 @@ Each row's hooks and Insert policy run as for its `Insert`. Rows whose
 setters name the same columns share one multi-row INSERT, chunked as
 `InsertAll`'s; rows of another column set go in another statement, and
 several statements run in one transaction. An upsert option goes on the
-`InsertBulk` and applies to every row.
+`InsertBulk` and applies to every row. Generic code over `E` names both
+type arguments, `db.InsertBulk[E, PE](qs...)`, since `PE` is not inferred
+there.
 
 ### Upsert
 
