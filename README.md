@@ -273,9 +273,8 @@ adopting an existing database.
 
 - [docs/guide.md](docs/guide.md): a tour of velox by task, from schema to
   GraphQL. Read this after the quick start.
-- [docs/coming-from-ent.md](docs/coming-from-ent.md): what differs from ent.
-- [docs/coming-from-veloxe.md](docs/coming-from-veloxe.md): porting a veloxe
-  application, its auto-migration included.
+- [docs/coming-from-ent.md](docs/coming-from-ent.md): what differs from ent,
+  and what a port changes, its auto-migration included.
 - [docs/sql.md](docs/sql.md): every way to write SQL the builders do not
   say, and which keep the policies.
 - [docs/for-agents.md](docs/for-agents.md): the rules a coding agent needs.

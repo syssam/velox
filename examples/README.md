@@ -87,7 +87,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
 
 ### Adopting an existing database
 
-A database made before the directory (by ent, by veloxe or by hand) joins
+A database made before the directory (by ent, by another tool or by hand) joins
 velox's planner in five steps:
 
 1. Run `go tool velox-gen migrate baseline -dialect postgres -db <dsn>`
@@ -113,7 +113,7 @@ velox's planner in five steps:
    velox spells differently from ent (`TestMigrateBaselineEnt`):
    - an index renamed to carry its table's prefix, which ent leaves off;
    - a foreign-key constraint renamed when its name is longer than the
-     dialect allows, since velox caps it as veloxe did (ADR 0090);
+     dialect allows, since velox caps it with FNV-1 (ADR 0090);
    - a string column's default set to its zero (ADR 0090);
    - on PostgreSQL, a serial key becoming an identity.
 

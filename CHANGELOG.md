@@ -61,32 +61,27 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   (ADR 0155).
 
 - velox-graphql: `node=on|off` declares Relay's `Node`, with `node(id:)`
-  and `nodes(ids:)` and `noder_gql.go`, apart from `compat=veloxe`, which
-  presets `on`; `off` is the default, and `compat=veloxe,node=off` drops
-  Node. The generated `WithNodeType(fn)` and `WithFixedNodeType(name)`, as
+  and `nodes(ids:)` and `noder_gql.go`; `off` is the default. The generated `WithNodeType(fn)` and `WithFixedNodeType(name)`, as
   entgql's, give `ResolveNode` and `ResolveNodes` an ID's type, so only
   that type is read and no lookup statement runs (ADR 0152).
 
 - velox-graphql: `names=go|schema` names fields by their Go names
   (`imageURL`, the default) or by their schema names (`imageUrl`), for
-  the type, predicates, inputs and `DecodeWhere` alike. `filters=strict|veloxe`
-  chooses fail-closed where inputs (the default) or veloxe's, where an
-  empty `idIn` adds nothing. `compat=veloxe` presets `names=schema` and
-  `filters=veloxe`, and an explicit option wins, so
-  `compat=veloxe,filters=strict` keeps veloxe's API with fail-closed
-  filters (ADR 0150).
+  the type, predicates, inputs and `DecodeWhere` alike. `filters=strict|lenient`
+  chooses fail-closed where inputs (the default) or lenient ones, where an
+  empty `idIn` adds nothing (ADR 0150).
 
 - veloxtest: `RolledBack(t, ctx, db, fn)` runs fn in a transaction that
   always rolls back, a `t.Fatal` in fn included, for a test whose writes
-  must not last (veloxe's `tx, _ := c.Tx(ctx); defer tx.Rollback()`).
+  must not last (ent's `tx, _ := c.Tx(ctx); defer tx.Rollback()`).
 - On SQLite a decimal Other field with no SQLite `SchemaType`, such as a
   `decimal.Decimal` whose `SchemaType` names MySQL and PostgreSQL only, is a
   `numeric` column, so it orders and compares as a number. Any other Other
   field with no SQLite `SchemaType` is refused by velox-gen (ADR 0148,
   which supersedes 0145).
 - `veloxgql.DecodeWhere(v, &w)` reads a kept filter, a JSON document of a
-  generated where input by its GraphQL names, as veloxe's generated
-  `UnmarshalGQL` did: an ID from a string or a number, enums, times,
+  generated where input by its GraphQL names, as entgql's generated
+  `UnmarshalGQL` does: an ID from a string or a number, enums, times,
   decimals, nested `not`/`and`/`or`. An unknown key or a wrong type is an
   error naming its path, such as `not.idIn[0]`. No generated code changes
   (ADR 0146).
@@ -157,8 +152,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   Query and the vocabulary, and one `velox_<label>.graphql` per entity.
   gqlc makes a package of each file, so `Query.salesOrderItems` and
   `SalesOrder.items` no longer both declare `SalesOrderItemsArgs`. It is
-  the default under compat=veloxe, with veloxe's names
-  (`velox_salesorder.graphql`); `sdlfiles=one` keeps one file.
+  named by the entity in lower case (`velox_salesorder.graphql`);
+  `sdlfiles=one`, the default, keeps one file.
   `entities=A+B` writes those entities' SDL alone, with each where input
   theirs nest, for an application that serves part of its schema (ADR
   0125).
@@ -185,10 +180,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - graphqlgo: `ScalarsOnly(names...)` binds only the named scalars of Time,
   UUID, Bytes and Uint64, for a schema that does not declare all four;
   graphql-go's `NewSchema` refuses `Scalars()` there.
-- velox-graphql: under compat=veloxe, a `graphql.OrderField` or
-  `graphql.OrderUnguarded` dropped from a field of a type veloxe did not
-  order (a decimal, a JSON field, a `Text`) is a warning naming the entity,
-  the field and the reason.
+- velox-graphql: a `graphql.OrderField` or `graphql.OrderUnguarded`
+  dropped from a field of a type the order enum does not take (a decimal,
+  a JSON field, a `Text`) is a warning naming the entity, the field and
+  the reason.
 - delete: `DeleteQuery.One(ctx)` removes exactly one row, ent's
   `DeleteOneID(id).Exec` as `Delete[E]().Where(X.ID.EQ(id)).One(ctx)`: no
   row removed wraps `ErrNotFound`, a hidden or soft-deleted row included;
@@ -322,9 +317,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   uint32, and Uint64 to uint, as gqlgen.yml's models do. `veloxgql.GeneratedCodeIsVersion27` stays: code generated
   before runs as it did, and the new output needs nothing new of the
   runtime.
-- Under velox-graphql's `compat=veloxe` (`gqlgraph.Type.Veloxe`), a
-  connection behaves for clients as veloxe's did (ADR 0108). It takes a
-  cursor veloxe wrote, so a list a client paged before the deploy pages
+- Under velox-graphql's old compat option, a connection behaves for
+  clients as the predecessor's did (ADR 0108). It takes a cursor the
+  predecessor wrote, so a list a client paged before the deploy pages
   on. The cursor's key is the key, and its values are the current order's;
   a cursor with another number of values fails as one taken under another
   order. Connections still write velox's cursors. An order of one term
@@ -332,7 +327,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   has `hasPreviousPage`, and a page before a cursor `hasNextPage`. A
   foreign key's predicates (`customerId`, `customerIdIn`,
   `customerIdIsNil`, …) are the column's alone, with no EXISTS on the
-  target. Without compat, a veloxe cursor fails with the same error as
+  target. Without compat, such a cursor fails with the same error as
   before, when the connection is built rather than when the argument is
   decoded. Generated code does not change.
 - Package `contrib/graphql/veloxgql/graphqlgo` serves velox-graphql's
@@ -350,7 +345,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   graphql-go drops the error before any presenter sees it.
   contrib/graphql requires graphql-go v0.0.0-20261029022150-3e0050be7462.
 - Package `generate` runs velox-gen's generate from Go, as ent's
-  `entc.Generate` and veloxe's `compiler.Generate` did (ADR 0097):
+  `entc.Generate` does (ADR 0097):
   `generate.Run(ctx, dir, generate.Config{Schema, Out, Package, Plugins,
   Check, Env, Stdout, Stderr})`, with `ErrStale` for a stale
   check and `ErrInterrupted` for a signal during the write. velox-gen calls
@@ -377,7 +372,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   UPDATE; an error from it fails the delete. `Reads: softdelete.Unfiltered`
   leaves deleted rows visible to reads and updates, while a delete stays
   soft and marks live rows only. The zero `Mixin` behaves as before.
-- `velox.AfterCommit(tx, fn)` (ADR 0100), as veloxe's `tx.OnCommit`:
+- `velox.AfterCommit(tx, fn)` (ADR 0100), as ent's `tx.OnCommit`:
   queues `fn` on the transaction, to run in order once the outermost
   transaction has committed, on the `Tx` context without its cancellation.
   A rollback, a failed COMMIT or a retried attempt runs none; a nested `Tx`
@@ -415,8 +410,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   update whose every setter was skipped sends nothing and returns 0.
   `UpdateQuery.KeepDefaults(cols...)`,
   `SaveQuery.KeepDefaults(cols...)` and `untyped.TableUpdate.KeepDefaults`
-  stop the named columns' `UpdateDefault` from firing, as veloxe's
-  `SkipDefault`; a column without one fails the statement.
+  stop the named columns' `UpdateDefault` from firing; a column without one fails the statement.
   `velox.IsConstraintError`, `IsValidationError` and `IsNotSingular`, as
   ent's, safe with a typed nil.
 - A `field.Other` field in a decimal column (its `SchemaType` names
@@ -480,56 +474,55 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   the caller's entity keeps its zone. `Diff` counts a NaN that stays NaN
   as unchanged. On MySQL an update that assigns the key fails, rolled
   back, when its read by the new keys finds fewer rows than it locked.
-- veloxe's privacy policies (ADR 0089): `velox.Policy` has `Query` and
-  `Mutation` rule lists, and package `privacy` has veloxe's names, with
-  `privacy.Policy` an alias of `velox.Policy`, so a veloxe schema's
+- ent-style privacy policies (ADR 0089): `velox.Policy` has `Query` and
+  `Mutation` rule lists, and package `privacy` has ent's names, with
+  `privacy.Policy` an alias of `velox.Policy`, so a schema's
   `return privacy.Policy{Query: privacy.QueryPolicy{...}}` compiles. Skip goes
   on, Allow ends a list, any other error denies; Query's conditions apply to
   reads only, Mutation's rules to inserted rows, updates and deletes;
   `privacy.DecisionContext` lifts the lists. velox-gen accepts
   `Policy() privacy.Policy`, and for such a schema writes
-  `<out>/privacy/privacy.go`, veloxe's generated privacy package, as aliases
+  `<out>/privacy/privacy.go`, the generated privacy package, as aliases
   of velox's.
 - A `field.Other` field's handle is `velox.OtherCol` (`NumberCol` in a
   decimal column, ADR 0096): GT, GTE, LT, LTE, Between, Min and Max,
   compared by its SQL type. velox-graphql's WhereOps
   gives such a field equality and comparison predicates (ADR 0087).
-- velox-graphql's option `compat=veloxe` makes the API veloxe's generator
+- velox-graphql's compat option makes the API the predecessor's generator
   made: names from the schema name (`customerId`, `imageUrl`), foreign keys in
   the type as IDs beside their edges, and their where predicates named from
-  the field. `graphql.Type` on a field is the field's GraphQL type, as veloxe
-  took it: an enum field's enum name, or a scalar or list the application
+  the field. `graphql.Type` on a field is the field's GraphQL type: an enum field's enum name, or a scalar or list the application
   declares (`Map`, `[ID!]`) (ADR 0087).
-- Under `compat=veloxe` the rest of veloxe's surface follows: every orderable
+- Under the compat option the rest of the predecessor's surface follows: every orderable
   field in the order enum, Optional fields nullable in the type, Required
   unique edges non-null, a root Query field for every type (a list for a
   `QueryField` without `RelayConnection`, which `graphql.RelayConnection()`
   now records), nullable connection edges and nodes, only `Cursor`, `Time`
   and `Bytes` declared, equality-only defaults on keys and Other fields,
   explicit WhereOps over WhereInput, no directives on inputs, a json field of
-  a named Go type typed by its name, and silence where veloxe ignored an
-  annotation. The option `where=whitelist` filters only fields with
+  a named Go type typed by its name, and silence where the predecessor
+  ignored an annotation. The option `where=whitelist` filters only fields with
   `WhereInput` (ADR 0087).
-- Under velox-graphql's `compat=veloxe`, every type with an ID implements
+- Under velox-graphql's compat option, every type with an ID implements
   `Node`, the root query has `node(id:)` and `nodes(ids:)`, and the generated
   `ResolveNode` and `ResolveNodes` answer them through each type's Read
-  policy; a where input means what veloxe's did: an empty `In`, a false
+  policy; a where input is lenient: an empty `In`, a false
   `IsNil` and an empty `or` add nothing, `not: {}` is an error, and no width
-  or node cap applies (`gqlgraph.Type.Veloxe`) (ADR 0088).
+  or node cap applies (ADR 0088).
 - Two enum fields whose types get one name (`Asset.depreciation_method`,
   `AssetDepreciation.method`) and hold the same values share one Go type and
-  one GraphQL enum, as veloxe did (ADR 0086).
+  one GraphQL enum (ADR 0086).
 - A one-to-one pair to its own schema may bind its key field on the assoc
   edge (`edge.To("reversed_by", T.Type).Field("reversed_by_id").Unique()` with
-  its `From` inverse), as veloxe schemas do; each edge reads from its own end
+  its `From` inverse); each edge reads from its own end
   (ADR 0085).
 - Two tables may share a check or not-null constraint name, as PostgreSQL
   allows; MySQL, which keeps check names per database, refuses it in its
   `Tables` (ADR 0084).
 - Each index is named `<table>_<name>` unless its name starts with
   `<table>_`, so a mixin's StorageKey is one name per table, and a long name
-  is capped with veloxe's FNV-1 128 suffix, not ent's MD5. A veloxe
-  application keeps its database's index names (ADR 0083, 0090).
+  is capped with an FNV-1 128 suffix, not ent's MD5. An application of
+  the predecessor keeps its database's index names (ADR 0083, 0090).
 - `sqlschema.NonUniqueFK` on an edge: its key is not unique, and a to-one
   edge to its own schema with no inverse is many-to-one (ADR 0090).
 - `field.JSON` of an unnamed struct, written inline (ADR 0090).
@@ -831,17 +824,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   under one order term the key breaks ties in that term's direction; and
   a page at a cursor has `hasPreviousPage` (after) or `hasNextPage`
   (before). A foreign key's where predicates are its column's alone,
-  with no EXISTS on the target. `gqlgraph.Type.Veloxe` is gone, and
-  `Type.VeloxeFilters` is `Type.LenientFilters`.
+  with no EXISTS on the target. `gqlgraph.Type`'s compat connection
+  flag is gone, and its lenient-filters flag is `Type.LenientFilters`.
   `veloxgql.GeneratedCodeIsVersion29` is now `GeneratedCodeIsVersion30`:
   regenerate (ADR 0155).
-- velox-graphql: `compat=veloxe` is gone, and refused with the options
+- velox-graphql: the `compat=` option is gone, and refused with the options
   that replace it, each of which stands alone: `names=schema`,
-  `filters=lenient` (was `filters=veloxe`), `node=on`, `sdlfiles=entity`,
+  `filters=lenient` (a renamed value), `node=on`, `sdlfiles=entity`,
   `orderfields=all`, `queryfields=all`, `optional=nullable`,
   `requirededges=nonnull`, `jsontypes=named`, `idops=equality`,
   `inputkeys=column` and `apptypes=JSON+UUID+Uint64`. Given together, with
-  `where=whitelist,engine=graphql-go`, they write what `compat=veloxe` wrote,
+  `where=whitelist,engine=graphql-go`, they write what `compat=` wrote,
   byte for byte but for the version line and comments (ADR 0155).
 - velox-graphql's defaults are entgql's (ADR 0155):
   - a declared foreign key is an `ID` in its type beside its edge, and its
@@ -868,17 +861,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   - `apptypes=` works without `entities=`, and leaves the vocabulary
     scalars it lists (`JSON`, `UUID`, `Uint64`, `Bytes`, `Time`) to the
     application.
-- velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
+- velox-graphql's `node(id:)` and `nodes(ids:)` under the compat option find
   the types that hold the IDs with one statement, then read only those
   types under their policies: `node(id:)` is 2 statements, not one per
   type of Node. Results, policy denials and ambiguity are unchanged; the
   lookup is raw SQL, which Around hooks see as "Rows". No generated code
   changes (ADR 0149).
-- `gqlgraph.Type.VeloxeFilters` gives a where input veloxe's semantics;
-  `Type.Veloxe` keeps veloxe's connections and plain foreign-key
+- A flag of `gqlgraph.Type` gives a where input lenient semantics; the
+  compat flag keeps the predecessor's connections and plain foreign-key
   predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
   `GeneratedCodeIsVersion28`: regenerate, since code generated under
-  compat=veloxe before sets only `Veloxe` (ADR 0150).
+  the compat option before sets only the compat flag (ADR 0150).
 - `gqlgraph.ResolveNode` and `gqlgraph.ResolveNodes` take
   `...gqlgraph.NodeOption`: `gqlgraph.WithNodeType[K]` and
   `gqlgraph.WithFixedNodeType`. The generated `ResolveNode` and
@@ -1103,21 +1096,20 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox-graphql: a connection reads the column of an order field only when
   its orderBy names it. `AlwaysRead` holds the key and the foreign keys, so
   a selection reads its own fields' columns and no more; before, every
-  orderable column was read, which under `compat=veloxe` (every field
+  orderable column was read, which under the compat option (every field
   orderable) was every column. An `XOrderField`'s `IsValid` and
   `UnmarshalGQL` are one call each to `gqlgraph.Type.IsOrderField` and
   `gqlgraph.UnmarshalOrderField`, with the same values and error text.
   `veloxgql.GeneratedCodeIsVersion25` replaces Version24.
 
 - A policy, Query rule or interceptor whose subquery reaches its own entity
-  again, as nextapp's conversation rule reads participants through the
+  again, as a conversation rule reads participants through the
   participants' own policy, is cut there and no longer refused: the inner
-  subquery gets none of that entity's conditions, the outer gets them all,
-  as veloxe's raw subquery applied none. `FieldInSelect` compares an integer
+  subquery gets none of that entity's conditions, the outer gets them all. `FieldInSelect` compares an integer
   column with a text key as text (`CAST(id AS TEXT)`, on MySQL
   `CONCAT(id)`), at run time and in velox-gen (ADR 0091).
-- An index's type (`sqlschema.IndexType`) is ignored on SQLite, as ent's and
-  veloxe's SQLite migration ignored it, where velox-gen refused it; MySQL
+- An index's type (`sqlschema.IndexType`) is ignored on SQLite, as ent's
+  SQLite migration ignores it, where velox-gen refused it; MySQL
   still refuses it (ADR 0090).
 - velox-gen refuses an `Optional` field whose only default is a
   `SchemaDefault`, and no longer lets one excuse a `Unique` `Optional` field
@@ -1138,26 +1130,25 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   code's shape is the same, so `GeneratedCodeIsVersionN` stays. A runtime
   error that names an entity says `veloxgen.Task`, not `gen.Task`. To keep the
   old layout, pass `-out ./gen ./schema`. Decision 0065.
-- veloxe's defaults are velox-gen's (ADR 0090, superseding 0063): an unset
+- The predecessor's defaults are velox-gen's (ADR 0090, superseding 0063): an unset
   `Optional` field is its Go zero, and only an `Optional` enum needs a
   `Default` or `Nillable` (rule 37; rules 39, 40 and 48 are gone). An
   `Optional` JSON field of any type is accepted; unset, a slice or map is
   written `[]` or `{}`. A NOT NULL string, bool or number column with no
   `Default` gets its zero as its column `DEFAULT`. An unsized string is
-  `character varying` on PostgreSQL. An enum is stored as ent and veloxe
-  store it: varchar on PostgreSQL, `enum(...)` on MySQL, text on SQLite,
+  `character varying` on PostgreSQL. An enum is stored as ent stores it: varchar on PostgreSQL, `enum(...)` on MySQL, text on SQLite,
   with no enum type unless a Postgres `SchemaType` names one and no `CHECK`.
   An `Immutable` key makes its edge `Immutable` (rule 34 refuses only the
   converse). Existing databases need a migration; `loadjson.Version` is 8.
-- velox-gen declares no index of a foreign key, as ent and veloxe declare
-  none (ADR 0090's amendment): on PostgreSQL and SQLite it added
-  `<table>_<column>` for each key no other index led, so an ent or veloxe
+- velox-gen declares no index of a foreign key, as ent declares none
+  (ADR 0090's amendment): on PostgreSQL and SQLite it added
+  `<table>_<column>` for each key no other index led, so an ent
   database's first diff added them. MySQL keeps the index InnoDB makes,
   named as the key. A database velox created earlier has the old indexes:
   the next `migrate diff` drops them, and each example has a
   `drop_fk_indexes` migration.
 - An unset `Optional` JSON field of pointer type is written as its
-  element's zero value's JSON, as veloxe wrote it, not NULL (ADR 0090's
+  element's zero value's JSON, not NULL (ADR 0090's
   amendment).
 - A GraphQL ID is the entity's key in its own Go type, which gqlgen decodes:
   a resolver takes `id int64`, an input's `<edge>ID` and `<edge>IDs` and a
@@ -1633,7 +1624,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   restrict.
 - One spelling of each schema option is kept, `entsql`'s where ent has
   one; a port that names a removed one does not compile, and
-  `docs/coming-from-veloxe.md` and `docs/coming-from-ent.md` name each
+  `docs/coming-from-ent.md` names each
   one's replacement. Gone: `schema.Table`, `TableIn`, `Collation`, `Check`
   and their annotation types (write `sqlschema.Table`, `SchemaTable`,
   `Collation`, `Checks`); `index.Builder.Where` (write
@@ -1648,8 +1639,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox-gen's warning about a file of yours in `-out/entity` or
   `-out/runtime`, where a velox-gen before 1.0 wrote. A run still removes
   the generated files it no longer writes, there as anywhere below `-out`.
-- `schema.Package`, `schema.VeloxeNames`, `load.MarshalPackage` and
-  `ddl.VeloxeSymbol`: their index naming is velox-gen's default (ADR 0090).
+- `schema.Package`, its index-name option, `load.MarshalPackage` and
+  ddl's capped-symbol function: their index naming is velox-gen's default
+  (ADR 0090).
 
 - `gqlgraph.AsString`, `AsInt`, `AsFloat`, `AsBool`, `AsUUID` and the
   `Integer` constraint. Generated code stopped calling them when its inputs
@@ -1748,17 +1740,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   policy hid. Such a row sorts as NULL: last ascending, first descending.
   `After` of a `LeftJoin` pages from a row with no joined entity as NULL,
   where it failed.
-- GraphQL, compat=veloxe: a where argument has a budget of 10 times
+- GraphQL, compat option: a where argument has a budget of 10 times
   `Limits.MaxFilterNodes` (10000 by default), where it had none; and any
   where argument's budget is held to 30000, so a huge `idIn` is
   `ErrFilterTooLarge` (BAD_USER_INPUT), not the driver's bind-parameter
   limit as an internal error.
-- GraphQL, compat=veloxe: `nodes(ids:)` reads each type of Node with one
+- GraphQL, compat option: `nodes(ids:)` reads each type of Node with one
   `IN` query, as entgql does, not one query per ID per type; each type's
   rows batch their edges; more IDs than `Limits.MaxPage` is
   `ErrPageTooLarge`; and the cost model charges it by the number of IDs,
   and `node`/`nodes` 100 for each type of Node.
-- GraphQL, compat=veloxe: `node(id:)` of an ID that more than one type has
+- GraphQL, compat option: `node(id:)` of an ID that more than one type has
   (`gqlgraph.ErrAmbiguousNodeID`) reaches the client as BAD_USER_INPUT, not
   INTERNAL_SERVER_ERROR.
 - veloxotel: a failed statement's or transaction's span no longer holds the

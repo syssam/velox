@@ -6,8 +6,7 @@ names. Most ent schemas port by changing imports. A few rules differ, because
 velox inserts and updates Go structs, where a zero field means unset. This page
 lists the differences that change what a schema means or what a call does.
 [Decision 0032](decisions/0032-ent-refusals.md) says which ent schemas velox-gen
-refuses, and why. A veloxe application reads this page first, then
-[coming-from-veloxe.md](coming-from-veloxe.md).
+refuses, and why.
 
 ## Finding schemas
 
@@ -46,12 +45,12 @@ which `Through` names, is a schema, and its behaviour is its own (see Edges).
 ## Fields
 
 **`Optional` is NOT NULL.** In ent, `Optional()` makes the column NULL-able. In
-velox, as in veloxe, it means only that the field need not be given on create:
+velox it means only that the field need not be given on create:
 the column stays NOT NULL and the Go field is a value. `Nillable()` is what
 makes a column NULL-able, a pointer in Go with `Null*` handles (`IsNull`,
 `SetNull`), and `Default` is what an unset field takes. An unset `Optional`
 field with neither is written as its Go zero value, `""`, `0`, `false` or a
-zero time, as veloxe wrote it ([0003](decisions/0003-nullability.md),
+zero time ([0003](decisions/0003-nullability.md),
 [0090](decisions/0090-veloxe-defaults.md)). An `Optional` enum is the
 exception, whose zero is none of its values: velox-gen asks it for a `Default`
 or `Nillable`. An `Optional` JSON field's column is NULL-able; unset, a slice
@@ -61,8 +60,7 @@ An `Optional` `Unique` field needs `Nillable` or a `DefaultFunc`, or every
 unset row would hold the same value.
 
 A string, bool or number column that is NOT NULL and has no `Default` gets
-its zero as its column `DEFAULT`, as veloxe's `FeatureAutoDefault` gave it, so
-`migrate diff` can add it to a table that has rows. Any other NOT NULL column
+its zero as its column `DEFAULT`, so `migrate diff` can add it to a table that has rows. Any other NOT NULL column
 with no default fails on those rows, and `-allow add-required-column=...` only
 helps on an empty table.
 
@@ -181,7 +179,7 @@ ADR 0109).
 
 **An edge schema's hooks and policies run on Add and Remove.** ent fills
 only defaults when `AddGroupIDs` inserts an edge schema's rows; its hooks
-and privacy do not run (veloxe's `compiler/gen/sql/helper.go:96`). velox
+and privacy do not run. velox
 inserts and deletes them as Membership rows, so Membership's hooks run, and
 a link its Write policy hides stays through `Clear`. velox is stricter on
 reads too. An edge schema cannot have a Read or Query policy, Interceptors
@@ -257,7 +255,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
-| `client.User.Update().SkipDefault(user.FieldUpdatedAt)` (veloxe) | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
+| an update that must not fire `UpdateDefault` on `updated_at` | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
 | `client.User.Query().Order(user.ByPostsCount(sql.OrderDesc()))` | `db.Query[veloxgen.User]().OrderBy(U.Posts.Count().Desc(), U.ID.Asc())`: the posts the reader may not see are not counted (decision 0112) |
 | `client.User.Query().Order(user.ByPosts(sql.OrderBySum(post.FieldViews)))` | `OrderBy(U.Posts.Sum(P.Views).Asc(), U.ID.Asc())`; `Avg`, `Min` and `Max` too, NULL for a user with no posts |
 | `user.HasPostsWith(...)` with a count, `sql.P` by hand | `velox.Expr[veloxgen.User]("? >= ?", U.Posts.Count(), 3)` in a `Where` |
@@ -413,6 +411,49 @@ itself; the driver parses a `datetime` column, slower, and velox reads that
 too. `migrate diff` on a database ent made plans the change to `datetime(9)`,
 a table rebuild on SQLite.
 
+### More calls
+
+| ent | velox |
+| --- | --- |
+| `ent.Open(dialect.Postgres, dsn)` | `velox.Connect("postgres", dsn, opts...)` |
+| `Modify(func(s *sql.Selector){…})`, `func(*sql.Selector)` predicates, `WhereP` | `velox.Expr` for a condition, `velox.Calc` for a term or an order, `Select` or `SelectRaw` with `Rows` for a projection, `velox.SetExpr` for an update ([sql.md](sql.md#coming-from-ent)) |
+| `COUNT(*) OVER ()` in a `Modify` | `velox.Calc[T]("COUNT(*) OVER ()")` or `SelectRaw`; a window function is refused in `Expr`, `GroupBy`, an aggregate and `SetExpr` ([ADR 0101](decisions/0101-window-terms-soft-delete-options.md)) |
+| a report's table from field names to columns, `sql.As(f, name)` by name | `velox.ColumnByName[T](column)`, a Term that selects, groups and orders ([guide](guide.md#date-buckets-subtotals-and-columns-by-name), [ADR 0127](decisions/0127-report-terms.md)) |
+| a date bucket in a `Modify`: `TO_CHAR(? AT TIME ZONE 'z', 'YYYY-MM')`, `date_trunc` | `velox.DateTrunc[T](velox.UnitMonth, col, velox.InZone(z))`, the bucket's first instant on every dialect; `FiscalYear(m)` for fiscal years and quarters; a date part (`EXTRACT`) stays a `Calc` |
+| `GroupBy(f…).Aggregate(ent.As(ent.Sum(col), n))` with a run-time `col` | `t, _ := velox.ColumnByName[T](col)`; `Select(key, t.Sum().As(n)).GroupBy(key)` ([ADR 0142](decisions/0142-nextapp-projection-recipes.md)) |
+| `GroupBy(a, b).Scan` with no aggregate | `Select(a, b).Distinct()` or `Select(a, b).GroupBy(a, b)`, read with `velox.Scan` |
+| `COUNT(DISTINCT CASE WHEN c <> 0 THEN c END)` in a `Modify` | `velox.Calc[T]("CASE WHEN ? <> 0 THEN ? END", c, c).CountDistinct()` |
+| `AppendSelectExprAs(expr, alias)` beside entity rows, read with `Value(alias)` | `Select` of every column (`ColumnByName`) and the `Calc` `.As(alias)`, scanned into a struct embedding the entity; the keyset an `Expr` over the same Term ([guide](guide.md#date-buckets-subtotals-and-columns-by-name)) |
+| a derived table in `Modify` so the parent's columns group the child | `Join(rel)` and `velox.Joined(rel, col)` in `Select` and `GroupBy`, the parent's policy in ON ([ADR 0143](decisions/0143-joined-terms-in-projections.md)) |
+| a hand join to a dated table with no edge | read the rows of that table first, then a `CASE` term over the document's own columns; a correlated outer reference is not built ([ADR 0142](decisions/0142-nextapp-projection-recipes.md)) |
+| `sqljson.ValueContains(f, v, sqljson.Path(k))` | `T.F.Array(k).Has(v)` ([ADR 0141](decisions/0141-json-array-at-a-path.md)) |
+| `GROUP BY ROLLUP(…)`, `CUBE(…)` in a `Modify` | `GroupBy(velox.Rollup[T](keys...))`, `velox.Cube`; MySQL `WITH ROLLUP` as the only key, SQLite refuses |
+| field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
+| `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
+| `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
+| the generated package's `ent.TypeUser` | `veloxgen.TypeUser`, the same value: the `Name()` of the entity a filter receives and `m.Entity()` ([ADR 0139](decisions/0139-entity-type-constants.md)) |
+| a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
+| `ForUpdate()` on SQLite | the read fails, unless the option `velox.WithSQLiteLockingReads()` runs it without the clause ([guide](guide.md#row-locks), [ADR 0123](decisions/0123-sqlite-locking-reads-opt-in.md)) |
+| the generated package's `IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` |
+| `ValidationError.Name`, the schema field's name, from which an error presenter derives the GraphQL input key | `velox.ValidationError.Name`, the same; `Field` is the Go name ([ADR 0144](decisions/0144-validation-error-name.md)) |
+| `OpCreate` | `OpInsert` |
+| `OpUpdate \| OpUpdateOne` | `OpUpdate` |
+| `OpDelete \| OpDeleteOne` | `OpDelete` |
+| an op tested as a bit set | an op compared with `==`; `velox.On(h, ops...)` runs `h` for the ops listed |
+| a hook's or an interceptor's lookup on the client inside a transaction | a read through the filter's `db` parameter, the statement's DB ([guide](guide.md#hooks-and-filters-for-every-entity), [ADR 0132](decisions/0132-filter-reads-through-the-statements-db.md)) |
+| a client read inside a transaction that must not join it | a read on `db` under `velox.WithoutTx(ctx)`; under fn's `ctx` it fails with `ErrOutsideTx` |
+| a test's `tx, _ := c.Tx(ctx); defer tx.Rollback()` that never commits | `veloxtest.RolledBack(t, ctx, db, func(ctx context.Context, tx *velox.DB) { … })`: fn's writes roll back, a `t.Fatal` in fn included |
+| a failed COMMIT, told apart by its message | `errors.Is(err, velox.ErrCommitUnknown)`: the outcome is unknown, so retry nothing. A COMMIT that says it rolled back does not match, such as PostgreSQL's answer to an aborted transaction, `pgx.ErrTxCommitRollback` ([ADR 0134](decisions/0134-commit-unknown.md)) |
+| a helper returning a `nil` predicate for "no condition", checked with `p == nil` | the zero `velox.Predicate{}` or `Pred[E]{}`, checked with `velox.IsZero(p)`: a `Pred` holds a slice, so it has no `nil` and no `==`. A zero `Pred` that reaches a query fails the statement |
+| a retry and a timeout in a helper around every transaction | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
+| `Select(f).Strings(ctx)`, `Ints(ctx)` | `velox.Values(ctx, q, T.F.Key())` |
+| `e.Unwrap()` | none: an entity is a plain struct, with no client in it |
+| a `softdelete` mixin of your own, with `deleted_by_*` | `softdelete.Mixin{Assign: …}`, and `Reads: softdelete.Unfiltered` for unfiltered reads ([guide](guide.md#soft-delete)) |
+| `entgql.Cursor` | `veloxgql.Cursor{Type, Terms, Key}`, bound to a type and an order |
+| `entgql.PageInfo` | `veloxgql.PageInfo` |
+| a where input's `AddPredicates(p)` | none: `q.Where(p)` before `Paginate` |
+| `w.UnmarshalGQL(doc)` of a kept filter (an access policy's `{"ownerId": "123"}`) | `veloxgql.DecodeWhere(doc, &w)`, then `w.Pred(ctx)`. An unknown key or a value of the wrong type is an error naming its path, such as `not.idIn[0]` ([ADR 0146](decisions/0146-decode-where.md)) |
+
 ## Tests and migrations
 
 ent's `client.Schema.Create` is an auto-migration that may run anywhere.
@@ -439,31 +480,158 @@ a relation per row does; `velox.CountStatements` and `StatementBudget` are
 the same check outside veloxtest
 ([decision 0117](decisions/0117-statement-counting.md)).
 
+### Adopting a database ent migrated
+
+A database `client.Schema.Create` made is adopted once, then each schema
+change is one file.
+[Adopting an existing database](../examples/README.md#adopting-an-existing-database)
+gives the five steps. In short:
+
+1. `go tool velox-gen migrate baseline -dialect postgres -db <dsn>` writes
+   `./migrations/0001_baseline.sql`, which builds the tables as that
+   database holds them.
+2. `go tool velox-gen migrate apply -baseline 1 -db <dsn>` records it as
+   applied, running nothing, on each existing database.
+3. `go tool velox-gen migrate drift -db <dsn>` checks each one.
+
+Then each change is a file:
+
+| ent | velox |
+| --- | --- |
+| `client.Schema.Create(ctx)` at deploy | `migrate diff` when the schema changes, then `migrate apply -db <dsn>`, or `migrate.Up(ctx, velox.Pool(db), dir)` in the program |
+| `client.Schema.WriteTo(ctx, os.Stdout)` | `migrate diff -dry-run` prints the file it would write; `migrate apply -dry-run` prints the files it would apply |
+| `migrate.WithDropIndex(true)` | none: `diff` plans a dropped index, as a finding to review |
+| a hand-written table rename before `Create` | `migrate diff -rename-table old=new`, or `-rename-column table.old=new` |
+| hand-written SQL around `Create` | statements you add to the file `diff` wrote, then `migrate hash` |
+
+`diff` compares the schema with the directory's `schema.json`, not with a
+database. `migrate drift -db <dsn>` compares a database with it.
+
+`migrate diff` refuses a destructive change until `-allow` names it, such
+as a dropped table or column. It also refuses a NOT NULL column with no
+default, which would fail on a table that has rows. A string, bool or
+number column gets its zero as its default, so only another type, such as
+a JSON column, meets this. Give the field a `Default` or make it
+`Nillable`, or add the statements that fill it to the file by hand.
+[A join table becomes an edge schema](migrations-operations.md#a-join-table-becomes-an-edge-schema)
+shows the edit and `migrate hash`.
+
+velox declares a foreign key for every edge, and has no option to leave
+them out. A database made with `migrate.WithForeignKeys(false)` has none,
+and baseline records it as it is, so the first `diff` adds every foreign
+key. Each fails on rows whose key matches no row of its target: find and
+fix those first.
+
+A field made `Nillable` gets `DROP NOT NULL` from `diff`, so a hand step
+that relaxed such columns is not needed. When `apply` refuses or stops,
+[migrations-operations.md](migrations-operations.md) says what to do.
+
 ## Running the generator from Go
 
-ent's `entc.go` calls `entc.Generate` (veloxe's, `compiler.Generate`) with a
+ent's `entc.go` calls `entc.Generate` with a
 `gen.Config`. velox's is `generate.Run(ctx, dir, generate.Config{...})`,
 from package `github.com/syssam/velox/generate`, in a `generate.go` behind
 `//go:build ignore` ([decision 0097](decisions/0097-generate-package.md)).
 It writes what `go tool velox-gen` writes with the same settings.
 
-| ent / veloxe | velox |
+| ent | velox |
 |---|---|
-| `compiler.Generate("./schema", cfg)`, `entc.Generate` | `generate.Run(ctx, "", generate.Config{Schema: "./veloxschema"})` |
+| `entc.Generate("./schema", cfg)` | `generate.Run(ctx, "", generate.Config{Schema: "./veloxschema"})` |
 | `gen.NewConfig(opts...)` | a `generate.Config` literal; the zero value is velox-gen with no flags |
 | `gen.WithTarget(dir)` | `Out` (default `./veloxgen`) |
 | `gen.WithPackage(path)` | not needed: the import path is the module's path joined to `Out`'s; `Package` names the package (default `Out`'s base name) |
 | `gen.WithSchema(path)` | `Schema`, a package pattern (default `./veloxschema`) |
 | `gen.WithFeatures(FeaturePrivacy, FeatureIntercept, ...)` | always on, so no flag: privacy is `Policy` and package `privacy`, intercept is `Interceptors` as row filters, lock is `ForUpdate`, modifier is `Expr`, `Calc`, `Select` and `SetExpr`, upsert is `OnConflict`, execquery is `db.Exec`, `Rows` and `Raw`, autodefault is the zero `DEFAULT` (decision 0090), entpredicates are the handles and `FieldEQ`, versioned migrations are velox-gen migrate, schemaconfig is `TableIn` and `sqlschema.Schema`; snapshot is not needed, as velox-gen loads a schema whose generated package is stale |
 | `gen.WithHooks(...)` | not offered. A hook that sorts each entity's fields has no form: `CREATE TABLE` follows the schema's declaration order, so declare the fields in the order wanted. A prefix hook for index names is the default (decision 0090). |
-| `gen.WithTemplates`, `compiler.TemplateDir`… | not offered: the generated package is entirely velox-gen's, reproducible from the schema alone, so `velox-gen -check` proves it current (decision 0034). Code of your own goes in a file of yours beside it. |
-| `compiler.Extensions(entgql.NewExtension(...))` | `Plugins`: `generate.Plugin{Tool: "velox-graphql"}` runs the tool; `graphqlgen.Plugin(opts)` from `contrib/graphql/graphqlgen` runs it in the process, with the same output |
-| `gen.WithBuildFlags`, `compiler.BuildFlags("-p=4")` | `Env: append(os.Environ(), "GOFLAGS=-p=4")`, the environment of every go command Run starts |
+| `gen.WithTemplates`, `entc.TemplateDir`… | not offered: the generated package is entirely velox-gen's, reproducible from the schema alone, so `velox-gen -check` proves it current (decision 0034). Code of your own goes in a file of yours beside it. |
+| `entc.Extensions(entgql.NewExtension(...))` | `Plugins`: `generate.Plugin{Tool: "velox-graphql"}` runs the tool; `graphqlgen.Plugin(opts)` from `contrib/graphql/graphqlgen` runs it in the process, with the same output |
+| `gen.WithBuildFlags`, `entc.BuildFlags("-p=4")` | `Env: append(os.Environ(), "GOFLAGS=-p=4")`, the environment of every go command Run starts |
 | `gen.WithStorageDriver`, `gen.WithIDType`, `gen.WithHeader` | not offered: the dialect is the migration directory's, IDs are int64 unless the schema declares one, and the header is velox-gen's, which marks the files it owns |
 
 A program with a plugin that runs only in the process is its own check: run
 it with `Check: true` in CI, where it returns `generate.ErrStale` when a file
 is out of date. `velox-gen -check` does not know such a plugin.
+
+## Behaviour a port sees change
+
+**`HasWith` sees soft delete and row filters.** A `WithFilter` filter, an
+interceptor and `softdelete.Mixin` reach every `Has` and `HasWith`, the
+GraphQL `hasX` and `hasXWith` included. So a parent whose only matching
+children are soft-deleted, or hidden by a row filter, does not match.
+Check each `hasXWith` a client sends, and each `HasWith` in service code.
+To match deleted children too, run the query under the context that shows
+deleted rows, such as `softdelete.Skip(ctx)`. That context shows deleted
+parents as well.
+
+**A filter must not restrict a join entity.** A `WithFilter` filter that
+returns a condition for the join entity of a many-to-many edge, or for an
+edge schema, fails `Has`, `With`, `LoadEach` and `CountEach` through it.
+Return `velox.Allow()` for those names
+([ADR 0098](decisions/0098-hooks-and-filters-for-every-entity.md)).
+
+**A filter is asked about writes.** ent's interceptors wrap queries. A
+velox filter is called with the op, `OpSelect` for reads and the write's
+op for updates and deletes. A filter that narrows reads only returns
+`velox.Allow()` when `op != velox.OpSelect`. Otherwise a restore that
+clears `deleted_at` under the plain context updates no row. A filter finds
+columns by name: it asks `e.HasColumn("deleted_at")` of the
+`velox.FilterEntity` it is given, in place of a generated list of entity
+names.
+
+**A read on the client inside a transaction fails.** Inside `db.Tx`, a
+statement on `db` under fn's `ctx` fails with `ErrOutsideTx`, where ent's
+client runs it outside the transaction. Run it on `tx`, or on `db` under
+`velox.WithoutTx(ctx)` when it must not join the transaction; on SQLite's
+pool of one connection that fails too, rather than wait for the
+transaction. A `WithTx(ctx, db, fn)` helper that kept its own transaction
+key in the context, so that a nested call joined the outer transaction,
+asks `velox.TxFrom(ctx, db)` instead: it returns the transaction ctx
+belongs to, with `db`'s own `WithoutPolicy` reason, and the helper runs fn
+on it, or begins `db.Tx` when it is false
+([ADR 0137](decisions/0137-nextapp-port-helpers.md)). A lookup on `db`
+that swallows its error narrows the statement inside a transaction and
+not outside.
+
+**A rule may name columns from configuration.** `velox.FieldIn`,
+`FieldEQ` and `FieldInSelect` take any string. velox-gen checks a constant
+name and warns on any other, and the statement checks it when it runs.
+An unknown name fails the statement, naming the entity and the column.
+To check a rule's SQL in a test, render a query that holds it with
+`velox.Open(d, nil)` and `Query.SQL`, which needs no database
+([guide](guide.md#policies)).
+
+**A transaction retries nothing by default.** A velox `Tx` runs once,
+under `WithDeadlines`' `Tx` limit, and panics again after the rollback.
+`velox.WithTxDefaults` at `Connect` gives a retry and a timeout to every
+`Tx`, and a call's own options override them. A nested `Tx` does not retry
+on its own, and `gqlgenx`'s mutation transaction never retries. A panic
+stays a panic: recover it in fn to make it an error.
+
+**A zero a setter gives is stored.** A field such as `exchange_rate`, with
+a Go `Default` and `sqlschema.Default("1")`, stores 0 from
+`Set(X.ExchangeRate.Set(0))`, as ent's `SetExchangeRate(0)` does: every
+column a setter names is written
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)). A zero the
+struct holds with no setter is unset and takes the default. A
+`decimal.Decimal` that holds a non-nil `*big.Int`, such as `decimal.Zero`,
+is not the Go zero, and is written from the struct too
+([guide](guide.md#fields)).
+
+**An empty patch still runs its hooks.** An update whose setters are all
+`SetPtr(nil)` runs its hooks and its `UpdateDefault`s, so `updated_at`
+moves. When they assign nothing, no statement is sent and `Exec` returns 0
+([ADR 0136](decisions/0136-explicit-zero-and-empty-patch.md)).
+
+**A self one-to-one reads from the right end.** With the key on the assoc
+edge, as in `reversed_by`/`reversal_of`, the inverse edge returns the row
+whose key holds its ID
+([ADR 0085](decisions/0085-self-one-to-one-key-on-assoc.md)).
+
+**A decimal Other field with no SQLite `SchemaType` is a `numeric`
+column**, so a `decimal.Decimal` field whose `SchemaType` names MySQL and
+PostgreSQL only opens on SQLite and compares as a number. The text `"1.10"`
+is stored as 1.1. Any other Other field still needs a `SchemaType` for
+SQLite ([ADR 0148](decisions/0148-other-decimal-numeric-on-sqlite.md)).
 
 ## Removed schema options
 
@@ -497,13 +665,34 @@ replacement.
 
 ## Refused by design
 
-- **Not built: back-references (no reader in nextapp).** ent's and veloxe's
-  load can fill each loaded child's inverse edge with its parent, so that
-  `child.Edges.Parent` is set after `parent.With(children)`. velox does not:
-  a child's to-one edge is set only when that edge is loaded, with
-  `With(C.Parent)` on the child's query. The one application ported from
-  veloxe reads no back-reference: each of its `child.Edges.Parent` reads
-  follows a `With` of that edge (ADR 0101).
+- **Not built: back-references.** ent's load can fill each loaded
+  child's inverse edge with its parent, so that `child.Edges.Parent` is set
+  after `parent.With(children)`. velox does not: a child's to-one edge is
+  set only when that edge is loaded, with `With(C.Parent)` on the child's
+  query (ADR 0101).
+- **Templates, graph hooks, `WithGenerator`, `WithHeader`, feature flags
+  and dependency injection.** The generated package is velox-gen's alone,
+  so `velox-gen -check` proves it current from the schema
+  ([ADR 0034](decisions/0034-schema-declares-behaviour.md),
+  [0097](decisions/0097-generate-package.md)).
+- **`field.Any`, `field.Deprecated`, `field.ValueScanner`, an edge's
+  `StructTag` and `sqlschema.View`.** Not built; nothing asked for them.
+- **`FeatureCheckBounds`.** `Min`, `Max` and `Range` make no `CHECK`.
+  Declare one with `sqlschema.Checks`.
+- **Composite keys and `field.ID`.** An edge schema is keyed by its own
+  `id` ([ADR 0109](decisions/0109-edge-schemas.md)).
+- **An exported SQL builder.** `sql.Selector` and `sqlgraph` are not
+  public, so no code can drop a policy from a statement
+  ([ADR 0069](decisions/0069-expr.md)).
+- **Named eager loads (`WithNamedX`).** One `With` per relation.
+- **`AllX` and the other panicking variants, and `Clone`.** Builders are
+  values, and every call returns its error.
+- **`querylanguage.P` (entql).** `velox.FieldEQ` and its kin, and package
+  `untyped`, name columns by string.
+- **A per-client table schema at run time.** `sqlschema.SchemaTable` and
+  `sqlschema.Schema` are fixed at generation.
+- **`privacy.NewPolicies` and `Policies`.** velox composes a schema's and
+  its mixins' policies itself.
 
 ## GraphQL (contrib/graphql, compared with entgql)
 
@@ -580,3 +769,29 @@ replacement.
   MySQL and SQLite is first ascending, and offers `sql.OrderNullsFirst()`;
   velox has one place for NULL and no such option. The core's `OrderBy`, and a
   joined column's `rel.By`, sort NULL the same way.
+- **Limits apply to every request.** A connection with no `first` or
+  `last` reads `MaxPage` rows, 100 by default, and a `first` or `last`
+  above it fails with `ErrPageTooLarge`; under graphql-go `MaxPage` is
+  fixed at 100. A list edge, one with no connection, reads at most
+  `MaxList` rows, 1000 by default; more fails with `velox.ErrTooManyRows`.
+  A cursor taken under another order is refused, and so is `after: ""`.
+  `first` with `before`, `last` with `after`, and `after` with `before`
+  are a `BAD_USER_INPUT` error. `totalCount` runs its COUNT only when the
+  field is resolved. `xContainsFold` and `xEqualFold` compare `LOWER(x)`
+  with `LOWER(v)`. An error from velox carries a code, such as
+  `BAD_USER_INPUT`, in `extensions.code`.
+- **Options shape the API.** velox-graphql takes `key=value` options after
+  a colon, where entgql takes Go options; [the guide](guide.md#velox-graphqls-options)
+  lists them. `where=whitelist` stands in for a hook that skips the where
+  input of every field without `graphql.WhereInput`; `engine=graphql-go`
+  serves [graphql-go](https://github.com/syssam/graphql-go) in place of
+  gqlgen; `sdlfiles=entity` writes one SDL file per entity, and
+  `entities=A+B` the SDL of some entities alone
+  ([ADR 0125](decisions/0125-graphql-sdl-per-entity-and-subset.md)).
+- **Not built:** a chosen SDL path (the SDL is in the generated package),
+  federation, subscriptions, interfaces and unions, input validation
+  annotations (generated inputs run the schema's validators),
+  `WhereInputFields`, `Unbind`, `MapsTo`, `SkipField`, the generator's
+  hooks (`WithSchemaHook`, `WithTemplates`, `WithGQLGenConfig`) and
+  `FeatureWhereInputAll`: where inputs are opt in, field by field, with
+  `graphql.WhereOps` or `graphql.WhereInput`.

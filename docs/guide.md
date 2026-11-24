@@ -115,7 +115,7 @@ Two options work differently from ent, so they are worth learning early
 ([ADR 0003](decisions/0003-nullability.md)):
 
 - `Optional()` means "may be left out on insert". The column stays
-  `NOT NULL`, and an unset field stores its zero value, as veloxe stored it;
+  `NOT NULL`, and an unset field stores its zero value;
   an `Optional` enum, whose zero is none of its values, needs a `Default` or
   `Nillable` ([ADR 0090](decisions/0090-veloxe-defaults.md)).
 - `Nillable()` makes the column nullable. The Go field becomes a pointer, and
@@ -190,7 +190,7 @@ shopspring's `decimal.Zero`, is not zero to velox, and is written as 0.
 
 `field.Enum("status").Values(...)` generates a Go type, `veloxgen.InvoiceStatus`,
 with a constant per value, such as `veloxgen.InvoiceStatusPaid`. The column
-is stored as ent and veloxe store it: `character varying` on PostgreSQL,
+is stored as ent stores it: `character varying` on PostgreSQL,
 `enum(...)` on MySQL and `text` on SQLite, with no CHECK. A Postgres
 `SchemaType` that names a type, `map[string]string{dialect.Postgres: "mood"}`,
 makes a PostgreSQL enum type of that name instead.
@@ -301,11 +301,11 @@ velox-gen.
 
 An index is named `<table>_<name>`, its name being its `StorageKey`, else
 `<entity>_<columns>` as in ent, unless that name starts with `<table>_`
-already, as veloxe applications' `UniqueIndexNamesHook` named them.
+already.
 PostgreSQL wants an index name unique in the database schema, and a mixin's
 StorageKey is one name on every table that lists the mixin. A name over the
-dialect's limit is shortened as veloxe did, with an FNV-1 128 suffix where ent
-uses MD5, so a database veloxe migrated keeps its names
+dialect's limit is shortened with an FNV-1 128 suffix where ent uses MD5,
+so a database velox's predecessor migrated keeps its names
 ([ADR 0083](decisions/0083-package-index-names.md)).
 
 Also on PostgreSQL, `sqlschema.DescColumns("created_at")` (or `Desc()` for every
@@ -323,7 +323,7 @@ A schema's table is `sqlschema.Table("users")`, or
 `SchemaTable`, `Collation` and `Checks` name its database schema, its MySQL
 collation and its CHECK constraints. The old velox's options velox does not
 hold, such as `StorageParams`, `Prefix`, `Size` or `ColumnType`, are not
-there: [coming from veloxe](coming-from-veloxe.md#removed-schema-options)
+there: [coming from ent](coming-from-ent.md#removed-schema-options)
 names each one's replacement.
 
 Name only an operator class that is not its type's default: PostgreSQL reads a
@@ -1447,7 +1447,7 @@ conflict column its own value (`ConflictClause.Ignore`, ent's `Ignore()`),
 so the existing row is kept and its key still read back.
 
 `KeepDefaults(cols...)`, on an update and on `Save`, stops the named
-columns' `UpdateDefault` from firing, as veloxe's `SkipDefault` does: a
+columns' `UpdateDefault` from firing: a
 system write that must not move `updated_at`. Nothing is written to them.
 Setting the column yourself already wins over its `UpdateDefault`, but
 writes a value. A column without an `UpdateDefault` fails the statement
@@ -1911,7 +1911,7 @@ name, as `FieldEQ` names one, so the filter needs no list of soft-deleted
 entities. It reads the entity's own metadata: nothing global, no lock
 ([ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
 
-It leaves writes alone for two reasons. ent's and veloxe's interceptors
+It leaves writes alone for two reasons. ent's interceptors
 wrap queries only, so a port keeps their behaviour. And a restore must
 reach a deleted row: code that reads it with the deleted included and then
 clears `deleted_at` under the plain context would otherwise update 0 rows
@@ -1956,7 +1956,7 @@ velox.WithFilter(func(ctx context.Context, db *velox.DB, e velox.FilterEntity, o
 })
 ```
 
-A schema written for veloxe keeps its `privacy` rules
+A schema written as ent's are keeps its `privacy` rules
 ([ADR 0089](decisions/0089-veloxe-privacy-shape.md)).
 
 ## Recording changes
@@ -2589,6 +2589,40 @@ size, depth, complexity and cost; velox keeps only its fixed bounds on a
 page (100 rows), a list edge (1000) and a where filter. A mutation runs
 in no transaction: a resolver that needs one opens it with `db.Tx` or
 `velox.UseTx`.
+
+### velox-graphql's options
+
+velox-graphql takes `key=value` options after a colon, separated by commas.
+With none, the API is entgql's: names from the Go name, where inputs that
+fail closed, no `Node`, and only the annotated order fields and root fields.
+Each option stands alone, and a value it does not know fails the run.
+
+| Option | Default | The other value |
+| --- | --- | --- |
+| `engine=` | `gqlgen` | `graphql-go`, served by graphql-go and bound by gqlc |
+| `where=` | every field with `WhereOps` | `whitelist`: a field other than the key has predicates only with `graphql.WhereInput` |
+| `names=` | `go`: `imageURL` | `schema`: `imageUrl`, from the schema name |
+| `filters=` | `strict`: an empty `idIn` matches no node | `lenient`: an empty `In`, a false `IsNil` and an empty `or` add nothing, and an empty nested input wraps `veloxgql.ErrEmptyWhereInput` |
+| `node=` | `off` | `on`: `Node`, `node(id:)` and `nodes(ids:)`, for IDs unique across types |
+| `idops=` | `kind`: equality alone for a foreign key | `equality`: equality alone for the key, any field named like a key and an Other field |
+| `orderfields=` | `annotated` | `all`: every orderable field in the order enum |
+| `queryfields=` | `annotated` | `all`: a root field for every type |
+| `optional=` | `nonnull`, as the column is | `nullable` |
+| `requirededges=` | `nullable`, as a policy may hide the node | `nonnull` |
+| `inputkeys=` | `edge`: `bestFriendID` | `column`: `userBestFriend` |
+| `jsontypes=` | `json`: the `JSON` scalar | `named`: the Go type's name, which the application declares |
+| `sdlfiles=` | `one` | `entity`: `velox.graphql` and one `velox_<entity>.graphql` each |
+| `entities=A+B` | every entity | the SDL of the entities listed alone |
+| `apptypes=A+B` | none | the types and scalars the application declares itself |
+| `only=enums` | everything | the enums alone, for an application with its own SDL |
+
+An application that keeps the GraphQL API of velox's predecessor, served by
+graphql-go, gives these together
+([ADR 0156](decisions/0156-graphql-options-not-compat.md)):
+
+```sh
+go tool velox-gen -plugin velox-graphql:names=schema,filters=lenient,node=on,sdlfiles=entity,orderfields=all,queryfields=all,optional=nullable,requirededges=nonnull,jsontypes=named,idops=equality,inputkeys=column,apptypes=JSON+UUID+Uint64,where=whitelist,engine=graphql-go ./veloxschema
+```
 
 ## Where to go next
 
