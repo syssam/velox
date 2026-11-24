@@ -107,6 +107,33 @@ func (t Term[E]) Decimal[_ Lazy[E]]() Term[E] { return Term[E]{engine.DecimalTer
 // window function, fails the statement.
 func Agg[E any](t Term[E]) Term[E] { return Term[E]{engine.AggMarkTerm(t.t)} }
 
+// Text marks t, an expression such as Calc("lower(?)", X.Name), as giving
+// text. velox does not read the text of an expression, so an unmarked
+// Calc's cursor values (Query.Paginate, untyped's AfterValues) are bound as
+// the cursor holds them; a marked one's are checked as a string column's
+// are, and a forged value of another kind is refused before the database
+// sees it (decision 0166). Text, Integer, Time and Bool are functions, as
+// Agg is, not Term methods: a method of Term costs every entity package its
+// declaration. A mark of a term that is not an expression, or a second mark
+// of another kind, Decimal included, fails the statement.
+//
+//	velox.Text(velox.Calc[gen.Doc]("substr(lower(?), 1, 256)", D.Title)).Asc()
+func Text[E any](t Term[E]) Term[E] { return Term[E]{engine.TextTerm(t.t)} }
+
+// Integer marks t, an expression such as Calc("CAST(? AS INTEGER)", x), as
+// giving integers: a cursor's value of it must be an integer, or, as MySQL
+// reads FLOOR of a decimal, a decimal with no fraction. See Text.
+func Integer[E any](t Term[E]) Term[E] { return Term[E]{engine.IntegerTerm(t.t)} }
+
+// Time marks t, an expression, as giving times: a cursor's value of it is
+// checked as a time column's is. See Text.
+func Time[E any](t Term[E]) Term[E] { return Term[E]{engine.TimeTerm(t.t)} }
+
+// Bool marks t, an expression, as giving bools: a cursor's value of it is
+// checked as a bool column's is, an integer taken on MySQL and SQLite. See
+// Text.
+func Bool[E any](t Term[E]) Term[E] { return Term[E]{engine.BoolTerm(t.t)} }
+
 // As names t as a result column of Select: SELECT t AS name. Scan reads
 // the column into the field of that name. A name is a letter or an
 // underscore, then letters, digits and underscores, at most 63 of them; any

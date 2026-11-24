@@ -3,6 +3,7 @@ package engine
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
 	"strconv"
@@ -156,7 +157,7 @@ func decimalTermAgg(d Dialect, in *EntityInfo, fn TermFn, of Term) bool {
 	case termColumn:
 		return decimalAgg(d, in, sumOrAvg, of.col)
 	case termExpr:
-		return d == SQLite && sumOrAvg && of.dec
+		return d == SQLite && sumOrAvg && of.mark == kindDecimal
 	}
 	return false
 }
@@ -170,7 +171,10 @@ func DecimalTerm(t Term) Term {
 	case termInvalid:
 		return t
 	case termExpr:
-		t.dec = true
+		if t.mark != kindUnknown && t.mark != kindDecimal {
+			return InvalidTerm(fmt.Errorf("velox: an expression marked as giving %s cannot also be Decimal", kindName(t.mark)))
+		}
+		t.mark = kindDecimal
 		return t.seal()
 	}
 	return InvalidTerm(errors.New("velox: Decimal marks an expression, such as a Calc, as holding decimals; a column is decimal by its schema, and an aggregate by what it aggregates"))

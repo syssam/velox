@@ -67,8 +67,8 @@ type Term struct {
 	err   error
 	r     *relAgg  // a termRel's relation, or a termJoined's (its n.V a RelRef; col is its index)
 	ext   *termExt // a termDate's or a termGrouping's
-	dec   bool     // a termExpr marked as holding decimals: DecimalTerm
 	agg   bool     // a termExpr marked as an aggregate: AggMarkTerm
+	mark  uint8    // a termExpr's mark, a valueKind: kindDecimal (DecimalTerm) or markKind's kind
 	shape string   // what shapes it in the render cache's key: see seal
 }
 
@@ -91,7 +91,7 @@ func (t Term) seal() Term {
 	b = binary.AppendUvarint(b, uint64(t.col+1))
 	switch t.kind {
 	case termExpr:
-		b = append(b, bit(t.dec), bit(t.agg))
+		b = append(b, bit(t.mark == kindDecimal), bit(t.agg))
 		b = append(b, t.x.shape...)
 	case termAgg:
 		if t.of != nil {

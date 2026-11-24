@@ -98,8 +98,10 @@ func valueSource(in *EntityInfo, o OrderTerm, v any, d Dialect) (afterSource, er
 
 // valueKind is the kind of value a term gives, as far as velox knows it
 // without the database: kindUnknown for an expression whose text velox
-// does not read.
-type valueKind uint8
+// does not read. It is an alias of uint8, and Term holds its mark as a
+// uint8: a field of a defined type would name that type in every entity
+// package's export data, about 230 bytes.
+type valueKind = uint8
 
 const (
 	kindUnknown valueKind = iota
@@ -108,10 +110,14 @@ const (
 	kindText
 	kindBool
 	kindBytes
+	kindInteger
+	// kindDecimal is a Term's mark alone (DecimalTerm): its values are
+	// numbers, and SQLite rounds its SUM and AVG.
+	kindDecimal
 )
 
-// name is the kind's name in an error.
-func (k valueKind) name() string {
+// kindName is k's name in an error.
+func kindName(k valueKind) string {
 	switch k {
 	case kindNumber:
 		return "a number"
@@ -123,17 +129,57 @@ func (k valueKind) name() string {
 		return "a bool"
 	case kindBytes:
 		return "bytes"
+	case kindInteger:
+		return "an integer"
+	case kindDecimal:
+		return "a decimal (Decimal)"
 	}
 	return "any value"
+}
+
+// TextTerm is t, an expression, marked as giving text: AfterValues takes a
+// string for its value, as for a string column. See markKind.
+func TextTerm(t Term) Term { return markKind(t, kindText) }
+
+// IntegerTerm is t, an expression, marked as giving integers: AfterValues
+// takes a Go integer for its value, or a DecimalText with no fraction, as
+// MySQL reads FLOOR of a decimal. See markKind.
+func IntegerTerm(t Term) Term { return markKind(t, kindInteger) }
+
+// TimeTerm is t, an expression, marked as giving times: AfterValues takes
+// for its value what it takes for a time column. See markKind.
+func TimeTerm(t Term) Term { return markKind(t, kindTime) }
+
+// BoolTerm is t, an expression, marked as giving bools: AfterValues takes
+// for its value what it takes for a bool column. See markKind.
+func BoolTerm(t Term) Term { return markKind(t, kindBool) }
+
+// markKind is t, an expression, marked as giving values of kind k
+// (termValueKind), so that AfterValues checks a cursor's value of it
+// (checkValueKind). The mark changes no SQL, so neither the render cache's
+// key nor OrderSig holds it. A term already marked with another kind,
+// Decimal included, and any other term than an expression are
+// InvalidTerms: a column's kind is its Go type's.
+func markKind(t Term, k valueKind) Term {
+	switch {
+	case t.kind == termInvalid:
+		return t
+	case t.kind != termExpr:
+		return InvalidTerm(fmt.Errorf("velox: a kind mark (%s) is for an expression, such as a Calc; a column's kind is its Go type's", kindName(k)))
+	case t.mark != kindUnknown && t.mark != k:
+		return InvalidTerm(fmt.Errorf("velox: an expression marked as giving %s cannot also give %s", kindName(t.mark), kindName(k)))
+	}
+	t.mark = k
+	return t
 }
 
 // termValueKind is the kind of value t, a term of in's rows, gives: a
 // column's by its Go type (columnKind); a JSON path's by its kind, a
 // number for Number, Len and Text's Number, a time for Text's Time, text
 // for Text and a bool for Bool; a time for a date bucket; a number for an
-// expression marked Decimal; a joined term's by its term in the joined
-// entity. Any other expression (a Calc, a JSON path's raw value) is
-// kindUnknown.
+// expression marked Decimal, and the kind markKind gave one; a joined
+// term's by its term in the joined entity. Any other expression (an
+// unmarked Calc, a JSON path's raw value) is kindUnknown.
 func termValueKind(in *EntityInfo, t Term) valueKind {
 	switch t.kind {
 	case termColumn:
@@ -141,9 +187,10 @@ func termValueKind(in *EntityInfo, t Term) valueKind {
 			return columnKind(in.Columns[t.col])
 		}
 	case termExpr:
-		if t.dec {
+		if t.mark == kindDecimal {
 			return kindNumber
 		}
+		return t.mark
 	case termJSON:
 		switch t.path.Kind {
 		case JSONKindNumber, JSONKindLen, JSONKindTextNumber:
@@ -235,6 +282,9 @@ func checkValueKind(d Dialect, in *EntityInfo, t Term, v any) error {
 		default:
 			ok = false
 		}
+	case kindInteger:
+		x, dec := v.(DecimalText)
+		ok = integerValue(v) || dec && decimalText(string(x)) && strings.IndexByte(string(x), '.') < 0
 	case kindText:
 		_, ok = v.(string)
 	case kindBool:
@@ -248,7 +298,7 @@ func checkValueKind(d Dialect, in *EntityInfo, t Term, v any) error {
 		}
 	}
 	if !ok {
-		return fmt.Errorf("%w: %#v for an ordering by %s on %v", ErrOrderValue, v, k.name(), d)
+		return fmt.Errorf("%w: %#v for an ordering by %s on %v", ErrOrderValue, v, kindName(k), d)
 	}
 	return nil
 }

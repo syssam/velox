@@ -110,6 +110,12 @@ func TestOrderValuesWire(t *testing.T) {
 				func(a, b testmodel.Invoice) ([2]bool, int) {
 					return [2]bool{a.Number[0] == 'C', b.Number[0] == 'C'}, cmp.Compare(a.Number[0], b.Number[0])
 				}},
+			// Text marks the Calc, so a cursor's value of it is checked
+			// as text's (decision 0166's 2026-11-24 amendment).
+			{"marked text", velox.Text(velox.Calc[testmodel.Invoice]("NULLIF(SUBSTR(?, ?, ?), ?)", I.Number, int64(1), int64(1), "C")),
+				func(a, b testmodel.Invoice) ([2]bool, int) {
+					return [2]bool{a.Number[0] == 'C', b.Number[0] == 'C'}, cmp.Compare(a.Number[0], b.Number[0])
+				}},
 			{"time", velox.Calc[testmodel.Invoice]("CASE WHEN ? > ? THEN ? END", I.ID, int64(0), I.PaidAt),
 				func(a, b testmodel.Invoice) ([2]bool, int) {
 					if a.PaidAt == nil || b.PaidAt == nil {
@@ -210,6 +216,7 @@ func TestOrderValuesWire(t *testing.T) {
 			}
 		}
 		t.Run("typed terms", func(t *testing.T) { wireTypedTerms(t, tg) })
+		t.Run("mixed", func(t *testing.T) { wireMixed(t, tg, rows) })
 	})
 }
 
@@ -285,6 +292,68 @@ func wireTypedTerms(t *testing.T, tg target) {
 			continue
 		}
 		if !errors.Is(err, untyped.ErrOrderValue) {
+			t.Errorf("%s: %v, want ErrOrderValue", c.name, err)
+		}
+	}
+}
+
+// wireMixed: an ordering that mixes expressions and columns, an Integer
+// Calc, then the nullable time column paid_at descending, then the string
+// column number, each NullsLast, then the key, pages forward and backward
+// through the cursor's JSON as a reference sort orders the rows, NULLs and
+// ties included. A forged value for the Integer Calc and for a Text Calc
+// fails with ErrOrderValue.
+func wireMixed(t *testing.T, tg target, rows []testmodel.Invoice) {
+	num := velox.Integer(velox.Calc[testmodel.Invoice]("NULLIF(? % ?, ?)", I.ID, int64(3), int64(0)))
+	orders := func(back bool) []velox.Order[testmodel.Invoice] {
+		if back {
+			return []velox.Order[testmodel.Invoice]{num.Desc().NullsFirst(), I.PaidAt.Asc().NullsFirst(), I.Number.Desc().NullsFirst(), I.ID.Desc()}
+		}
+		return []velox.Order[testmodel.Invoice]{num.Asc().NullsLast(), I.PaidAt.Desc().NullsLast(), I.Number.Asc().NullsLast(), I.ID.Asc()}
+	}
+	want := slices.Clone(rows)
+	slices.SortFunc(want, func(a, b testmodel.Invoice) int {
+		if c := placed(a.ID%3 == 0, b.ID%3 == 0, false, func() int { return cmp.Compare(a.ID%3, b.ID%3) }, false); c != 0 {
+			return c
+		}
+		if c := placed(a.PaidAt == nil, b.PaidAt == nil, false, func() int { return a.PaidAt.Compare(*b.PaidAt) }, true); c != 0 {
+			return c
+		}
+		return cmp.Or(cmp.Compare(a.Number, b.Number), cmp.Compare(a.ID, b.ID))
+	})
+	for _, back := range []bool{false, true} {
+		q := untyped.FromQuery(tg.db.Query[testmodel.Invoice]().Where(I.ID.GTE(700)).OrderBy(orders(back)...)).OrderValues()
+		for n := 1; n <= 4; n++ {
+			var got []int64
+			page, err := q.Limit(n).All(ctx)
+			for err == nil && page.Len() > 0 && len(got) <= len(rows) {
+				got = append(got, ids(untyped.RowsOf[testmodel.Invoice](page))...)
+				last := page.Len() - 1
+				page, err = q.AfterValues(page.At(last), wireValues(t, page.OrderValues(last))).Limit(n).All(ctx)
+			}
+			if err != nil {
+				t.Fatalf("back %v, %d a page: %v", back, n, err)
+			}
+			if back {
+				slices.Reverse(got)
+			}
+			if !slices.Equal(got, ids(want)) {
+				t.Errorf("back %v, %d a page:\n got %v\nwant %v", back, n, got, ids(want))
+			}
+		}
+	}
+	text := velox.Text(velox.Calc[testmodel.Invoice]("LOWER(?)", I.Number))
+	for _, c := range []struct {
+		name string
+		by   velox.Order[testmodel.Invoice]
+		v    any
+	}{
+		{"text for Integer", num.Asc(), "abc"},
+		{"a float for Integer", num.Asc(), 2.5},
+		{"a number for Text", text.Asc(), int64(7)},
+	} {
+		q := untyped.FromQuery(tg.db.Query[testmodel.Invoice]().OrderBy(c.by, I.ID.Asc()).Limit(5)).OrderValues()
+		if _, err := q.AfterValues(&rows[0], []any{c.v}).All(ctx); !errors.Is(err, untyped.ErrOrderValue) {
 			t.Errorf("%s: %v, want ErrOrderValue", c.name, err)
 		}
 	}

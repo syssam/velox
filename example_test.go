@@ -9,6 +9,7 @@ import (
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/scope"
+	"github.com/syssam/velox/untyped"
 	_ "modernc.org/sqlite"
 )
 
@@ -367,4 +368,22 @@ func ExampleCalc() {
 	// Output:
 	// SELECT "id", "number" FROM "invoices" WHERE NOT "paid" AND "org_id" = $1 ORDER BY (similarity("number", $2)) DESC LIMIT 5
 	// [7 INV-42] <nil>
+}
+
+// Text marks a Calc as giving text, as Integer, Time and Bool mark theirs:
+// a cursor's value of the ordering is then checked as a string column's
+// is, and a forged number is refused before the database sees it.
+func ExampleText() {
+	db := exampleDB()
+	ctx := testmodel.Org.With(context.Background(), 7)
+	I := testmodel.Invoices
+	key := velox.Text(velox.Calc[testmodel.Invoice]("lower(?)", I.Number))
+	q := untyped.FromQuery(db.Query[testmodel.Invoice]().OrderBy(key.Asc(), I.ID.Asc()).Limit(2))
+	_, err := q.AfterValues(&testmodel.Invoice{ID: 1}, []any{int64(7)}).All(ctx)
+	fmt.Println(errors.Is(err, untyped.ErrOrderValue))
+	_, err = q.AfterValues(&testmodel.Invoice{ID: 1}, []any{"inv-1"}).All(ctx)
+	fmt.Println(err)
+	// Output:
+	// true
+	// <nil>
 }

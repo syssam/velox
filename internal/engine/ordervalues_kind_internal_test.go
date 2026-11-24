@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -84,12 +85,17 @@ func TestTermValueKind(t *testing.T) {
 		{"date bucket", DateTruncTerm(DateDay, ColumnTerm(5), "", 1), kindTime},
 		{"calc", calc, kindUnknown},
 		{"decimal calc", DecimalTerm(calc), kindNumber},
+		{"text calc", TextTerm(calc), kindText},
+		{"integer calc", IntegerTerm(calc), kindInteger},
+		{"time calc", TimeTerm(calc), kindTime},
+		{"bool calc", BoolTerm(calc), kindBool},
+		{"text calc marked twice", TextTerm(TextTerm(calc)), kindText},
 		{"joined text", JoinedTerm(ref, ColumnTerm(3)), kindText},
 		{"joined JSON number", JoinedTerm(ref, path(JSONKindTextNumber)), kindNumber},
 		{"joined, unresolved", JoinedTerm(bad, ColumnTerm(3)), kindUnknown},
 	} {
 		if got := termValueKind(in, c.t); got != c.want {
-			t.Errorf("%s: %s, want %s", c.name, got.name(), c.want.name())
+			t.Errorf("%s: %s, want %s", c.name, kindName(got), kindName(c.want))
 		}
 	}
 }
@@ -150,7 +156,7 @@ func TestCheckValueKind(t *testing.T) {
 		for i, d := range []Dialect{SQLite, Postgres, MySQL} {
 			err := checkValueKind(d, in, c.term, c.v)
 			if (err == nil) != c.ok[i] || (err != nil && !errors.Is(err, ErrOrderValue)) {
-				t.Errorf("%v %s %#v: %v", d, termValueKind(in, c.term).name(), c.v, err)
+				t.Errorf("%v %s %#v: %v", d, kindName(termValueKind(in, c.term)), c.v, err)
 			}
 		}
 	}
@@ -168,6 +174,107 @@ func TestValueSourceKind(t *testing.T) {
 		}
 		if _, err := valueSource(in, o, 1.5, d); err != nil {
 			t.Errorf("%v number: %v", d, err)
+		}
+	}
+}
+
+// TestCheckMarkedValueKind: a Calc marked Text, Integer, Time or Bool takes
+// on each dialect the values a column of that kind takes, and refuses
+// others with ErrOrderValue; an Integer takes a decimal with no fraction,
+// as MySQL reads FLOOR of a decimal, and no float.
+func TestCheckMarkedValueKind(t *testing.T) {
+	in := kindInfo()
+	calc := ExprTerm("? + 1", []ExprSlot{{Col: 0}}, nil)
+	text, integer, when, flag := TextTerm(calc), IntegerTerm(calc), TimeTerm(calc), BoolTerm(calc)
+	at := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	all, none := [3]bool{true, true, true}, [3]bool{}
+	for _, c := range []struct {
+		term Term
+		v    any
+		ok   [3]bool // SQLite, PostgreSQL, MySQL
+	}{
+		{text, "abc", all},
+		{text, nil, all},
+		{text, int64(1), none},
+		{text, DecimalText("1"), none},
+		{text, TimeText("2026-03-01"), none},
+		{text, at, none},
+		{text, []byte("abc"), none},
+		{integer, int64(3), all},
+		{integer, int32(-3), all},
+		{integer, uint64(math.MaxUint64), all},
+		{integer, DecimalText("12"), all},
+		{integer, DecimalText("-12"), all},
+		{integer, nil, all},
+		{integer, DecimalText("1.5"), none},
+		{integer, DecimalText("NaN"), none},
+		{integer, 2.0, none},
+		{integer, "3", none},
+		{integer, true, none},
+		{integer, at, none},
+		{when, at, all},
+		{when, TimeText("2026-03-01 10:00:00"), all},
+		{when, "2026-03-01 10:00:00", [3]bool{true, false, false}},
+		{when, int64(1), none},
+		{when, DecimalText("1"), none},
+		{flag, true, all},
+		{flag, int64(1), [3]bool{true, false, true}},
+		{flag, "true", none},
+		{flag, 1.0, none},
+	} {
+		for i, d := range []Dialect{SQLite, Postgres, MySQL} {
+			err := checkValueKind(d, in, c.term, c.v)
+			if (err == nil) != c.ok[i] || (err != nil && !errors.Is(err, ErrOrderValue)) {
+				t.Errorf("%v %s %#v: %v", d, kindName(termValueKind(in, c.term)), c.v, err)
+			}
+		}
+	}
+}
+
+// TestMarkKind: a mark is for an expression; a column, an aggregate, a
+// second mark of another kind and a Decimal expression are refused, both
+// ways round, and an invalid term stays as it was.
+func TestMarkKind(t *testing.T) {
+	calc := ExprTerm("? + 1", []ExprSlot{{Col: 0}}, nil)
+	bad := InvalidTerm(errors.New("first"))
+	for _, c := range []struct {
+		name string
+		t    Term
+		want string
+	}{
+		{"column", TextTerm(ColumnTerm(0)), "is for an expression"},
+		{"aggregate", IntegerTerm(AggTerm(TermSum, calc)), "is for an expression"},
+		{"two kinds", TimeTerm(TextTerm(calc)), "marked as giving text cannot also give a time"},
+		{"decimal, then text", TextTerm(DecimalTerm(calc)), "marked as giving a decimal (Decimal) cannot also give text"},
+		{"bool, then decimal", DecimalTerm(BoolTerm(calc)), "marked as giving a bool cannot also be Decimal"},
+		{"invalid", BoolTerm(bad), "first"},
+	} {
+		if c.t.err == nil || !strings.Contains(c.t.err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", c.name, c.t.err, c.want)
+		}
+	}
+	// A mark changes no SQL: the render cache's key and the term's
+	// sameness are as the unmarked term's.
+	if m := TextTerm(calc); m.shape != calc.shape || !sameTerm(m, calc) {
+		t.Errorf("a mark changed the shape (%q, %q) or sameness", m.shape, calc.shape)
+	}
+}
+
+// TestValueSourceMarked: AfterValues' source of an ordering by a Calc
+// marked Text refuses a forged number, and an unmarked Calc takes it, as
+// before.
+func TestValueSourceMarked(t *testing.T) {
+	in := kindInfo()
+	calc := ExprTerm("lower(?)", []ExprSlot{{Col: 3}}, nil)
+	for _, d := range []Dialect{SQLite, Postgres, MySQL} {
+		if _, err := valueSource(in, OrderTerm{Expr: TextTerm(calc)}, int64(7), d); !errors.Is(err, ErrOrderValue) {
+			t.Errorf("%v forged: %v, want ErrOrderValue", d, err)
+		}
+		if _, err := valueSource(in, OrderTerm{Expr: TextTerm(calc)}, "abc", d); err != nil {
+			t.Errorf("%v text: %v", d, err)
+		}
+		if _, err := valueSource(in, OrderTerm{Expr: calc}, int64(7), d); err != nil {
+			t.Errorf("%v unmarked: %v", d, err)
 		}
 	}
 }

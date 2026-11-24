@@ -743,6 +743,7 @@ func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func Before(f MutateFunc, ops ...Op) Hook
 func BeforeCommit(tx *DB, fn func(context.Context) error) error
+func Bool[E any](t Term[E]) Term[E]
 func Calc[E any](text string, args ...any) Term[E]
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
@@ -791,6 +792,7 @@ func HasEdgeWith(name string, ps ...Predicate) Predicate
 func HasOp(ops ...Op) Condition
 func If(h Hook, cond Condition) Hook
 func InZone(name string) DateOption
+func Integer[E any](t Term[E]) Term[E]
 func IsConstraintError(err error) bool
 func IsDryRun(ctx context.Context) bool
 func IsNotFound(err error) bool
@@ -836,6 +838,8 @@ func SumByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Quer
 func SumBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error)
 func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, error)
 func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error)
+func Text[E any](t Term[E]) Term[E]
+func Time[E any](t Term[E]) Term[E]
 func TxFrom(ctx context.Context, db *DB) (*DB, bool)
 func TxIsolation(level sql.IsolationLevel) TxOption
 func TxReadOnly() TxOption
