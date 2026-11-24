@@ -793,7 +793,7 @@ index serves `Has` and `HasEvery`. velox-graphql offers them as
 [ADR 0080](decisions/0080-json-array-elements.md).
 
 An array inside an object is reached by `Array(keys...)`, which has the same
-four conditions, and `HasField`:
+four conditions, and `HasField` and `HasFieldKey`:
 
 ```go
 L := veloxgen.LandedCosts
@@ -824,6 +824,21 @@ column matches neither. It reads alike on the three dialects, but MySQL's
 `{"employee_id": [7]}`. On PostgreSQL the condition is
 `column @> '[{"employee_id":7}]'`, which a GIN index on the column serves.
 See [ADR 0159](decisions/0159-json-array-has-field.md).
+
+`HasFieldKey(key)` asks only that the member is there with a value that is not
+a JSON null, whatever else it holds:
+
+```go
+db.Query[veloxgen.Task]().Where(T.Assignees.Array().HasFieldKey("employee_id"))
+```
+
+`[{"employee_id": null}]` does not match, and `0`, `""` and `false` do, so it
+differs from `HasKey`, which counts a null member as present. A scalar
+element, an object without the member, an empty array and a missing path do
+not match (`Not` matches them), and a NULL column matches neither. On
+PostgreSQL it is `jsonb_path_exists` of a strict path, which no GIN index
+serves; MySQL and SQLite read the member of each element. See
+[ADR 0160](decisions/0160-json-array-has-field-key.md).
 
 ### A document that contains another: Contains
 

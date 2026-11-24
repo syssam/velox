@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `JSONArray.HasFieldKey(key)`: true where a JSON array holds an object with
+  the member `key` and a value that is not a JSON null, on PostgreSQL
+  (`jsonb_path_exists`), MySQL and SQLite (ADR 0160).
 - `JSONArray.HasField(key, v)`: true where a JSON array, the column's own
   (`Array()`) or one at a path, holds an object whose member `key` is `v`, on
   PostgreSQL (`@>`, which a GIN index serves), MySQL and SQLite. `v` compares

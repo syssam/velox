@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -19,7 +20,8 @@ type jsonElem struct {
 	v    any      // a string, an int64, a float64 or a bool, which SQLite compares
 	// field is the member of an object element that holds the value, for
 	// JSONHasFieldNode, and "" for the element itself. text is then the
-	// object {"field": value}.
+	// object {"field": value}. For JSONHasFieldKeyNode it is the member
+	// asked for, kind is JSONKindAny, and there is no text and no value.
 	field string
 }
 
@@ -94,6 +96,18 @@ func JSONHasFieldNode(col int32, key string, v any) Node {
 	e.field = key
 	e.text = "{" + string(k) + ":" + e.text + "}"
 	return Node{Op: OpJSONHas, Col: col, V: e}
+}
+
+// JSONHasFieldKeyNode is true where the JSON array in column col holds an
+// object with the member key, whatever its value but a JSON null: a member
+// that is null is absent. An element that is no object, or an object without
+// the member, does not match. It is false and NULL where JSONHasNode is. A
+// key that a JSON path refuses makes an invalid condition.
+func JSONHasFieldKeyNode(col int32, key string) Node {
+	if err := (JSONPath{Kind: JSONKindAny, Keys: []string{key}}).check(); err != nil {
+		return Node{Op: OpInvalid, V: err}
+	}
+	return Node{Op: OpJSONHas, Col: col, V: &jsonElem{kind: JSONKindAny, field: key}}
 }
 
 // JSONEmptyNode is true where the column holds the empty array, []. It is
@@ -211,6 +225,10 @@ func (w *writer) jsonHas(n Node) {
 	}
 	e := n.V.(*jsonElem)
 	keys := arrayPath(n)
+	if e.kind == JSONKindAny {
+		w.jsonHasFieldKey(n.Col, keys, e.field)
+		return
+	}
 	switch w.d {
 	case Postgres:
 		if e.field != "" {
@@ -316,6 +334,55 @@ func (w *writer) jsonHasFieldPG(col int32, keys []string, e *jsonElem) {
 	w.str(" @> ")
 	w.argOf(col, containsAt(keys, e.text))
 	w.str("::jsonb")
+}
+
+// jsonHasFieldKey writes JSONHasFieldKeyNode: an element is an object whose
+// member is there and is no JSON null (ADR 0160). It is false where the path
+// is missing or holds no array, and NULL for a NULL column, on every dialect.
+//
+// PostgreSQL asks jsonb_path_exists of a strict path whose errors (a missing
+// path, a non-array, a scalar element) are unknown inside the filters and
+// not errors of the call: strict $ ? (exists(@."a"."b"[*] ? (@."k" != null))).
+// A lax path would unwrap an array found on the way and wrap a non-array.
+// MySQL reads the members of every element, JSON_EXTRACT(col, '$[*]."k"'),
+// which is NULL where no element has the member; that array holds a non-null
+// where it is not contained in [null]. SQLite looks for an object element
+// whose member has a JSON type other than 'null'.
+func (w *writer) jsonHasFieldKey(col int32, keys []string, field string) {
+	switch w.d {
+	case Postgres:
+		var b strings.Builder
+		b.WriteString("strict $ ? (exists(@")
+		for _, k := range keys {
+			b.WriteString(`."` + k + `"`)
+		}
+		b.WriteString(`[*] ? (@."` + field + `" != null)))`)
+		w.str("jsonb_path_exists(")
+		w.colRef(col)
+		w.str(", ")
+		w.argOf(col, b.String())
+		w.str("::jsonpath)")
+	case MySQL:
+		w.str("CASE WHEN JSON_TYPE(")
+		w.jsonDoc(col, keys)
+		w.str(") = 'ARRAY' THEN COALESCE(NOT JSON_CONTAINS('[null]', JSON_EXTRACT(")
+		w.colRef(col)
+		w.str(", ")
+		w.argOf(col, JSONPath{Keys: keys}.quotedPath()+`[*]."`+field+`"`)
+		w.str(")), 0) WHEN ")
+		w.colRef(col)
+		w.str(" IS NULL THEN NULL ELSE 1 = 0 END")
+	default: // SQLite
+		w.str("CASE WHEN json_type(")
+		w.docArgs(col, keys)
+		w.str(") = 'array' THEN EXISTS (SELECT 1 FROM json_each(")
+		w.docArgs(col, keys)
+		w.str(") AS je WHERE je.type = 'object' AND json_type(je.value, ")
+		w.argOf(col, JSONPath{Keys: []string{field}}.quotedPath())
+		w.str(") <> 'null') WHEN ")
+		w.colRef(col)
+		w.str(" IS NULL THEN NULL ELSE 1 = 0 END")
+	}
 }
 
 // jsonEmpty writes the OpJSONEmpty node n: the column, or the document at its

@@ -236,10 +236,11 @@ func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E] {
 // JSONArray is the JSON array at a path of object keys in a JSON column of
 // entity E, made by a JSON handle's Array, for the conditions on its
 // elements that the handle's Has, HasSome, HasEvery and IsEmpty make on the
-// column's own array, and HasField on the members of its objects. Array()
-// with no key is the column's own array. Where the path is missing or holds no array they are
-// false, and where the column is NULL they are NULL, as the handle's are.
-// Its conditions read alike on PostgreSQL (jsonb), MySQL and SQLite.
+// column's own array, and HasField and HasFieldKey on the members of its
+// objects. Array() with no key is the column's own array. Where the path is
+// missing or holds no array they are false, and where the column is NULL
+// they are NULL, as the handle's are. Its conditions read alike on
+// PostgreSQL (jsonb), MySQL and SQLite.
 type JSONArray[E any] struct {
 	col  int32
 	keys []string
@@ -271,6 +272,21 @@ func (a JSONArray[E]) Has[_ Lazy[E]](v any) Pred[E] {
 // json_each.
 func (a JSONArray[E]) HasField[_ Lazy[E]](key string, v any) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.JSONAtPath(engine.JSONHasFieldNode(a.col, key, v), a.keys)))
+}
+
+// HasFieldKey is true where the array holds an object that has the member
+// key with a value that is not a JSON null: [{"employee_id": null}] does not
+// match, where HasKey on the column counts a null member as present. An
+// element that is no object, or lacks the member, does not match. key is one
+// member's name, under HasField's rules. Not(HasFieldKey) matches an empty
+// array and a path that is missing or holds no array, and no row whose
+// column is NULL, as Not(HasField) does.
+//
+// PostgreSQL writes jsonb_path_exists of a strict path, which no GIN index
+// serves; MySQL tests the members JSON_EXTRACT reads from every element; and
+// SQLite searches json_each.
+func (a JSONArray[E]) HasFieldKey[_ Lazy[E]](key string) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONAtPath(engine.JSONHasFieldKeyNode(a.col, key), a.keys)))
 }
 
 // HasSome is true where the array holds one of vs. With no values it is
