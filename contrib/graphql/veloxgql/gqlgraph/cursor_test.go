@@ -34,7 +34,7 @@ func TestCursorValues(t *testing.T) {
 	big := int64(1<<53 + 1) // a float64 would round it to 1<<53
 	u := uuid.MustParse("0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
 	terms := []veloxgql.CursorTerm{}
-	for i, v := range []any{"ann", big, when, true, 1.5, u, uint64(math.MaxInt64), veloxgql.Time(when.UTC()), []byte{0, 0xff}} {
+	for i, v := range []any{"ann", big, when, true, 1.5, u, uint64(math.MaxUint64), veloxgql.Time(when.UTC()), []byte{0, 0xff}} {
 		terms = append(terms, veloxgql.CursorTerm{Field: "F" + strconv.Itoa(i), Direction: veloxgql.OrderDirectionAsc, Value: v})
 	}
 	d, err := veloxgql.DecodeCursor(encode(t, veloxgql.Cursor{Type: "User", Terms: terms, Key: u}))
@@ -59,13 +59,8 @@ func TestCursorValues(t *testing.T) {
 	expect(t, v[5], u)
 	expect(t, v[5], [16]byte(u))
 	expect(t, v[5], veloxgql.UUID(u))
-	expect(t, v[6], uint64(math.MaxInt64))
-	expect(t, v[6], veloxgql.Uint64(math.MaxInt64))
-	// database/sql cannot send a uint64 with the high bit set: such a value
-	// is a bad cursor, as the Uint64 scalar refuses it, not a failed statement.
-	if _, err := gqlgraph.CursorValue[uint64](json.Number("9223372036854775808")); !errors.Is(err, veloxgql.ErrBadCursor) {
-		t.Errorf("a uint64 past MaxInt64: %v, want ErrBadCursor", err)
-	}
+	expect(t, v[6], uint64(math.MaxUint64))
+	expect(t, v[6], veloxgql.Uint64(math.MaxUint64))
 	expect(t, v[7], veloxgql.Time(when.UTC()))
 	if got, err := gqlgraph.CursorValue[[]byte](v[8]); err != nil || !bytes.Equal(got, []byte{0, 0xff}) {
 		t.Errorf("bytes = %v, %v", got, err)

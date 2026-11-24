@@ -5,7 +5,8 @@ Status: accepted, 2026-11-02. Its explicit-null bullet is reversed by
 Its refusal of a non-zero Default on a bool or number, and the 2026-11-18
 amendment's `ZeroInvalid`, are withdrawn by
 [0082](0082-defaults-before-setters.md): defaults are filled before setters
-and hooks, so a setter stores false or 0 over them.
+and hooks, so a setter stores false or 0 over them. Its Uint64 bullet is
+reversed by its review of 2026-11-24: the whole uint64 range is taken.
 
 ## Context
 
@@ -139,3 +140,17 @@ the Default instead of failing the check, as unset does. `GeneratedCodeIsVersion
 Evidence: `TestBuildZeroInvalidDefault`, `TestRenderZeroInvalid`,
 `TestZeroInvalidDefault` (engine), `TestZeroInvalidInsert`,
 `TestDefaultOnNumberThatIsNeverZero` (sdl).
+
+2026-11-24, a Uint64 over 2^63-1: its refusal rested on database/sql's
+default converter, which refuses a uint64 with the high bit set. pgx and
+go-sql-driver/mysql check their own values and send it, and velox stores
+uint64 as PostgreSQL's numeric(20,0) and MySQL's bigint unsigned, which hold
+the whole range. A row past 2^63-1 was stored and read, but the scalar
+refused it as input, `graphql.CreateDefault` refused it, and a cursor of such
+a row was refused on its next page. The Uint64 scalar, CreateDefault and
+cursors now take the whole range; SQLite's integer is signed, so there such
+a value fails the statement, as any write of it does. Evidence:
+`TestScalars`, `TestUint64OverSaysWhy`, `TestCursorValues`, `TestSetValue`,
+`TestUint64HighBit` (served on SQLite); the round trip of 2^64-1 on
+PostgreSQL and MySQL is `TestBindingRoundTrip`'s "uint64" in
+`internal/integration`.

@@ -1784,6 +1784,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- veloxgql: the `Uint64` scalar, `graphql.CreateDefault` and cursors take
+  the whole uint64 range, which PostgreSQL's numeric(20,0) and MySQL's
+  bigint unsigned store; a row past 2^63-1 was stored but refused as input
+  and on its next page. On SQLite, whose integer is signed, such a value
+  fails the statement (ADR 0032).
 - A left join to an entity whose Read policy or filter denies outright keeps
   every row, loaded and empty, instead of failing the statement; an inner
   join to it still fails with `ErrDenied`, and the error names the join. A

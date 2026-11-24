@@ -428,7 +428,6 @@ func TestCreateDefault(t *testing.T) {
 		"out of range":   {model(build(with(field("n", "int8"), graphql.CreateDefault(300)))), "graphql.CreateDefault(300) is not a value of the int8 field"},
 		"negative uint":  {model(build(with(field("n", "uint16"), graphql.CreateDefault(-1)))), "graphql.CreateDefault(-1) is not a value of the uint16 field"},
 		"NaN":            {model(build(with(field("n", "float64"), graphql.CreateDefault(math.NaN())))), `graphql.CreateDefault("NaN") is not a value of the float64 field`},
-		"high bit":       {model(build(with(field("n", "uint64"), graphql.CreateDefault(uint64(math.MaxUint64))))), "database/sql cannot send a uint64 with the high bit set"},
 		"left out":       {model(build(with(field("n", "int"), graphql.Annotation{CreateInput: new(bool), CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
 		"skipped":        {model(build(with(field("n", "int"), graphql.Annotation{Skip: graphql.SkipMutationCreateInput, CreateDefault: []byte("1")}))), "graphql.CreateDefault on a field the create input leaves out"},
 		"no create":      {model(noCreate), "schema User, field n: graphql.CreateDefault, and graphql.Mutations does not list create"},

@@ -130,10 +130,10 @@ func TestScalars(t *testing.T) {
 		t.Errorf("zero values:\n got %s\nwant %s", out, want)
 	}
 	for name, v := range map[string]map[string]any{
-		"a UUID":     {"u": "nope"},
-		"Bytes":      {"b": "%%"},
-		"a Uint64":   {"n": 7},
-		"over int64": {"n": "18446744073709551615"},
+		"a UUID":      {"u": "nope"},
+		"Bytes":       {"b": "%%"},
+		"a Uint64":    {"n": 7},
+		"over uint64": {"n": "18446744073709551616"},
 	} {
 		in := map[string]any{"t": vars["t"], "u": vars["u"], "b": vars["b"], "n": vars["n"]}
 		maps.Copy(in, v)

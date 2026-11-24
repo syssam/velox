@@ -144,9 +144,7 @@ func setUint[T uint | uint8 | uint16 | uint32 | uint64](p *T, v any, bits int) e
 		return ErrMismatch
 	}
 	n, err := strconv.ParseUint(s, 10, bits)
-	if err != nil || n > math.MaxInt64 {
-		// database/sql cannot send a uint64 with the high bit set, so such a
-		// value would fail the statement, as the Uint64 scalar says.
+	if err != nil {
 		return ErrMismatch
 	}
 	*p = T(n)

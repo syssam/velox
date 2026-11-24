@@ -1024,13 +1024,19 @@ func TestJSONInputExact(t *testing.T) {
 	s.want("a pointer may be null", 'mutation { createItem(input: {jStruct: {A: "x", N: null}}) { jStruct } }', '{"data":{"createItem":{"jStruct":{"A":"x","N":null}}}}')
 }
 
-// TestUint64HighBit: a Uint64 over 2^63-1 is the client's error, naming the limit; at
-// it, it stores.
+// TestUint64HighBit: Uint64 takes the whole uint64 range, which PostgreSQL
+// and MySQL store; SQLite's integer is signed, so over 2^63-1 the statement
+// fails and nothing is stored. Past 2^64-1 is the client's error. At 2^63-1
+// it stores.
 func TestUint64HighBit(t *testing.T) {
 	s := serve(t)
 	got := s.do('mutation { createItem(input: {big: "18446744073709551615"}) { big } }')
-	if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "9223372036854775807") {
-		t.Errorf("over: %s", got)
+	if !strings.Contains(got, '"errors"') || strings.Contains(got, "BAD_USER_INPUT") || strings.Contains(got, '"big":"18446744073709551615"') {
+		t.Errorf("over 2^63-1 on SQLite: %s", got)
+	}
+	got = s.do('mutation { createItem(input: {big: "18446744073709551616"}) { big } }')
+	if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "18446744073709551615") {
+		t.Errorf("over 2^64-1: %s", got)
 	}
 	s.want("at the limit", 'mutation { createItem(input: {big: "9223372036854775807"}) { big } }', '{"data":{"createItem":{"big":"9223372036854775807"}}}')
 }

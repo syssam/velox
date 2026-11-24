@@ -556,10 +556,7 @@ func createDefault(f *plugin.Field, d json.RawMessage, where string) (string, er
 			err = strconv.ErrRange
 		}
 	case strings.HasPrefix(f.Type, "uint"):
-		var v uint64
-		if v, err = strconv.ParseUint(s, 10, bits); err == nil && v > math.MaxInt64 {
-			return "", fmt.Errorf("%s: graphql.CreateDefault(%s) is over 9223372036854775807: database/sql cannot send a uint64 with the high bit set", where, s)
-		}
+		_, err = strconv.ParseUint(s, 10, bits)
 	default:
 		_, err = strconv.ParseInt(s, 10, bits)
 	}
