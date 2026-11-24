@@ -458,6 +458,14 @@ func (p *Page) Node(i int) any { return p.Rows[i] }
 // *Connection is the empty connection: its page has no rows and its
 // totalCount is 0, so the zero connection type of generated code, which an
 // application returns for a list it denies, is one.
+//
+// Page and TotalCount read under the context they are given, for its
+// cancellation and deadline, with the values of the context Paginate was
+// given first (decision 0172): a value Paginate's context does not hold,
+// such as the field context of the reading field, comes from the reading
+// context. A transaction is Paginate's context's alone: the reading
+// context's mark is dropped. Paginate's cancellation is not kept, so a
+// resolver may cancel its context once it returns the connection.
 type Connection struct {
 	query untyped.TableQuery // the whole list, unordered
 	typ   string             // the GraphQL type of the nodes
@@ -471,6 +479,7 @@ type Connection struct {
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
+	from context.Context // Paginate's context, without its cancellation: readIn
 
 	pageOnce  sync.Once
 	page      *Page
@@ -522,6 +531,14 @@ type Connection struct {
 // keeps, is read as entgql reads one: its key as the key, and its values
 // as the order's, whatever order it was taken under. One whose number of
 // values is not the order's number of terms fails with ErrBadCursor.
+//
+// The connection's reads, run later, take their context values from ctx
+// and their cancellation and deadline from the context of the read (see
+// Connection): a value an application puts in ctx before it paginates,
+// which a Policy or an Interceptor reads, holds for the page and for
+// totalCount alike, after ctx is cancelled too. An Edge's batch reads under
+// one context for all its owners, as Edge's paginate says: a value given
+// per owner separates the batch only through what the batch's key holds.
 func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
 	if err := needSource(ctx); err != nil {
 		return nil, err
@@ -618,7 +635,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 		}
 		terms = append(terms, t)
 	}
-	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(pre) + len(order), exprs: len(pre)}
+	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(pre) + len(order), exprs: len(pre), from: context.WithoutCancel(ctx)}
 	var joined []int
 	for _, t := range terms {
 		if t.edge != 0 && !t.isCount && !slices.Contains(joined, t.edge) {
@@ -672,7 +689,7 @@ func (c *Connection) Page(ctx context.Context) (*Page, error) {
 	}
 	c.pageOnce.Do(func() {
 		c.pageErr = errPanicked // the other callers' error, when run panics
-		c.page, c.pageErr = c.run(ctx)
+		c.page, c.pageErr = c.run(c.readIn(ctx))
 	})
 	return c.page, c.pageErr
 }
@@ -689,7 +706,7 @@ func (c *Connection) TotalCount(ctx context.Context) (int, error) {
 			c.count, c.countErr = c.edge.count(c.query)
 			return
 		}
-		n, err := c.query.Count(ctx)
+		n, err := c.query.Count(c.readIn(ctx))
 		c.count, c.countErr = int(n), err
 	})
 	return c.count, c.countErr

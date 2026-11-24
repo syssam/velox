@@ -102,8 +102,8 @@ func (s *statements) take() []string {
 }
 
 // peopleDB opens an in-memory SQLite database with the ten people, through
-// velox with an Around hook that records the statements.
-func peopleDB(t *testing.T) (*velox.DB, *statements) {
+// velox with an Around hook that records the statements, and opts.
+func peopleDB(t *testing.T, opts ...velox.Option) (*velox.DB, *statements) {
 	t.Helper()
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -120,7 +120,7 @@ func peopleDB(t *testing.T) (*velox.DB, *statements) {
 		}
 	}
 	st := &statements{}
-	return velox.Open(velox.SQLite, sqlDB, velox.WithAround(st.around)), st
+	return velox.Open(velox.SQLite, sqlDB, append([]velox.Option{velox.WithAround(st.around)}, opts...)...), st
 }
 
 // wire is c as the client sends it back: encoded and decoded.

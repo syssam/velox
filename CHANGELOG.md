@@ -1795,6 +1795,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- veloxgql: a connection's page and `totalCount` read with the values of
+  the context given to Paginate, and the deadline and cancellation of the
+  reading field's. A value an application set before paginating, which a
+  Policy, Filter or Interceptor reads, was lost, and the page and the count
+  could disagree. A transaction is Paginate's context's alone. An edge's
+  batch is unchanged (ADR 0172).
 - veloxgql: the `Uint64` scalar, `graphql.CreateDefault` and cursors take
   the whole uint64 range, which PostgreSQL's numeric(20,0) and MySQL's
   bigint unsigned store; a row past 2^63-1 was stored but refused as input

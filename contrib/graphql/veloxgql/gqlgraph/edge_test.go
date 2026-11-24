@@ -237,7 +237,7 @@ func (l *edgeLog) take(table string) []string {
 //     editor 3, 5 and 6 the editor 1, and 7 none;
 //   - tags 1 "go", 2 "db" and 3 "zz"; owner 1 has tags 1 and 2, owner 2 tag
 //     2, owner 3 none.
-func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
+func edgeDB(t *testing.T, opts ...velox.Option) (*velox.DB, *sql.DB, *edgeLog) {
 	t.Helper()
 	raw, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -261,7 +261,7 @@ func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
 		}
 	}
 	l := &edgeLog{sql: map[string][]string{}}
-	return velox.Open(velox.SQLite, raw, velox.WithAround(l.around)), raw, l
+	return velox.Open(velox.SQLite, raw, append([]velox.Option{velox.WithAround(l.around)}, opts...)...), raw, l
 }
 
 // operation returns ctx inside the operation query, parsed against
