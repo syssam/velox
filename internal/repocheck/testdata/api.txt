@@ -156,6 +156,7 @@ const UnitQuarter
 const UnitWeek
 const UnitYear
 func (a JSONArray[E]) HasEvery[_ Lazy[E]](vs ...any) Pred[E]
+func (a JSONArray[E]) HasField[_ Lazy[E]](key string, v any) Pred[E]
 func (a JSONArray[E]) HasSome[_ Lazy[E]](vs ...any) Pred[E]
 func (a JSONArray[E]) Has[_ Lazy[E]](v any) Pred[E]
 func (a JSONArray[E]) IsEmpty[_ Lazy[E]]() Pred[E]

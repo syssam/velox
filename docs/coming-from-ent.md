@@ -87,6 +87,7 @@ map as follows ([0115](decisions/0115-json-append-len-patterns-order.md)):
 | `client.User.Update().AppendTags([]string{"x"})` (`sqljson.Append`) | `Set(U.Tags.Append([]string{"x"}))`; a NULL column becomes the elements, as in ent |
 | `sqljson.ValueContains(f, v, sqljson.Path("a", "ids"))` | `U.Attrs.Array("a", "ids").Has(v)`; also `HasSome`, `HasEvery`, `IsEmpty`: false where the path holds no array ([0141](decisions/0141-json-array-at-a-path.md)) |
 | `sqljson.ValueContains(f, doc)` with an object `doc` and no path | `U.Attrs.Contains(doc)`: PostgreSQL's `@>`, MySQL's `JSON_CONTAINS`, and a refusal on SQLite, where ent's form compares `json_each` values ([0154](decisions/0154-json-contains.md)) |
+| `sqljson.ValueContains(f, map[string]any{"employee_id": 7}, sqljson.Path(…))` on an array of objects | `U.Attrs.Array(…).HasField("employee_id", 7)`, or `Array()` for the column's own array: alike on PostgreSQL (`@>`, GIN), MySQL and SQLite, where ent's form compares `json_each` values as text ([0159](decisions/0159-json-array-has-field.md)) |
 | `sqljson.LenEQ(user.FieldTags, 2)`, `LenGT`… with `sqljson.Path` | `U.Tags.Len().EQ(2)`, `U.Attrs.Len("a", "b").GT(0)`: NULL where the path holds no array |
 | `sqljson.StringContains(f, "x", sqljson.Path("name"))`, `StringHasPrefix`, `StringHasSuffix` | `U.Attrs.Text("name").Contains("x")`, `HasPrefix`, `HasSuffix`: literal and with case on every dialect |
 | `sqljson.OrderValue(f, sqljson.Path("n"))` | `OrderBy(U.Attrs.Number("n").Asc())`, or `Text("n").Desc()` |
@@ -426,7 +427,7 @@ a table rebuild on SQLite.
 | `AppendSelectExprAs(expr, alias)` beside entity rows, read with `Value(alias)` | `Select` of every column (`ColumnByName`) and the `Calc` `.As(alias)`, scanned into a struct embedding the entity; the keyset an `Expr` over the same Term ([guide](guide.md#date-buckets-subtotals-and-columns-by-name)) |
 | a derived table in `Modify` so the parent's columns group the child | `Join(rel)` and `velox.Joined(rel, col)` in `Select` and `GroupBy`, the parent's policy in ON ([ADR 0143](decisions/0143-joined-terms-in-projections.md)) |
 | a hand join to a dated table with no edge | read the rows of that table first, then a `CASE` term over the document's own columns; a correlated outer reference is not built ([ADR 0142](decisions/0142-nextapp-projection-recipes.md)) |
-| `sqljson.ValueContains(f, v, sqljson.Path(k))` | `T.F.Array(k).Has(v)` ([ADR 0141](decisions/0141-json-array-at-a-path.md)) |
+| `sqljson.ValueContains(f, v, sqljson.Path(k))` | `T.F.Array(k).Has(v)` ([ADR 0141](decisions/0141-json-array-at-a-path.md)); an object element by one member, `T.F.Array(k).HasField(key, v)` ([ADR 0159](decisions/0159-json-array-has-field.md)) |
 | `GROUP BY ROLLUP(…)`, `CUBE(…)` in a `Modify` | `GroupBy(velox.Rollup[T](keys...))`, `velox.Cube`; MySQL `WITH ROLLUP` as the only key, SQLite refuses |
 | field names kept beside each `Order` | `o.Term().Column()` and `o.Descending()`; `RawRow.Columns()` for a row's names |
 | `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |

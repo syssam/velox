@@ -793,7 +793,7 @@ index serves `Has` and `HasEvery`. velox-graphql offers them as
 [ADR 0080](decisions/0080-json-array-elements.md).
 
 An array inside an object is reached by `Array(keys...)`, which has the same
-four conditions:
+four conditions, and `HasField`:
 
 ```go
 L := veloxgen.LandedCosts
@@ -807,6 +807,23 @@ nothing and is not empty, so `Not` matches the row. A NULL column matches
 neither. `Array()` with no key is the column's own array. On PostgreSQL the
 condition keeps `column @> '{"receiptIds":["…"]}'`, which a GIN index on the
 column serves. See [ADR 0141](decisions/0141-json-array-at-a-path.md).
+
+An array of objects is searched by one member with `HasField(key, v)`:
+
+```go
+T := veloxgen.Tasks // assignees: [{"employee_id": 7, "role": "owner"}, …]
+db.Query[veloxgen.Task]().Where(T.Assignees.Array().HasField("employee_id", 7))
+db.Query[veloxgen.Task]().Where(T.Meta.Array("review", "by").HasField("role", "owner"))
+```
+
+The member compares as `Has` compares an element: 7 matches 7.0, `"7"` is not
+7, and `true` is not 1. A scalar element, or an object without the member,
+does not match; `Not` matches an empty array and a missing path, and a NULL
+column matches neither. It reads alike on the three dialects, but MySQL's
+`JSON_CONTAINS` also finds `v` in a member that is an array, such as
+`{"employee_id": [7]}`. On PostgreSQL the condition is
+`column @> '[{"employee_id":7}]'`, which a GIN index on the column serves.
+See [ADR 0159](decisions/0159-json-array-has-field.md).
 
 ### A document that contains another: Contains
 

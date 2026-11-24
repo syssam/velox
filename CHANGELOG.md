@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `JSONArray.HasField(key, v)`: true where a JSON array, the column's own
+  (`Array()`) or one at a path, holds an object whose member `key` is `v`, on
+  PostgreSQL (`@>`, which a GIN index serves), MySQL and SQLite. `v` compares
+  as `Has` compares an element (ADR 0159).
 - `velox.FieldInSelectRaw(reason, column, entity, key, ps...)`:
   `FieldInSelect` with nothing but `ps` inside the subquery, so no Read
   policy, `WithFilter` filter or interceptor of the other entity applies

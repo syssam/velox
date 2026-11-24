@@ -17,6 +17,10 @@ type jsonElem struct {
 	kind JSONKind // JSONKindText, JSONKindNumber or JSONKindBool
 	text string   // its JSON encoding, which PostgreSQL and MySQL bind as JSON
 	v    any      // a string, an int64, a float64 or a bool, which SQLite compares
+	// field is the member of an object element that holds the value, for
+	// JSONHasFieldNode, and "" for the element itself. text is then the
+	// object {"field": value}.
+	field string
 }
 
 // newJSONElem returns v as an element: a string, a boolean or a number of any
@@ -70,6 +74,25 @@ func JSONHasNode(col int32, v any) Node {
 	if err != nil {
 		return Node{Op: OpInvalid, V: err}
 	}
+	return Node{Op: OpJSONHas, Col: col, V: e}
+}
+
+// JSONHasFieldNode is true where the JSON array in column col holds an
+// object whose member key is v, compared as JSONHasNode compares an element.
+// An element that is no object, or an object without the member, does not
+// match. It is false and NULL where JSONHasNode is. A key that a JSON path
+// refuses, or a v that JSONHasNode refuses, makes an invalid condition.
+func JSONHasFieldNode(col int32, key string, v any) Node {
+	if err := (JSONPath{Kind: JSONKindAny, Keys: []string{key}}).check(); err != nil {
+		return Node{Op: OpInvalid, V: err}
+	}
+	e, err := newJSONElem(v)
+	if err != nil {
+		return Node{Op: OpInvalid, V: err}
+	}
+	k, _ := json.Marshal(key) // a checked key always encodes
+	e.field = key
+	e.text = "{" + string(k) + ":" + e.text + "}"
 	return Node{Op: OpJSONHas, Col: col, V: e}
 }
 
@@ -178,6 +201,10 @@ func containsAt(keys []string, elem string) string {
 // That @> is false where the path is missing, so the conjunction is false
 // there and NULL only for a NULL column, and the GIN index still serves it.
 // MySQL's and SQLite's are a CASE, as their tests at a missing path are NULL.
+//
+// A member's test (JSONHasFieldNode) binds the object {"field": value} where
+// the element would be, and SQLite tests the member of each object element.
+// PostgreSQL's is the bare @> alone (jsonHasFieldPG).
 func (w *writer) jsonHas(n Node) {
 	if !w.jsonColumn(n.Col) {
 		return
@@ -186,6 +213,10 @@ func (w *writer) jsonHas(n Node) {
 	keys := arrayPath(n)
 	switch w.d {
 	case Postgres:
+		if e.field != "" {
+			w.jsonHasFieldPG(n.Col, keys, e)
+			return
+		}
 		w.str("(jsonb_typeof(")
 		w.jsonDoc(n.Col, keys)
 		w.str(") = 'array' AND ")
@@ -225,21 +256,66 @@ func (w *writer) jsonHas(n Node) {
 		w.str(") = 'array' THEN EXISTS (SELECT 1 FROM json_each(")
 		w.docArgs(n.Col, keys)
 		w.str(") AS je WHERE ")
-		switch e.kind {
-		case JSONKindText:
-			w.str("je.type = 'text' AND je.value = ")
-			w.argOf(n.Col, e.v)
-		case JSONKindNumber:
-			w.str("je.type IN ('integer', 'real') AND je.value = ")
-			w.argOf(n.Col, e.v)
-		default: // a boolean: the type says it, so the value is not compared
-			w.str("je.type = ")
-			w.argOf(n.Col, e.text)
+		if e.field != "" {
+			w.jsonFieldSQLite(n.Col, e)
+		} else {
+			w.jsonElemSQLite(n.Col, e)
 		}
 		w.str(") WHEN ")
 		w.colRef(n.Col)
 		w.str(" IS NULL THEN NULL ELSE 1 = 0 END")
 	}
+}
+
+// jsonElemSQLite writes the test of SQLite's json_each row je against the
+// element e: by its JSON type, then by its value.
+func (w *writer) jsonElemSQLite(col int32, e *jsonElem) {
+	switch e.kind {
+	case JSONKindText:
+		w.str("je.type = 'text' AND je.value = ")
+		w.argOf(col, e.v)
+	case JSONKindNumber:
+		w.str("je.type IN ('integer', 'real') AND je.value = ")
+		w.argOf(col, e.v)
+	default: // a boolean: the type says it, so the value is not compared
+		w.str("je.type = ")
+		w.argOf(col, e.text)
+	}
+}
+
+// jsonFieldSQLite writes the test of SQLite's json_each row je against the
+// member e.field of an object element: je is an object, and the member has
+// e's JSON type and value, as jsonElemSQLite tests an element. The member's
+// path is an argument.
+func (w *writer) jsonFieldSQLite(col int32, e *jsonElem) {
+	path := JSONPath{Keys: []string{e.field}}.quotedPath()
+	w.str("je.type = 'object' AND json_type(je.value, ")
+	w.argOf(col, path)
+	switch e.kind {
+	case JSONKindText:
+		w.str(") = 'text' AND json_extract(je.value, ")
+	case JSONKindNumber:
+		w.str(") IN ('integer', 'real') AND json_extract(je.value, ")
+	default: // a boolean: the type says it, so the value is not compared
+		w.str(") = ")
+		w.argOf(col, strconv.FormatBool(e.v.(bool)))
+		return
+	}
+	w.argOf(col, path)
+	w.str(") = ")
+	w.argOf(col, e.v)
+}
+
+// jsonHasFieldPG writes PostgreSQL's JSONHasFieldNode: the bare column @> a
+// document whose array, at the path or at the top, holds the one object
+// {"field": value}. Only an array contains an array, so no jsonb_typeof is
+// asked: the condition is false where the path holds no array and NULL for
+// a NULL column, and a GIN index on the column serves it.
+func (w *writer) jsonHasFieldPG(col int32, keys []string, e *jsonElem) {
+	w.colRef(col)
+	w.str(" @> ")
+	w.argOf(col, containsAt(keys, e.text))
+	w.str("::jsonb")
 }
 
 // jsonEmpty writes the OpJSONEmpty node n: the column, or the document at its

@@ -236,7 +236,8 @@ func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E] {
 // JSONArray is the JSON array at a path of object keys in a JSON column of
 // entity E, made by a JSON handle's Array, for the conditions on its
 // elements that the handle's Has, HasSome, HasEvery and IsEmpty make on the
-// column's own array. Where the path is missing or holds no array they are
+// column's own array, and HasField on the members of its objects. Array()
+// with no key is the column's own array. Where the path is missing or holds no array they are
 // false, and where the column is NULL they are NULL, as the handle's are.
 // Its conditions read alike on PostgreSQL (jsonb), MySQL and SQLite.
 type JSONArray[E any] struct {
@@ -254,6 +255,22 @@ func jsonArray[E any](col int32, keys []string) JSONArray[E] {
 // serves.
 func (a JSONArray[E]) Has[_ Lazy[E]](v any) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.JSONAtPath(engine.JSONHasNode(a.col, v), a.keys)))
+}
+
+// HasField is true where the array holds an object whose member key is v: a
+// string, a number or a boolean, compared as Has compares an element, so 7
+// matches 7.0 and true is not 1. An element that is no object, or lacks the
+// member, does not match. key is one member's name, which may not be empty
+// or hold a double quote, a backslash or a control character. Not(HasField)
+// matches an empty array and a path that is missing or holds no array, and
+// no row whose column is NULL, as Not(Has) does.
+//
+// PostgreSQL writes a bare @> of the column against [{"key": v}], at the
+// path, which a GIN index on it serves; MySQL writes JSON_CONTAINS, which
+// also matches a member that is an array holding v; SQLite searches
+// json_each.
+func (a JSONArray[E]) HasField[_ Lazy[E]](key string, v any) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.JSONAtPath(engine.JSONHasFieldNode(a.col, key, v), a.keys)))
 }
 
 // HasSome is true where the array holds one of vs. With no values it is
