@@ -22,8 +22,8 @@
 //
 // Usage:
 //
-//	velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
-//	velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
+//	velox-gen [generate] [-out dir] [-package name] [-files dir] [-plugin tool[:key=value,...]]... [-check] [package]
+//	velox-gen verify [-out dir] [-package name] [-files dir] [-plugin tool[:key=value,...]]... [package]
 //	velox-gen describe [-json] [package]
 //	velox-gen version
 //	velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
@@ -130,6 +130,27 @@
 // set aside whose name is missing, removes the others, a directory entry by
 // entry, keeping a file in it that is not velox-gen's, and prints a line for
 // each; -check prints a line for each and exits 3.
+// -files dir writes each plugin file that is not Go, a .graphql or .proto
+// file, below dir instead, at the path it has below -out, so that
+// sdlfiles=entity's velox.graphql and velox_<entity>.graphql land where
+// gqlgen reads them (-files schema). A plugin's .go file stays in -out,
+// whose package it is in. dir is relative to the working directory, as -out
+// is, and is resolved through its symbolic links; it must be a directory
+// strictly inside the module that holds -out, not the module's root, not
+// -out's parent or another directory above -out, not inside -out, and below
+// no directory that holds a go.mod or velox-gen's velox.go. So ../x, an
+// absolute path outside the module and a symbolic link that leads out of
+// it are refused, exit 1. -files equal to -out is as without it. Below dir,
+// velox-gen owns exactly the .graphql and .proto files that start with its
+// header: -check reports one that is missing, out of date or no longer
+// generated, and a run writes them, removes the stale ones and the
+// directories that leaves empty, but never dir itself, a file without the
+// header or a .go file; a file without the header at a path a plugin writes
+// is refused, as in -out. With -files, the sweep of -out removes the
+// .graphql and .proto files a run without it left there, so adding -files
+// moves them. velox-gen sweeps only the directories it is given: after
+// dropping -files, or changing it, delete the old directory's files by hand.
+// verify takes -files too, and checks it as generate does.
 // A plugin built on package plugin that panics fails with "the plugin
 // panicked: " and the panic's value; run velox-gen with VELOX_PLUGIN_TRACE=1,
 // which reaches the plugin, for the stack on the lines below it.
@@ -388,6 +409,7 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 	}
 	outDir := fs.String("out", "./veloxgen", "the directory of the generated package")
 	pkgName := fs.String("package", "", "the generated package's name (default: the base name of -out)")
+	filesDir := fs.String("files", "", "write the plugins' files that are not Go, such as .graphql, below `dir`, a directory of the module beside -out, at their paths below -out")
 	var plugins pluginFlag
 	fs.Var(&plugins, "plugin", "run the generator plugin `tool`, a tool of your module as go tool names it, on the model; options follow a colon (tool:key=value,...); repeat for several")
 	patterns, code, done := parseFlags(fs, args)
@@ -400,7 +422,7 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 	var rerun []string
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
-		case "out", "package":
+		case "out", "package", "files":
 			rerun = append(rerun, "-"+f.Name, f.Value.String())
 		case "plugin":
 			for _, spec := range plugins {
@@ -408,7 +430,7 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 			}
 		}
 	})
-	f := genFlags{out: *outDir, pkg: *pkgName, plugins: plugins, rerun: append(rerun, patterns...)}
+	f := genFlags{out: *outDir, pkg: *pkgName, files: *filesDir, plugins: plugins, rerun: append(rerun, patterns...)}
 	pattern := genrun.DefaultSchema
 	if len(patterns) == 1 {
 		pattern = patterns[0]
@@ -490,9 +512,9 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 // printUsage prints the forms of the command and its exit codes.
 func printUsage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `Usage:
-  velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
+  velox-gen [generate] [-out dir] [-package name] [-files dir] [-plugin tool[:key=value,...]]... [-check] [package]
         generate the veloxgen package of a veloxschema package (default ./veloxschema)
-  velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
+  velox-gen verify [-out dir] [-package name] [-files dir] [-plugin tool[:key=value,...]]... [package]
         check every generated entity's metadata
   velox-gen describe [-json] [package]
         print the entities, columns and relations of a schema package;

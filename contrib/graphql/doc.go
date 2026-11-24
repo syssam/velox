@@ -147,6 +147,14 @@
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:sdlfiles=entity ./veloxschema
 //
+// velox-gen's -files puts the SDL files in a directory of the module, such
+// as schema/, where gqlgen reads them; the Go files stay in -out:
+//
+//	go tool velox-gen -out veloxgen -files schema -plugin velox-graphql:sdlfiles=entity ./veloxschema
+//
+// velox-gen then owns schema/'s .graphql files that start with its header,
+// and leaves the application's own .graphql files there alone (ADR 0169).
+//
 // An entity's file has its type, connection, order, where and mutation
 // inputs, and the enums only it uses. velox.graphql has the scalars,
 // PageInfo, OrderDirection, the root Query and the enums two entities use.

@@ -4,7 +4,8 @@
 //
 // Run does what "go tool velox-gen" does with the same settings, and writes
 // the same files: Schema is the package argument, Out is -out, Package is
-// -package, Plugins are the -plugin flags and Check is -check. Run also
+// -package, Files is -files, Plugins are the -plugin flags and Check is
+// -check. Run also
 // takes what the command cannot: a plugin called in the process, with no
 // tool to build.
 //
@@ -39,6 +40,16 @@ type Config struct {
 	// It is the base name of Out when empty.
 	// An error about it names velox-gen's flag, -package.
 	Package string
+	// Files is the directory of the plugins' files that are not Go, such
+	// as a GraphQL schema, relative to Run's dir unless it is absolute.
+	// Each goes at the path it would have below Out; Go files stay in Out.
+	// It must be a directory strictly inside Out's module, beside Out, not
+	// above or inside it, below no other module or velox-gen output.
+	// Run owns the files below it that start with velox-gen's header and
+	// are not Go: it writes, checks and removes only those.
+	// They are below Out when empty, or when it is Out.
+	// An error about it names velox-gen's flag, -files.
+	Files string
 	// Plugins run on the model in order, after velox-gen's own files are
 	// built and before anything is written.
 	Plugins []Plugin
@@ -136,7 +147,7 @@ func Run(ctx context.Context, dir string, cfg Config) (Result, error) {
 		plugins[i] = genrun.Plugin{Name: p.Tool, Options: p.Options, Run: p.Run}
 	}
 	res, err := genrun.Run(ctx, dir, genrun.Config{
-		Schema: cfg.Schema, Out: cfg.Out, Package: cfg.Package,
+		Schema: cfg.Schema, Out: cfg.Out, Package: cfg.Package, Files: cfg.Files,
 		Plugins: plugins, Check: cfg.Check, Env: cfg.Env,
 		Stdout: cfg.Stdout, Stderr: cfg.Stderr,
 	})

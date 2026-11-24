@@ -261,10 +261,12 @@ type Output struct {
 }
 
 // BuildOutput generates the files of the package at out, named pkg, for the
-// schema package at pattern, and runs the plugins on the model. The files of
-// the user's in out are checked against what velox-gen writes. Nothing is
-// written. It reads through the codegen.Cache ctx carries, or a new one.
-func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir, out, pkg string, env []string, log *Log) (*Output, error) {
+// schema package at pattern, and runs the plugins on the model. A plugin's
+// file that is not Go is below filesDir (FilesDir) when it is not "". The
+// files of the user's in out are checked against what velox-gen writes.
+// Nothing is written. It reads through the codegen.Cache ctx carries, or a
+// new one.
+func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir, out, filesDir, pkg string, env []string, log *Log) (*Output, error) {
 	ctx = codegen.WithCache(ctx)
 	genPath, err := DirImportPath(ctx, out, env)
 	if err != nil {
@@ -273,7 +275,7 @@ func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir,
 	// The plugins run beside velox-gen's own work, on a model encoded
 	// first; what they print and their error come after velox-gen's own, as
 	// in a run that calls them last. A run that fails first stops them.
-	plugged := startPlugins(ctx, plugins, pluginBodies(plugins, gm, pkg, genPath), pattern, dir, out, env)
+	plugged := startPlugins(ctx, plugins, pluginBodies(plugins, gm, pkg, genPath), pattern, dir, out, filesDir, env)
 	defer plugged.stop()
 	cfg, err := genConfig(ctx, gm, dir, pattern, genPath, pkg, env, log)
 	if err != nil {
@@ -309,6 +311,7 @@ func BuildOutput(ctx context.Context, plugins []Plugin, gm *Model, pattern, dir,
 // Config is one run of Run; package generate's Config documents it.
 type Config struct {
 	Schema, Out, Package string
+	Files                string // -files: where the plugins' files that are not Go go
 	Plugins              []Plugin
 	Check                bool
 	Env                  []string
@@ -355,19 +358,23 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 	if err != nil {
 		return done(err)
 	}
+	files, err := FilesDir(dir, out, c.Files)
+	if err != nil {
+		return done(err)
+	}
 	gm, err := LoadModel(ctx, dir, pattern, out, pkg, c.Env)
 	if err != nil {
 		return done(err)
 	}
-	o, err := BuildOutput(ctx, c.Plugins, gm, pattern, dir, out, pkg, c.Env, log)
+	o, err := BuildOutput(ctx, c.Plugins, gm, pattern, dir, out, files, pkg, c.Env, log)
 	if err != nil {
 		return done(relFileError(dir, err))
 	}
 	want, owners := o.Want, o.Owners
-	if err := checkWantPaths(dir, out, want); err != nil {
+	if err := checkWant(dir, out, files, want); err != nil {
 		return done(err)
 	}
-	sw, err := staleFiles(out, want, owners, !c.Check)
+	sw, err := plan(out, files, want, owners, !c.Check)
 	reportSwept(dir, sw.swept, stderr)
 	if err != nil {
 		return done(err)
@@ -386,9 +393,14 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 	// WriteAll sets the removals aside before it writes: on a
 	// case-insensitive file system a file or directory whose name changed
 	// only in case is the old one, which goes first. The emptied directories
-	// go with the files they held.
+	// go with the files they held. With -files, one write covers out and
+	// files, below the directory that holds both.
+	root := out
+	if files != "" {
+		root = commonDir(out, files)
+	}
 	rel := func(p string) string {
-		r, _ := filepath.Rel(out, p)
+		r, _ := filepath.Rel(root, p)
 		return filepath.ToSlash(r)
 	}
 	write := make(map[string][]byte, len(stale))
@@ -400,7 +412,7 @@ func Run(ctx context.Context, dir string, c Config) (Result, error) {
 		gone = append(gone, rel(p))
 	}
 	// A signal waits for the write to finish or be undone.
-	interrupted, err := WriteAllHeld(out, write, gone)
+	interrupted, err := WriteAllHeld(root, write, gone)
 	if err == nil {
 		removed := make(map[string]bool, len(remove))
 		for _, p := range remove {

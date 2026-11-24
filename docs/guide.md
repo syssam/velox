@@ -2800,6 +2800,25 @@ needs: `@goModel` on each type, the Resolver for a field a `<Field>GQL`
 method converts, and a `graphql` tag on an input field whose name
 graphql-go would not derive, such as `IPAddress`'s `ipAddress`.
 
+### Where the SDL goes
+
+The SDL files are written into `-out` beside the Go code, unless velox-gen's
+`-files` names another directory of the module. Each `.graphql` file then
+goes there at the same path, and the Go files stay in `-out`:
+
+```sh
+go tool velox-gen -out veloxgen -files schema -plugin velox-graphql:sdlfiles=entity ./veloxschema
+```
+
+writes `schema/velox.graphql` and `schema/velox_<entity>.graphql`, where
+gqlgen's `schema:` list reads them. velox-gen owns the files there that
+start with its header: `-check` reports them, a run removes those no
+longer written, and an application's own `.graphql` files beside them stay.
+The directory must be inside the module and beside `-out`, not above or
+inside it. Adding `-files` moves the SDL out of `-out`; after dropping or
+changing it, delete the old directory's files by hand
+([ADR 0169](decisions/0169-plugin-files-directory.md)).
+
 ## Where to go next
 
 - [examples/](../examples/README.md): one runnable program per topic, plus

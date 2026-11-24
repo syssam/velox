@@ -1466,7 +1466,7 @@ type Supports struct { Protocol, Model int }
 
 package generate
 func Run(ctx context.Context, dir string, cfg Config) (Result, error)
-type Config struct { Schema string Out string Package string Plugins []Plugin Check bool Env []string Stdout io.Writer Stderr io.Writer }
+type Config struct { Schema string Out string Package string Files string Plugins []Plugin Check bool Env []string Stdout io.Writer Stderr io.Writer }
 type Plugin struct { Tool string Options map[string]string Run func(context.Context, *plugin.Request) (*plugin.Response, error) }
 type Result struct { Written []string Removed []string Stale []string Warnings []string }
 var ErrInterrupted

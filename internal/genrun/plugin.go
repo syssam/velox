@@ -364,13 +364,13 @@ type pluginRun struct {
 
 // startPlugins runs, in a goroutine, pluginFiles of the plugins with the
 // bodies pluginBodies encoded. stop or wait ends it.
-func startPlugins(ctx context.Context, plugins []Plugin, bodies []pluginBody, pattern, dir, out string, env []string) *pluginRun {
+func startPlugins(ctx context.Context, plugins []Plugin, bodies []pluginBody, pattern, dir, out, filesDir string, env []string) *pluginRun {
 	ctx, cancel := context.WithCancel(ctx)
 	r := &pluginRun{cancel: cancel, done: make(chan struct{})}
 	r.log.Stderr = &r.stderr
 	go func() {
 		defer close(r.done)
-		r.files, r.owners, r.err = pluginFiles(ctx, plugins, bodies, pattern, dir, out, env, &r.log)
+		r.files, r.owners, r.err = pluginFiles(ctx, plugins, bodies, pattern, dir, out, filesDir, env, &r.log)
 	}()
 	return r
 }
@@ -396,8 +396,9 @@ func (r *pluginRun) stop() {
 // their files by absolute path, and the plugin that wrote each. It runs the
 // tools in the module of the schema package at pattern. out is the
 // directory of the package that holds the entities: the plugins' paths are
-// below it.
-func pluginFiles(ctx context.Context, plugins []Plugin, bodies []pluginBody, pattern, dir, out string, env []string, log *Log) (files map[string][]byte, owners map[string]string, err error) {
+// below it, but for a file that is not Go when filesDir is not "": its path
+// is below filesDir.
+func pluginFiles(ctx context.Context, plugins []Plugin, bodies []pluginBody, pattern, dir, out, filesDir string, env []string, log *Log) (files map[string][]byte, owners map[string]string, err error) {
 	if len(plugins) == 0 {
 		return nil, nil, nil
 	}
@@ -413,8 +414,12 @@ func pluginFiles(ctx context.Context, plugins []Plugin, bodies []pluginBody, pat
 	}
 	files, owners = make(map[string][]byte, len(rel)), make(map[string]string, len(rel))
 	for name, data := range rel {
-		files[filepath.Join(out, filepath.FromSlash(name))] = data
-		owners[filepath.Join(out, filepath.FromSlash(name))] = byPlugin[name]
+		root := out
+		if filesDir != "" && path.Ext(name) != ".go" {
+			root = filesDir
+		}
+		p := filepath.Join(root, filepath.FromSlash(name))
+		files[p], owners[p] = data, byPlugin[name]
 	}
 	return files, owners, nil
 }

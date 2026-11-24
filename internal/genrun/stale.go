@@ -134,9 +134,12 @@ type sweep struct {
 // of writeAll left in it (sweepLeftovers), which sw.swept reports. Without
 // it, as for -check, those entries stay, and sw.leftovers lists them. Either
 // way they are never counted as a directory's entries.
-func staleFiles(out string, want map[string][]byte, owners map[string]string, tidy bool) (sweep, error) {
+//
+// With noGo, as for -files' directory, a .go file is never removed: only
+// .graphql and .proto files are velox-gen's there.
+func staleFiles(out string, want map[string][]byte, owners map[string]string, tidy, noGo bool) (sweep, error) {
 	w := &staleWalk{
-		out: out, want: want, tidy: tidy,
+		out: out, want: want, tidy: tidy, noGo: noGo,
 		write:    map[string]bool{},
 		wantFold: make(map[string]string, len(want)),
 		held:     map[string]int{},
@@ -200,6 +203,7 @@ type staleWalk struct {
 	out      string
 	want     map[string][]byte
 	tidy     bool
+	noGo     bool // a .go file is not velox-gen's here
 	sw       sweep
 	write    map[string]bool
 	wantFold map[string]string // folded path → the path of want
@@ -266,7 +270,7 @@ func (w *staleWalk) entry(d string, de fs.DirEntry) error {
 		w.dirs = append(w.dirs, p)
 		return w.walk(p)
 	case de.Type().IsRegular():
-		if _, ok := w.want[p]; ok || headerFor(p) == "" || !IsGenerated(p) {
+		if _, ok := w.want[p]; ok || headerFor(p) == "" || w.noGo && filepath.Ext(p) == ".go" || !IsGenerated(p) {
 			return nil
 		}
 		w.sw.remove = append(w.sw.remove, p)

@@ -422,3 +422,28 @@ func TestRunInterrupted(t *testing.T) {
 		t.Errorf("the write is not done: %v", slices.Sorted(maps.Keys(got)))
 	}
 }
+
+// Files puts a plugin's files that are not Go below it, at their paths, and
+// a Check sees them there; its Go files stay in Out.
+func TestRunFiles(t *testing.T) {
+	t.Parallel()
+	dir := module(t, map[string]string{"veloxschema/user.go": userSchema})
+	p := generate.Plugin{Tool: "sdl", Run: func(context.Context, *plugin.Request) (*plugin.Response, error) {
+		return &plugin.Response{Files: []plugin.File{
+			{Path: "velox.graphql", Content: "scalar Time\n"},
+			{Path: "velox_user.graphql", Content: "type User\n"},
+			{Path: "sdl.go", Content: "package veloxgen\n"},
+		}}, nil
+	}}
+	cfg := generate.Config{Env: offline(), Files: "schema", Plugins: []generate.Plugin{p}, Stderr: io.Discard}
+	res, err := generate.Run(context.Background(), dir, cfg)
+	want := []string{filepath.Join("schema", "velox.graphql"), filepath.Join("schema", "velox_user.graphql"),
+		filepath.Join("veloxgen", "sdl.go"), filepath.Join("veloxgen", "user.go"), filepath.Join("veloxgen", "velox.go")}
+	if err != nil || !slices.Equal(res.Written, want) {
+		t.Fatalf("%+v %v", res, err)
+	}
+	cfg.Check = true
+	if res, err := generate.Run(context.Background(), dir, cfg); err != nil || res.Stale != nil {
+		t.Errorf("check: %+v %v", res, err)
+	}
+}

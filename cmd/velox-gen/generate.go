@@ -25,6 +25,7 @@ const veloxPath = "github.com/syssam/velox"
 // genFlags are the flags of generate and verify.
 type genFlags struct {
 	out, pkg string
+	files    string // -files: the directory of the plugins' files that are not Go
 	check    bool
 	plugins  []pluginSpec // the -plugin flags, in order
 	rerun    []string     // the flags the user set, as a command line, for the -check hint
@@ -46,7 +47,7 @@ func (f genFlags) genPlugins() []genrun.Plugin {
 // with generate.Run, and returns the exit code: 3 for a stale -check, 130
 // for an interrupted write.
 func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr io.Writer) int {
-	cfg := generate.Config{Schema: pattern, Out: f.out, Package: f.pkg, Check: f.check, Env: env, Stdout: stdout, Stderr: stderr}
+	cfg := generate.Config{Schema: pattern, Out: f.out, Package: f.pkg, Files: f.files, Check: f.check, Env: env, Stdout: stdout, Stderr: stderr}
 	for _, s := range f.plugins {
 		cfg.Plugins = append(cfg.Plugins, generate.Plugin{Tool: s.name, Options: s.options})
 	}
@@ -113,6 +114,12 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	if err != nil {
 		return fail(err)
 	}
+	// -files moves only files that are not Go, which the check program
+	// does not compile; its rules apply as in generate.
+	files, err := genrun.FilesDir(dir, out, f.files)
+	if err != nil {
+		return fail(err)
+	}
 	if fi, err := os.Stat(out); err != nil || !fi.IsDir() {
 		return fail(fmt.Errorf("%s is not a directory; run velox-gen to generate it first", genrun.RelPath(dir, out)))
 	}
@@ -123,7 +130,7 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	// The plugins' Go files are compiled with the package, as they are on
 	// disk; they must be the files the plugins write now. A plugin path that
 	// collides with a file of velox-gen's fails as it does in generate.
-	o, err := genrun.BuildOutput(ctx, f.genPlugins(), gm, pattern, dir, out, pkg, env, &genrun.Log{Stderr: stderr})
+	o, err := genrun.BuildOutput(ctx, f.genPlugins(), gm, pattern, dir, out, files, pkg, env, &genrun.Log{Stderr: stderr})
 	if err != nil {
 		return fail(err)
 	}

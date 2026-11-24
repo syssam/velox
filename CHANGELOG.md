@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-gen's `-files dir` (`generate.Config.Files`) writes a plugin's
+  files that are not Go, such as velox-graphql's SDL, below a directory of
+  the module instead of `-out`, at the same paths: `-files schema` puts
+  `velox.graphql` where gqlgen reads it. `-check`, `verify` and the stale
+  sweep cover it; files there without velox-gen's header stay (ADR 0169).
 - velox.json's `"foreign_keys": false`, ent's `migrate.WithForeignKeys(false)`:
   a migration directory whose files and schema.json hold no foreign key on
   any dialect, which `migrate diff -foreign-keys=false` and `migrate baseline
