@@ -3,6 +3,7 @@
 Status: accepted, 2026-11-07. Revises 0035's generated read surface. 0047
 revises its edge methods. Its node_gql.go lookup is gone since
 [0061](0061-graphql-plain-ids.md).
+Amended by [0049](0049-graphql-go-names.md).
 
 ## Context
 

@@ -3,6 +3,7 @@
 Status: accepted, 2026-11-01. The foreign-key check and the join-row scoping below
 (`TenantRefs`, `ErrTenantRef`) were removed by [0029](0029-scope-replaces-tenant.md); the
 rest stands.
+Amended by [0054](0054-fail-closed-runtime.md).
 
 ## Context
 

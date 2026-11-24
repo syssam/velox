@@ -4,6 +4,8 @@ Status: accepted, 2026-11-22. Amended by
 [0108](0108-veloxe-compat-paging-and-fk-filters.md): under compat=veloxe
 (`gqlgraph.Type.Veloxe`) `EdgeIDField` does not use `ScopedKey`, and a
 foreign key's predicates are the column's alone.
+The compat=veloxe parts superseded by
+[0156](0156-graphql-options-not-compat.md).
 
 ## Context
 

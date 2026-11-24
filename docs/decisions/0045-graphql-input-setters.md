@@ -5,6 +5,7 @@ and explicit nulls by type, and 0010; moves 0009's read-back to the
 application. Its `DecodeID` and `DecodeIDs` are gone since
 [0061](0061-graphql-plain-ids.md): gqlgen decodes an ID to the key, and
 `gqlgraph.IDs` caps and dedupes a list.
+Amended by [0048](0048-update-one.md).
 
 ## Context
 

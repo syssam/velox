@@ -2,6 +2,8 @@
 
 Date: 2026-10-31
 
+- Status: accepted, 2026-10-31.
+
 ## Context
 
 The module was `github.com/syssam/velox2` and its package `velox`: the last element of the

@@ -9,6 +9,8 @@
   only `clear<Field>` or `clear<Edge>` clears. Under compat=veloxe a foreign key's
   predicates are the column's alone, as veloxe's were, by
   [0108](0108-veloxe-compat-paging-and-fk-filters.md).
+  The compat=veloxe parts superseded by
+  [0156](0156-graphql-options-not-compat.md).
 
 ## Context
 

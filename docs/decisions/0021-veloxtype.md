@@ -2,6 +2,8 @@
 
 Date: 2026-10-31
 
+- Status: accepted, 2026-10-31.
+
 ## Context
 
 Decision 0020 made the root's public types aliases of `internal/engine`. Its cost:

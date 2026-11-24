@@ -1,6 +1,7 @@
 # 113. A test's or a development database gets its tables without migrations
 
 Status: accepted, 2026-11-22.
+Amended by [0167](0167-no-foreign-keys.md).
 
 Amends [0006](0006-own-migrate-and-atlas.md), and the lists of what velox
 does not offer in coming-from-ent.md and coming-from-veloxe.md, which

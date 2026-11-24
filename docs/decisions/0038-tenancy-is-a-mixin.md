@@ -4,6 +4,7 @@ Status: accepted, 2026-11-05. Supersedes 0030. Revises 0029, 0034 and 0037.
 Revised by 0039: `InOrg`'s methods are plain and untyped; `scope.By` is gone;
 the column check moves to `scopetest.Isolates`; velox-gen checks the column
 names a behaviour method gives.
+Revised by [0054](0054-fail-closed-runtime.md).
 
 ## Context
 

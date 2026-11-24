@@ -1,6 +1,7 @@
 # 0001. Names follow ent's
 
 - Status: accepted, 2026-10-29
+  Amended by [0090](0090-veloxe-defaults.md).
 
 ## Context
 

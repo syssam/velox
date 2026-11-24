@@ -7,6 +7,7 @@ Revised by 0038: the descriptor has no `Scope`. Revised by 0039: every
 entity stays in gen, always; gen/runtime, its blank import and the runtime
 warning are gone; gen imports the schema; `NotLinkedError` and the retry
 are gone.
+Amended by [0065](0065-veloxgen-veloxschema-defaults.md).
 
 ## Context
 

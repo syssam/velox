@@ -1,6 +1,7 @@
 # 42. An entity's generated file is <entity>.go
 
 Status: accepted, 2026-11-06.
+Amended by [0065](0065-veloxgen-veloxschema-defaults.md).
 
 ## Context
 

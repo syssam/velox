@@ -7,6 +7,8 @@ Amended by 0088: under velox-graphql's compat=veloxe, Node, `node` and
 Amended 2026-11-24 by 0152: velox-graphql's option node=on declares that
 Node outside compat too, with IDs still keys; node=off, the default, keeps
 this record's API without Node.
+The compat=veloxe parts superseded by
+[0156](0156-graphql-options-not-compat.md).
 
 ## Context
 

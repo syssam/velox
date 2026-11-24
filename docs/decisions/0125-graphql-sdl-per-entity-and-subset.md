@@ -3,6 +3,8 @@
 - Status: accepted, 2026-11-23. Amended by 0130: `apptypes=` drops
   fields of unlisted application types, and nested inputs of an entity not
   chosen go in `velox.graphql`.
+  The compat=veloxe parts superseded by
+  [0156](0156-graphql-options-not-compat.md).
 
 ## Context
 

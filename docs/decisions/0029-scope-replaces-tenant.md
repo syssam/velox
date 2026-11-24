@@ -4,6 +4,7 @@ Status: accepted, 2026-11-02. Supersedes 0016, and the tenant-reference and join
 parts of 0028. Revised by 0038: a scope is applied by a tenancy mixin. Revised
 by 0039: package `scope` is `Key` with `Require` and `Match`; a scope is the
 application's mixin.
+Revised by [0054](0054-fail-closed-runtime.md).
 
 ## Context
 

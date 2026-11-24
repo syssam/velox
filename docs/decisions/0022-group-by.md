@@ -2,6 +2,10 @@
 
 Date: 2026-10-31
 
+- Status: accepted, 2026-10-31; amended by [0067](0067-allow-unbounded.md); the
+  choice of `Key()` superseded by
+  [0158](0158-values-and-ids-are-query-methods.md).
+
 The key is the bare handle since
 [0158](0158-values-and-ids-are-query-methods.md), which supersedes the
 choice of `Key()` below; the rest stands.

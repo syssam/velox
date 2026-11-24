@@ -3,6 +3,7 @@
 Status: accepted, 2026-11-02. Its `After` of a left join, the GraphQL
 plugin's inner join and a denied target are amended by the reviews of
 2026-11-22 and 2026-11-24, at the end.
+Amended by [0143](0143-joined-terms-in-projections.md).
 
 ## Context
 

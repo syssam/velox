@@ -1,6 +1,8 @@
 # 0006. velox's own migrate, and an Atlas provider
 
 - Status: accepted, 2026-10-29
+  Amended by [0113](0113-test-schema-create.md),
+  [0167](0167-no-foreign-keys.md).
 
 ## Context
 

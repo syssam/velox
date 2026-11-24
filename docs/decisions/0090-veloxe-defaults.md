@@ -6,6 +6,7 @@
   and JSON pointers.
   The user chose that veloxe's behaviour is
   velox-gen's default for every application, with no option to ask for it.
+  Amended by [0114](0114-unindexed-foreign-keys.md).
 
 ## Context
 

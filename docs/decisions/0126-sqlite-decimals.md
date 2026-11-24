@@ -1,6 +1,7 @@
 # 0126. SQLite rounds a decimal sum to 15 digits and binds a decimal in an Expr as a number
 
 - Status: accepted, 2026-11-23.
+  Amended by [0131](0131-decimal-expression-terms.md).
 
 ## Context
 

@@ -3,6 +3,7 @@
 - Status: accepted, 2026-11-23. Amends [0082](0082-defaults-before-setters.md)'s
   consequence that velox-gen cannot show a default replacing a zero, and
   places [0086](0086-shared-enum-types.md)'s types.
+  Amended by [0124](0124-explicit-null-in-inserts.md).
 
 ## Context
 

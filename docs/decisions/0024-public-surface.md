@@ -2,6 +2,8 @@
 
 Date: 2026-11-01
 
+- Status: accepted, 2026-11-01.
+
 ## Context
 
 A name exported at 1.0 stays until 2.0. Nothing failed when a name was exported by accident:

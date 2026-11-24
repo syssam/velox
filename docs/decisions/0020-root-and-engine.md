@@ -2,6 +2,9 @@
 
 Date: 2026-10-30. Amended by 0053: the drivers' errors are internal/dberr.
 
+- Status: accepted, 2026-10-30; amended by [0053](0053-engine-split.md): the
+  drivers' errors are `internal/dberr`.
+
 ## Context
 
 velox's root package held the whole runtime: 34 code files, 13,348 lines, and 82 test

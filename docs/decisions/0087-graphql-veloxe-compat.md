@@ -7,6 +7,7 @@
   Its GraphQL parts are superseded by
   [0156](0156-graphql-options-not-compat.md), 2026-11-24: compat is gone,
   and each part is a neutral option or a default.
+  Amended by [0096](0096-handle-names.md).
 
 ## Context
 

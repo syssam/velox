@@ -3,6 +3,7 @@
 - Status: accepted, 2026-11-19. Amends [0032](0032-ent-refusals.md): its
   refusal of a non-zero Default on a bool or number (rule 36) and its
   2026-11-18 amendment (`ColumnDescriptor.ZeroInvalid`) are withdrawn.
+  Amended by [0119](0119-enum-placement-and-default-docs.md).
 
 ## Context
 
