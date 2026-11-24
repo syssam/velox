@@ -108,3 +108,12 @@ the HundredRows benchmark.
   resolver's ctx run in that transaction, serialised by the extension's
   per-field lock as `veloxgql.DB(ctx)`'s were. `veloxgql.DB(ctx)` is for
   code outside a resolver.
+- Compile cost, bench/scale at 500 entities and 100 services, base
+  1461075f against this branch, three alternating runs each
+  (GOFLAGS=-p=2, Apple M3 Max): cold build CPU 167 s to 175 s (+4.6%),
+  schema edit and rebuild 149 s to 155 s (+4.1%), link peak 219 MB to
+  237 MB; with velox-graphql, cold 207 s to 211 s (+2.3%), edit 189 s to
+  194 s (+2.6%), link peak 286 MB to 299 MB, service 7.0 MB to 7.1 MB.
+  The runtime is unchanged: HundredRows 106 allocations and about
+  21.5 KB either way, a statement in a transaction 6; a transaction
+  makes one object more.
