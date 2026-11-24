@@ -123,7 +123,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 				v.EdgeFieldPtr = func(i int) any { return a(x, i) }
 			}
 			if a := d.SourcePtr; a != nil {
-				v.SourcePtr = func() unsafe.Pointer { return unsafe.Pointer(a(x)) }
+				v.SourceAt = unsafe.Pointer(a(x))
 			}
 			return v
 		})

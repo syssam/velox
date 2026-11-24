@@ -24,7 +24,12 @@ import (
 // reflect.DeepEqual of two entities read through different DBs, and go-cmp
 // without cmpopts.IgnoreUnexported, see the field; veloxtest.Equal ignores
 // it.
-type Source struct{ s *engine.Source }
+//
+// It holds an *engine.Source as an unsafe.Pointer: a field of that type would
+// put engine's Source and DB, with all of DB's methods, in the export data of
+// every entity's package, which names Descriptor and so Source; that was
+// 25 KB per package.
+type Source struct{ p unsafe.Pointer }
 
 // The engine stores an *engine.Source in the field, through its offset.
 var _ [unsafe.Sizeof(Source{}) - unsafe.Sizeof((*engine.Source)(nil))]struct{} = [0]struct{}{}
@@ -54,5 +59,5 @@ func QueryEdge[E, T any](src Source, owner *E, r Rel[E, T]) Query[T] {
 		m = &metaState[T]{Err: err}
 	}
 	ref := engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}
-	return Query[T]{s: engine.EdgeQuery(src.s, ref, r.where, r.err, unsafe.Pointer(owner), m.Info), meta: m}
+	return Query[T]{s: engine.EdgeQuery((*engine.Source)(src.p), ref, r.where, r.err, unsafe.Pointer(owner), m.Info), meta: m}
 }

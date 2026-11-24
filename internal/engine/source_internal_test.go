@@ -44,7 +44,7 @@ func TestSourceResolves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if txSrc.tx.Load() != nil || spSrc.tx.Load() != nil {
+	if txSrc.liveTx() != nil || spSrc.liveTx() != nil {
 		t.Error("an ended transaction's Source keeps its handle")
 	}
 	if txSrc.DB() != &db || spSrc.DB() != &db {
@@ -59,7 +59,7 @@ func TestSourceResolves(t *testing.T) {
 		}
 		return stop
 	})
-	if !errors.Is(err, stop) || txSrc.tx.Load() != nil || txSrc.DB() != &db {
+	if !errors.Is(err, stop) || txSrc.liveTx() != nil || txSrc.DB() != &db {
 		t.Errorf("after a rollback: %v; the Source keeps its handle or does not fall back", err)
 	}
 }

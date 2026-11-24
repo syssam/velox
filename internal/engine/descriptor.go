@@ -30,9 +30,9 @@ type DescriptorFields struct {
 // bound to one new entity. Each is nil when the descriptor's is.
 type DescriptorView struct {
 	D            *DescriptorFields
-	FieldPtr     func(i int) any       // d.FieldPtr(x, i)
-	EdgeFieldPtr func(i int) any       // d.EdgeFieldPtr(x, i)
-	SourcePtr    func() unsafe.Pointer // d.SourcePtr(x): the address of x's Source field, one pointer
+	FieldPtr     func(i int) any // d.FieldPtr(x, i)
+	EdgeFieldPtr func(i int) any // d.EdgeFieldPtr(x, i)
+	SourceAt     unsafe.Pointer  // d.SourcePtr(x): the address of x's Source field, one pointer; nil for none
 }
 
 // BuildDescriptor builds the metadata of the entity x, a new *E at base, from the
@@ -102,8 +102,8 @@ func buildDescriptor(t reflect.Type, base unsafe.Pointer, load func() Descriptor
 		return nil, err
 	}
 	info.names = nameIndex(cols)
-	if v.SourcePtr != nil {
-		at := uintptr(v.SourcePtr())
+	if v.SourceAt != nil {
+		at := uintptr(v.SourceAt)
 		if at < uintptr(base) || at-uintptr(base)+unsafe.Sizeof(base) > t.Size() || (at-uintptr(base))%unsafe.Alignof(base) != 0 {
 			return nil, schemaError(name, "", "the generated metadata's SourcePtr does not point into the entity; run go tool velox-gen")
 		}

@@ -26,8 +26,12 @@ type Source struct {
 	// WithoutPolicy reason; nil for a transaction's Source.
 	db *DB
 	// tx is, for a transaction's Source, its handle without a WithoutPolicy
-	// reason while the transaction is live; nil once it has ended.
-	tx atomic.Pointer[DB]
+	// reason while the transaction is live; nil once it has ended. It is
+	// an unsafe.Pointer read and written with sync/atomic's functions, not
+	// an atomic.Pointer[DB]: a generic type's descriptor is emitted in each
+	// package that names a type holding a DB, which every velox.Query[E]
+	// does, and cost 40 KB per entity package.
+	tx unsafe.Pointer
 	// up is, for a transaction's Source, the Source of the DB the
 	// transaction (or savepoint) was begun on, which it falls back to.
 	up *Source
@@ -43,17 +47,20 @@ func (s *Source) DB() *DB {
 		if s.db != nil {
 			return s.db
 		}
-		if t := s.tx.Load(); t != nil {
+		if t := s.liveTx(); t != nil {
 			return t
 		}
 	}
 	return nil
 }
 
+// liveTx is s.tx: its transaction's handle while it is live, else nil.
+func (s *Source) liveTx() *DB { return (*DB)(atomic.LoadPointer(&s.tx)) }
+
 // end ends a transaction's Source: from now on it resolves to up, and it
 // keeps nothing of the transaction.
 func (s *Source) end() {
-	s.tx.Store(nil)
+	atomic.StorePointer(&s.tx, nil)
 	if s.kept != nil {
 		*s.kept = DB{}
 		s.kept = nil
@@ -79,7 +86,7 @@ func txSource(h *DB, up *Source) *Source {
 	if h.bypass == "" {
 		s := &Source{up: up}
 		h.src = s
-		s.tx.Store(h)
+		atomic.StorePointer(&s.tx, unsafe.Pointer(h))
 		return s
 	}
 	b := &bypassSource{}
@@ -87,7 +94,7 @@ func txSource(h *DB, up *Source) *Source {
 	h.src = &b.Source
 	b.kept = *h
 	b.kept.owned, b.kept.bypass = false, ""
-	b.tx.Store(&b.kept)
+	atomic.StorePointer(&b.tx, unsafe.Pointer(&b.kept))
 	b.Source.kept = &b.kept
 	return &b.Source
 }
