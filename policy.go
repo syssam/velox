@@ -42,7 +42,10 @@ import (
 // A policy function decides from ctx, db and, for Insert, the row. db is
 // the DB the statement runs on, never nil: inside Tx it is the
 // transaction's, as Mutation.DB is for a hook and the db a Filter gets.
-// Prefer a condition that reads nothing itself, such as HasEdgeWith, which
+// An insert that velox runs in a transaction of its own, such as a batch
+// of several statements or a recording DB's insert, asks Insert inside
+// it, with that transaction's DB; a hook around the insert, which runs
+// before velox begins it, gets the outer DB. Prefer a condition that reads nothing itself, such as HasEdgeWith, which
 // runs inside the statement. A function that must read to decide, such as
 // a lookup of an organization's subtree, reads through db with ctx, so it
 // gets the same answer inside a transaction and outside:

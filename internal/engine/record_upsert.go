@@ -56,6 +56,9 @@ func recordInsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statemen
 	rows := []unsafe.Pointer{p}
 	var n int64
 	send := func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+		if err := InsertAllowed(ctx, tx, in, p); err != nil {
+			return nil, err
+		}
 		cp.InTx = tx.InTx
 		cs, k, err := sendRecorded(ctx, tx, &cp, rows, gen, func(ctx context.Context, tx *DB, st *Statement) (int64, error) {
 			var res Result

@@ -165,6 +165,36 @@ func TestPolicyGetsTheStatementsDB(t *testing.T) {
 	}
 }
 
+// TestInsertPolicyInImplicitTx: an insert that velox runs in a transaction
+// of its own, as a recording DB's does, asks the Insert policy inside it,
+// with a DB of that transaction, which reads through it. Before, the
+// policy ran before the transaction began, on the outer DB.
+func TestInsertPolicyInImplicitTx(t *testing.T) {
+	resetPNote(t)
+	ctx := context.Background()
+	var rec *velox.DB
+	var calls int
+	var errs []error
+	fixture.PNoteInsert = func(ctx context.Context, db *velox.DB, _ velox.Row) error {
+		calls++
+		if _, inTx := velox.TxFrom(ctx, rec); !inTx || db == rec {
+			t.Errorf("call %d: the policy ran outside the insert's transaction (TxFrom %v), or on the outer DB (%v)", calls, inTx, db == rec)
+		}
+		ownerO2(ctx, db, &errs)
+		return nil
+	}
+	rec = interceptorDB(t).Record(velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error { return nil }))
+	if err := rec.Insert(&fixture.PNote{OwnerID: 1, Body: "one"}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := rec.InsertAll([]fixture.PNote{{OwnerID: 1, Body: "many-1"}, {OwnerID: 2, Body: "many-2"}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 3 || len(errs) != 0 {
+		t.Errorf("%d policy calls, want 3; lookups failed: %v", calls, errs)
+	}
+}
+
 // TestInsertPolicyReadsInTx: an Insert policy that reads through its db
 // judges a row inside a Tx as outside it.
 func TestInsertPolicyReadsInTx(t *testing.T) {

@@ -101,6 +101,14 @@ type PrivacyMutation interface { Op() Op; Filter() PrivacyFilter; Value(name str
 
 `db` is the DB the statement runs on, never nil: inside `Tx` the
 transaction's, as `Mutation.DB` is for a hook and the `db` a Filter gets.
+An insert that velox runs in a transaction of its own (a batch of several
+statements, a recording DB's insert, MySQL's upsert that reads its row
+back, a bidirectional edge's link) asks `Insert` and the Mutation rules
+inside that transaction, with its DB; before, they ran before it began,
+on the outer DB (`TestInsertPolicyInImplicitTx`). A denied row then rolls
+back a transaction that wrote nothing. A hook around the insert runs
+before velox begins it, so its `Mutation.DB` is the outer DB. `SQL(ctx)`
+asks the policy on the DB it was called on, as before.
 `privacy.Query` and `privacy.Mutation` are `PrivacyQuery` and
 `PrivacyMutation`, so a rule list reads through `q.DB()` or `m.DB()`.
 0135's guard stays: a statement made under a policy function's or rule

@@ -459,7 +459,10 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 	var st Statement
 	if q.one != nil {
 		var err error
-		if st, _, err = oneStatement(ctx, &q.db.e, q.meta, q.one, engine.InsertGiven(q.meta.Info, q.set, mu), q.conflict); err != nil {
+		if st, _, err = oneStatement(&q.db.e, q.meta, q.one, engine.InsertGiven(q.meta.Info, q.set, mu), q.conflict); err != nil {
+			return err
+		}
+		if err = engine.InsertAllowed(ctx, &q.db.e, q.meta.Info, unsafe.Pointer(q.one)); err != nil {
 			return err
 		}
 	} else {
@@ -515,16 +518,15 @@ func rowValues[E any](m *metaState[E], p *E, cols []int) []any {
 // writing set, the columns its setters store a value in, as the entity
 // holds them. On
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
-func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, set []int, cf *ConflictClause) (Statement, int, error) {
+// It does not ask the Insert policy: engine.InsertRow asks it on the DB the
+// insert runs on, and render before it renders.
+func oneStatement[E any](db *engine.DB, m *metaState[E], p *E, set []int, cf *ConflictClause) (Statement, int, error) {
 	gen := generatedKey(m, p)
 	cols := engine.InsertColumns(m.Info, gen)
 	if len(cols) == 0 {
 		return Statement{}, -1, engine.ErrNothingToInsert(m.Info)
 	}
 	if err := engine.ValidateInsert(m.Info, db.D, unsafe.Pointer(p), cols, set, cf); err != nil {
-		return Statement{}, -1, err
-	}
-	if err := engine.InsertAllowed(ctx, db, m.Info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.Info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.InTx}
@@ -541,7 +543,7 @@ func oneStatement[E any](ctx context.Context, db *engine.DB, m *metaState[E], p 
 
 // insertOne inserts the entity at p and sets out.Affected.
 func insertOne[E any](ctx context.Context, db *engine.DB, m *metaState[E], p *E, set []int, cf *ConflictClause, out *Result) error {
-	st, gen, err := oneStatement(ctx, db, m, p, set, cf)
+	st, gen, err := oneStatement(db, m, p, set, cf)
 	if err != nil {
 		return err
 	}

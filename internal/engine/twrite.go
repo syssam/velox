@@ -256,7 +256,10 @@ func (q TableInsert) render(ctx context.Context, mu *MutationState) error {
 	var st Statement
 	if q.one != nil {
 		var err error
-		if st, _, err = q.t.oneStatement(ctx, q.e, q.one, mu.Given, q.conflict); err != nil {
+		if st, _, err = q.t.oneStatement(q.e, q.one, mu.Given, q.conflict); err != nil {
+			return err
+		}
+		if err = InsertAllowed(ctx, q.e, q.t.info, q.one); err != nil {
 			return err
 		}
 	} else {
@@ -319,17 +322,15 @@ func (t *table) rowValues(p unsafe.Pointer, cols []int) []any {
 }
 
 // oneStatement is the insert of the row at p, writing set, the columns a
-// hook's Set named, as the row holds them (SetExplicit).
-func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, set []int, cf *ConflictClause) (Statement, int, error) {
+// hook's Set named, as the row holds them (SetExplicit). It does not ask
+// the Insert policy: InsertRow asks it on the DB the insert runs on.
+func (t *table) oneStatement(db *DB, p unsafe.Pointer, set []int, cf *ConflictClause) (Statement, int, error) {
 	gen := t.generatedKey(p)
 	cols := InsertColumns(t.info, gen)
 	if len(cols) == 0 {
 		return Statement{}, -1, ErrNothingToInsert(t.info)
 	}
 	if err := ValidateInsert(t.info, db.D, p, cols, set, cf); err != nil {
-		return Statement{}, -1, err
-	}
-	if err := InsertAllowed(ctx, db, t.info, p); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: t.info, Columns: cols, Rows: [][]any{t.rowValues(p, cols)}, Conflict: cf, InTx: db.InTx}
@@ -345,7 +346,7 @@ func (t *table) oneStatement(ctx context.Context, db *DB, p unsafe.Pointer, set 
 }
 
 func (t *table) insertOne(ctx context.Context, db *DB, p unsafe.Pointer, set []int, cf *ConflictClause, out *Result) error {
-	st, gen, err := t.oneStatement(ctx, db, p, set, cf)
+	st, gen, err := t.oneStatement(db, p, set, cf)
 	if err != nil {
 		return err
 	}
@@ -368,11 +369,6 @@ func (t *table) prepareMany(ctx context.Context, db *DB, xs TableRows, cf *Confl
 	}
 	for i := range xs.n {
 		if err := ValidateInsert(t.info, db.D, xs.at(i), cols, xs.explicit, cf); err != nil {
-			return nil, 0, err
-		}
-	}
-	for i := range xs.n {
-		if err := InsertAllowed(ctx, db, t.info, xs.at(i)); err != nil {
 			return nil, 0, err
 		}
 	}
@@ -474,6 +470,9 @@ func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	if err != nil {
 		return Statement{}, err
 	}
+	if err := t.allowMany(ctx, db, xs); err != nil {
+		return Statement{}, err
+	}
 	ends := t.defaultRuns(db, xs, cols)
 	inTx := db.InTx || len(ends) > 1 || xs.n > per || ConditionedUpsert(ctx, db, t.info, cf, xs.n, t.readsBack(db, xs, cols))
 	st := t.batch(xs, 0, min(per, ends[0]), cols, cf, inTx)
@@ -508,10 +507,25 @@ func (t *table) defaultRuns(db *DB, xs TableRows, cols []int) []int {
 	return DefaultRuns(t.info, db.D, cols, xs.explicit, xs.n, func(i, c int) any { return Elem(t.addr(xs.at(i), c)) })
 }
 
+// allowMany asks the Insert policy about each of xs's rows on db.
+func (t *table) allowMany(ctx context.Context, db *DB, xs TableRows) error {
+	for i := range xs.n {
+		if err := InsertAllowed(ctx, db, t.info, xs.at(i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // insertBatches sends xs's rows, a statement of at most per rows within
-// each run of ends, each with send (SendBatch, or recordMany's).
+// each run of ends, each with send (SendBatch, or recordMany's). It asks
+// the Insert policy first, on db: inside the transaction velox began for
+// the insert, if it began one, so the policy reads through it.
 func (t *table) insertBatches(ctx context.Context, db *DB, xs TableRows, cols []int, per int, ends []int, cf *ConflictClause,
 	send func(ctx context.Context, db *DB, st *Statement, rows []unsafe.Pointer, gen int) (int64, error)) (int64, error) {
+	if err := t.allowMany(ctx, db, xs); err != nil {
+		return 0, err
+	}
 	gen := t.generatedKey(xs.at(0))
 	var affected int64
 	unknown := false

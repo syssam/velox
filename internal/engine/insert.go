@@ -468,7 +468,9 @@ func errBidiUpdate(in *EntityInfo) error {
 // key of a bidirectional one-to-one edge (EdgeBidi) is inserted with the
 // statement that links its partner (bidiInsert). It is not generic, so that
 // it is compiled once; the transaction's closure works on copies, made only
-// for such a row, so that no other insert allocates for it.
+// for such a row, so that no other insert allocates for it. It asks the
+// Insert policy on the DB the insert runs on: inside the transaction it
+// begins, if it begins one.
 func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
 	if db.rec != nil {
 		return recordInsertRow(ctx, db, p, st, gen, out)
@@ -479,6 +481,9 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 			setStmtBidi(&cp, &bidiStep{Keys: keys, Vals: vs, Insert: true})
 			var res Result
 			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) ([]ChangeRow, error) {
+				if err := InsertAllowed(ctx, tx, in, p); err != nil {
+					return nil, err
+				}
 				return nil, sendOne(ctx, tx, p, &cp, gen, &res)
 			})
 			if err == nil {
@@ -493,12 +498,18 @@ func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 		cp := *st
 		var res Result
 		err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+			if err := InsertAllowed(ctx, tx, st.Entity, p); err != nil {
+				return err
+			}
 			cp.InTx = true
 			return sendOne(ctx, tx, p, &cp, gen, &res)
 		})
 		if err == nil {
 			out.Affected = res.Affected
 		}
+		return err
+	}
+	if err := InsertAllowed(ctx, db, st.Entity, p); err != nil {
 		return err
 	}
 	return sendOne(ctx, db, p, st, gen, out)
