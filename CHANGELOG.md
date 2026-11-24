@@ -807,7 +807,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   that entity's own metadata. `velox.HasColumn(entity, column)` and its
   process-wide registry are removed: it was false before an entity's first
   use, could not tell two packages' entities of one name apart, and took a
-  lock per call (ADR 0151).
+  lock per call. `veloxtest.FilterEntity(name, columns...)` is a stand-in
+  with that name and exactly those columns, so a filter is tested with no
+  schema and no database (ADR 0151).
 - An `Interceptor`'s `Filter` is `func(ctx, db *velox.DB)`: `db` is the
   statement's DB, the transaction's inside `Tx`, as a `Policy` function's
   and a `WithFilter` filter's are. A Filter that read joined with

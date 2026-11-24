@@ -136,6 +136,10 @@ type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predi
 // Both read the entity's own metadata: nothing global, no lock.
 type FilterEntity struct{ in *engine.EntityInfo }
 
+func init() {
+	engine.WrapFilterEntity = func(in *engine.EntityInfo) any { return FilterEntity{in} }
+}
+
 // Name is the entity's name in the schema: "Invoice".
 func (e FilterEntity) Name() string {
 	if e.in == nil {

@@ -1502,6 +1502,7 @@ func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.
 
 package veloxtest
 func Budget(t testing.TB, ctx context.Context, b velox.StatementBudget) context.Context
+func FilterEntity(name string, columns ...string) velox.FilterEntity
 func NoNPlusOne(t testing.TB, ctx context.Context) context.Context
 func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...velox.Option) *velox.DB
 func RolledBack(t testing.TB, ctx context.Context, db *velox.DB, fn func(ctx context.Context, tx *velox.DB))
