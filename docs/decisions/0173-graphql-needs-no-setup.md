@@ -49,6 +49,17 @@ every column and batched nothing, N+1, with no error.
   imports the adapter blank. velox-graphql's files do not import it:
   that linked gqlgen and net/http into every program that only queries,
   measured below.
+- velox-graphql, for gqlgen, refuses a gqlgen configuration that binds
+  nothing from gqlgenx, naming the fix: bind `ID` to `gqlgenx.Int64ID`, or
+  import gqlgenx blank in the server and give the option `gqlgenx=blank`,
+  which skips the check. The configuration is the first `.gqlgen.yml`,
+  `gqlgen.yml` or `gqlgen.yaml` (gqlgen's names) in the generated
+  package's directory or one above it, up to the module's root; the
+  module is the one velox-graphql runs in, and the package's directory is
+  its import path below it. A comment does not count. With no
+  configuration, a package outside the module, or `engine=graphql-go`,
+  nothing is checked: a graphql-go schema cannot do without
+  `graphqlgo.Scalars` or `ScalarsOnly`.
 - The setup calls stay, unchanged, and none is deprecated, since each
   still does something no-setup does not:
   - `gqlgenx.Setup` and `NewExtension`: the request's size, depth, cost,
@@ -77,12 +88,15 @@ every column and batched nothing, N+1, with no error.
 0105 failed closed because a missing setup could not be seen. Now nothing
 is missing: the reader comes with the adapter, and a server cannot serve
 velox's types through gqlgen or graphql-go without binding its scalars,
-which links it. Inside a field the reader gives the same field, the same
+which links it, and velox-graphql refuses a gqlgen configuration that
+binds none of gqlgenx's unless the application says it imports it blank. Inside a field the reader gives the same field, the same
 selection and a batch table, so an edge's first caller loads it for every
 row of its batch, as before. Outside any engine there is no sibling to
 batch with, and reading every column is the only answer, which 0121
 already gave under `Service`. The one way to an unbatched read inside a
-server is a third engine, which velox-graphql does not generate for.
+server is a third engine, which velox-graphql does not generate for, or a
+gqlgen configuration velox-graphql cannot find (outside the generated
+package's module, or under a name gqlgen is given with `--config`).
 
 ## Measured
 

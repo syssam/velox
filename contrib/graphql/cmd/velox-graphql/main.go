@@ -63,6 +63,13 @@
 //     (bestFriendID).
 //   - jsontypes=named names a json field's type by its Go type's name
 //     (Settings, [Assignee!]); jsontypes=json, the default, makes it JSON.
+//   - gqlgenx=blank says the gqlgen server imports veloxgql/gqlgenx blank.
+//     Without it, for gqlgen, velox-graphql refuses a gqlgen configuration
+//     that binds nothing from gqlgenx: the server would not link the reader
+//     that batches generated edges (docs/decisions/0173). The configuration
+//     is the first .gqlgen.yml, gqlgen.yml or gqlgen.yaml in the generated
+//     package's directory or one above it, up to the module's root; with
+//     none, nothing is checked.
 //
 // A connection's edges and node are nullable, and an order of one term
 // breaks ties by the key in its direction, as entgql's do

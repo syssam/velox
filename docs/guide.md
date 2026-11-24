@@ -2774,9 +2774,14 @@ runtime `veloxgql` and its package `gqlgraph`; gqlgen's adapter is
 server needs no setup (decision 0173): gqlgen's server with
 `Resolver{DB: db}` alone pages, reads only the columns a request selects,
 and loads each edge of a level in one statement, batched by the adapter
-from gqlgen's own context. A `gqlgen.yml` that binds nothing to gqlgenx
-needs `import _ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"`
-in the server.
+from gqlgen's own context. velox-graphql refuses a `gqlgen.yml` that
+binds nothing to gqlgenx, since the server would not link the adapter and
+each edge would read one row at a time: bind `ID` to `gqlgenx.Int64ID`,
+or import `github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx`
+blank in the server and give velox-graphql `gqlgenx=blank`. It reads the
+first `.gqlgen.yml`, `gqlgen.yml` or `gqlgen.yaml` in the generated
+package's directory or one above it, up to the module's root, and checks
+nothing when there is none or under `engine=graphql-go`.
 
 ```go
 srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}}))
@@ -2900,6 +2905,7 @@ Each option stands alone, and a value it does not know fails the run.
 | `entities=A+B` | every entity | the SDL of the entities listed alone |
 | `apptypes=A+B` | none | the types and scalars the application declares itself |
 | `only=enums` | everything | the enums alone, for an application with its own SDL |
+| `gqlgenx=` | the gqlgen configuration must bind something from gqlgenx | `blank`: the server imports gqlgenx blank, and nothing is checked |
 
 An application that keeps the GraphQL API of velox's predecessor, served by
 graphql-go, gives these together

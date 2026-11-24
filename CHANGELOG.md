@@ -904,8 +904,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `graphqlgo.With` and `veloxgql.Service` still work, for request limits,
   the mutation transaction, the error presenter and `veloxgql.DB(ctx)`.
   The adapter registers itself when linked, as `gqlgen.yml`'s models from
-  gqlgenx and `graphqlgo.Scalars` link it; a server that binds none
-  imports it blank. A connection's
+  gqlgenx and `graphqlgo.Scalars` link it; velox-graphql refuses a
+  gqlgen configuration that binds nothing from gqlgenx, unless the server
+  imports it blank and says so with the option `gqlgenx=blank`. A connection's
   `Conn` field is exported: `gqlgraph.ConnectionFromRows` builds one of
   rows given for a test's fake. `veloxgql.GeneratedCodeIsVersion30` is now
   `GeneratedCodeIsVersion31`: regenerate.

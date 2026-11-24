@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 
@@ -33,6 +34,10 @@ var Supports = plugin.Supports{Protocol: 2, Model: 3}
 // (sdl.Config's Entities); the Go is the whole schema's. apptypes=A+B names
 // the types the application declares (sdl.Config's AppTypes).
 //
+// For gqlgen it refuses a gqlgen configuration that binds nothing from
+// gqlgenx (checkGQLGenConfig), unless gqlgenx=blank says the server
+// imports gqlgenx blank (decision 0173).
+//
 // It refuses any other option, as the plugin protocol asks; compat= is
 // refused with the options that replace it. It warns of each many-to-many
 // edge whose create or update input has no field that adds links, as its
@@ -51,6 +56,15 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 		}
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err
+	}
+	if !cfg.GraphQLGo && req.Options["gqlgenx"] != "blank" {
+		dir, err := os.Getwd()
+		if err != nil {
+			return nil, nil, fmt.Errorf("velox-graphql: %w", err)
+		}
+		if err := checkGQLGenConfig(dir, req.OutPath); err != nil {
+			return nil, nil, err
+		}
 	}
 	sdlFiles, surface, err := sdl.RenderFiles(req.Model, cfg)
 	if err != nil {
@@ -82,6 +96,7 @@ func config(req *plugin.Request) (sdl.Config, error) {
 		case k == "where" && v == "whitelist":
 			cfg.WhereWhitelist = true
 		case k == "engine" && v == "gqlgen":
+		case k == "gqlgenx" && v == "blank":
 		case k == "engine" && v == "graphql-go":
 			cfg.GraphQLGo, cfg.Package = true, req.OutPath
 		case k == "sdlfiles" && v == "one":
@@ -102,7 +117,7 @@ func config(req *plugin.Request) (sdl.Config, error) {
 				cfg.AppTypes = append(cfg.AppTypes, n)
 			}
 		default:
-			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, %s, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", strings.Join(sdl.OptionHelp(), ", "), options(req.Options))
+			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, %s, where=whitelist, engine=gqlgen or engine=graphql-go, gqlgenx=blank, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", strings.Join(sdl.OptionHelp(), ", "), options(req.Options))
 		}
 	}
 	return cfg, nil
