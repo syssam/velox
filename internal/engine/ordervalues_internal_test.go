@@ -70,6 +70,10 @@ func TestOrderValueRoundTrip(t *testing.T) {
 		{DecimalText("0.37500000000000000700"), DecimalText("0.37500000000000000700")},
 		{DecimalText("-12.500"), DecimalText("-12.500")},
 		{TimeText("2026-03-01"), TimeText("2026-03-01")},
+		{DecimalText("NaN"), DecimalText("NaN")}, {DecimalText("Infinity"), DecimalText("Infinity")},
+		{DecimalText("-Infinity"), DecimalText("-Infinity")},
+		{TimeText("0000-00-00"), TimeText("0000-00-00")}, {TimeText("0000-00-00 00:00:00"), TimeText("0000-00-00 00:00:00")},
+		{TimeText("0000-00-00 00:00:00.000000"), TimeText("0000-00-00 00:00:00.000000")},
 		{TimeText("2026-03-01 10:00:00.123456"), TimeText("2026-03-01 10:00:00.123456")},
 		{at, at},
 	} {
@@ -108,16 +112,18 @@ func TestOrderValueRoundTrip(t *testing.T) {
 	if got, err := DecodeOrderValue(nan); err != nil || !math.IsNaN(got.(float64)) {
 		t.Errorf("NaN: %v %v", got, err)
 	}
-	for _, bad := range []any{struct{}{}, DecimalText("NaN"), DecimalText("-Infinity"), TimeText("0000-00-00 00:00:00")} {
+	for _, bad := range []any{struct{}{}, DecimalText("nan"), DecimalText("1e5"), TimeText("0000-00-00 01:00:00")} {
 		if _, err := EncodeOrderValue(bad); err == nil {
 			t.Errorf("%#v: no error", bad)
 		}
 	}
 	for _, bad := range []any{"x", "u:12", "u:x", "d:abc", "t:now", "f:1.5", json.Number("1x"), 1.5, []any{},
-		"d:NaN", "d:Inf", "d:infinity", "d:0x1p-2", "d:1e999999", "d:1E+40", "d:+1", "d:1.", "d:.5", "d:",
+		"d:Inf", "d:0x1p-2", "d:1e999999", "d:1E+40", "d:+1", "d:1.", "d:.5", "d:",
 		"dt:yesterday", "dt:2026-13-45 99:00:00", "dt:2026-02-30", "dt:2026-03-01T10:00:00", "dt:2026-03-01 10:00:00.1234567", "dt:",
 		"u:018446744073709551615", "u:+18446744073709551615", "u:18446744073709551616", "u:9223372036854775807",
 		"f:nan", "f:inf", "f:Infinity", "f:+inf",
+		"d:nan", "d:+NaN", "d:NaN ", "d:infinity", "d:+Infinity",
+		"dt:0000-00-00 99:00:00", "dt:0000-00-00 00:00:00.0000000", "dt:0000-00-00 00:00:01", "dt:0000-00-00T00:00:00",
 		json.Number("0x10"), json.Number("+1"), json.Number("1e999"), json.Number("Inf"), json.Number("01"),
 	} {
 		if _, err := DecodeOrderValue(bad); err == nil {
@@ -129,7 +135,7 @@ func TestOrderValueRoundTrip(t *testing.T) {
 // FuzzOrderValue: no string or JSON number panics DecodeOrderValue, and a
 // value it decodes encodes to a value that decodes to the same.
 func FuzzOrderValue(f *testing.F) {
-	for _, s := range []string{"s:x", "d:-12.50", "dt:2026-03-01 10:00:00.5", "u:18446744073709551615", "t:2026-03-01T10:00:00Z", "f:NaN", "d:0x1p-2", "dt:2026-13-45"} {
+	for _, s := range []string{"s:x", "d:-12.50", "dt:2026-03-01 10:00:00.5", "u:18446744073709551615", "t:2026-03-01T10:00:00Z", "f:NaN", "d:0x1p-2", "dt:2026-13-45", "d:NaN", "d:nan", "dt:0000-00-00 00:00:00.000000", "dt:0000-00-00 99:00:00"} {
 		f.Add(s, false)
 	}
 	for _, s := range []string{"3", "3.0", "-1e5", "1e999"} {
@@ -192,6 +198,7 @@ func TestBoundValue(t *testing.T) {
 		{Postgres, at, "?", at},
 		{MySQL, uint64(math.MaxUint64), "?", uint64(math.MaxUint64)},
 		{MySQL, "x", "?", "x"},
+		{Postgres, DecimalText("NaN"), "CAST(? AS NUMERIC)", "NaN"},
 	} {
 		text, arg := boundValue(c.d, c.v)
 		if text != c.text || !reflect.DeepEqual(arg, c.arg) {

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -104,6 +105,24 @@ func TestOrderSig(t *testing.T) {
 	} {
 		if sig(o) == base {
 			t.Errorf("another %s, the same signature", name)
+		}
+	}
+}
+
+// TestOrderValuesZeroDateSQL: past MySQL's zero date, read as text or as the
+// zero time, a keyset compares by YEAR, MONTH and DAY and binds no literal of
+// it, which NO_ZERO_DATE would cast to NULL.
+func TestOrderValuesZeroDateSQL(t *testing.T) {
+	calc := velox.Calc[testmodel.Invoice]("COALESCE(?, ?)", I.PaidAt, I.CreatedAt)
+	row := &testmodel.Invoice{ID: 7}
+	for _, v := range []any{untyped.TimeText("0000-00-00 00:00:00.000000"), time.Time{}} {
+		q := untyped.FromQuery(openFake(velox.MySQL, &fakeconn.Exec{}).Query[testmodel.Invoice]().OrderBy(calc.Asc(), I.ID.Asc()).Limit(10))
+		text, args := sqlOK(t)(q.AfterValues(row, []any{v}).SQL(ctx))
+		e := "(COALESCE(`paid_at`, `created_at`))"
+		zero := "(YEAR(" + e + ") = 0 AND MONTH(" + e + ") = 0 AND DAY(" + e + ") = 0)"
+		want := "WHERE (((" + e + " IS NULL OR NOT " + zero + ")) OR ((" + zero + ") AND `id` > ?))"
+		if !strings.Contains(text, want) || len(args) != 1 || args[0] != int64(7) {
+			t.Errorf("%#v:\n got %s %#v\nwant …%s…", v, text, args, want)
 		}
 	}
 }

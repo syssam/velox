@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,7 +60,10 @@ type wireExpr struct {
 // finer than a double, a text and a time expression, each with ties and
 // NULLs, page forward and backward with every value carried through the
 // cursor's JSON, with no row repeated or skipped and in the exact order the
-// database sorts them. The decimal's rows differ past a double's digits and
+// database sorts them. On PostgreSQL a numeric also holds NaN, which sorts
+// after every number, and -Infinity; on MySQL a time holds the zero date,
+// which sorts before every other, under the default sql_mode with
+// NO_ZERO_DATE. The decimal's rows differ past a double's digits and
 // are tie-broken by the key against the expression's direction, so a value
 // compared as a double (MySQL's text against a decimal) repeats or skips
 // rows; on SQLite, which keeps a double, they tie. On MySQL a time is also
@@ -118,13 +122,64 @@ func TestOrderValuesWire(t *testing.T) {
 			exprs = append(exprs, wireExpr{"unsigned", velox.Calc[testmodel.Invoice]("CAST(? % ? AS UNSIGNED) + CAST(? AS UNSIGNED)", I.ID, int64(3), uint64(18446744073709551000)),
 				func(a, b testmodel.Invoice) ([2]bool, int) { return [2]bool{}, cmp.Compare(a.ID%3, b.ID%3) }})
 		}
+		if tg.d == velox.Postgres {
+			// NaN where the key is a multiple of 5, else NULL where it is
+			// 1 past a multiple of 4, else -Infinity where it is 2 past a
+			// multiple of 6, else the total.
+			rank := func(a testmodel.Invoice) (bool, float64) {
+				switch {
+				case a.ID%5 == 0:
+					return false, 1e9
+				case a.ID%4 == 1:
+					return true, 0
+				case a.ID%6 == 2:
+					return false, -1e9
+				}
+				return false, a.Total
+			}
+			exprs = append(exprs, wireExpr{"nan", velox.Calc[testmodel.Invoice](
+				"CASE WHEN ? % ? = ? THEN CAST(? AS NUMERIC) WHEN ? % ? = ? THEN NULL WHEN ? % ? = ? THEN CAST(? AS NUMERIC) ELSE CAST(? AS NUMERIC) END",
+				I.ID, int64(5), int64(0), "NaN", I.ID, int64(4), int64(1), I.ID, int64(6), int64(2), "-Infinity", I.Total),
+				func(a, b testmodel.Invoice) ([2]bool, int) {
+					na, ra := rank(a)
+					nb, rb := rank(b)
+					return [2]bool{na, nb}, cmp.Compare(ra, rb)
+				}})
+		}
+		if tg.d == velox.MySQL {
+			var mode string
+			var zero bool
+			if err := tg.direct.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode, YEAR(FROM_DAYS(0)) = 0").Scan(&mode, &zero); err != nil {
+				t.Fatal(err)
+			}
+			if !zero || !strings.Contains(mode, "NO_ZERO_DATE") {
+				t.Fatalf("sql_mode %q, FROM_DAYS(0) the zero date: %v", mode, zero)
+			}
+			// The zero date where the key is a multiple of 5, else the
+			// time paid.
+			exprs = append(exprs, wireExpr{"zero date", velox.Calc[testmodel.Invoice]("CASE WHEN ? % ? = ? THEN FROM_DAYS(?) ELSE ? END",
+				I.ID, int64(5), int64(0), int64(0), I.PaidAt),
+				func(a, b testmodel.Invoice) ([2]bool, int) {
+					at := func(a testmodel.Invoice) *time.Time {
+						if a.ID%5 == 0 {
+							return &time.Time{}
+						}
+						return a.PaidAt
+					}
+					x, y := at(a), at(b)
+					if x == nil || y == nil {
+						return [2]bool{x == nil, y == nil}, 0
+					}
+					return [2]bool{}, x.Compare(*y)
+				}})
+		}
 		dbs := []*velox.DB{tg.db}
 		if tg.d == velox.MySQL {
 			dbs = append(dbs, mysqlNoParseTime(t))
 		}
 		for k, db := range dbs {
 			for _, e := range exprs {
-				if k > 0 && e.name != "time" && e.name != "decimal" {
+				if k > 0 && e.name != "time" && e.name != "decimal" && e.name != "zero date" {
 					continue
 				}
 				for _, o := range []struct {

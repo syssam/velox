@@ -100,8 +100,32 @@ func valueEqual(o OrderTerm, v any, d Dialect) Node {
 	if nullValue(v) {
 		return valueExpr("? IS NULL", t)
 	}
+	if zeroDate(d, v) {
+		return valueExpr(zeroDateText, t, t, t)
+	}
 	b, arg := boundValue(d, v)
 	return valueExpr("? = "+b, t, arg)
+}
+
+// zeroDateText is the condition that a MySQL date or time is the zero date,
+// 0000-00-00, written with no literal of it: under NO_ZERO_DATE MySQL casts
+// the literal to NULL.
+const zeroDateText = "(YEAR(?) = 0 AND MONTH(?) = 0 AND DAY(?) = 0)"
+
+// zeroDate reports whether v, an order value on dialect d, is MySQL's zero
+// date: a TimeText of it, or the zero time.Time, which the driver reads it
+// as with parseTime. It sorts before every other date.
+func zeroDate(d Dialect, v any) bool {
+	if d != MySQL {
+		return false
+	}
+	switch x := v.(type) {
+	case TimeText:
+		return zeroTimeText.MatchString(string(x))
+	case time.Time:
+		return x.IsZero()
+	}
+	return false
 }
 
 // boundValue is how v, an order value, is bound on dialect d: the text that
@@ -146,6 +170,19 @@ func valuePast(o OrderTerm, v any, d Dialect) (Node, bool) {
 		return Node{}, false
 	case null:
 		return valueExpr("? IS NOT NULL", t), true
+	}
+	if zeroDate(d, v) {
+		// Past the zero date ascending is every other date; descending,
+		// nothing but NULL where NULL sorts last.
+		switch {
+		case !o.Desc && first:
+			return valueExpr("(? IS NOT NULL AND NOT "+zeroDateText+")", t, t, t, t), true
+		case !o.Desc:
+			return valueExpr("(? IS NULL OR NOT "+zeroDateText+")", t, t, t, t), true
+		case first:
+			return Node{}, false
+		}
+		return valueExpr("? IS NULL", t), true
 	}
 	b, arg := boundValue(d, v)
 	if first {
@@ -281,8 +318,9 @@ func orderValue(v any, typ string) any {
 // and "f:-Inf"; text is "s:" and the text, a DecimalText "d:" and its text,
 // a TimeText "dt:" and its text, and a time.Time "t:" and RFC 3339 with
 // nanoseconds. Any other value is an error, and so is a DecimalText or a
-// TimeText that is not as the drivers print one (decimalText,
-// validTimeText): a NaN or infinite numeric, a zero date.
+// TimeText that is not as the drivers print one (decimalText and
+// PostgreSQL's NaN, Infinity and -Infinity; validTimeText and MySQL's zero
+// date).
 func EncodeOrderValue(v any) (any, error) {
 	switch x := v.(type) {
 	case nil, bool, int64:
@@ -317,12 +355,12 @@ func EncodeOrderValue(v any) (any, error) {
 	case []byte:
 		return "s:" + string(x), nil
 	case DecimalText:
-		if !decimalText.MatchString(string(x)) {
+		if !decimalText.MatchString(string(x)) && !specialDecimal(string(x)) {
 			return nil, fmt.Errorf("velox: an ordering by an expression read the decimal %q, which a cursor cannot hold", string(x))
 		}
 		return "d:" + string(x), nil
 	case TimeText:
-		if !validTimeText(string(x)) {
+		if !validTimeText(string(x)) && !zeroTimeText.MatchString(string(x)) {
 			return nil, fmt.Errorf("velox: an ordering by an expression read the time %q, which a cursor cannot hold", string(x))
 		}
 		return "dt:" + string(x), nil
@@ -355,9 +393,19 @@ var (
 	// timeText is MySQL's DATE, or DATETIME and TIMESTAMP with up to six
 	// fraction digits.
 	timeText = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}( [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?)?$`)
+	// zeroTimeText is MySQL's zero date as it prints it, with up to six
+	// zero fraction digits.
+	zeroTimeText = regexp.MustCompile(`^0000-00-00( 00:00:00(\.0{1,6})?)?$`)
 	// jsonNumber is a JSON number.
 	jsonNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
 )
+
+// specialDecimal reports whether s is a PostgreSQL numeric that is not a
+// number, exactly as it prints it: NaN, which sorts after every number
+// and equals itself, Infinity or -Infinity.
+func specialDecimal(s string) bool {
+	return s == "NaN" || s == "Infinity" || s == "-Infinity"
+}
 
 // validTimeText reports whether s is a date or a time as MySQL prints one,
 // and a real date and time.
@@ -409,11 +457,11 @@ func decodeTagged(x string) (any, error) {
 	case tag == "s":
 		return rest, nil
 	case tag == "d":
-		if decimalText.MatchString(rest) {
+		if decimalText.MatchString(rest) || specialDecimal(rest) {
 			return DecimalText(rest), nil
 		}
 	case tag == "dt":
-		if validTimeText(rest) {
+		if validTimeText(rest) || zeroTimeText.MatchString(rest) {
 			return TimeText(rest), nil
 		}
 	case tag == "u":

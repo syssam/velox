@@ -286,7 +286,9 @@ type TimeText = engine.TimeText
 // int64), a finite float a json.Number with a fraction or an exponent
 // ("3.0"), NaN and the infinities "f:NaN", "f:+Inf" and "f:-Inf", text
 // "s:<text>", a DecimalText "d:<text>", a TimeText "dt:<text>" and a time
-// "t:" and RFC 3339 with nanoseconds. Any other value is an error.
+// "t:" and RFC 3339 with nanoseconds. PostgreSQL's NaN, Infinity and
+// -Infinity, and MySQL's zero date, are held exactly as the driver prints
+// them. Any other value is an error.
 func EncodeOrderValue(v any) (any, error) { return engine.EncodeOrderValue(v) }
 
 // DecodeOrderValue is v, a value EncodeOrderValue wrote, after a JSON round

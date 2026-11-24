@@ -70,13 +70,23 @@ connection type the resolver returns.
   as `"s:<text>"`, a time as `"t:<RFC 3339 nano>"`, a decimal read as text
   as `"d:<text>"` and a time read as text as `"dt:<text>"`. A cursor is
   the client's, so decoding takes only what the encoder writes: a decimal
-  as the drivers print it (digits, sign, point, no exponent, no NaN), a
-  time as MySQL's `2006-01-02[ 15:04:05[.ffffff]]` that is a real date,
-  `u:` digits past int64 with no sign or leading zero, `f:` exactly NaN,
-  +Inf or -Inf, and a JSON number as JSON spells one. Anything else fails
-  with `ErrBadCursor`, before the database could cast it to 0 or NULL;
-  the encoder refuses a NaN numeric or a zero date likewise.
-  `FuzzOrderValue` holds the round trip.
+  as the drivers print it (digits, sign, point, no exponent) or exactly
+  PostgreSQL's `NaN`, `Infinity` or `-Infinity`, a time as MySQL's
+  `2006-01-02[ 15:04:05[.ffffff]]` that is a real date or exactly its zero
+  date (`0000-00-00`, with zero time and zero fraction digits as MySQL
+  prints them), `u:` digits past int64 with no sign or leading zero, `f:`
+  exactly NaN, +Inf or -Inf, and a JSON number as JSON spells one.
+  Anything else (`d:nan`, `d:+NaN`, `dt:0000-00-00 99:00:00`) fails with
+  `ErrBadCursor`, before the database could cast it to 0 or NULL. Stored
+  data always pages: every edge carries a cursor, so an encoder that
+  refused a value would fail the whole page. PostgreSQL's NaN binds as
+  `CAST(? AS NUMERIC)` and sorts after every number. MySQL's default
+  sql_mode (NO_ZERO_DATE) casts a zero-date literal to NULL, so the keyset
+  binds none: the zero date (text, or the zero `time.Time` parseTime reads
+  it as) sorts first, and its conditions are `YEAR(e) = 0 AND MONTH(e) = 0
+  AND DAY(e) = 0` and its negation. A real date 0001-01-01 read with
+  parseTime is the zero `time.Time` too, so MySQL pages it as the zero
+  date. `FuzzOrderValue` holds the round trip.
 - **A decimal or a time read as text is bound cast to its type.** The
   read takes each value column's database type when the rows tell it
   (`sql.ColumnType.DatabaseTypeName`): text in a DECIMAL or NUMERIC column

@@ -184,7 +184,7 @@ func TestConnectionExpressionCursorRefused(t *testing.T) {
 	}
 	q := db.Query[person]().OrderBy(by(3).Asc())
 	for _, v := range []any{"x", "s", "t:yesterday", "f:1.5", 1.5,
-		"d:NaN", "d:0x1p-2", "d:1e999999", "dt:yesterday", "dt:2026-13-45 99:00:00"} {
+		"d:nan", "d:+NaN", "d:0x1p-2", "d:1e999999", "dt:yesterday", "dt:2026-13-45 99:00:00", "dt:0000-00-00 99:00:00"} {
 		bad := cur
 		bad.Terms = []veloxgql.CursorTerm{{Field: cur.Terms[0].Field, Direction: cur.Terms[0].Direction, Value: v}}
 		if _, err := gqlgraph.PageWith(ctx, q, "Person", gqlgraph.Args{First: new(2), After: &bad}, nil, personKey()); !errors.Is(err, veloxgql.ErrBadCursor) {
