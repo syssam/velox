@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.LoadedOne(p)` and `velox.LoadedMany(s)` return a loaded relation,
+  so code that builds an entity itself, such as a test's fixture, can set
+  `x.Edges.Foo` as ent's `x.Edges.Foo = y` does. A nil `p` or `s` is a
+  relation loaded with no row; an empty `Many`'s JSON is `[]`.
 - A JSON handle's `Contains(doc)` is true where the column's JSON document
   contains `doc`: PostgreSQL's `@>` (`"col" @> $1::jsonb`, which a GIN index
   serves) and MySQL's `JSON_CONTAINS`. `doc` is encoded with `encoding/json`

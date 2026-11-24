@@ -44,6 +44,21 @@ func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool) {
 	return s, m.loaded
 }
 
+// LoadedOne returns a loaded One holding p: nil p is a relation that was
+// loaded and found no row. With fills a One; LoadedOne is for code that
+// builds an entity itself, such as a test's fixture for a function that
+// reads an edge, as ent's x.Edges.Foo = y is.
+func LoadedOne[T any](p *T) One[T] { return One[T]{v: p, loaded: true} }
+
+// LoadedMany returns a loaded Many holding s: nil s is a relation that was
+// loaded and is empty, written to JSON as []. It is LoadedOne's counterpart for a to-many edge.
+func LoadedMany[T any](s []T) Many[T] {
+	if s == nil {
+		s = []T{} // loaded: its JSON is [], not a not-loaded relation's null
+	}
+	return Many[T]{v: s, loaded: true}
+}
+
 // targetOf is the use site's target for a relation to entity T. It calls
 // ElemType with a nil pointer where non-generic code would use reflect.TypeFor,
 // so that no reflect.Type is compiled into the generic code.

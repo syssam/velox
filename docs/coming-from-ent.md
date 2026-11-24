@@ -221,7 +221,9 @@ the write. velox-gen warns of an edge schema with such a key.
 **Relations are in an Edges struct, as in ent.** A post's author is
 `post.Edges.Author`, of `PostEdges`, tagged `json:"edges,omitzero"`. Each
 edge is a `velox.One[T]` or `velox.Many[T]` whose `Get()` returns the value
-and whether it was loaded, so there is no `AuthorOrErr`.
+and whether it was loaded, so there is no `AuthorOrErr`. Where ent's code
+assigns `post.Edges.Author = u`, such as a test's fixture, velox's assigns
+`velox.LoadedOne(u)` (`velox.LoadedMany(s)` for a to-many edge).
 
 **A required field is always in JSON.** ent tags every field
 `json:"name,omitempty"`, so a stored 0, false or "" is left out. velox leaves

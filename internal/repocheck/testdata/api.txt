@@ -784,6 +784,8 @@ func IsZero[E any](p Pred[E]) bool
 func Joined[E, T any](r Rel[E, T], s Selectable[T]) Term[E]
 func LinkEntity[T any, PT Entity[T]](name, table string) EntityLink
 func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
+func LoadedMany[T any](s []T) Many[T]
+func LoadedOne[T any](p *T) One[T]
 func LogArgs() LogOption
 func MaxByNull[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NullNumberCol[E, V]) ([]Group[K, V], error)
 func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
