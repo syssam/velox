@@ -1789,6 +1789,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   bigint unsigned store; a row past 2^63-1 was stored but refused as input
   and on its next page. On SQLite, whose integer is signed, such a value
   fails the statement (ADR 0032).
+- `AfterValues`, and a GraphQL connection ordered by an expression, refuse
+  a cursor value of another kind than its term gives with
+  `untyped.ErrOrderValue` (`ErrBadCursor`). Before, such a value was bound
+  as it was: text for a JSON path's `Number` failed the statement on
+  PostgreSQL and read a wrong page on SQLite. The terms checked are JSON
+  paths other than the raw value, date buckets, Calcs marked `Decimal` and
+  typed columns. Text holding a NUL byte is refused on PostgreSQL. An
+  unsigned value past int64 is accepted on PostgreSQL as on MySQL
+  (ADR 0166 amendment).
 - A left join to an entity whose Read policy or filter denies outright keeps
   every row, loaded and empty, instead of failing the statement; an inner
   join to it still fails with `ErrDenied`, and the error names the join. A

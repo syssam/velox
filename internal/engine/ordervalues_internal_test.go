@@ -185,7 +185,8 @@ func FuzzOrderValue(f *testing.F) {
 // TestCheckOrderValue: a value no read on a dialect gives is refused there
 // with ErrOrderValue: NaN and the infinities as decimals off PostgreSQL,
 // the zero date off MySQL, a NaN float off PostgreSQL, an infinite one on
-// MySQL, an unsigned integer past int64 off MySQL.
+// MySQL, an unsigned integer past int64 on SQLite, text holding a NUL byte
+// on PostgreSQL.
 func TestCheckOrderValue(t *testing.T) {
 	big := uint64(math.MaxInt64) + 1
 	for _, c := range []struct {
@@ -203,9 +204,12 @@ func TestCheckOrderValue(t *testing.T) {
 		{math.Inf(1), [3]bool{true, true, false}},
 		{math.Inf(-1), [3]bool{true, true, false}},
 		{1.5, [3]bool{true, true, true}},
-		{big, [3]bool{false, false, true}},
+		{big, [3]bool{false, true, true}},
 		{uint64(3), [3]bool{true, true, true}},
 		{nil, [3]bool{true, true, true}},
+		{"a\x00b", [3]bool{true, false, true}},
+		{"\x00", [3]bool{true, false, true}},
+		{"ab", [3]bool{true, true, true}},
 	} {
 		for i, d := range []Dialect{SQLite, Postgres, MySQL} {
 			err := checkOrderValue(d, c.v)

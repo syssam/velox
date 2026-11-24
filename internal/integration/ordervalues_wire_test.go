@@ -118,9 +118,14 @@ func TestOrderValuesWire(t *testing.T) {
 					return [2]bool{}, a.PaidAt.Compare(*b.PaidAt)
 				}},
 		}
-		if tg.d == velox.MySQL {
-			// An unsigned value past int64.
+		// An unsigned value past int64: MySQL's BIGINT UNSIGNED, and
+		// PostgreSQL's numeric(20,0), velox's uint64 column there.
+		switch tg.d {
+		case velox.MySQL:
 			exprs = append(exprs, wireExpr{"unsigned", velox.Calc[testmodel.Invoice]("CAST(? % ? AS UNSIGNED) + CAST(? AS UNSIGNED)", I.ID, int64(3), uint64(18446744073709551000)),
+				func(a, b testmodel.Invoice) ([2]bool, int) { return [2]bool{}, cmp.Compare(a.ID%3, b.ID%3) }})
+		case velox.Postgres:
+			exprs = append(exprs, wireExpr{"unsigned", velox.Calc[testmodel.Invoice]("CAST(? % ? AS NUMERIC(20,0)) + ?", I.ID, int64(3), uint64(18446744073709551000)),
 				func(a, b testmodel.Invoice) ([2]bool, int) { return [2]bool{}, cmp.Compare(a.ID%3, b.ID%3) }})
 		}
 		if tg.d == velox.Postgres {
@@ -204,7 +209,94 @@ func TestOrderValuesWire(t *testing.T) {
 				}
 			}
 		}
+		t.Run("typed terms", func(t *testing.T) { wireTypedTerms(t, tg) })
 	})
+}
+
+// wireTypedTerms: an ordering by a term whose kind velox knows, a JSON
+// path's Number, Time or Text, pages through the cursor's JSON both ways
+// as one read orders the rows; and a cursor's value of another kind (text
+// for Number, text for Time off SQLite, a number for Text) or text holding
+// a NUL byte on PostgreSQL fails with ErrOrderValue before the database
+// sees it, never with a database error or a page.
+func wireTypedTerms(t *testing.T, tg target) {
+	jsonParsedSetup(t, tg)
+	num, when, text := JR.Attrs.Text("n").Number(), JR.Attrs.Text("t").Time(), JR.Attrs.Text("n")
+	for _, c := range []struct {
+		name     string
+		asc, dsc velox.Order[jrec]
+	}{
+		{"number", num.Asc(), num.Desc()},
+		{"time", when.Asc(), when.Desc()},
+		{"text", text.Asc(), text.Desc()},
+	} {
+		for _, by := range []velox.Order[jrec]{c.asc, c.dsc} {
+			q := untyped.FromQuery(tg.db.Query[jrec]().OrderBy(by, JR.ID.Asc())).OrderValues()
+			all, err := q.Limit(100).All(ctx)
+			if err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			want := jrecIDs(untyped.RowsOf[jrec](all))
+			for n := 1; n <= 4; n++ {
+				var got []int64
+				page, err := q.Limit(n).All(ctx)
+				for err == nil && page.Len() > 0 && len(got) <= len(want) {
+					got = append(got, jrecIDs(untyped.RowsOf[jrec](page))...)
+					last := page.Len() - 1
+					page, err = q.AfterValues(page.At(last), wireValues(t, page.OrderValues(last))).Limit(n).All(ctx)
+				}
+				if err != nil {
+					t.Fatalf("%s by %d: %v", c.name, n, err)
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("%s by %d:\n got %v\nwant %v", c.name, n, got, want)
+				}
+			}
+		}
+	}
+	row, err := tg.db.Query[jrec]().Where(JR.ID.EQ(1)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name string
+		by   velox.Order[jrec]
+		v    any // a decoded cursor's value
+		ok   func(velox.Dialect) bool
+	}{
+		{"text for Number", num.Asc(), "s:abc", func(velox.Dialect) bool { return false }},
+		{"numeric text for Number", num.Asc(), "s:10", func(velox.Dialect) bool { return false }},
+		{"a number for Number", num.Asc(), json.Number("2.5"), func(velox.Dialect) bool { return true }},
+		{"text for Time", when.Asc(), "s:2026-03-01 02:00:00", func(d velox.Dialect) bool { return d == velox.SQLite }},
+		{"a number for Text", text.Asc(), json.Number("7"), func(velox.Dialect) bool { return false }},
+		{"NUL in Text", text.Asc(), "s:a\x00b", func(d velox.Dialect) bool { return d != velox.Postgres }},
+		{"text for Text", text.Asc(), "s:abc", func(velox.Dialect) bool { return true }},
+	} {
+		v, err := untyped.DecodeOrderValue(c.v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := untyped.FromQuery(tg.db.Query[jrec]().OrderBy(c.by, JR.ID.Asc()).Limit(5)).OrderValues()
+		_, err = q.AfterValues(row, []any{v}).All(ctx)
+		if c.ok(tg.d) {
+			if err != nil {
+				t.Errorf("%s: %v", c.name, err)
+			}
+			continue
+		}
+		if !errors.Is(err, untyped.ErrOrderValue) {
+			t.Errorf("%s: %v, want ErrOrderValue", c.name, err)
+		}
+	}
+}
+
+// jrecIDs is the keys of rs, in order.
+func jrecIDs(rs []jrec) []int64 {
+	out := make([]int64, len(rs))
+	for i := range rs {
+		out[i] = rs[i].ID
+	}
+	return out
 }
 
 // wireOrder is rows sorted by e, descending when desc, NULL placed by nulls
@@ -293,7 +385,8 @@ func mysqlNoParseTime(t *testing.T) *velox.DB {
 // TestOrderValuesForged: a cursor's value that no read on the dialect gives
 // fails with ErrOrderValue before the database sees it: a NaN or infinite
 // decimal off PostgreSQL (MySQL would cast it to 0), the zero date off
-// MySQL (PostgreSQL would fail to read it as a time).
+// MySQL (PostgreSQL would fail to read it as a time), an unsigned integer
+// past int64 on SQLite, whose integers are signed.
 func TestOrderValuesForged(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		row := newInvoice(7, "F01")
@@ -301,14 +394,18 @@ func TestOrderValuesForged(t *testing.T) {
 		if err := tg.db.Insert(&row).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
+		only := func(d velox.Dialect) func(velox.Dialect) bool {
+			return func(e velox.Dialect) bool { return e == d }
+		}
 		for _, c := range []struct {
 			v    string
 			term velox.Term[testmodel.Invoice]
-			on   velox.Dialect // the one dialect a read gives it on
+			on   func(velox.Dialect) bool // the dialects a read gives it on
 		}{
-			{"d:NaN", velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2)), velox.Postgres},
-			{"d:-Infinity", velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2)), velox.Postgres},
-			{"dt:0000-00-00 00:00:00", velox.Calc[testmodel.Invoice]("CASE WHEN ? > ? THEN ? END", I.ID, int64(0), I.PaidAt), velox.MySQL},
+			{"d:NaN", velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2)), only(velox.Postgres)},
+			{"d:-Infinity", velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2)), only(velox.Postgres)},
+			{"dt:0000-00-00 00:00:00", velox.Calc[testmodel.Invoice]("CASE WHEN ? > ? THEN ? END", I.ID, int64(0), I.PaidAt), only(velox.MySQL)},
+			{"u:18446744073709551001", velox.Calc[testmodel.Invoice]("CAST(? AS DECIMAL(20,0))", I.ID), func(d velox.Dialect) bool { return d != velox.SQLite }},
 		} {
 			v, err := untyped.DecodeOrderValue(c.v)
 			if err != nil {
@@ -316,7 +413,7 @@ func TestOrderValuesForged(t *testing.T) {
 			}
 			q := untyped.FromQuery(tg.db.Query[testmodel.Invoice]().Where(I.ID.GTE(790)).OrderBy(c.term.Asc(), I.ID.Asc()).Limit(5)).OrderValues()
 			_, err = q.AfterValues(&row, []any{v}).All(ctx)
-			if tg.d == c.on {
+			if c.on(tg.d) {
 				if err != nil {
 					t.Errorf("%s: %v", c.v, err)
 				}

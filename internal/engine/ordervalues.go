@@ -84,12 +84,191 @@ func checkOrderValueTerm(in *EntityInfo, o OrderTerm) error {
 }
 
 // valueSource is the afterSource of an OrderValueTerm: the row's value of
-// it, read beside the row.
+// it, read beside the row. A value of another kind than the term gives
+// (checkValueKind) is refused.
 func valueSource(in *EntityInfo, o OrderTerm, v any, d Dialect) (afterSource, error) {
 	if err := checkOrderValueTerm(in, o); err != nil {
 		return afterSource{}, err
 	}
+	if err := checkValueKind(d, in, o.Expr.(Term), v); err != nil {
+		return afterSource{}, fmt.Errorf("velox: %s: %w", in.Name, err)
+	}
 	return afterSource{info: in, value: true, v: v, d: d}, nil
+}
+
+// valueKind is the kind of value a term gives, as far as velox knows it
+// without the database: kindUnknown for an expression whose text velox
+// does not read.
+type valueKind uint8
+
+const (
+	kindUnknown valueKind = iota
+	kindNumber
+	kindTime
+	kindText
+	kindBool
+	kindBytes
+)
+
+// name is the kind's name in an error.
+func (k valueKind) name() string {
+	switch k {
+	case kindNumber:
+		return "a number"
+	case kindTime:
+		return "a time"
+	case kindText:
+		return "text"
+	case kindBool:
+		return "a bool"
+	case kindBytes:
+		return "bytes"
+	}
+	return "any value"
+}
+
+// termValueKind is the kind of value t, a term of in's rows, gives: a
+// column's by its Go type (columnKind); a JSON path's by its kind, a
+// number for Number, Len and Text's Number, a time for Text's Time, text
+// for Text and a bool for Bool; a time for a date bucket; a number for an
+// expression marked Decimal; a joined term's by its term in the joined
+// entity. Any other expression (a Calc, a JSON path's raw value) is
+// kindUnknown.
+func termValueKind(in *EntityInfo, t Term) valueKind {
+	switch t.kind {
+	case termColumn:
+		if in != nil && t.col >= 0 && int(t.col) < len(in.Columns) {
+			return columnKind(in.Columns[t.col])
+		}
+	case termExpr:
+		if t.dec {
+			return kindNumber
+		}
+	case termJSON:
+		switch t.path.Kind {
+		case JSONKindNumber, JSONKindLen, JSONKindTextNumber:
+			return kindNumber
+		case JSONKindTextTime:
+			return kindTime
+		case JSONKindText:
+			return kindText
+		case JSONKindBool:
+			return kindBool
+		}
+	case termDate:
+		return kindTime
+	case termJoined:
+		if ref, ok := t.r.n.V.(RelRef); ok {
+			if l, err := ref.Link(); err == nil {
+				return termValueKind(l.Target, *t.of)
+			}
+		}
+	}
+	return kindUnknown
+}
+
+// columnKind is the kind of value column c gives, by its Go type: a time
+// for a time.Time or a type of one; kindUnknown for a column velox encodes
+// and any other type with a Value or Scan method, such as a decimal type;
+// a number for a column with a MySQL decimal type, an integer or a float;
+// text for a string; a bool for a bool; bytes for a []byte.
+func columnKind(c ColumnInfo) valueKind {
+	typ := GoType(c)
+	if typ == nil || c.Codec {
+		return kindUnknown
+	}
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+	if timeLike(typ) {
+		return kindTime
+	}
+	if typ.Implements(reflect.TypeFor[driver.Valuer]()) || reflect.PointerTo(typ).Implements(scannerType) {
+		return kindUnknown
+	}
+	if c.decimal != [2]uint8{} {
+		return kindNumber
+	}
+	switch typ.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return kindNumber
+	case reflect.String:
+		return kindText
+	case reflect.Bool:
+		return kindBool
+	case reflect.Slice:
+		if typ.Elem().Kind() == reflect.Uint8 {
+			return kindBytes
+		}
+	}
+	return kindUnknown
+}
+
+// checkValueKind refuses v, an order value given to AfterValues for the
+// term t, when t's kind is known (termValueKind) and no read of t on
+// dialect d gives a value of v's Go type, as a cursor edited by its client
+// may hold: bound as it is, PostgreSQL would fail the statement and SQLite
+// page from the wrong place. NULL is every kind's. A number is an integer,
+// a float or a DecimalText (PostgreSQL's numeric, MySQL's decimal, read as
+// text); a time a time.Time or a TimeText (MySQL's without parseTime), and
+// on SQLite, whose times are text, a string; text a string; a bool a bool,
+// and on MySQL and SQLite, whose booleans are integers, an integer; bytes a
+// string, as OrderValues copies them, or a []byte. A value of a term of
+// unknown kind is bound as it is.
+func checkValueKind(d Dialect, in *EntityInfo, t Term, v any) error {
+	if v == nil {
+		return nil
+	}
+	k := termValueKind(in, t)
+	ok := true
+	switch k {
+	case kindNumber:
+		_, dec := v.(DecimalText)
+		ok = dec || numberValue(v)
+	case kindTime:
+		switch v.(type) {
+		case time.Time, TimeText:
+		case string:
+			ok = d == SQLite
+		default:
+			ok = false
+		}
+	case kindText:
+		_, ok = v.(string)
+	case kindBool:
+		_, ok = v.(bool)
+		ok = ok || d != Postgres && integerValue(v)
+	case kindBytes:
+		switch v.(type) {
+		case string, []byte:
+		default:
+			ok = false
+		}
+	}
+	if !ok {
+		return fmt.Errorf("%w: %#v for an ordering by %s on %v", ErrOrderValue, v, k.name(), d)
+	}
+	return nil
+}
+
+// integerValue reports whether v is a Go integer of any width.
+func integerValue(v any) bool {
+	switch v.(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return true
+	}
+	return false
+}
+
+// numberValue reports whether v is a Go integer or float of any width.
+func numberValue(v any) bool {
+	switch v.(type) {
+	case float32, float64:
+		return true
+	}
+	return integerValue(v)
 }
 
 // valueEqual is the condition that the expression o orders by has the value
@@ -128,8 +307,9 @@ func zeroDate(d Dialect, v any) bool {
 }
 
 // ErrOrderValue is the error of AfterValues given an order value that no
-// read on the statement's dialect gives: a cursor's that was forged, or
-// written on another dialect.
+// read on the statement's dialect gives, or that is not of the kind its
+// ordering's term gives: a cursor's that was forged, or written on another
+// dialect.
 var ErrOrderValue = errors.New("velox: an order value this dialect never reads")
 
 // checkOrderValue refuses v, an order value given to AfterValues, when no
@@ -137,10 +317,14 @@ var ErrOrderValue = errors.New("velox: an order value this dialect never reads")
 // fail with a driver's error. A NaN, Infinity or -Infinity decimal is
 // PostgreSQL's alone; the zero date MySQL's alone; a NaN float
 // PostgreSQL's alone, an infinite one not MySQL's; an unsigned integer past
-// int64 MySQL's alone.
+// int64 not SQLite's, whose integers are signed (PostgreSQL's numeric(20,0)
+// and MySQL's BIGINT UNSIGNED hold one); text holding a NUL byte not
+// PostgreSQL's, whose text cannot hold one.
 func checkOrderValue(d Dialect, v any) error {
 	ok := true
 	switch x := v.(type) {
+	case string:
+		ok = d != Postgres || strings.IndexByte(x, 0) < 0
 	case DecimalText:
 		ok = d == Postgres || !specialDecimal(string(x))
 	case TimeText:
@@ -153,7 +337,7 @@ func checkOrderValue(d Dialect, v any) error {
 			ok = d != MySQL
 		}
 	case uint64:
-		ok = d == MySQL || x <= math.MaxInt64
+		ok = d != SQLite || x <= math.MaxInt64
 	}
 	if !ok {
 		return fmt.Errorf("%w: %#v on %v", ErrOrderValue, v, d)

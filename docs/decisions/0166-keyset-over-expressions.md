@@ -3,7 +3,9 @@
 - Status: accepted, 2026-11-24. Extends
   [0059](0059-query-paginate.md): `Query.Paginate` takes a query ordered
   by expressions. Amends 0142's recipe for a computed sort key and 0163's
-  "connections never meet a Nulls term".
+  "connections never meet a Nulls term". Amended 2026-11-24: a cursor's
+  value of another kind than its term gives is refused (see the
+  amendment below).
 
 ## Context
 
@@ -65,7 +67,7 @@ connection type the resolver returns.
   `DecodeOrderValue` (root, so the integration tests cover the round trip
   on every dialect) write a value so that it reads back as the same Go
   value: null, a bool, an integer as a JSON integer (`"u:<digits>"` past
-  int64: MySQL's BIGINT UNSIGNED), a finite float as a JSON number with a
+  int64: MySQL's BIGINT UNSIGNED, PostgreSQL's numeric(20,0)), a finite float as a JSON number with a
   fraction or exponent (`3.0`), NaN and the infinities as `"f:NaN"`, text
   as `"s:<text>"`, a time as `"t:<RFC 3339 nano>"`, a decimal read as text
   as `"d:<text>"` and a time read as text as `"dt:<text>"`. A cursor is
@@ -94,7 +96,8 @@ connection type the resolver returns.
   a NaN or infinite decimal off PostgreSQL (MySQL casts `'NaN'` to 0), the
   zero date off MySQL (PostgreSQL fails to read it as a time, SQLite
   compares it as text), a NaN float off PostgreSQL, an infinite float on
-  MySQL, an unsigned integer past int64 off MySQL. `FuzzOrderValue` holds
+  MySQL, an unsigned integer past int64 on SQLite, text holding a NUL
+  byte on PostgreSQL (amendment below). `FuzzOrderValue` holds
   the round trip.
 - **A decimal or a time read as text is bound cast to its type.** The
   read takes each value column's database type when the rows tell it
@@ -113,8 +116,9 @@ connection type the resolver returns.
   database/sql driver returns numeric as a string, and pgx sends a string
   argument in text format, which PostgreSQL reads as the type the context
   gives it. `TestOrderValuesWire` pages an integer, a fraction, a decimal
-  finer than a double, a text and a time (and on MySQL an unsigned value
-  past int64, and a time without parseTime) through the cursor's JSON, both
+  finer than a double, a text and a time (on MySQL and PostgreSQL an
+  unsigned value past int64, and on MySQL a time without parseTime)
+  through the cursor's JSON, both
   ways, asserting the exact rows.
 - **Any expression may page.** Any expression that is not an aggregate
   or a window function may page; terms have no Go type. The expression
@@ -151,3 +155,55 @@ connection type the resolver returns.
 - Existing cursors encode and decode byte for byte as before
   (`TestOldCursorBytes`).
 - Compile cost: no change to a generic type or the generated code.
+
+## Amendment, 2026-11-24: a value must be of its term's kind
+
+A downstream application found that a cursor value which decodes but has
+the wrong kind for its term was bound as it was. A client that changed
+the value of a `Text(k).Number()` ordering to `"s:abc"` failed the whole
+statement on PostgreSQL, a 500, and read a wrong page on SQLite. Text
+holding a NUL byte failed it on PostgreSQL too. The decision promises
+that a forged cursor is `ErrBadCursor`, never a wrong page.
+
+- **A static check, not error mapping.** `AfterValues` checks each value
+  against the kind its term gives, where velox knows it without the
+  database (`termValueKind`). A mismatch is `untyped.ErrOrderValue`,
+  which a connection reports as `ErrBadCursor`. PostgreSQL's 22xxx errors
+  are not mapped: row data raises the same codes, such as `22P02` from a
+  `Text(k).Number()`-like Calc over a non-numeric row.
+- **What a term knows.** A JSON path's `Number`, `Len` and `Text(k).Number`
+  give a number; `Text(k).Time` a time; `Text` text; `Bool` a bool. A
+  date bucket gives a time, and a Calc marked `Decimal` a number. A
+  column, through a joined term, is known by its Go type: an integer or
+  float, or a MySQL decimal column, a number; a string text; a bool a
+  bool; a time a time; a `[]byte` bytes. A type with Value or Scan, such
+  as a decimal type, and an encoded column are not known.
+- **What each kind accepts** is what the drivers read for it and the
+  encoder writes. NULL is every kind's.
+  - A number accepts an integer or a float, or a `DecimalText`
+    (PostgreSQL's numeric through pgx, MySQL's decimal).
+  - A time accepts a `time.Time` or a `TimeText` (MySQL without
+    parseTime). SQLite also accepts a string: its times are velox's text.
+  - Text accepts a string.
+  - A bool accepts a bool. MySQL and SQLite also accept an integer, since
+    their booleans are integers.
+  - Bytes accept a string, as `OrderValues` copies them, or a `[]byte`.
+- **What stays unchecked.** A Calc that is not marked `Decimal`, and a
+  JSON path's raw value, have no known kind. Their values are bound as
+  before, so a forged value of another kind can still fail the statement
+  on PostgreSQL. A string column whose SQL type is not text (a string
+  field mapped to a numeric column by an annotation) is taken as text.
+  SQLite takes any string for a time; it compares text and fails nothing.
+- **Dialect refusals.** `checkOrderValue` also refuses text holding a NUL
+  byte on PostgreSQL: its text cannot hold one, so no PostgreSQL page
+  wrote one. A `bytea` value holding NUL cannot page either; it never
+  could, since pgx sends the string as text. An unsigned integer past
+  int64 is refused only on SQLite. PostgreSQL's numeric(20,0), velox's
+  uint64 column there, holds one, as MySQL's BIGINT UNSIGNED does.
+- **Size.** The check is type switches and the reflect calls the engine
+  already makes. It adds no regexp and no package-level variable.
+- **Tests.** `TestCheckValueKind` and `TestTermValueKind` cover each kind
+  on each dialect. `TestOrderValuesWire`'s "typed terms" pages JSON
+  Number, Time and Text orderings on every dialect, and refuses
+  mismatched values and PostgreSQL's NUL. gqlgraph's
+  `TestConnectionExpressionValueKind` refuses them at the connection.
