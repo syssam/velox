@@ -84,7 +84,9 @@ connection type the resolver returns.
   sql_mode (NO_ZERO_DATE) casts a zero-date literal to NULL, so the keyset
   binds none: the zero date (text, or the zero `time.Time` parseTime reads
   it as) sorts first, and its conditions are `YEAR(e) = 0 AND MONTH(e) = 0
-  AND DAY(e) = 0` and its negation. A real date 0001-01-01 read with
+  AND DAY(e) = 0` and its negation. MySQL compares no zero date as less
+  than a date either, so descending past any other date the keyset admits
+  the zero date by that condition. A real date 0001-01-01 read with
   parseTime is the zero `time.Time` too, so MySQL pages it as the zero
   date. Decoding has no dialect, so `AfterValues` refuses with
   `untyped.ErrOrderValue` (a GraphQL connection's `ErrBadCursor`) a value

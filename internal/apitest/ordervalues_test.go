@@ -126,3 +126,33 @@ func TestOrderValuesZeroDateSQL(t *testing.T) {
 		}
 	}
 }
+
+// TestOrderValuesPastToZeroDateSQL: descending past a MySQL date, read as
+// text or as a time, a keyset admits the zero date by name, since MySQL
+// does not compare it as less than a date under NO_ZERO_DATE; ascending,
+// where the zero date was passed, it does not, and no other dialect does.
+func TestOrderValuesPastToZeroDateSQL(t *testing.T) {
+	calc := velox.Calc[testmodel.Invoice]("COALESCE(?, ?)", I.PaidAt, I.CreatedAt)
+	row := &testmodel.Invoice{ID: 7}
+	e := "(COALESCE(`paid_at`, `created_at`))"
+	zero := "(YEAR(" + e + ") = 0 AND MONTH(" + e + ") = 0 AND DAY(" + e + ") = 0)"
+	at := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		d    velox.Dialect
+		v    any
+		by   velox.Order[testmodel.Invoice]
+		want bool
+	}{
+		{velox.MySQL, untyped.TimeText("2026-03-01 10:00:00"), calc.Desc(), true},
+		{velox.MySQL, at, calc.Desc().NullsLast(), true},
+		{velox.MySQL, at, calc.Asc(), false},
+		{velox.Postgres, at, calc.Desc(), false},
+		{velox.SQLite, untyped.TimeText("2026-03-01 10:00:00"), calc.Desc(), false},
+	} {
+		q := untyped.FromQuery(openFake(c.d, &fakeconn.Exec{}).Query[testmodel.Invoice]().OrderBy(c.by, I.ID.Asc()).Limit(10))
+		text, _ := sqlOK(t)(q.AfterValues(row, []any{c.v}).SQL(ctx))
+		if strings.Contains(text, "YEAR(") != c.want || (c.want && !strings.Contains(text, " OR "+zero)) {
+			t.Errorf("%v %#v:\n got %s, want the zero date named: %v", c.d, c.v, text, c.want)
+		}
+	}
+}

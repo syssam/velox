@@ -218,10 +218,28 @@ func valuePast(o OrderTerm, v any, d Dialect) (Node, bool) {
 		return valueExpr("? IS NULL", t), true
 	}
 	b, arg := boundValue(d, v)
+	if o.Desc && mysqlTime(d, v) {
+		// The zero date sorts before every date, but under NO_ZERO_DATE
+		// MySQL does not compare it as less than one: name it.
+		if first {
+			return valueExpr("(?"+cmp+b+" OR "+zeroDateText+")", t, arg, t, t, t), true
+		}
+		return valueExpr("(?"+cmp+b+" OR "+zeroDateText+" OR ? IS NULL)", t, arg, t, t, t, t), true
+	}
 	if first {
 		return valueExpr("?"+cmp+b, t, arg), true
 	}
 	return valueExpr("(?"+cmp+b+" OR ? IS NULL)", t, arg, t), true
+}
+
+// mysqlTime reports whether v, an order value on dialect d, is a MySQL
+// date or time, which the zero date may sort before.
+func mysqlTime(d Dialect, v any) bool {
+	switch v.(type) {
+	case TimeText, time.Time:
+		return d == MySQL
+	}
+	return false
 }
 
 // valueExpr is the condition text with each ? filled by the next of xs: a
