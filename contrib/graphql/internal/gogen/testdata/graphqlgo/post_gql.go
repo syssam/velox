@@ -189,6 +189,7 @@ var postType = gqlgraph.Type{
 	AlwaysRead: []int{postColID, postColAuthorID},
 	Fields: []string{
 		postColID:          "id",
+		postColAuthorID:    "authorID",
 		postColTitle:       "title",
 		postColSlug:        "slug",
 		postColStatus:      "status",
@@ -293,7 +294,7 @@ type PostWhereInput struct {
 	IDLT    *int64
 	IDLTE   *int64
 
-	// Predicates on the edge author, by the ID of its node.
+	// Predicates on the edge author (authorID), by the ID of its node.
 	AuthorID      *int64  `graphql:"authorID"`
 	AuthorIDNEQ   *int64  `graphql:"authorIDNEQ"`
 	AuthorIDIn    []int64 `graphql:"authorIDIn"`

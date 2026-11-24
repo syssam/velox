@@ -60,6 +60,7 @@ type Query {
 """A post, in an organization, by its author."""
 type Post {
   id: ID!
+  authorID: ID!
   """The post's title, never empty."""
   title: String!
   """Whether the post is a draft or published."""
@@ -84,7 +85,7 @@ enum PostStatus {
 """A connection to a list of Post."""
 type PostConnection {
   """The edges of this page."""
-  edges: [PostEdge!]!
+  edges: [PostEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -94,7 +95,7 @@ type PostConnection {
 """An edge in a connection to a list of Post."""
 type PostEdge {
   """The Post at the end of the edge."""
-  node: Post!
+  node: Post
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -217,7 +218,7 @@ type Label {
 """A connection to a list of Label."""
 type LabelConnection {
   """The edges of this page."""
-  edges: [LabelEdge!]!
+  edges: [LabelEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -227,7 +228,7 @@ type LabelConnection {
 """An edge in a connection to a list of Label."""
 type LabelEdge {
   """The Label at the end of the edge."""
-  node: Label!
+  node: Label
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -326,7 +327,7 @@ enum UserRole {
 """A connection to a list of User."""
 type UserConnection {
   """The edges of this page."""
-  edges: [UserEdge!]!
+  edges: [UserEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -336,7 +337,7 @@ type UserConnection {
 """An edge in a connection to a list of User."""
 type UserEdge {
   """The User at the end of the edge."""
-  node: User!
+  node: User
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -379,15 +380,6 @@ input UserWhereInput {
   nameHasSuffix: String
   nameEqualFold: String
   nameContainsFold: String
-  email: String @admin
-  emailNEQ: String @admin
-  emailIn: [String!] @admin
-  emailNotIn: [String!] @admin
-  emailContains: String @admin
-  emailHasPrefix: String @admin
-  emailHasSuffix: String @admin
-  emailEqualFold: String @admin
-  emailContainsFold: String @admin
   role: UserRole
   roleNEQ: UserRole
   roleIn: [UserRole!]
@@ -401,7 +393,7 @@ input CreateUserInput {
   """The name the user shows."""
   name: String!
   """The address the user signs in with; admins only."""
-  email: String! @admin
+  email: String!
   """What the user may do."""
   role: UserRole
   """When the user joined."""
@@ -413,7 +405,7 @@ input UpdateUserInput {
   """The name the user shows."""
   name: String
   """The address the user signs in with; admins only."""
-  email: String @admin
+  email: String
   """What the user may do."""
   role: UserRole
   """When the user joined."""

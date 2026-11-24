@@ -1,0 +1,2 @@
+User.following: no add inputs; Follow.Note has no default
+User.followers: no add inputs; Follow.Note has no default

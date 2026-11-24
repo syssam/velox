@@ -12,7 +12,7 @@ type Category {
 """A connection to a list of Category."""
 type CategoryConnection {
   """The edges of this page."""
-  edges: [CategoryEdge!]!
+  edges: [CategoryEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -22,7 +22,7 @@ type CategoryConnection {
 """An edge in a connection to a list of Category."""
 type CategoryEdge {
   """The Category at the end of the edge."""
-  node: Category!
+  node: Category
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }

@@ -135,6 +135,8 @@ var membershipType = gqlgraph.Type{
 		membershipColID:       "id",
 		membershipColRole:     "role",
 		membershipColJoinedAt: "joinedAt",
+		membershipColUserID:   "userId",
+		membershipColGroupID:  "groupId",
 	},
 	Edges: []string{membershipEdgeUser: "user", membershipEdgeGroup: "group"},
 	CreateInputs: []string{

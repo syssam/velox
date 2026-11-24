@@ -1,0 +1,376 @@
+{
+ "version": 3,
+ "schema_path": "example.com/app/schema",
+ "entities": [
+  {
+   "name": "Customer",
+   "label": "customer",
+   "handles": "Customers",
+   "table": "customers",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "annotations": {
+      "graphql": {
+       "type": "ID"
+      }
+     }
+    },
+    {
+     "name": "name",
+     "go_name": "Name",
+     "column": "name",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string"
+    },
+    {
+     "name": "tier",
+     "go_name": "Tier",
+     "column": "tier",
+     "type": "enum",
+     "go_type": "schema.SalesOrderStatus",
+     "elem_type": "schema.SalesOrderStatus",
+     "pkg_path": "example.com/app/schema",
+     "imports": [
+      "example.com/app/schema"
+     ],
+     "kind": "string",
+     "has_default": true,
+     "default": "gold",
+     "enum": "SalesOrderStatus",
+     "enum_values": [
+      "gold",
+      "silver"
+     ],
+     "annotations": {
+      "graphql": {
+       "type": "SalesOrderStatus",
+       "where_ops": 2147483648
+      }
+     }
+    },
+    {
+     "name": "vip",
+     "go_name": "Vip",
+     "column": "vip",
+     "type": "bool",
+     "go_type": "bool",
+     "elem_type": "bool",
+     "has_default": true,
+     "default": false
+    },
+    {
+     "name": "joined_at",
+     "go_name": "JoinedAt",
+     "column": "joined_at",
+     "type": "time",
+     "go_type": "time.Time",
+     "elem_type": "time.Time",
+     "pkg_path": "time",
+     "imports": [
+      "time"
+     ]
+    }
+   ],
+   "edges": [],
+   "indexes": [],
+   "primary_key": [
+    0
+   ]
+  },
+  {
+   "name": "Memo",
+   "label": "memo",
+   "handles": "Memos",
+   "table": "memos",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "auto_id": true
+    },
+    {
+     "name": "title",
+     "go_name": "Title",
+     "column": "title",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string"
+    }
+   ],
+   "edges": [],
+   "indexes": [],
+   "primary_key": [
+    0
+   ]
+  },
+  {
+   "name": "SalesOrder",
+   "label": "sales_order",
+   "handles": "SalesOrders",
+   "table": "sales_orders",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "auto_id": true
+    },
+    {
+     "name": "organization_id",
+     "go_name": "OrganizationID",
+     "column": "organization_id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "annotations": {
+      "graphql": {
+       "type": "ID",
+       "where_ops": 2147483648
+      }
+     }
+    },
+    {
+     "name": "customer_id",
+     "go_name": "CustomerID",
+     "column": "customer_id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "annotations": {
+      "graphql": {
+       "type": "ID",
+       "where_ops": 2147483648
+      }
+     }
+    },
+    {
+     "name": "image_url",
+     "go_name": "ImageURL",
+     "column": "image_url",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string"
+    },
+    {
+     "name": "referrer_id",
+     "go_name": "ReferrerID",
+     "column": "referrer_id",
+     "type": "int64",
+     "go_type": "*int64",
+     "elem_type": "int64",
+     "pointer": true,
+     "nullable": true,
+     "optional": true,
+     "annotations": {
+      "graphql": {
+       "where_ops": 2147483648
+      }
+     }
+    },
+    {
+     "name": "total",
+     "go_name": "Total",
+     "column": "total",
+     "type": "other",
+     "go_type": "schema.Amount",
+     "elem_type": "schema.Amount",
+     "pkg_path": "example.com/app/schema",
+     "imports": [
+      "example.com/app/schema"
+     ],
+     "kind": "struct",
+     "schema_type": {
+      "mysql": "bigint",
+      "postgres": "bigint",
+      "sqlite": "integer"
+     },
+     "annotations": {
+      "graphql": {
+       "type": "Amount",
+       "where_ops": 255
+      }
+     }
+    },
+    {
+     "name": "custom_fields",
+     "go_name": "CustomFields",
+     "column": "custom_fields",
+     "type": "json",
+     "go_type": "map[string]any",
+     "elem_type": "map[string]any",
+     "kind": "map",
+     "annotations": {
+      "graphql": {
+       "type": "Map"
+      }
+     }
+    },
+    {
+     "name": "status",
+     "go_name": "Status",
+     "column": "status",
+     "type": "enum",
+     "go_type": "SalesOrderStatus",
+     "elem_type": "SalesOrderStatus",
+     "enum": "SalesOrderStatus",
+     "enum_values": [
+      "open",
+      "shipped"
+     ],
+     "annotations": {
+      "graphql": {
+       "type": "SalesOrderEntryStatus",
+       "where_ops": 2147483648
+      }
+     }
+    },
+    {
+     "name": "note",
+     "go_name": "Note",
+     "column": "note",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string",
+     "optional": true,
+     "has_default": true,
+     "default": ""
+    }
+   ],
+   "edges": [
+    {
+     "name": "customer",
+     "go_name": "Customer",
+     "target": "Customer",
+     "kind": "M2O",
+     "unique": true,
+     "required": true,
+     "field": "customer_id",
+     "field_on": "SalesOrder",
+     "owns_key": true,
+     "annotations": {
+      "graphql": {
+       "where_edge": true
+      }
+     }
+    },
+    {
+     "name": "referrer",
+     "go_name": "Referrer",
+     "target": "Customer",
+     "kind": "M2O",
+     "unique": true,
+     "field": "referrer_id",
+     "field_on": "SalesOrder",
+     "owns_key": true,
+     "annotations": {
+      "graphql": {
+       "skip": 63
+      }
+     }
+    }
+   ],
+   "indexes": [],
+   "primary_key": [
+    0
+   ],
+   "annotations": {
+    "graphql": {
+     "query_field": "salesOrders",
+     "relay_connection": true,
+     "mutations": [
+      "create"
+     ]
+    }
+   }
+  },
+  {
+   "name": "Workspace",
+   "label": "workspace",
+   "handles": "Workspaces",
+   "table": "workspaces",
+   "fields": [
+    {
+     "name": "id",
+     "go_name": "ID",
+     "column": "id",
+     "type": "int64",
+     "go_type": "int64",
+     "elem_type": "int64",
+     "auto_id": true
+    },
+    {
+     "name": "slug",
+     "go_name": "Slug",
+     "column": "slug",
+     "type": "string",
+     "go_type": "string",
+     "elem_type": "string"
+    },
+    {
+     "name": "settings",
+     "go_name": "Settings",
+     "column": "settings",
+     "type": "json",
+     "go_type": "*schema.Settings",
+     "elem_type": "*schema.Settings",
+     "pkg_path": "example.com/app/schema",
+     "imports": [
+      "example.com/app/schema"
+     ],
+     "kind": "ptr",
+     "nullable": true,
+     "optional": true
+    },
+    {
+     "name": "assignees",
+     "go_name": "Assignees",
+     "column": "assignees",
+     "type": "json",
+     "go_type": "[]schema.Assignee",
+     "elem_type": "[]schema.Assignee",
+     "imports": [
+      "example.com/app/schema"
+     ],
+     "kind": "slice"
+    }
+   ],
+   "edges": [],
+   "indexes": [],
+   "primary_key": [
+    0
+   ],
+   "annotations": {
+    "graphql": {
+     "query_field_default": true
+    }
+   }
+  }
+ ],
+ "enums": [
+  {
+   "type": "SalesOrderStatus",
+   "values": [
+    "open",
+    "shipped"
+   ],
+   "consts": [
+    "SalesOrderStatusOpen",
+    "SalesOrderStatusShipped"
+   ]
+  }
+ ]
+}

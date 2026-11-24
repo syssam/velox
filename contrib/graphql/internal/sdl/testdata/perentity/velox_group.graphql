@@ -11,7 +11,7 @@ type Group {
 """A connection to a list of Group."""
 type GroupConnection {
   """The edges of this page."""
-  edges: [GroupEdge!]!
+  edges: [GroupEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -21,7 +21,7 @@ type GroupConnection {
 """An edge in a connection to a list of Group."""
 type GroupEdge {
   """The Group at the end of the edge."""
-  node: Group!
+  node: Group
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }

@@ -89,6 +89,7 @@ type ComplexityRoot struct {
 
 	Post struct {
 		Author      func(childComplexity int) int
+		AuthorID    func(childComplexity int) int
 		ID          func(childComplexity int) int
 		Keywords    func(childComplexity int) int
 		PublishedAt func(childComplexity int) int
@@ -347,6 +348,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Post.Author(childComplexity), true
+	case "Post.authorID":
+		if e.complexity.Post.AuthorID == nil {
+			break
+		}
+
+		return e.complexity.Post.AuthorID(childComplexity), true
 	case "Post.id":
 		if e.complexity.Post.ID == nil {
 			break
@@ -742,6 +749,7 @@ type Query {
 """A post, in an organization, by its author."""
 type Post {
   id: ID!
+  authorID: ID!
   """The post's title, never empty."""
   title: String!
   """Whether the post is a draft or published."""
@@ -766,7 +774,7 @@ enum PostStatus {
 """A connection to a list of Post."""
 type PostConnection {
   """The edges of this page."""
-  edges: [PostEdge!]!
+  edges: [PostEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -776,7 +784,7 @@ type PostConnection {
 """An edge in a connection to a list of Post."""
 type PostEdge {
   """The Post at the end of the edge."""
-  node: Post!
+  node: Post
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -899,7 +907,7 @@ type Label {
 """A connection to a list of Label."""
 type LabelConnection {
   """The edges of this page."""
-  edges: [LabelEdge!]!
+  edges: [LabelEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -909,7 +917,7 @@ type LabelConnection {
 """An edge in a connection to a list of Label."""
 type LabelEdge {
   """The Label at the end of the edge."""
-  node: Label!
+  node: Label
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -1008,7 +1016,7 @@ enum UserRole {
 """A connection to a list of User."""
 type UserConnection {
   """The edges of this page."""
-  edges: [UserEdge!]!
+  edges: [UserEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -1018,7 +1026,7 @@ type UserConnection {
 """An edge in a connection to a list of User."""
 type UserEdge {
   """The User at the end of the edge."""
-  node: User!
+  node: User
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -1061,15 +1069,6 @@ input UserWhereInput {
   nameHasSuffix: String
   nameEqualFold: String
   nameContainsFold: String
-  email: String @admin
-  emailNEQ: String @admin
-  emailIn: [String!] @admin
-  emailNotIn: [String!] @admin
-  emailContains: String @admin
-  emailHasPrefix: String @admin
-  emailHasSuffix: String @admin
-  emailEqualFold: String @admin
-  emailContainsFold: String @admin
   role: UserRole
   roleNEQ: UserRole
   roleIn: [UserRole!]
@@ -1083,7 +1082,7 @@ input CreateUserInput {
   """The name the user shows."""
   name: String!
   """The address the user signs in with; admins only."""
-  email: String! @admin
+  email: String!
   """What the user may do."""
   role: UserRole
   """When the user joined."""
@@ -1095,7 +1094,7 @@ input UpdateUserInput {
   """The name the user shows."""
   name: String
   """The address the user signs in with; admins only."""
-  email: String @admin
+  email: String
   """What the user may do."""
   role: UserRole
   """When the user joined."""
@@ -1673,9 +1672,9 @@ func (ec *executionContext) _LabelConnection_edges(ctx context.Context, field gr
 			return obj.Edges(ctx)
 		},
 		nil,
-		ec.marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdgeᚄ,
+		ec.marshalOLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdgeᚄ,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -1776,9 +1775,9 @@ func (ec *executionContext) _LabelEdge_node(ctx context.Context, field graphql.C
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐTag,
+		ec.marshalOLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐTag,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -1861,6 +1860,8 @@ func (ec *executionContext) fieldContext_Mutation_createPost(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Post_id(ctx, field)
+			case "authorID":
+				return ec.fieldContext_Post_authorID(ctx, field)
 			case "title":
 				return ec.fieldContext_Post_title(ctx, field)
 			case "status":
@@ -1920,6 +1921,8 @@ func (ec *executionContext) fieldContext_Mutation_updatePost(ctx context.Context
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Post_id(ctx, field)
+			case "authorID":
+				return ec.fieldContext_Post_authorID(ctx, field)
 			case "title":
 				return ec.fieldContext_Post_title(ctx, field)
 			case "status":
@@ -2105,7 +2108,20 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 			fc := graphql.GetFieldContext(ctx)
 			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(veloxgen.CreateUserInput), fc.Args["password"].(string))
 		},
-		nil,
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Admin == nil {
+					var zeroVal *veloxgen.User
+					return zeroVal, errors.New("directive admin is not implemented")
+				}
+				return ec.directives.Admin(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
 		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUser,
 		true,
 		true,
@@ -2162,7 +2178,20 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 			fc := graphql.GetFieldContext(ctx)
 			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(int64), fc.Args["input"].(veloxgen.UpdateUserInput), fc.Args["password"].(*string))
 		},
-		nil,
+		func(ctx context.Context, next graphql.Resolver) graphql.Resolver {
+			directive0 := next
+
+			directive1 := func(ctx context.Context) (any, error) {
+				if ec.directives.Admin == nil {
+					var zeroVal *veloxgen.User
+					return zeroVal, errors.New("directive admin is not implemented")
+				}
+				return ec.directives.Admin(ctx, nil, directive0)
+			}
+
+			next = directive1
+			return next
+		},
 		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUser,
 		true,
 		true,
@@ -2342,6 +2371,35 @@ func (ec *executionContext) _Post_id(ctx context.Context, field graphql.Collecte
 }
 
 func (ec *executionContext) fieldContext_Post_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Post",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Post_authorID(ctx context.Context, field graphql.CollectedField, obj *veloxgen.Post) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Post_authorID,
+		func(ctx context.Context) (any, error) {
+			return obj.AuthorID, nil
+		},
+		nil,
+		ec.marshalNID2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Post_authorID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Post",
 		Field:      field,
@@ -2603,9 +2661,9 @@ func (ec *executionContext) _PostConnection_edges(ctx context.Context, field gra
 			return obj.Edges(ctx)
 		},
 		nil,
-		ec.marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdgeᚄ,
+		ec.marshalOPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdgeᚄ,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -2706,9 +2764,9 @@ func (ec *executionContext) _PostEdge_node(ctx context.Context, field graphql.Co
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPost,
+		ec.marshalOPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPost,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -2722,6 +2780,8 @@ func (ec *executionContext) fieldContext_PostEdge_node(_ context.Context, field 
 			switch field.Name {
 			case "id":
 				return ec.fieldContext_Post_id(ctx, field)
+			case "authorID":
+				return ec.fieldContext_Post_authorID(ctx, field)
 			case "title":
 				return ec.fieldContext_Post_title(ctx, field)
 			case "status":
@@ -3322,9 +3382,9 @@ func (ec *executionContext) _UserConnection_edges(ctx context.Context, field gra
 			return obj.Edges(ctx)
 		},
 		nil,
-		ec.marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdgeᚄ,
+		ec.marshalOUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdgeᚄ,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -3425,9 +3485,9 @@ func (ec *executionContext) _UserEdge_node(ctx context.Context, field graphql.Co
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUser,
+		ec.marshalOUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUser,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -5061,26 +5121,11 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 			it.Name = data
 		case "email":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalNString2string(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
+			data, err := ec.unmarshalNString2string(ctx, v)
 			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
+				return it, err
 			}
-			if data, ok := tmp.(string); ok {
-				it.Email = data
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
+			it.Email = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
 			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserRole(ctx, v)
@@ -5889,28 +5934,11 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 			it.Name = data
 		case "email":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
 			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
+				return it, err
 			}
-			if data, ok := tmp.(*string); ok {
-				it.Email = data
-			} else if tmp == nil {
-				it.Email = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
+			it.Email = data
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
 			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserRole(ctx, v)
@@ -5976,7 +6004,7 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "name", "nameNEQ", "nameIn", "nameNotIn", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "email", "emailNEQ", "emailIn", "emailNotIn", "emailContains", "emailHasPrefix", "emailHasSuffix", "emailEqualFold", "emailContainsFold", "role", "roleNEQ", "roleIn", "roleNotIn", "hasPosts", "hasPostsWith"}
+	fieldsInOrder := [...]string{"not", "and", "or", "id", "idNEQ", "idIn", "idNotIn", "idGT", "idGTE", "idLT", "idLTE", "name", "nameNEQ", "nameIn", "nameNotIn", "nameContains", "nameHasPrefix", "nameHasSuffix", "nameEqualFold", "nameContainsFold", "role", "roleNEQ", "roleIn", "roleNotIn", "hasPosts", "hasPostsWith"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -6123,222 +6151,6 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 				return it, err
 			}
 			it.NameContainsFold = data
-		case "email":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("email"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.Email = data
-			} else if tmp == nil {
-				it.Email = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailNEQ":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailNEQ"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.EmailNEQ = data
-			} else if tmp == nil {
-				it.EmailNEQ = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailIn":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailIn"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚕstringᚄ(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal []string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.([]string); ok {
-				it.EmailIn = data
-			} else if tmp == nil {
-				it.EmailIn = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be []string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailNotIn":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailNotIn"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚕstringᚄ(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal []string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.([]string); ok {
-				it.EmailNotIn = data
-			} else if tmp == nil {
-				it.EmailNotIn = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be []string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailContains":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailContains"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.EmailContains = data
-			} else if tmp == nil {
-				it.EmailContains = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailHasPrefix":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailHasPrefix"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.EmailHasPrefix = data
-			} else if tmp == nil {
-				it.EmailHasPrefix = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailHasSuffix":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailHasSuffix"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.EmailHasSuffix = data
-			} else if tmp == nil {
-				it.EmailHasSuffix = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailEqualFold":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailEqualFold"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.EmailEqualFold = data
-			} else if tmp == nil {
-				it.EmailEqualFold = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-		case "emailContainsFold":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("emailContainsFold"))
-			directive0 := func(ctx context.Context) (any, error) { return ec.unmarshalOString2ᚖstring(ctx, v) }
-
-			directive1 := func(ctx context.Context) (any, error) {
-				if ec.directives.Admin == nil {
-					var zeroVal *string
-					return zeroVal, errors.New("directive admin is not implemented")
-				}
-				return ec.directives.Admin(ctx, obj, directive0)
-			}
-
-			tmp, err := directive1(ctx)
-			if err != nil {
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
-			if data, ok := tmp.(*string); ok {
-				it.EmailContainsFold = data
-			} else if tmp == nil {
-				it.EmailContainsFold = nil
-			} else {
-				err := fmt.Errorf(`unexpected type %T from directive, should be *string`, tmp)
-				return it, graphql.ErrorOnPath(ctx, err)
-			}
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
 			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserRole(ctx, v)
@@ -6494,16 +6306,13 @@ func (ec *executionContext) _LabelConnection(ctx context.Context, sel ast.Select
 		case "edges":
 			field := field
 
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
 				res = ec._LabelConnection_edges(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
 				return res
 			}
 
@@ -6635,9 +6444,6 @@ func (ec *executionContext) _LabelEdge(ctx context.Context, sel ast.SelectionSet
 			out.Values[i] = graphql.MarshalString("LabelEdge")
 		case "node":
 			out.Values[i] = ec._LabelEdge_node(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "cursor":
 			out.Values[i] = ec._LabelEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -6821,6 +6627,11 @@ func (ec *executionContext) _Post(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "authorID":
+			out.Values[i] = ec._Post_authorID(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "title":
 			out.Values[i] = ec._Post_title(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -6946,16 +6757,13 @@ func (ec *executionContext) _PostConnection(ctx context.Context, sel ast.Selecti
 		case "edges":
 			field := field
 
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
 				res = ec._PostConnection_edges(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
 				return res
 			}
 
@@ -7087,9 +6895,6 @@ func (ec *executionContext) _PostEdge(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = graphql.MarshalString("PostEdge")
 		case "node":
 			out.Values[i] = ec._PostEdge_node(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "cursor":
 			out.Values[i] = ec._PostEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -7401,16 +7206,13 @@ func (ec *executionContext) _UserConnection(ctx context.Context, sel ast.Selecti
 		case "edges":
 			field := field
 
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
 				res = ec._UserConnection_edges(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
 				return res
 			}
 
@@ -7542,9 +7344,6 @@ func (ec *executionContext) _UserEdge(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = graphql.MarshalString("UserEdge")
 		case "node":
 			out.Values[i] = ec._UserEdge_node(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "cursor":
 			out.Values[i] = ec._UserEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -8041,50 +7840,6 @@ func (ec *executionContext) marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋv
 	return ec._LabelConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*veloxgen.LabelEdge) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdge(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
 func (ec *executionContext) marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdge(ctx context.Context, sel ast.SelectionSet, v *veloxgen.LabelEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -8156,50 +7911,6 @@ func (ec *executionContext) marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋve
 		return graphql.Null
 	}
 	return ec._PostConnection(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*veloxgen.PostEdge) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdge(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
 }
 
 func (ec *executionContext) marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdge(ctx context.Context, sel ast.SelectionSet, v *veloxgen.PostEdge) graphql.Marshaler {
@@ -8315,50 +8026,6 @@ func (ec *executionContext) marshalNUserConnection2ᚖgithubᚗcomᚋsyssamᚋve
 		return graphql.Null
 	}
 	return ec._UserConnection(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*veloxgen.UserEdge) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	var wg sync.WaitGroup
-	isLen1 := len(v) == 1
-	if !isLen1 {
-		wg.Add(len(v))
-	}
-	for i := range v {
-		i := i
-		fc := &graphql.FieldContext{
-			Index:  &i,
-			Result: &v[i],
-		}
-		ctx := graphql.WithFieldContext(ctx, fc)
-		f := func(i int) {
-			defer func() {
-				if r := recover(); r != nil {
-					ec.Error(ctx, ec.Recover(ctx, r))
-					ret = nil
-				}
-			}()
-			if !isLen1 {
-				defer wg.Done()
-			}
-			ret[i] = ec.marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdge(ctx, sel, v[i])
-		}
-		if isLen1 {
-			f(i)
-		} else {
-			go f(i)
-		}
-
-	}
-	wg.Wait()
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
 }
 
 func (ec *executionContext) marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdge(ctx context.Context, sel ast.SelectionSet, v *veloxgen.UserEdge) graphql.Marshaler {
@@ -8839,6 +8506,60 @@ func (ec *executionContext) marshalOInt2ᚖint8(ctx context.Context, sel ast.Sel
 	return res
 }
 
+func (ec *executionContext) marshalOLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐTag(ctx context.Context, sel ast.SelectionSet, v *veloxgen.Tag) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Label(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*veloxgen.LabelEdge) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelEdge(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐLabelOrder(ctx context.Context, v any) (*veloxgen.LabelOrder, error) {
 	if v == nil {
 		return nil, nil
@@ -8871,6 +8592,60 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssam�
 	}
 	res, err := ec.unmarshalInputLabelWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPost(ctx context.Context, sel ast.SelectionSet, v *veloxgen.Post) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Post(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*veloxgen.PostEdge) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostEdge(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐPostOrderᚄ(ctx context.Context, v any) ([]*veloxgen.PostOrder, error) {
@@ -9123,6 +8898,53 @@ func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexam
 		return graphql.Null
 	}
 	return ec._User(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*veloxgen.UserEdge) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	var wg sync.WaitGroup
+	isLen1 := len(v) == 1
+	if !isLen1 {
+		wg.Add(len(v))
+	}
+	for i := range v {
+		i := i
+		fc := &graphql.FieldContext{
+			Index:  &i,
+			Result: &v[i],
+		}
+		ctx := graphql.WithFieldContext(ctx, fc)
+		f := func(i int) {
+			defer func() {
+				if r := recover(); r != nil {
+					ec.Error(ctx, ec.Recover(ctx, r))
+					ret = nil
+				}
+			}()
+			if !isLen1 {
+				defer wg.Done()
+			}
+			ret[i] = ec.marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserEdge(ctx, sel, v[i])
+		}
+		if isLen1 {
+			f(i)
+		} else {
+			go f(i)
+		}
+
+	}
+	wg.Wait()
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋveloxgenᚐUserOrder(ctx context.Context, v any) (*veloxgen.UserOrder, error) {

@@ -3,7 +3,6 @@ package sdl
 import (
 	"cmp"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/syssam/velox/contrib/graphql"
@@ -187,7 +186,6 @@ type whereSubject struct {
 	edge   int    // the index of the foreign key's edge; -1 for none
 	on     string // the GraphQL name of what the predicates are on: the edge's, or the field's
 	v      goValue
-	dirs   []directive // the directives the predicates carry
 }
 
 // wherePredicates adds to fs, o's where input, the predicates of o's field
@@ -207,9 +205,6 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	if err != nil {
 		return err
 	}
-	if o.veloxe {
-		s.dirs = nil // veloxe put directives on the type's fields alone
-	}
 	on := cmp.Or(s.on, s.name)
 	// IsNil and NotNil are the handle's IsNull and NotNull, which only a
 	// nullable field's Null* handle has: a Nillable field's. An Optional
@@ -218,24 +213,26 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 	if err != nil {
 		return err
 	}
-	if o.veloxe && a.WhereOps&graphql.OpsDefault != 0 && veloxeEqualityDefault(f.Name, s.kind) {
-		// veloxe's default for the key, a field named as a key (id, *_id)
-		// and an Other field: equality.
+	if o.cfg.idEquality() && a.WhereOps&graphql.OpsDefault != 0 && equalityDefault(f.Name, s.kind) {
+		// idops=equality: the defaults of the key, a field named like a
+		// key (id, *_id) and an Other field are equality.
 		_, defaults := predicatesOf(s.kind, f.Nullable)
 		ops = ops&^defaults | ops&a.WhereOps | graphql.OpsEquality
 		if f.Nullable {
 			ops |= graphql.OpsNullable
 		}
 	}
-	if o.veloxe && f.Nullable && a.WhereOps&graphql.OpsNullable == 0 && s.kind != "jsonArray" {
-		// veloxe's: a nullable field's predicates test for NULL too.
+	if f.Nullable && s.kind != "jsonArray" {
+		// A nullable field's predicates test for NULL too, as ent's do.
 		ops |= graphql.OpsNullable
 	}
 	for _, p := range predicates {
 		if ops&p.op == 0 {
 			continue
 		}
-		pf := gqlField{name: s.name + p.suffix, typ: s.typ, dirs: s.dirs, where: where}
+		// A predicate carries no directive, as in entgql: one declared for
+		// FIELD_DEFINITION alone would make the SDL invalid.
+		pf := gqlField{name: s.name + p.suffix, typ: s.typ, where: where}
 		switch p.takes {
 		case takesList:
 			pf.typ = "[" + s.typ + "!]"
@@ -262,13 +259,6 @@ func (g *graph) wherePredicates(o *object, fs *inputFields, i int) error {
 func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool, where string) (whereSubject, error) {
 	e, f := o.ent, o.ent.Fields[i]
 	s := whereSubject{edge: -1}
-	// The predicates carry the field's directives, and a foreign key's
-	// its edge's too, so that what guards the field guards its filters.
-	dirs, err := directives(a.Directives, where)
-	if err != nil {
-		return s, err
-	}
-	s.dirs = dirs
 	switch {
 	case key:
 		// Only an enum or a uuid key is unordered.
@@ -278,11 +268,11 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		}
 		s.name, s.typ, s.goBase, s.target = "id", "ID", "ID", o.name
 		s.v = goValue{typ: o.keyTyp, pkg: o.keyPkg, own: true}
-	case f.Implicit != "" || o.fks[f.Name] && (!o.veloxe || g.keyEdge(o, f) >= 0):
-		// A foreign key is never a raw scalar: its edge names it, and it
-		// takes the IDs of the edge's target. Under compat=veloxe a declared
-		// key whose edge GraphQL leaves out is filtered as a field (default),
-		// as veloxe did.
+	case f.Implicit != "" || o.fks[f.Name] && g.keyEdge(o, f) >= 0:
+		// A foreign key takes the IDs of its edge's target. A declared key
+		// is named from the field, as the type shows it; an implicit one,
+		// which the type does not show, from the edge. A declared key whose
+		// edge GraphQL leaves out is filtered as a field (default).
 		j := g.keyEdge(o, f)
 		if j < 0 {
 			return s, fmt.Errorf("%s: graphql.WhereOps on a foreign key whose edge is not in GraphQL: an edge's ID names a foreign key's predicates", where)
@@ -294,8 +284,7 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		ed := e.Edges[j]
 		t := g.byName[ed.Target]
 		s.name, s.typ, s.kind, s.goBase, s.target, s.edge, s.on = o.idOf(en), "ID", "ID", goOf(en, ed.GoName)+"ID", t.name, j, en
-		if o.veloxe {
-			// veloxe's: named from the field, as the type shows it.
+		if f.Implicit == "" {
 			n, err := o.fieldName(i)
 			if err != nil {
 				return s, err
@@ -304,11 +293,6 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 		}
 		// The foreign key's IDs are its target's keys, in their Go type.
 		s.v = goValue{typ: t.keyTyp, pkg: t.keyPkg, own: true}
-		eds, err := directives(o.eanns[j].Directives, "schema "+e.Name+", edge "+ed.Name)
-		if err != nil {
-			return s, err
-		}
-		s.dirs = unite(dirs, eds)
 	default:
 		n, err := o.fieldName(i)
 		if err != nil {
@@ -319,8 +303,8 @@ func (g *graph) whereSubjectOf(o *object, i int, a graphql.Annotation, key bool,
 			return s, err
 		}
 		if o.fks[f.Name] {
-			// veloxe's: a key whose edge GraphQL leaves out is its ID still,
-			// filtered by the field's own handle.
+			// A key whose edge GraphQL leaves out is its ID still, filtered
+			// by the field's own handle.
 			t = "ID"
 		}
 		s.name, s.typ, s.kind, s.goBase, s.v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
@@ -353,14 +337,8 @@ func (g *graph) whereEdge(o *object, fs *inputFields, i int) error {
 	if err != nil {
 		return err
 	}
-	dirs, err := directives(a.Directives, where)
-	if err != nil {
-		return err
-	}
-	if o.veloxe {
-		dirs = nil // veloxe put directives on the type's fields alone
-	}
-	has := gqlField{name: "has" + upper(name), typ: "Boolean", dirs: dirs, where: where}
+	// has and hasWith carry no directive, as in entgql.
+	has := gqlField{name: "has" + upper(name), typ: "Boolean", where: where}
 	if err := fs.add(has); err != nil {
 		return err
 	}
@@ -371,25 +349,12 @@ func (g *graph) whereEdge(o *object, fs *inputFields, i int) error {
 	if !t.hasWhere {
 		return nil
 	}
-	with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", dirs: dirs, where: where}
+	with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", where: where}
 	if err := fs.add(with); err != nil {
 		return err
 	}
 	o.whereGo = append(o.whereGo, WhereField{Name: with.name, GoName: goHas + "With", Type: with.typ, Kind: WhereHasWith, Field: -1, Edge: i, Target: t.name, On: name})
 	return nil
-}
-
-// unite is ds followed by those of more whose names ds lacks: GraphQL allows
-// a directive once where it is, unless it is repeatable, and the plugin
-// cannot tell which are.
-func unite(ds, more []directive) []directive {
-	out := slices.Clone(ds)
-	for _, d := range more {
-		if !slices.ContainsFunc(out, func(x directive) bool { return x.name == d.name }) {
-			out = append(out, d)
-		}
-	}
-	return out
 }
 
 // keyEdge is the index in o.ent.Edges of the unique edge that f, a foreign

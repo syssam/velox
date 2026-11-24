@@ -17,18 +17,41 @@ import (
 
 const genPath = "example.com/app/gen"
 
-// graphqlGo is the Config of engine=graphql-go, compat=veloxe or not.
-func graphqlGo(veloxe bool) Config {
-	return Config{GraphQLGo: true, Veloxe: veloxe, Package: genPath}
+// graphqlGoModel is the test model for graphqlGo(wide): as written, with
+// no RelayConnection, when wide, as wideConfig is the old velox's.
+func graphqlGoModel(t *testing.T, wide bool) *plugin.Model {
+	if wide {
+		return modeltest.NoRelay(t, modeltest.GraphQLGo(t))
+	}
+	return modeltest.GraphQLGo(t)
 }
 
-// TestGraphQLGoGolden pins the SDL of engine=graphql-go, with and without
-// compat=veloxe, over the test model less what the engine refuses. Run it
+// graphqlGo is the Config of engine=graphql-go, under wideConfig or the
+// defaults.
+func graphqlGo(wide bool) Config {
+	cfg := Config{}
+	if wide {
+		cfg = wideConfig()
+	}
+	cfg.GraphQLGo, cfg.Package = true, genPath
+	return cfg
+}
+
+// wideBytes is wideConfig with Bytes left to the application too, as one
+// whose schema has no bytes field declares it.
+func wideBytes() Config {
+	cfg := wideConfig()
+	cfg.AppTypes, cfg.Package = append(cfg.AppTypes, "Bytes"), genPath
+	return cfg
+}
+
+// TestGraphQLGoGolden pins the SDL of engine=graphql-go, under the defaults
+// and wideConfig, over the test model less what the engine refuses. Run it
 // with -update to rewrite testdata/graphqlgo*.graphql.
 func TestGraphQLGoGolden(t *testing.T) {
-	for name, veloxe := range map[string]bool{"graphqlgo.graphql": false, "graphqlgo_veloxe.graphql": true} {
+	for name, wide := range map[string]bool{"graphqlgo.graphql": false, "graphqlgo_wide.graphql": true} {
 		t.Run(name, func(t *testing.T) {
-			got, err := RenderConfig(modeltest.GraphQLGo(t), graphqlGo(veloxe))
+			got, err := RenderConfig(graphqlGoModel(t, wide), graphqlGo(wide))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -57,8 +80,8 @@ func TestGraphQLGoGolden(t *testing.T) {
 // Go types; and gqlgen's introspection binds are gone. gqlgen's SDL of the
 // same model binds only what it did.
 func TestGraphQLGoBindsEveryType(t *testing.T) {
-	for _, veloxe := range []bool{false, true} {
-		got, err := RenderConfig(modeltest.GraphQLGo(t), graphqlGo(veloxe))
+	for _, wide := range []bool{false, true} {
+		got, err := RenderConfig(graphqlGoModel(t, wide), graphqlGo(wide))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +96,7 @@ func TestGraphQLGoBindsEveryType(t *testing.T) {
 			}
 			dir := d.Directives.ForName("goModel")
 			if dir == nil {
-				t.Errorf("veloxe=%v: %s %s has no @goModel", veloxe, d.Kind, d.Name)
+				t.Errorf("wide=%v: %s %s has no @goModel", wide, d.Kind, d.Name)
 				continue
 			}
 			models[d.Name] = dir.Arguments.ForName("model").Value.Raw
@@ -85,24 +108,23 @@ func TestGraphQLGoBindsEveryType(t *testing.T) {
 			"CreatePostInput": genPath + ".CreatePostInput", "Bytes": "[]byte",
 		} {
 			if models[typ] != model {
-				t.Errorf("veloxe=%v: %s binds %q, want %q", veloxe, typ, models[typ], model)
+				t.Errorf("wide=%v: %s binds %q, want %q", wide, typ, models[typ], model)
 			}
 		}
-		// Under compat=veloxe a type with a QueryField has no connection,
-		// and the application declares JSON, UUID and Uint64, as veloxe left
-		// them to it.
+		// Under wideConfig the application declares JSON, UUID and Uint64,
+		// which apptypes= lists, and Node is declared.
 		own := map[string]string{"UUID": "github.com/google/uuid.UUID", "Uint64": "uint64", "JSON": "github.com/syssam/velox/contrib/graphql/veloxgql.JSON",
 			"AccountConnection": genPath + ".AccountConnection", "AccountEdge": genPath + ".AccountEdge", "PostOrder": genPath + ".PostOrder", "PostOrderField": genPath + ".PostOrderField"}
-		if veloxe {
+		if wide {
 			own = map[string]string{"Node": genPath + ".Noder", "LikeConnection": genPath + ".LikeConnection", "LikeOrder": genPath + ".LikeOrder"}
 		}
 		for typ, model := range own {
 			if models[typ] != model {
-				t.Errorf("veloxe=%v: %s binds %q, want %q", veloxe, typ, models[typ], model)
+				t.Errorf("wide=%v: %s binds %q, want %q", wide, typ, models[typ], model)
 			}
 		}
 		if strings.Contains(got, "extend ") {
-			t.Errorf("veloxe=%v: an introspection bind in\n%s", veloxe, got)
+			t.Errorf("wide=%v: an introspection bind in\n%s", wide, got)
 		}
 	}
 	// gqlgen's: the scalars stay unbound, gqlgen.yml binds them.

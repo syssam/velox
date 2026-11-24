@@ -1,0 +1,35 @@
+# Membership
+
+type Membership implements Node @goModel(model: "example.com/app/gen.Membership") {
+  id: ID!
+  role: MembershipRole!
+  joinedAt: Time!
+  userId: ID!
+  groupId: ID!
+  user: User!
+  group: Group!
+}
+
+enum MembershipRole @goModel(model: "example.com/app/gen.MembershipRole") {
+  OWNER
+  MEMBER
+}
+
+"""The input that creates a Membership."""
+input CreateMembershipInput @goModel(model: "example.com/app/gen.CreateMembershipInput") {
+  role: MembershipRole
+  joinedAt: Time
+  """The ID of the User the edge user leads to."""
+  userId: ID!
+  """The ID of the Group the edge group leads to."""
+  groupId: ID!
+}
+
+"""The input that updates a Membership: a field not given is left as it is."""
+input UpdateMembershipInput @goModel(model: "example.com/app/gen.UpdateMembershipInput") {
+  role: MembershipRole
+  """The ID of the User the edge user leads to."""
+  userId: ID
+  """The ID of the Group the edge group leads to."""
+  groupId: ID
+}

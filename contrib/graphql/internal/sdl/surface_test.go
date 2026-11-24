@@ -263,7 +263,7 @@ func TestSurfaceInputs(t *testing.T) {
 		"Views: views value field views int",
 		"Rating: rating value field rating float64",
 		"ClearRating: clearRating clear field rating",
-		"WriterID: writerID edgeID edge author Account int64",
+		"AuthorID: authorID edgeID edge author Account int64", // named from the key field
 		// An M2M to its own type, from both sides.
 		"AddRelatedIDs: addRelatedIDs add edge related Post int64",
 		"RemoveRelatedIDs: removeRelatedIDs remove edge related Post int64",

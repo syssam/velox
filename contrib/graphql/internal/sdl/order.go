@@ -18,19 +18,18 @@ type order struct {
 }
 
 // orderOf computes o's order from its fields' OrderField annotations: none
-// when no field has one, or when the entity skips its order.
-//
-// Under compat=veloxe it is veloxe's order (veloxeOrder), and a type without
-// a connection has none, as in veloxe.
+// when no field has one, when the entity skips its order, or when o has no
+// connection, which alone takes an order. Under orderfields=all it lists
+// every orderable field (allOrder).
 func (g *graph) orderOf(o *object) error {
 	e := o.ent
 	var ord order
 	by := map[string]string{} // value → the field
 	switch {
-	case o.ann.Skip&graphql.SkipOrderField != 0, o.veloxe && !o.conn:
+	case o.ann.Skip&graphql.SkipOrderField != 0, !o.conn:
 		return nil
-	case o.veloxe:
-		if err := veloxeOrder(o, &ord, by); err != nil {
+	case o.cfg.orderAll():
+		if err := allOrder(o, &ord, by); err != nil {
 			return err
 		}
 	default:

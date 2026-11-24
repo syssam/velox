@@ -25,8 +25,8 @@ func TestPluginAnswers(t *testing.T) {
 		Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", ElemType: "int64"}, {Name: "name", GoName: "Name", Type: "string", ElemType: "string"}},
 	}}}
-	p := graphqlgen.Plugin(map[string]string{"compat": "veloxe"})
-	if p.Tool != "velox-graphql" || p.Options["compat"] != "veloxe" || p.Run == nil {
+	p := graphqlgen.Plugin(map[string]string{"names": "schema"})
+	if p.Tool != "velox-graphql" || p.Options["names"] != "schema" || p.Run == nil {
 		t.Fatalf("%+v", p)
 	}
 	req := &plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Model: m}

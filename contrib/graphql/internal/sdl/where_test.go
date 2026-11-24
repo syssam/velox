@@ -64,8 +64,9 @@ func TestWhere(t *testing.T) {
 		}
 	})
 
-	// A foreign key is never a raw scalar: its edge names its predicates, and
-	// they take IDs.
+	// A declared foreign key's predicates are named from its field, as the
+	// type shows it, and take IDs: equality alone, and IsNil and NotNil
+	// when it is nullable.
 	t.Run("foreign key", func(t *testing.T) {
 		aid := field("author_id", "int64")
 		aid.Annotations = ann(t, graphql.WhereOps())
@@ -83,17 +84,19 @@ func TestWhere(t *testing.T) {
 		posts.Field, posts.FieldOn = "author_id", "Post"
 		user.Edges = []*plugin.Edge{posts}
 		s, sdl := load(t, model(post, user))
-		want := append(append(logic("PostWhereInput"), nodeKey()...), "writerID: ID", "writerIDNEQ: ID", "writerIDIn: [ID!]", "writerIDNotIn: [ID!]", "editorID: ID", "editorIDIsNil: Boolean")
+		want := append(append(logic("PostWhereInput"), nodeKey()...), "authorID: ID", "authorIDNEQ: ID", "authorIDIn: [ID!]", "authorIDNotIn: [ID!]", "editorID: ID", "editorIDIsNil: Boolean", "editorIDNotNil: Boolean")
 		if got := fieldsOf(s, "PostWhereInput"); !slices.Equal(got, want) {
 			t.Errorf("got %v\nwant %v\n%s", got, want, sdl)
 		}
-		if strings.Contains(sdl, "authorID") {
-			t.Errorf("the raw key is exposed:\n%s", sdl)
+		if strings.Contains(sdl, "writerIDNEQ") {
+			t.Errorf("the predicates are named from the edge:\n%s", sdl)
 		}
 
-		// With its edge out of GraphQL, the key has no name to filter by.
+		// With its edge out of GraphQL, the key is filtered as its ID still.
 		author.Annotations = ann(t, graphql.Skip())
-		renderErr(t, model(post, user), "schema Post, field author_id", "WhereOps", "edge")
+		if s, sdl := load(t, model(post, user)); typeOf(s, "PostWhereInput", "authorIDNEQ") != "ID" {
+			t.Errorf("a key whose edge is skipped:\n%s", sdl)
+		}
 	})
 
 	t.Run("each op", func(t *testing.T) {
@@ -113,7 +116,16 @@ func TestWhere(t *testing.T) {
 			n := &plugin.Field{Name: "n", GoName: "N", Type: "string", Pointer: true, Nullable: true, Optional: true}
 			n.Annotations = ann(t, graphql.WhereOps(c.op))
 			s, _ := load(t, model(entity("User", n)))
+			// A nullable field's predicates test for NULL too, as ent's do.
 			want := append(append(logic("UserWhereInput"), nodeKey()...), c.want)
+			for _, n := range []string{"nIsNil: Boolean", "nNotNil: Boolean"} {
+				if n != c.want {
+					want = append(want, n)
+				}
+			}
+			if c.op == graphql.OpNotNil {
+				want = append(append(logic("UserWhereInput"), nodeKey()...), "nIsNil: Boolean", "nNotNil: Boolean")
+			}
 			if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 				t.Errorf("%s: got %v", c.want, got)
 			}
@@ -121,7 +133,8 @@ func TestWhere(t *testing.T) {
 	})
 
 	t.Run("merged and presets", func(t *testing.T) {
-		// WhereOps() with WhereOps(OpGT): the defaults plus GT.
+		// WhereOps() with WhereOps(OpGT): the defaults plus GT, as the two
+		// annotations merge into one WhereOps.
 		n := field("n", "string")
 		n.Annotations = ann(t, graphql.WhereOps(), graphql.WhereOps(graphql.OpGT))
 		// OpsAll: every predicate the type has.
@@ -153,7 +166,7 @@ func TestWhere(t *testing.T) {
 		groups := edge("groups", plugin.M2M, "Group")
 		groups.Annotations = ann(t, graphql.WhereEdge(), graphql.FieldName("memberships"))
 		user.Edges = []*plugin.Edge{posts, groups, edge("profile", plugin.O2O, "Group")}
-		user.Annotations = ann(t, graphql.QueryField("users"))
+		user.Annotations = ann(t, graphql.QueryField("users"), graphql.RelayConnection())
 		title := field("title", "string")
 		title.Annotations = ann(t, graphql.WhereOps())
 		post := entity("Post", title)
@@ -186,11 +199,11 @@ func TestWhere(t *testing.T) {
 		n := field("name", "string")
 		n.Annotations = ann(t, graphql.WhereOps())
 		user := entity("User", n)
-		user.Annotations = ann(t, graphql.QueryField("users"), graphql.Skip(graphql.SkipWhereInput))
+		user.Annotations = ann(t, graphql.QueryField("users"), graphql.RelayConnection(), graphql.Skip(graphql.SkipWhereInput))
 		skipped := field("label", "string")
 		skipped.Annotations = ann(t, graphql.WhereOps(), graphql.Skip(graphql.SkipWhereInput))
 		tag := entity("Tag", skipped)
-		tag.Annotations = ann(t, graphql.QueryField("tags"))
+		tag.Annotations = ann(t, graphql.QueryField("tags"), graphql.RelayConnection())
 		s, sdl := load(t, model(tag, user))
 		if s.Types["UserWhereInput"] != nil || s.Types["TagWhereInput"] != nil || strings.Contains(sdl, "where:") {
 			t.Errorf("a where input:\n%s", sdl)
@@ -203,8 +216,14 @@ func TestWhere(t *testing.T) {
 		renderErr(t, model(entity("User", i)), "schema User, field i", "OpContains", "int")
 		i.Annotations = ann(t, graphql.WhereOps(graphql.OpIsNil))
 		renderErr(t, model(entity("User", i)), "schema User, field i", "OpIsNil")
+		// Default predicates on a json field that has none have no effect,
+		// a warning; an explicit op is refused.
 		j := field("doc", "json")
 		j.Annotations = ann(t, graphql.WhereOps())
+		if got := warningsOf(t, model(entity("User", j)), Config{}); len(got) != 1 || !strings.HasPrefix(got[0], "User.doc: graphql.WhereOps has no effect on a json field") {
+			t.Errorf("warnings %q", got)
+		}
+		j.Annotations = ann(t, graphql.WhereOps(graphql.OpEQ))
 		renderErr(t, model(entity("User", j)), "schema User, field doc", "json")
 	})
 }
@@ -231,74 +250,41 @@ func dirsOf(s *ast.Schema, typ, name string) []string {
 	return out
 }
 
-// A where input's fields carry the directives of what they filter, so that
-// a directive guarding a field guards its filters too: otherwise a client
-// could bisect a protected field's value with them.
-func TestWhereCarriesDirectives(t *testing.T) {
+// A where input's fields carry no directives, as entgql's do not: gqlgen
+// would run a field's directive on its predicates, which an application
+// directive written for the type's field does not expect. The type's field
+// keeps its directives. A field that must not be filtered has no WhereOps.
+func TestWhereCarriesNoDirectives(t *testing.T) {
 	admin := graphql.Directives(graphql.Directive{Name: "admin"})
 	audit := graphql.Directives(graphql.Directive{Name: "audit", Args: map[string]any{"level": 2}})
 
-	t.Run("field", func(t *testing.T) {
-		salary := &plugin.Field{Name: "salary", GoName: "Salary", Type: "int", Pointer: true, Nullable: true, Optional: true}
-		salary.Annotations = ann(t, admin, graphql.WhereOps(graphql.OpsAll))
-		s, sdl := load(t, model(entity("User", salary)), appDirectives)
-		got := fieldsOf(s, "UserWhereInput")[11:]
-		if len(got) != 10 { // equality, comparison and nullable
-			t.Fatalf("predicates %v\n%s", got, sdl)
+	salary := &plugin.Field{Name: "salary", GoName: "Salary", Type: "int", Pointer: true, Nullable: true, Optional: true}
+	salary.Annotations = ann(t, admin, graphql.WhereOps(graphql.OpsAll))
+	aid := field("author_id", "int64")
+	aid.Annotations = ann(t, audit, graphql.WhereOps(graphql.OpEQ, graphql.OpIn))
+	post := entity("Post", aid)
+	author := edge("author", plugin.M2O, "User")
+	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
+	author.Annotations = ann(t, admin, audit)
+	post.Edges = []*plugin.Edge{author}
+	user := entity("User", salary)
+	posts := edge("posts", plugin.O2M, "Post")
+	posts.Field, posts.FieldOn = "author_id", "Post"
+	posts.Annotations = ann(t, admin, graphql.WhereEdge())
+	user.Edges = []*plugin.Edge{posts}
+	s, sdl := load(t, model(post, user), appDirectives)
+	for _, c := range [][2]string{
+		{"UserWhereInput", "salary"}, {"UserWhereInput", "salaryGT"}, {"UserWhereInput", "salaryIsNil"},
+		{"UserWhereInput", "hasPosts"}, {"UserWhereInput", "hasPostsWith"},
+		{"PostWhereInput", "authorID"}, {"PostWhereInput", "authorIDIn"},
+	} {
+		if d := dirsOf(s, c[0], c[1]); len(d) != 0 {
+			t.Errorf("%s.%s: %v, want none\n%s", c[0], c[1], d, sdl)
 		}
-		for _, f := range got {
-			name, _, _ := strings.Cut(f, ":")
-			if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@admin"}) {
-				t.Errorf("%s: %v, want [@admin]\n%s", name, d, sdl)
-			}
+	}
+	for _, c := range [][3]string{{"User", "salary", "@admin"}, {"User", "posts", "@admin"}, {"Post", "authorID", "@audit"}} {
+		if d := dirsOf(s, c[0], c[1]); !slices.Equal(d, []string{c[2]}) {
+			t.Errorf("%s.%s: %v, want [%s]", c[0], c[1], d, c[2])
 		}
-		// The type's field keeps it, and the logic fields carry none.
-		if d := dirsOf(s, "User", "salary"); !slices.Equal(d, []string{"@admin"}) {
-			t.Errorf("User.salary: %v", d)
-		}
-		if d := dirsOf(s, "UserWhereInput", "not"); len(d) != 0 {
-			t.Errorf("not: %v", d)
-		}
-	})
-
-	t.Run("edge", func(t *testing.T) {
-		title := field("title", "string")
-		title.Annotations = ann(t, graphql.WhereOps())
-		post := entity("Post", title)
-		user := entity("User")
-		posts := edge("posts", plugin.O2M, "Post")
-		posts.Annotations = ann(t, admin, graphql.WhereEdge())
-		user.Edges = []*plugin.Edge{posts}
-		s, sdl := load(t, model(post, user), appDirectives)
-		for _, name := range []string{"hasPosts", "hasPostsWith"} {
-			if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@admin"}) {
-				t.Errorf("%s: %v, want [@admin]\n%s", name, d, sdl)
-			}
-		}
-		if d := dirsOf(s, "User", "posts"); !slices.Equal(d, []string{"@admin"}) {
-			t.Errorf("User.posts: %v", d)
-		}
-	})
-
-	// A foreign key's predicates carry the key field's directives, GraphQL's
-	// own only, then the edge's, each name once.
-	t.Run("foreign key", func(t *testing.T) {
-		dep := graphql.Directives(graphql.Directive{Name: "deprecated", Args: map[string]any{"reason": "old"}})
-		aid := field("author_id", "int64")
-		aid.Annotations = ann(t, dep, graphql.WhereOps(graphql.OpEQ, graphql.OpIn))
-		post := entity("Post", aid)
-		author := edge("author", plugin.M2O, "User")
-		author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
-		author.Annotations = ann(t, admin, dep, audit)
-		post.Edges = []*plugin.Edge{author}
-		s, sdl := load(t, model(post, entity("User")), appDirectives)
-		for _, name := range []string{"authorID", "authorIDIn"} {
-			if d := dirsOf(s, "PostWhereInput", name); !slices.Equal(d, []string{"@deprecated", "@admin", "@audit"}) {
-				t.Errorf("%s: %v, want [@deprecated @admin @audit]\n%s", name, d, sdl)
-			}
-		}
-		if !strings.Contains(sdl, `authorID: ID @deprecated(reason: "old") @admin @audit(level: 2)`) {
-			t.Errorf("the arguments are lost:\n%s", sdl)
-		}
-	})
+	}
 }

@@ -120,7 +120,7 @@ func resolverField(o *object, m graphql.ResolverMapping) (gqlField, error) {
 func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 	e, f, a := o.ent, o.ent.Fields[i], o.fanns[i]
 	switch {
-	case o.hasID && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", o.fks[f.Name] && !o.veloxe, a.Skip&graphql.SkipType != 0:
+	case o.hasID && i == e.PrimaryKey[0], f.Sensitive, f.Implicit != "", a.Skip&graphql.SkipType != 0:
 		return gqlField{}, false, nil
 	}
 	where := "schema " + e.Name + ", field " + f.Name
@@ -133,12 +133,13 @@ func (g *graph) plainField(o *object, i int) (gqlField, bool, error) {
 		return gqlField{}, false, err
 	}
 	if o.fks[f.Name] {
-		// veloxe's: a foreign key is its target's ID, beside its edge.
+		// A declared foreign key is its target's ID, beside its edge, as
+		// in ent.
 		typ = "ID"
 	}
-	// veloxe's type left an Optional field nullable too, though its column is
-	// NOT NULL and its Go value never nil: gqlgen writes a value as non-null.
-	if !f.Nullable && (!o.veloxe || !f.Optional) {
+	// An Optional field's column is NOT NULL and its Go value never nil, so
+	// it is non-null, unless optional=nullable leaves it nullable.
+	if !f.Nullable && (!f.Optional || !o.cfg.optionalNullable()) {
 		typ += "!"
 	}
 	var dirs []directive
@@ -198,9 +199,9 @@ func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error)
 		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.MaxList on an edge that is no list, which first and last bound; add graphql.Connection(false) to a to-many edge", where)
 	}
 	switch {
-	case ed.Unique && o.veloxe && ed.Required:
-		// veloxe's: a Required unique edge is non-null, whatever may leave
-		// the target unread (see below).
+	case ed.Unique && ed.Required && o.cfg.requiredNonNull():
+		// requirededges=nonnull: a Required unique edge is non-null,
+		// whatever may leave the target unread (see below).
 		f.typ, ef.kind = t.name+"!", EdgeUnique
 	case ed.Unique:
 		// Nullable even when Required: a row reads the edge's target in a
@@ -211,9 +212,10 @@ func (g *graph) edgeFieldOf(o *object, i int) (gqlField, edgeField, bool, error)
 	case a.Connection != nil && !*a.Connection:
 		f.typ, ef.kind = "["+t.name+"!]!", EdgeList
 	case !t.conn && a.Connection != nil:
-		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.Connection(true) on an edge to %s, which has no connection: under compat=veloxe a schema with graphql.QueryField and without graphql.RelayConnection has none", where, ed.Target)
+		return gqlField{}, edgeField{}, false, fmt.Errorf("%s: graphql.Connection(true) on an edge to %s, which has no connection: a schema with graphql.QueryField and without graphql.RelayConnection has none", where, ed.Target)
 	case !t.conn:
-		// veloxe's: a to-many edge to a type without a connection is a list.
+		// A to-many edge to a type without a connection is a list, bounded
+		// by its MaxList.
 		f.typ, ef.kind = "["+t.name+"!]!", EdgeList
 	default:
 		f.typ, f.conn, ef.kind = t.name+"Connection!", t, EdgeConnection
@@ -277,10 +279,11 @@ func (o *object) fieldName(i int) (string, error) {
 }
 
 // camel is the GraphQL name of a field or edge of o by its Go name and its
-// schema name: velox's, or under Config.SchemaNames veloxe's.
+// schema name: by the Go name, or under Config.SchemaNames by the schema
+// name (schemaCamel).
 func (o *object) camel(goName, name string) string {
 	if o.schema {
-		return veloxeCamel(name)
+		return schemaCamel(name)
 	}
 	return camel(goName)
 }
@@ -323,8 +326,8 @@ func fieldName(camel, annotated, where string) (string, error) {
 // inputs may each ask.
 func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, where string) (string, error) {
 	if a.Type != "" && (f.Type != "enum" || a.Skip&graphql.SkipEnumField != 0) {
-		// The application's type, as veloxe took it: the application
-		// declares it, and binds it to the field's Go type.
+		// The application's type: the application declares it, and binds
+		// it to the field's Go type.
 		name := a.Type
 		if inner, ok := listOf(name); ok {
 			name = inner
@@ -348,7 +351,6 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 	case "uuid":
 		return "UUID", nil
 	case "bytes":
-		g.bytes = true
 		return "Bytes", nil
 	case "json":
 		if s := jsonList[f.ElemType]; s != "" {
@@ -384,8 +386,8 @@ func (g *graph) enumType(o *object, f *plugin.Field, a graphql.Annotation, where
 		name = f.Enum
 	}
 	if a.Type != "" {
-		// veloxe's: the enum's name, shared by the fields of one Go type
-		// that give it. The Go code aliases velox-gen's own type to it.
+		// The enum's name, shared by the fields of one Go type that give
+		// it. The Go code aliases velox-gen's own type to it.
 		name = a.Type
 	}
 	if slices.ContainsFunc(o.enums, func(en gqlEnum) bool { return en.name == name && en.field == f.Name }) {

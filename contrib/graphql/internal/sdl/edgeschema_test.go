@@ -11,7 +11,7 @@ import (
 )
 
 // TestEdgeSchemaGolden pins the SDL of the edge schema model for gqlgen,
-// graphql-go and compat=veloxe. Run it with -update to rewrite testdata/edgeschema*.graphql.
+// graphql-go and wideConfig. Run it with -update to rewrite testdata/edgeschema*.graphql.
 // Membership and Follow are types like any; User.groups keeps every input,
 // and User.following and followers, whose edge schema Follow has a note Add
 // cannot fill, have no input that adds links.
@@ -25,9 +25,13 @@ func TestEdgeSchemaGolden(t *testing.T) {
 	if ms, key := edgeOf(t, byName["User"], "memberships"), edgeOf(t, byName["Membership"], "user"); ms.Ref != "user" || key.Ref != "" {
 		t.Fatalf("the model's Ref pair is not one way: %q, %q", ms.Ref, key.Ref)
 	}
-	for name, cfg := range map[string]Config{"edgeschema.graphql": {}, "edgeschema_graphqlgo.graphql": graphqlGo(false), "edgeschema_veloxe.graphql": {Veloxe: true, Package: genPath}, "edgeschema_schemanames.graphql": {Names: "schema"}} {
+	for name, cfg := range map[string]Config{"edgeschema.graphql": {}, "edgeschema_graphqlgo.graphql": graphqlGo(false), "edgeschema_wide.graphql": wideBytes(), "edgeschema_schemanames.graphql": {Names: "schema"}} {
 		t.Run(name, func(t *testing.T) {
-			got, err := RenderConfig(modeltest.EdgeSchema(t), cfg)
+			m := modeltest.EdgeSchema(t)
+			if name == "edgeschema_wide.graphql" {
+				m = modeltest.NoRelay(t, m)
+			}
+			got, err := RenderConfig(m, cfg)
 			if err != nil {
 				t.Fatal(err)
 			}

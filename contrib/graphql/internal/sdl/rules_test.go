@@ -49,7 +49,6 @@ func TestAnnotationMisuse(t *testing.T) {
 		a     anns
 		wants []string
 	}{
-		{"OrderField on a sensitive field", anns{secret: graphql.OrderField("SECRET")}, []string{"schema User, field secret", "graphql.OrderField", "sensitive"}},
 		{"OrderField on a schema", anns{user: graphql.OrderField("X")}, []string{"schema User:", "graphql.OrderField"}},
 		{"Mutations on a field", anns{name: graphql.Mutations()}, []string{"schema User, field name", "graphql.Mutations"}},
 		{"Mutations on an edge", anns{posts: graphql.Mutations()}, []string{"schema User, edge posts", "graphql.Mutations"}},
@@ -66,17 +65,32 @@ func TestAnnotationMisuse(t *testing.T) {
 		{"FieldName on a schema", anns{user: graphql.FieldName("x")}, []string{"schema User:", "graphql.FieldName"}},
 		{"EnumValues on a string", anns{name: graphql.EnumValues(map[string]string{"a": "A"})}, []string{"schema User, field name", "graphql.EnumValues"}},
 		{"an unknown EnumValues key", anns{status: graphql.EnumValues(map[string]string{"gone": "GONE"})}, []string{"schema User, field status", `"gone"`}},
-		{"WhereOps on a sensitive field", anns{secret: graphql.WhereOps()}, []string{"schema User, field secret", "graphql.WhereOps", "sensitive"}},
 		{"UpdateInput(true) on an immutable field", anns{handle: graphql.UpdateInput(true)}, []string{"schema User, field handle", "graphql.UpdateInput", "immutable"}},
 		{"an unknown mutation", anns{user: graphql.Mutations("upsert")}, []string{"schema User", `"upsert"`}},
 		{"create with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipMutationCreateInput}}, []string{"schema User", "create", "SkipMutationCreateInput"}},
-		{"QueryField on a skipped type", anns{user: graphql.Annotation{QueryField: "users", Skip: graphql.SkipType}}, []string{"schema User", "graphql.QueryField", "Skip"}},
-		{"Mutations on a skipped type", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipType}}, []string{"schema User", "graphql.Mutations", "Skip"}},
-		{"OrderField on a field out of the type", anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.OrderField", "cursors"}},
-		{"WhereOps on a field out of the type", anns{name: graphql.Annotation{WhereOps: graphql.OpsEquality, Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.WhereOps", "reveal"}},
 		{"update with its input skipped", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"update"}, Skip: graphql.SkipMutationUpdateInput}}, []string{"schema User", "update", "SkipMutationUpdateInput"}},
 	} {
 		t.Run(c.name, func(t *testing.T) { renderErr(t, build(c.a), c.wants...) })
+	}
+
+	// An annotation that has no effect is a warning, and is dropped: an
+	// order or a filter on a sensitive field or one out of the type, and a
+	// QueryField or Mutations on a skipped type.
+	for _, c := range []struct {
+		a    anns
+		want string
+	}{
+		{anns{secret: graphql.OrderField("SECRET")}, `User.secret: graphql.OrderField("SECRET") has no effect on a sensitive field`},
+		{anns{secret: graphql.WhereOps()}, "User.secret: graphql.WhereOps has no effect on a sensitive field"},
+		{anns{user: graphql.Annotation{QueryField: "users", Skip: graphql.SkipType}}, "schema User: graphql.QueryField has no effect on a schema whose type graphql.Skip leaves out"},
+		{anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipType}}, "schema User: graphql.Mutations has no effect on a schema whose type graphql.Skip leaves out"},
+		{anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType}}, `User.name: graphql.OrderField("NAME") has no effect on a field graphql.Skip leaves out of the type`},
+		{anns{name: graphql.Annotation{WhereOps: graphql.OpsEquality, Skip: graphql.SkipType}}, "User.name: graphql.WhereOps has no effect on a field graphql.Skip leaves out of the type"},
+	} {
+		m := build(c.a)
+		if !slices.ContainsFunc(warningsOf(t, m, Config{}), func(w string) bool { return strings.HasPrefix(w, c.want) }) {
+			t.Errorf("warnings %q, want %q", warningsOf(t, m, Config{}), c.want)
+		}
 	}
 
 	// A mutation kind listed twice is harmless.
@@ -285,12 +299,15 @@ func TestOrderFieldUnderDirective(t *testing.T) {
 		t.Errorf("got  %v\nwant %s", err, want)
 	}
 	load(t, user(admin, graphql.OrderField("SALARY"), graphql.OrderUnguarded()), appDirectives)
-	// GraphQL's own directives guard nothing; one is copied onto the
-	// predicates like any other.
+	// GraphQL's own directives guard nothing; the type's field keeps one,
+	// and the predicates carry none.
 	s, _ := load(t, user(graphql.Directives(graphql.Directive{Name: "deprecated"}), graphql.OrderField("SALARY"), graphql.WhereOps(graphql.OpEQ, graphql.OpGT)))
+	if d := dirsOf(s, "User", "salary"); !slices.Equal(d, []string{"@deprecated"}) {
+		t.Errorf("User.salary: %v, want [@deprecated]", d)
+	}
 	for _, name := range []string{"salary", "salaryGT"} {
-		if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@deprecated"}) {
-			t.Errorf("%s: %v, want [@deprecated]", name, d)
+		if d := dirsOf(s, "UserWhereInput", name); len(d) != 0 {
+			t.Errorf("%s: %v, want none", name, d)
 		}
 	}
 
@@ -307,9 +324,10 @@ func TestOrderFieldUnderDirective(t *testing.T) {
 	renderErr(t, model(u), "schema User, edge posts", "graphql.OrderUnguarded")
 }
 
-// An application directive on a key field would guard nothing: a foreign
-// key's edge stands for it, and a type's id is readable through the cursors
-// and every edge to the type. GraphQL's own directives are allowed on both.
+// A declared foreign key is in the type, so its directives are on its field
+// there. One on the primary key has no effect, a warning: the id is
+// readable through the cursors and every edge to the type, and carries
+// none. GraphQL's own directives are allowed on both.
 func TestDirectiveOnKey(t *testing.T) {
 	admin := graphql.Directives(graphql.Directive{Name: "admin"})
 	dep := graphql.Directives(graphql.Directive{Name: "deprecated"})
@@ -322,10 +340,9 @@ func TestDirectiveOnKey(t *testing.T) {
 		p.Edges = []*plugin.Edge{author}
 		return model(p, entity("User"))
 	}
-	_, err := Render(post(admin))
-	want := "schema Post, field author_id: graphql.Directives with the directive @admin on a foreign key, which its edge stands for in GraphQL; put the directive on the edge, which guards the edge's field, its has and hasWith filters and the key's predicates"
-	if err == nil || err.Error() != want {
-		t.Errorf("foreign key:\n got  %v\nwant %s", err, want)
+	s, sdl := load(t, post(admin), appDirectives)
+	if d := dirsOf(s, "Post", "authorID"); !slices.Equal(d, []string{"@admin"}) {
+		t.Errorf("foreign key: %v, want [@admin]\n%s", d, sdl)
 	}
 	load(t, post(dep))
 
@@ -334,10 +351,9 @@ func TestDirectiveOnKey(t *testing.T) {
 		u.Fields[0].Annotations = ann(t, a, graphql.WhereOps())
 		return model(u)
 	}
-	_, err = Render(user(admin))
-	want = "schema User, field id: graphql.Directives with the directive @admin on the primary key: the id is readable through the cursors and every edge to the type, so the directive would guard nothing"
-	if err == nil || err.Error() != want {
-		t.Errorf("primary key:\n got  %v\nwant %s", err, want)
+	want := "schema User, field id: graphql.Directives with the directive @admin has no effect on the primary key: the id is readable through the cursors and every edge to the type, and carries no directive"
+	if got := warningsOf(t, user(admin), Config{}); !slices.Equal(got, []string{want}) {
+		t.Errorf("primary key:\n got  %q\nwant %q", got, want)
 	}
 	load(t, user(dep))
 }

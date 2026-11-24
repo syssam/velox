@@ -45,8 +45,8 @@ enum OrderDirection {
 # The root query.
 
 type Query {
-  """The connection to the Asset nodes, filtered by where, ordered by the key, and paged by the other arguments."""
-  assets(after: Cursor, first: Int, before: Cursor, last: Int, where: AssetWhereInput): AssetConnection!
+  """The Asset nodes, as the application's resolver returns them."""
+  assets: [Asset!]!
 }
 
 # Asset
@@ -56,24 +56,6 @@ type Asset {
   name: String!
   price: Money!
   related: [Asset!] @goField(forceResolver: true)
-}
-
-"""A connection to a list of Asset."""
-type AssetConnection {
-  """The edges of this page."""
-  edges: [AssetEdge!]!
-  """Information about this page."""
-  pageInfo: PageInfo!
-  """The number of nodes in the whole connection, not only on this page."""
-  totalCount: Int!
-}
-
-"""An edge in a connection to a list of Asset."""
-type AssetEdge {
-  """The Asset at the end of the edge."""
-  node: Asset!
-  """The cursor of this edge, for paging."""
-  cursor: Cursor!
 }
 
 """Filters Asset nodes: a node matches when every predicate given holds."""

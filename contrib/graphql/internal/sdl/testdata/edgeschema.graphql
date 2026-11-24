@@ -58,6 +58,8 @@ type Query {
 type Follow {
   id: ID!
   note: String!
+  userID: ID!
+  followerID: ID!
   user: User
   follower: User
 }
@@ -65,7 +67,7 @@ type Follow {
 """A connection to a list of Follow."""
 type FollowConnection {
   """The edges of this page."""
-  edges: [FollowEdge!]!
+  edges: [FollowEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -75,7 +77,7 @@ type FollowConnection {
 """An edge in a connection to a list of Follow."""
 type FollowEdge {
   """The Follow at the end of the edge."""
-  node: Follow!
+  node: Follow
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -101,7 +103,7 @@ type Group {
 """A connection to a list of Group."""
 type GroupConnection {
   """The edges of this page."""
-  edges: [GroupEdge!]!
+  edges: [GroupEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -111,7 +113,7 @@ type GroupConnection {
 """An edge in a connection to a list of Group."""
 type GroupEdge {
   """The Group at the end of the edge."""
-  node: Group!
+  node: Group
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -140,6 +142,8 @@ type Membership {
   id: ID!
   role: MembershipRole!
   joinedAt: Time!
+  userID: ID!
+  groupID: ID!
   user: User
   group: Group
 }
@@ -152,7 +156,7 @@ enum MembershipRole {
 """A connection to a list of Membership."""
 type MembershipConnection {
   """The edges of this page."""
-  edges: [MembershipEdge!]!
+  edges: [MembershipEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -162,7 +166,7 @@ type MembershipConnection {
 """An edge in a connection to a list of Membership."""
 type MembershipEdge {
   """The Membership at the end of the edge."""
-  node: Membership!
+  node: Membership
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -201,7 +205,7 @@ type User {
 """A connection to a list of User."""
 type UserConnection {
   """The edges of this page."""
-  edges: [UserEdge!]!
+  edges: [UserEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -211,7 +215,7 @@ type UserConnection {
 """An edge in a connection to a list of User."""
 type UserEdge {
   """The User at the end of the edge."""
-  node: User!
+  node: User
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }

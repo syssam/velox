@@ -1,0 +1,79 @@
+# SalesOrder
+
+type SalesOrder implements Node @goModel(model: "example.com/app/gen.SalesOrder") {
+  id: ID!
+  organizationId: ID!
+  customerId: ID!
+  imageUrl: String!
+  referrerId: ID
+  total: Amount!
+  customFields: Map!
+  status: SalesOrderEntryStatus!
+  note: String
+  customer: Customer!
+}
+
+enum SalesOrderEntryStatus @goModel(model: "example.com/app/gen.SalesOrderStatus") {
+  OPEN
+  SHIPPED
+}
+
+"""A connection to a list of SalesOrder."""
+type SalesOrderConnection @goModel(model: "example.com/app/gen.SalesOrderConnection") {
+  """The edges of this page."""
+  edges: [SalesOrderEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of SalesOrder."""
+type SalesOrderEdge @goModel(model: "example.com/app/gen.SalesOrderEdge") {
+  """The SalesOrder at the end of the edge."""
+  node: SalesOrder
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to SalesOrder."""
+input SalesOrderOrder @goModel(model: "example.com/app/gen.SalesOrderOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: SalesOrderOrderField!
+}
+
+"""The fields connections to SalesOrder can be ordered by."""
+enum SalesOrderOrderField @goModel(model: "example.com/app/gen.SalesOrderOrderField") {
+  ORGANIZATION_ID
+  CUSTOMER_ID
+  IMAGE_URL
+  REFERRER_ID
+  STATUS
+  NOTE
+}
+
+"""Filters SalesOrder nodes: a node matches when every predicate given holds."""
+input SalesOrderWhereInput @goModel(model: "example.com/app/gen.SalesOrderWhereInput") {
+  not: SalesOrderWhereInput
+  and: [SalesOrderWhereInput!]
+  or: [SalesOrderWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  hasCustomer: Boolean
+}
+
+"""The input that creates a SalesOrder."""
+input CreateSalesOrderInput @goModel(model: "example.com/app/gen.CreateSalesOrderInput") {
+  organizationId: ID!
+  imageUrl: String!
+  total: Amount!
+  customFields: Map!
+  status: SalesOrderEntryStatus!
+  note: String
+  """The ID of the Customer the edge customer leads to."""
+  customerId: ID!
+}

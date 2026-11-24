@@ -1,0 +1,8 @@
+# Workspace
+
+type Workspace implements Node @goModel(model: "example.com/app/gen.Workspace") {
+  id: ID!
+  slug: String!
+  settings: Settings
+  assignees: [Assignee!]!
+}

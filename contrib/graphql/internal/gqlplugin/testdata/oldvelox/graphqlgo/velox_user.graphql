@@ -1,0 +1,71 @@
+# User, as the type Account
+
+"""
+User is a person who writes posts.
+Its GraphQL type is Account.
+"""
+type Account implements Node @goModel(model: "example.com/app/gen.User") {
+  id: ID!
+  createdAt: Time!
+  updatedAt: Time!
+  """The display name."""
+  name: String!
+  email: String!
+  role: UserRole!
+  nickname: String @deprecated(reason: "Use \"displayName\".")
+  bio: String
+  age: Int
+  score: Float
+  externalId: UUID!
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean
+  settings: JSON @goField(forceResolver: true)
+  """The posts the user wrote."""
+  posts: [Post!]! @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  groups: [Group!]!
+  likes(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LikeOrder): LikeConnection!
+}
+
+enum UserRole @goModel(model: "example.com/app/gen.UserRole") {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+"""Filters Account nodes: a node matches when every predicate given holds."""
+input AccountWhereInput @goModel(model: "example.com/app/gen.AccountWhereInput") {
+  not: AccountWhereInput
+  and: [AccountWhereInput!]
+  or: [AccountWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  hasPosts: Boolean
+  hasPostsWith: [PostWhereInput!]
+}
+
+"""The input that creates an Account."""
+input CreateAccountInput @goModel(model: "example.com/app/gen.CreateAccountInput") {
+  createdAt: Time
+  updatedAt: Time
+  """The display name."""
+  name: String!
+  email: String!
+  role: UserRole
+  nickname: String
+  bio: String
+  age: Int
+  passwordHash: String!
+  score: Float
+  externalId: UUID
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean
+  settings: JSON
+  """The IDs of the Group nodes the edge groups leads to."""
+  groupIDs: [ID!]
+  """The ID of the Account the edge best_friend leads to."""
+  userBestFriend: ID
+}

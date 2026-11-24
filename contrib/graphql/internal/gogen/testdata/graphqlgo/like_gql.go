@@ -106,8 +106,13 @@ var likeType = gqlgraph.Type{
 		{Name: "post_id", Index: likeColPostID},
 	},
 	AlwaysRead: []int{likeColUserID, likeColPostID},
-	Fields:     []string{likeColWeight: "weight", likeColCreatedAt: "createdAt"},
-	Edges:      []string{likeEdgeUser: "user", likeEdgePost: "post"},
+	Fields: []string{
+		likeColUserID:    "userID",
+		likeColPostID:    "postID",
+		likeColWeight:    "weight",
+		likeColCreatedAt: "createdAt",
+	},
+	Edges: []string{likeEdgeUser: "user", likeEdgePost: "post"},
 	Inputs: []string{
 		likeColWeight:    "weight",
 		likeColCreatedAt: "createdAt",

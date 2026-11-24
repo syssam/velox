@@ -207,8 +207,8 @@ func TestNode(t *testing.T) {
 }
 `
 
-// TestNodeOn generates with node=on outside compat: velox's own API, names
-// from Go names and no foreign keys in the type, with Relay's Node, every
+// TestNodeOn generates with node=on alone: velox's own API, names from Go
+// names, with Relay's Node, every
 // type implementing it, and node and nodes in a root query that has no
 // other field. gqlgen serves them through the generated ResolveNode and
 // ResolveNodes, and a type hint skips the lookup statement.

@@ -1,0 +1,57 @@
+# The vocabulary of velox's GraphQL types: the scalars, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
+
+"""A time, as an RFC 3339 string."""
+scalar Time @goModel(model: "time.Time")
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.Cursor")
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
+
+"""Information about a page of a connection."""
+type PageInfo @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo") {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection @goModel(model: "github.com/syssam/velox/contrib/graphql/veloxgql.OrderDirection") {
+  ASC
+  DESC
+}
+
+"""
+An object with an ID.
+Follows the [Relay Global Object Identification Specification](https://relay.dev/graphql/objectidentification.htm)
+"""
+interface Node @goModel(model: "example.com/app/gen.Noder") {
+  """The id of the object."""
+  id: ID!
+}
+
+# The root query.
+
+type Query {
+  """Fetches an object given its ID."""
+  node(id: ID!): Node
+  """Lookup nodes by a list of IDs."""
+  nodes(ids: [ID!]!): [Node]!
+  """The connection to the Customer nodes, ordered by orderBy and then the key, and paged by the other arguments."""
+  customers(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: CustomerOrder): CustomerConnection!
+  """The connection to the Memo nodes, ordered by orderBy and then the key, and paged by the other arguments."""
+  memos(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: MemoOrder): MemoConnection!
+  """The connection to the SalesOrder nodes, filtered by where, ordered by orderBy and then the key, and paged by the other arguments."""
+  salesOrders(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: SalesOrderOrder, where: SalesOrderWhereInput): SalesOrderConnection!
+  """The Workspace nodes, as the application's resolver returns them."""
+  workspaces: [Workspace!]!
+}

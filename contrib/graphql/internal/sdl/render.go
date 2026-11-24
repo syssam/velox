@@ -94,10 +94,10 @@ func (g *graph) render(cfg Config) ([]plugin.File, error) {
 	own := writer{cfg: cfg, emit: e}
 	g.write(&own)
 	// The application declares the types graphql.Type names that velox does
-	// not, as it declares its directives, and under compat=veloxe the
-	// scalars veloxe left to it: a scalar stands for each.
+	// not, as it declares its directives, and the scalars of the vocabulary
+	// apptypes= lists: a scalar stands for each.
 	stubs := map[string]bool{}
-	for _, t := range g.veloxeScalars() {
+	for _, t := range g.appScalars() {
 		stubs[t] = true
 	}
 	for t := range g.appSet {
@@ -311,23 +311,25 @@ enum OrderDirection {
 }
 `
 
-// veloxeScalars are the scalars of the vocabulary veloxe's SDL did not
-// declare, which under compat=veloxe the application declares, as it did:
-// Bytes only when no field is of type bytes, as veloxe declared it then.
-func (g *graph) veloxeScalars() []string {
-	if !g.cfg.Veloxe {
-		return nil
-	}
-	s := []string{"JSON", "UUID", "Uint64"}
-	if !g.bytes {
-		s = append(s, "Bytes")
+// vocabularyScalars are the scalars of the vocabulary the application may
+// declare itself, listing them in apptypes=. Cursor is velox's own.
+var vocabularyScalars = []string{"Time", "UUID", "Bytes", "JSON", "Uint64"}
+
+// appScalars are the scalars of the vocabulary that apptypes= lists, which
+// velox.graphql leaves to the application.
+func (g *graph) appScalars() []string {
+	var s []string
+	for _, t := range vocabularyScalars {
+		if slices.Contains(g.cfg.AppTypes, t) {
+			s = append(s, t)
+		}
 	}
 	return s
 }
 
 func (g *graph) write(w *writer) {
 	w.file = sharedFile
-	leave := g.veloxeScalars()
+	leave := g.appScalars()
 	for block := range strings.SplitSeq(strings.TrimSuffix(vocabulary, "\n"), "\n\n") {
 		if slices.ContainsFunc(leave, func(s string) bool { return strings.HasSuffix(block, "\nscalar "+s) }) {
 			continue
@@ -459,14 +461,12 @@ func (g *graph) writeSharedEnums(w *writer) {
 	}
 }
 
-// writeConnection writes XConnection and XEdge of o. Under compat=veloxe the
-// edges list and an edge's node are nullable, as veloxe's were; the Go code
+// writeConnection writes XConnection and XEdge of o. The edges list and an
+// edge's node are nullable, as entgql's are and the Relay spec allows, so
+// that a node a policy hides nulls itself and not its page; the Go code
 // never gives a nil.
 func writeConnection(w *writer, o *object) {
-	edges, node := "!]!", "!"
-	if o.veloxe {
-		edges, node = "!]", ""
-	}
+	const edges, node = "!]", ""
 	w.line()
 	w.line(`"""A connection to a list of `, o.name, `."""`)
 	w.line("type ", o.name, "Connection", w.gen(o.name+"Connection"), " {")

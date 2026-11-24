@@ -89,7 +89,7 @@ func richSchemaOf(t testing.TB, n int, field ...graphql.Annotation) *ast.Schema 
 				{Name: "peers", GoName: "Peers", Kind: plugin.M2M, Target: next, Annotations: enc(graphql.WhereEdge())},
 				{Name: "links", GoName: "Links", Kind: plugin.M2M, Target: name, Annotations: enc(graphql.WhereEdge())},
 			},
-			Annotations: enc(graphql.QueryField(fmt.Sprintf("q%d", i)), graphql.MultiOrder(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)),
+			Annotations: enc(graphql.QueryField(fmt.Sprintf("q%d", i)), graphql.RelayConnection(), graphql.MultiOrder(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)),
 		})
 	}
 	src, err := sdl.Render(m)

@@ -5,10 +5,10 @@
 // takes the same options:
 //
 //	generate.Run(ctx, "", generate.Config{
-//		Plugins: []generate.Plugin{graphqlgen.Plugin(map[string]string{"compat": "veloxe"})},
+//		Plugins: []generate.Plugin{graphqlgen.Plugin(map[string]string{"names": "schema", "node": "on"})},
 //	})
 //
-// is "go tool velox-gen -plugin velox-graphql:compat=veloxe". The command's
+// is "go tool velox-gen -plugin velox-graphql:names=schema,node=on". The command's
 // package documentation lists the options.
 package graphqlgen
 

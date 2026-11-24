@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// e2eVeloxeSchema is a schema as a veloxe application declares it: foreign
+// e2eOldSchema is a schema as an old velox application declares it: foreign
 // keys marked graphql.Type("ID"), one bound to an edge (customer_id) and one
 // with none (organization_id), a name with an initialism (image_url), a
 // field of the application's scalar Map, an enum graphql.Type renames, and
 // an Other field of the application's scalar Amount, compared in SQL.
-const e2eVeloxeSchema = `package schema
+const e2eOldSchema = `package schema
 
 import (
 	"database/sql/driver"
@@ -117,8 +117,8 @@ func (SalesOrder) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("salesOrders"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate)}
 }
 
-// Settings and Assignee are the Go types of json fields, which veloxe named
-// in the SDL by their names and the application declares.
+// Settings and Assignee are the Go types of json fields, which the SDL
+// names by their names and the application declares.
 type Settings struct {
 	Theme string ` + "`json:\"theme\"`" + `
 }
@@ -127,8 +127,8 @@ type Assignee struct {
 	Name string ` + "`json:\"name\"`" + `
 }
 
-// Workspace has a QueryField and no RelayConnection: veloxe's root field of
-// it is a list, and it has no connection.
+// Workspace has a QueryField and no RelayConnection: its root field is a
+// list, and it has no connection.
 type Workspace struct{ schema.Schema }
 
 func (Workspace) Fields() []schema.Field {
@@ -144,9 +144,9 @@ func (Workspace) Annotations() []schema.Annotation {
 }
 `
 
-// e2eVeloxeResolvers are the root query's resolvers: salesOrders, and node
+// e2eOldResolvers are the root query's resolvers: salesOrders, and node
 // and nodes through the generated ResolveNode and ResolveNodes.
-const e2eVeloxeResolvers = `package graph
+const e2eOldResolvers = `package graph
 
 import (
 	"context"
@@ -155,7 +155,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Customers is the resolver for the customers field, which compat=veloxe
+// Customers is the resolver for the customers field, which queryfields=all
 // gives every type.
 func (r *queryResolver) Customers(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.CustomerOrder, where *gen.CustomerWhereInput) (*gen.CustomerConnection, error) {
 	db, err := veloxgql.DBFromContext(ctx)
@@ -174,14 +174,14 @@ func (r *queryResolver) SalesOrders(ctx context.Context, after *veloxgql.Cursor,
 	return db.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderOrder(orderBy), gen.WithSalesOrderFilter(where))
 }
 
-// Workspaces is the resolver for the workspaces field: a list, as veloxe
-// gave a type with a QueryField and no RelayConnection.
+// Workspaces is the resolver for the workspaces field: a list, as a type
+// with a QueryField and no RelayConnection has, bounded as every read is.
 func (r *queryResolver) Workspaces(ctx context.Context) ([]*gen.Workspace, error) {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.Query[gen.Workspace]().AllowUnbounded().All(ctx)
+	rows, err := db.Query[gen.Workspace]().Limit(100).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -216,9 +216,10 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 type queryResolver struct{ *Resolver }
 `
 
-// e2eVeloxeRun queries veloxe's names: the keys as IDs, beside the edge, and
+// e2eOldRun queries names=schema's names: the keys as IDs, beside the edge,
+// and
 // the predicates named from the field.
-const e2eVeloxeRun = `package app_test
+const e2eOldRun = `package app_test
 
 import (
 	"context"
@@ -238,7 +239,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
-func TestVeloxeNames(t *testing.T) {
+func TestOldNames(t *testing.T) {
 	db, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -282,8 +283,8 @@ func TestVeloxeNames(t *testing.T) {
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11","customer":{"tier":"SILVER"}}}]}}}` + "`" + `,
 		` + "`" + `{"query":"{ salesOrders(first: 5, where: {referrerIdIsNil: true}) { edges { node { id } } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"salesOrders":{"edges":[{"node":{"id":"11"}}]}}}` + "`" + `,
-		// Cursors veloxe wrote, the parity probe's of keys 1 and 3, page on,
-		// with veloxe's page flags (ADR 0108).
+		// Cursors the old velox wrote, the parity probe's of keys 1 and 3,
+		// page on, with entgql's page flags (ADR 0108).
 		` + "`" + `{"query":"{ customers(first: 2, after: \"gqFpAaF2wA\") { edges { node { name } } pageInfo { hasNextPage hasPreviousPage } } }"}` + "`" + `: ` +
 	"`" + `{"data":{"customers":{"edges":[{"node":{"name":"bob"}},{"node":{"name":"cy"}}],"pageInfo":{"hasNextPage":false,"hasPreviousPage":true}}}}` + "`" + `,
 		` + "`" + `{"query":"{ customers(last: 1, before: \"gqFpA6F2wA\") { edges { node { name } } pageInfo { hasNextPage hasPreviousPage } } }"}` + "`" + `: ` +
@@ -302,7 +303,7 @@ func TestVeloxeNames(t *testing.T) {
 		}
 	}
 	// A bool order pages on: the cursor holds the bool. bob and cy tie, and
-	// the key breaks the tie DESC, as veloxe did (ADR 0108): cy, then bob.
+	// the key breaks the tie DESC, as the old velox did (ADR 0108): cy, then bob.
 	var page struct {
 		Data struct {
 			Customers struct {
@@ -323,7 +324,7 @@ func TestVeloxeNames(t *testing.T) {
 		t.Errorf("the next page by vip:\n got %s\nwant %s", got, want)
 	}
 	// A WithFilter filter hides bob, as soft delete would. A foreign key's
-	// predicates are the column's, as veloxe's were (ADR 0108): bob's orders
+	// predicates are the column's, as the old velox's were (ADR 0108): bob's orders
 	// still match customerId 2 and customerIdIn [2].
 	hideBob := func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
 		if fe.Name() != "Customer" || op != velox.OpSelect {
@@ -349,9 +350,10 @@ func TestVeloxeNames(t *testing.T) {
 }
 `
 
-// e2eVeloxeApp is the application's own SDL, as a veloxe application had it:
-// its scalars, and the types of its json fields, which veloxe's SDL named.
-const e2eVeloxeApp = `scalar Map
+// e2eOldApp is the application's own SDL, as an old velox application had
+// it: its scalars, and the types of its json fields, which jsontypes=named
+// names.
+const e2eOldApp = `scalar Map
 scalar Amount
 scalar JSON
 
@@ -364,9 +366,9 @@ type Assignee @goModel(model: "example.com/app/schema.Assignee") {
 }
 `
 
-// e2eVeloxeMemo is a schema whose Read policy hides the memos titled
+// e2eOldMemo is a schema whose Read policy hides the memos titled
 // hidden, for node and nodes.
-const e2eVeloxeMemo = `package schema
+const e2eOldMemo = `package schema
 
 import (
 	"context"
@@ -388,11 +390,11 @@ func (Memo) Policy() velox.Policy {
 }
 `
 
-// e2eVeloxeNodeRun queries node and nodes, with veloxe's fragments on the
-// types, and the where inputs veloxe read otherwise than velox does: an
+// e2eOldNodeRun queries node and nodes, with fragments on the types, and
+// the where inputs filters=lenient reads otherwise than the default: an
 // empty In, a false IsNil, an empty or, an In over velox's width cap, and a
-// not of nothing, which veloxe refused.
-const e2eVeloxeNodeRun = `package app_test
+// not of nothing, which is refused.
+const e2eOldNodeRun = `package app_test
 
 import (
 	"database/sql"
@@ -410,7 +412,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
-func TestVeloxeNodeAndFilters(t *testing.T) {
+func TestOldNodeAndFilters(t *testing.T) {
 	db, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -468,7 +470,7 @@ func TestVeloxeNodeAndFilters(t *testing.T) {
 			t.Errorf("%s:\n got %s\nwant %s", c.q, got, c.want)
 		}
 	}
-	// A missing ID, a hidden one and a not of nothing are errors, as in veloxe.
+	// A missing ID, a hidden one and a not of nothing are errors, as in the old velox.
 	for _, c := range []struct{ q, want string }{
 		{"{\"query\":\"{ node(id: \\\"99\\\") { id } }\"}", "\"code\":\"NOT_FOUND\""},
 		{"{\"query\":\"{ node(id: \\\"21\\\") { id } }\"}", "could not resolve to a node with the global ID"},
@@ -483,28 +485,32 @@ func TestVeloxeNodeAndFilters(t *testing.T) {
 }
 `
 
-// TestVeloxeCompat generates with compat=veloxe and serves veloxe's API:
-// customerId and organizationId are IDs in the type, imageUrl is named as
-// veloxe named it, and the where input filters by customerId, customerIdNEQ
-// and organizationIdIn.
-func TestVeloxeCompat(t *testing.T) {
+// oldVeloxOptions are the options of an application that moved from the
+// old velox and keeps its GraphQL API, as the guide gives them.
+const oldVeloxOptions = "names=schema,filters=lenient,node=on,sdlfiles=entity,orderfields=all,queryfields=all,optional=nullable,requirededges=nonnull,jsontypes=named,idops=equality,inputkeys=column,apptypes=JSON+UUID+Uint64+Bytes"
+
+// TestOldVeloxAPI generates with oldVeloxOptions and serves the old velox's
+// API: customerId and organizationId are IDs in the type, imageUrl is named
+// from its schema name, and the where input filters by customerId,
+// customerIdNEQ and organizationIdIn.
+func TestOldVeloxAPI(t *testing.T) {
 	t.Parallel() // its own module, in its own directory
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
 	dir, run := app(t, map[string]string{
-		"schema/schema.go":          e2eVeloxeSchema,
-		"schema/memo.go":            e2eVeloxeMemo,
-		"veloxe_node_test.go":       e2eVeloxeNodeRun,
+		"schema/schema.go":          e2eOldSchema,
+		"schema/memo.go":            e2eOldMemo,
+		"oldvelox_node_test.go":     e2eOldNodeRun,
 		"gqlgen.yml":                e2eCollectGqlgen + "  Map:\n    model: github.com/99designs/gqlgen/graphql.Map\n  Amount:\n    model: example.com/app/schema.Amount\n",
-		"graph/app.graphql":         e2eVeloxeApp,
-		"graph/schema.resolvers.go": e2eVeloxeResolvers,
-		"veloxe_test.go":            e2eVeloxeRun,
+		"graph/app.graphql":         e2eOldApp,
+		"graph/schema.resolvers.go": e2eOldResolvers,
+		"oldvelox_test.go":          e2eOldRun,
 	}, true)
-	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:compat=veloxe", "./schema"); err != nil {
+	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:"+oldVeloxOptions, "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	// veloxe's files: velox.graphql and velox_<entity>.graphql (ADR 0125).
+	// sdlfiles=entity: velox.graphql and velox_<entity>.graphql (ADR 0125).
 	files, err := filepath.Glob(filepath.Join(dir, "gen", "*.graphql"))
 	if err != nil {
 		t.Fatal(err)
@@ -529,10 +535,10 @@ func TestVeloxeCompat(t *testing.T) {
 	if strings.Contains(string(sdl), "customerID") {
 		t.Errorf("velox.graphql names an edge's ID customerID:\n%s", sdl)
 	}
-	// The rest of veloxe's surface: every orderable field in the order, a
+	// The rest of the options: every orderable field in the order, a
 	// root field for every type, a list for Workspace, Optional nullable, a
-	// Required edge non-null, veloxe's connections and scalars, and the json
-	// fields' Go types by name.
+	// Required edge non-null, entgql's connections, the application's
+	// scalars, and the json fields' Go types by name.
 	for _, want := range []string{
 		"enum CustomerOrderField {\n  NAME\n  TIER\n  VIP\n  JOINED_AT\n}",
 		"enum SalesOrderOrderField {\n  ORGANIZATION_ID\n  CUSTOMER_ID\n  IMAGE_URL\n  REFERRER_ID\n  STATUS\n  NOTE\n}",
@@ -567,7 +573,7 @@ func TestVeloxeCompat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "--- PASS: TestVeloxeNames ") || !strings.Contains(out, "--- PASS: TestVeloxeNodeAndFilters ") {
-		t.Errorf("no PASS of TestVeloxeNames or TestVeloxeNodeAndFilters in\n%s", out)
+	if !strings.Contains(out, "--- PASS: TestOldNames ") || !strings.Contains(out, "--- PASS: TestOldNodeAndFilters ") {
+		t.Errorf("no PASS of TestOldNames or TestOldNodeAndFilters in\n%s", out)
 	}
 }

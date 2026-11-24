@@ -26,61 +26,65 @@
 // A value is then written to GraphQL as the stored one upper-cased, or as
 // graphql.EnumValues names it, and read back from it: open is OPEN.
 //
-// An application whose clients are built against the API veloxe's generator
-// made asks for that API:
+// The default surface is entgql's. Each option below shapes one part of
+// it, and stands alone; a value the option does not know fails the run.
 //
-//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe ./veloxschema
+//   - names=schema names a field from its schema name (image_url is
+//     imageUrl, customer_id is customerId); names=go, the default, from its
+//     Go name (imageURL).
+//   - filters=lenient reads a where input so that an empty In, a false
+//     IsNil and an empty or add nothing, a not of nothing is an error, no
+//     width cap applies and the node budget is 10 times MaxFilterNodes
+//     (gqlgraph.Type's LenientFilters); filters=strict, the default, fails
+//     closed: an empty idIn matches no node (docs/decisions/0150).
+//   - node=on declares Relay's Node, node(id:) and nodes(ids:), for an
+//     application whose IDs are unique across types, as snowflakes and
+//     UUIDs are; node=off, the default, leaves them out
+//     (docs/decisions/0152). The application's resolvers answer with the
+//     generated ResolveNode and ResolveNodes (veloxgen/noder_gql.go), and
+//     WithNodeType and WithFixedNodeType give ResolveNode an ID's type, so
+//     it reads that type alone and runs no lookup.
+//   - idops=equality gives equality alone (EQ, NEQ, In, NotIn, and IsNil
+//     and NotNil when nullable) to the key, to any field named like a key
+//     (id, *_id, *ID) and to an Other field; idops=kind, the default, gives
+//     equality alone to a foreign key and its kind's operators to every
+//     other field.
+//   - orderfields=all lists every orderable field in the order enum;
+//     orderfields=annotated, the default, those with graphql.OrderField.
+//   - queryfields=all gives every type a root Query field;
+//     queryfields=annotated, the default, those with graphql.QueryField.
+//   - optional=nullable makes an Optional field nullable in its type;
+//     optional=nonnull, the default, keeps it non-null, as its column is.
+//   - requirededges=nonnull makes a Required unique edge non-null;
+//     requirededges=nullable, the default, keeps it nullable, as a policy
+//     may hide its node.
+//   - inputkeys=column names an implicit foreign key's input field by its
+//     column (userBestFriend); inputkeys=edge, the default, by its edge
+//     (bestFriendID).
+//   - jsontypes=named names a json field's type by its Go type's name
+//     (Settings, [Assignee!]); jsontypes=json, the default, makes it JSON.
 //
-// A field or edge is then named from its schema name as veloxe named it
-// (customer_id is customerId, image_url is imageUrl); a foreign key an edge
-// is bound to is an ID in the type, beside its edge; and its where
-// predicates are named from it (customerId, customerIdNEQ, customerIdIn,
-// customerIdNotIn); and the rest of veloxe's surface follows, as
-// docs/decisions/0087 lists it.
-//
-// Every type with an ID implements the interface Node, and the root query
-// has node(id:) and nodes(ids:), which the application's resolvers answer
-// with the generated ResolveNode and ResolveNodes (veloxgen/noder_gql.go). A
-// where input reads as veloxe's did: an empty In, a false IsNil and an empty
-// or add nothing, a not of nothing is an error, no width cap applies, and
-// the node budget is 10 times MaxFilterNodes (gqlgraph.Type's
-// VeloxeFilters). A foreign key's predicates are the column's alone. A connection takes the cursors veloxe wrote, as well as
-// its own, and reads their values as the current order's. An order of one
-// term breaks ties by the key in its direction. A page after a cursor has
-// a previous page, and a page before one a next page (docs/decisions/0108).
-//
-// compat=veloxe presets two options that also stand alone, and an
-// explicit one wins (docs/decisions/0150). names=schema names fields from
-// their schema names (imageUrl) and names=go from their Go names
-// (imageURL, the default). filters=veloxe reads where inputs as veloxe did
-// and filters=strict fails closed (the default): an empty idIn matches no
-// node. An application that keeps access-policy filters as documents asks
-// for fail-closed filters under veloxe's API:
-//
-//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,filters=strict ./veloxschema
-//
-// Node is a third such option (docs/decisions/0152). node=on declares
-// Relay's Node and node(id:) and nodes(ids:) with velox's own API, for an
-// application whose IDs are unique across types, as snowflakes and UUIDs
-// are; node=off, the default, leaves them out, and compat=veloxe,node=off
-// drops them from veloxe's API. The generated WithNodeType and
-// WithFixedNodeType give ResolveNode an ID's type, so it reads that type
-// alone and runs no lookup:
+// A connection's edges and node are nullable, and an order of one term
+// breaks ties by the key in its direction, as entgql's do
+// (docs/decisions/0108). A type with a QueryField and no RelayConnection
+// has a list as its root field, and no connection, as in entgql.
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:node=on ./veloxschema
 //
-// An application whose filters were opt-in field by field, as a veloxe
-// codegen hook made them, asks for where=whitelist: a field other than the
-// key then has predicates only with graphql.WhereInput (the old velox's
-// EnableWhereInputs(true)), whatever its WhereOps:
+// An application whose filters were opt-in field by field, as the old
+// velox's codegen hook made them, asks for where=whitelist: a field other
+// than the key then has predicates only with graphql.WhereInput (the old
+// velox's EnableWhereInputs(true)), whatever its WhereOps. An application
+// that moved from the old velox and keeps its GraphQL API gives these
+// options together (docs/guide.md lists them):
 //
-//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,where=whitelist ./veloxschema
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:names=schema,filters=lenient,node=on,sdlfiles=entity,orderfields=all,queryfields=all,optional=nullable,requirededges=nonnull,jsontypes=named,idops=equality,inputkeys=column,apptypes=JSON+UUID+Uint64,where=whitelist ./veloxschema
 //
 // An application served by github.com/syssam/graphql-go, whose generator
 // gqlc binds the schema, asks for engine=graphql-go; engine=gqlgen is the
 // default:
 //
-//	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,where=whitelist,engine=graphql-go ./veloxschema
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:where=whitelist,engine=graphql-go ./veloxschema
 //
 // Every type of velox.graphql but Query then carries @goModel naming its Go
 // type, an input's field whose name graphql-go would not derive has a graphql
@@ -94,19 +98,22 @@
 // sdlfiles=entity writes the SDL as velox.graphql, with the root Query, and
 // one velox_<label>.graphql per entity, so that gqlc, which makes a Go
 // package of each file, names Query's argument structs apart from the
-// entities'. sdlfiles=one is the default, and entity is under compat=veloxe,
-// whose files are named as veloxe's were (velox_salesorder.graphql).
+// entities'. Each file is named by the entity's name in lower case
+// (velox_salesorder.graphql). sdlfiles=one is the default.
 // entities=A+B writes the SDL of the schemas A and B alone: a field whose
 // type is a schema left out is left out, and each where input a written
 // one nests is written, under sdlfiles=entity in velox.graphql; the Go is
-// the whole schema's. apptypes=A+B names the application's types their SDL
-// may name: a field naming another type velox-graphql does not declare is
-// left out, and an input naming one is refused:
+// the whole schema's. apptypes=A+B names the types the application
+// declares. A scalar of velox-graphql's vocabulary it lists, JSON, UUID,
+// Uint64, Bytes or Time, is left out of velox.graphql. Under entities= a
+// field naming another type velox-graphql does not declare is left out,
+// and an input naming one is refused:
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:engine=graphql-go,sdlfiles=entity,entities=SalesOrder+SalesOrderItem,apptypes=Decimal+Map ./veloxschema
 //
-// only=enums takes neither compat, where, sdlfiles, entities nor apptypes,
-// and writes the same Go for either engine. Any other option fails the run.
+// only=enums takes no other option but engine, and writes the same Go for
+// either engine. Any other option fails the run, and compat=, which these
+// options replace, is refused with them.
 package main
 
 import (

@@ -507,7 +507,8 @@ func TestGoTypes(t *testing.T) {
 		` {Name: "level", Ops: gqlgraph.OpEQ, Col: eventColLevel}, `,
 		` {Name: "size", Ops: gqlgraph.OpGT, Col: eventColSize}, `,
 		` {Name: "rank", Ops: gqlgraph.OpIn, Col: eventColRank}, `,
-		` {Name: "at", Ops: gqlgraph.OpLT | gqlgraph.OpIsNil, Col: eventColAt}, `,
+		// A nullable field's predicates test for NULL too.
+		` {Name: "at", Ops: gqlgraph.OpsNull | gqlgraph.OpLT, Col: eventColAt}, `,
 		` {Name: "ref", Ops: gqlgraph.OpNEQ, Col: eventColRef}, `,
 		` {Name: "ownerID", Kind: gqlgraph.WhereEdgeID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsNull, Col: eventColOwnerID, Edge: eventEdgeOwner, Target: untyped.TableOf[Owner]}, `,
 		` {Name: "hasOwner", Kind: gqlgraph.WhereHas, Edge: eventEdgeOwner, Target: untyped.TableOf[Owner]}, `,
@@ -534,7 +535,7 @@ func TestGoTypes(t *testing.T) {
 		// Its where predicates take the scalar's Go type, and gqlgraph converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
 		` {Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpEQ, Col: ownerColID}, `,
-		` {Name: "email", Ops: gqlgraph.OpEQ, Col: ownerColEmail}, `,
+		` {Name: "email", Ops: gqlgraph.OpsNull | gqlgraph.OpEQ, Col: ownerColEmail}, `,
 		` {Name: "rank", Ops: gqlgraph.OpIn, Col: ownerColRank}, `,
 		` {Name: "ref", Ops: gqlgraph.OpEQ, Col: ownerColRef}, `,
 		` {Name: "ratio", Ops: gqlgraph.OpGT, Col: ownerColRatio}, `,

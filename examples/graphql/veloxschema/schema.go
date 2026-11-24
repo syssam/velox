@@ -22,13 +22,13 @@ type User struct{ velox.Schema }
 // is in no GraphQL type, where input or order, and Skip leaves it out of the
 // inputs too: a client sends a password, which the createUser and updateUser
 // resolvers hash, and never a hash it chose. Email is for admins only: the
-// application's directive @admin guards the field and, since velox-graphql
-// copies it onto them, its where predicates, by which a client could
-// otherwise find an email a prefix at a time.
+// application's directive @admin guards the field. It has no WhereOps, as a
+// where input's fields carry no directive: a client could otherwise find an
+// email a prefix at a time.
 func (User) Fields() []velox.Field {
 	return []velox.Field{
 		field.String("name").Comment("The name the user shows.").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
-		field.String("email").Comment("The address the user signs in with; admins only.").Annotations(graphql.WhereOps(), graphql.Directives(graphql.Directive{Name: "admin"})),
+		field.String("email").Comment("The address the user signs in with; admins only.").Annotations(graphql.Directives(graphql.Directive{Name: "admin"})),
 		field.Enum("role").Values("admin", "member").Default("member").Comment("What the user may do.").Annotations(graphql.WhereOps()),
 		field.Time("joined_at").Comment("When the user joined.").Annotations(graphql.OrderField("JOINED_AT")),
 		field.String("password_hash").Sensitive().Annotations(graphql.Skip(graphql.SkipMutationCreateInput, graphql.SkipMutationUpdateInput)),
@@ -46,7 +46,7 @@ func (User) Edges() []velox.Edge {
 
 // Annotations names the root query field.
 func (User) Annotations() []velox.Annotation {
-	return []velox.Annotation{schema.Comment("A user, who writes posts."), graphql.QueryField("users"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []velox.Annotation{schema.Comment("A user, who writes posts."), graphql.QueryField("users"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 // Post belongs to an organization, and to its author.
@@ -84,7 +84,7 @@ func (Post) Edges() []velox.Edge {
 func (Post) Annotations() []velox.Annotation {
 	return []velox.Annotation{
 		schema.Comment("A post, in an organization, by its author."),
-		graphql.QueryField("posts"),
+		graphql.QueryField("posts"), graphql.RelayConnection(),
 		graphql.MultiOrder(),
 		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
 	}
@@ -112,5 +112,5 @@ func (Tag) Edges() []velox.Edge {
 
 // Annotations names the GraphQL type and the root query field.
 func (Tag) Annotations() []velox.Annotation {
-	return []velox.Annotation{schema.Comment("A label on posts."), graphql.Type("Label"), graphql.QueryField("labels"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []velox.Annotation{schema.Comment("A label on posts."), graphql.Type("Label"), graphql.QueryField("labels"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }

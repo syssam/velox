@@ -1,0 +1,37 @@
+# Memo
+
+type Memo implements Node @goModel(model: "example.com/app/gen.Memo") {
+  id: ID!
+  title: String!
+}
+
+"""A connection to a list of Memo."""
+type MemoConnection @goModel(model: "example.com/app/gen.MemoConnection") {
+  """The edges of this page."""
+  edges: [MemoEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Memo."""
+type MemoEdge @goModel(model: "example.com/app/gen.MemoEdge") {
+  """The Memo at the end of the edge."""
+  node: Memo
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Memo."""
+input MemoOrder @goModel(model: "example.com/app/gen.MemoOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: MemoOrderField!
+}
+
+"""The fields connections to Memo can be ordered by."""
+enum MemoOrderField @goModel(model: "example.com/app/gen.MemoOrderField") {
+  TITLE
+}

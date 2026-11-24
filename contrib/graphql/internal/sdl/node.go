@@ -1,9 +1,8 @@
 package sdl
 
-// Node, under node=on, which compat=veloxe presets: Relay's interface Node,
-// which every type with an ID implements, and node(id:) and nodes(ids:)
-// first in the root query, as veloxe's generator declared them; clients
-// built against it ask for them (nodes(ids:) with "... on Invoice"
+// Node, under node=on: Relay's interface Node, which every type with an ID
+// implements, and node(id:) and nodes(ids:) first in the root query, as
+// entgql declares them; clients built against such an API ask for them (nodes(ids:) with "... on Invoice"
 // fragments). By default velox's API has no Node (ADRs 0061 and 0152). The
 // Go side, Noder and IsNode, is gogen's noder_gql.go.
 
@@ -30,7 +29,7 @@ func (g *graph) implementsNode(o *object) string {
 	return ""
 }
 
-// writeNode writes the interface Node, as veloxe declared it, bound with
+// writeNode writes the interface Node, as entgql declares it, bound with
 // @goModel to the generated package's Noder when Config.Package names the
 // package (velox-graphql always does; a test may not, and gqlgen's autobind
 // then looks for a Go type Node).
@@ -54,7 +53,7 @@ func (g *graph) writeNode(w *writer) {
 }
 
 // rootQuery is the root query's fields: the QueryFields, after node and
-// nodes when the SDL declares Node, as veloxe's were.
+// nodes when the SDL declares Node.
 func (g *graph) rootQuery() []gqlField {
 	if !g.hasNode() {
 		return g.query

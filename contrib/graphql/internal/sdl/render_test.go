@@ -407,10 +407,13 @@ func TestTypeMapping(t *testing.T) {
 		posts.Field, posts.FieldOn = "author_id", "Post"
 		user.Edges = []*plugin.Edge{posts}
 		s, _ := load(t, model(cat, post, user))
-		for typ, name := range map[string]string{"Post": "authorID", "Category": "categoryParent"} {
-			if got := typeOf(s, typ, name); got != "" {
-				t.Errorf("%s.%s is exposed as %s", typ, name, got)
-			}
+		// A declared foreign key is an ID beside its edge, as in ent; an
+		// implicit one is not shown.
+		if got := typeOf(s, "Post", "authorID"); got != "ID!" {
+			t.Errorf("Post.authorID: %q, want ID!", got)
+		}
+		if got := typeOf(s, "Category", "categoryParent"); got != "" {
+			t.Errorf("Category.categoryParent is exposed as %s", got)
 		}
 		if got := typeOf(s, "Post", "author"); got != "User" {
 			t.Errorf("Post.author: %q", got)
@@ -479,7 +482,7 @@ func TestTypeMapping(t *testing.T) {
 
 	t.Run("Type renames", func(t *testing.T) {
 		user := entity("User", &plugin.Field{Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"admin"}})
-		user.Annotations = ann(t, graphql.Type("Account"), graphql.QueryField("accounts"))
+		user.Annotations = ann(t, graphql.Type("Account"), graphql.QueryField("accounts"), graphql.RelayConnection())
 		posts := edge("posts", plugin.O2M, "Post")
 		user.Edges = []*plugin.Edge{posts}
 		post := entity("Post")
@@ -502,8 +505,8 @@ func TestTypeMapping(t *testing.T) {
 		for _, c := range [][3]string{
 			{"Account", "id", "ID!"},
 			{"Account", "role", "UserRole!"},
-			{"AccountConnection", "edges", "[AccountEdge!]!"},
-			{"AccountEdge", "node", "Account!"},
+			{"AccountConnection", "edges", "[AccountEdge!]"},
+			{"AccountEdge", "node", "Account"},
 			{"Post", "author", "Account"},
 			{"Group", "users", "AccountConnection!"},
 			{"Query", "accounts", "AccountConnection!"},
@@ -559,7 +562,7 @@ func TestSkip(t *testing.T) {
 		user := entity("User", name, field("email", "string"))
 		user.Annotations = ann(t, userAnn)
 		if userAnn.Skip&graphql.SkipType == 0 {
-			user.Annotations = ann(t, userAnn, graphql.QueryField("users"))
+			user.Annotations = ann(t, userAnn, graphql.QueryField("users"), graphql.RelayConnection())
 		}
 		posts := edge("posts", plugin.O2M, "Post")
 		posts.Annotations = ann(t, postsAnn)
@@ -717,10 +720,12 @@ func TestEdges(t *testing.T) {
 		}
 	}
 	for _, c := range [][3]string{
-		{"PostConnection", "edges", "[PostEdge!]!"},
+		// The edges and a node are nullable, as entgql's are and the Relay
+		// spec allows.
+		{"PostConnection", "edges", "[PostEdge!]"},
 		{"PostConnection", "pageInfo", "PageInfo!"},
 		{"PostConnection", "totalCount", "Int!"},
-		{"PostEdge", "node", "Post!"},
+		{"PostEdge", "node", "Post"},
 		{"PostEdge", "cursor", "Cursor!"},
 	} {
 		if got := typeOf(s, c[0], c[1]); got != c[2] {
@@ -744,8 +749,8 @@ func TestCompositeKey(t *testing.T) {
 	likes := edge("likes", plugin.O2M, "Like")
 	likes.Field, likes.FieldOn = "user_id", "Like"
 	u.Edges = []*plugin.Edge{likes}
-	u.Annotations = ann(t, graphql.QueryField("users"))
-	like.Annotations = ann(t, graphql.QueryField("likes"))
+	u.Annotations = ann(t, graphql.QueryField("users"), graphql.RelayConnection())
+	like.Annotations = ann(t, graphql.QueryField("likes"), graphql.RelayConnection())
 	join := &plugin.Entity{Name: "UserGroup", Join: true, PrimaryKey: []int{0, 1},
 		Fields: []*plugin.Field{field("user_id", "int64"), field("group_id", "int64")}}
 	s, sdl := load(t, model(like, u, join))
@@ -753,12 +758,12 @@ func TestCompositeKey(t *testing.T) {
 	if def == nil || len(def.Interfaces) != 0 {
 		t.Fatalf("Like: %+v", def)
 	}
-	for name, want := range map[string]string{"id": "", "userID": "", "day": "String!", "weight": "Int!", "user": "User"} {
+	for name, want := range map[string]string{"id": "", "userID": "ID!", "day": "String!", "weight": "Int!", "user": "User"} {
 		if got := typeOf(s, "Like", name); got != want {
 			t.Errorf("Like.%s: %q, want %q", name, got, want)
 		}
 	}
-	if typeOf(s, "User", "likes") != "LikeConnection!" || typeOf(s, "LikeEdge", "node") != "Like!" || typeOf(s, "Query", "likes") != "LikeConnection!" {
+	if typeOf(s, "User", "likes") != "LikeConnection!" || typeOf(s, "LikeEdge", "node") != "Like" || typeOf(s, "Query", "likes") != "LikeConnection!" {
 		t.Errorf("Like's connection:\n%s", sdl)
 	}
 	if strings.Contains(sdl, "UserGroup") {
@@ -767,7 +772,7 @@ func TestCompositeKey(t *testing.T) {
 
 	// With its own fields skipped and its edge's target skipped, the type
 	// would have no fields: an error naming the schema, not a parse error.
-	for _, f := range like.Fields[1:] {
+	for _, f := range like.Fields {
 		f.Annotations = ann(t, graphql.Skip())
 	}
 	u.Annotations = ann(t, graphql.Skip())
@@ -894,8 +899,8 @@ func TestDirectiveNumbers(t *testing.T) {
 
 func TestQuery(t *testing.T) {
 	a, b := entity("Alpha"), entity("Beta")
-	b.Annotations = ann(t, graphql.QueryField("betas"))
-	a.Annotations = ann(t, graphql.QueryField("alphas"))
+	b.Annotations = ann(t, graphql.QueryField("betas"), graphql.RelayConnection())
+	a.Annotations = ann(t, graphql.QueryField("alphas"), graphql.RelayConnection())
 	s, sdl := load(t, model(b, a))
 	var got []string
 	for _, f := range s.Types["Query"].Fields {
@@ -914,7 +919,7 @@ func TestQuery(t *testing.T) {
 		t.Error("entities are not in name order")
 	}
 
-	b.Annotations = ann(t, graphql.QueryField("alphas"))
+	b.Annotations = ann(t, graphql.QueryField("alphas"), graphql.RelayConnection())
 	renderErr(t, model(a, b), "Alpha", "Beta", "alphas")
 }
 

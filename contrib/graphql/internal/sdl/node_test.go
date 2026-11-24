@@ -7,14 +7,14 @@ import (
 	"github.com/syssam/velox/contrib/graphql"
 )
 
-// Under Config.Veloxe the SDL declares Node as veloxe did: the interface,
-// bound to the generated package's Noder, each type with an ID implementing
-// it, and node and nodes first in the root query, which is there even with
-// no QueryField. Without Veloxe there is none of it (ADR 0061).
-func TestVeloxeNode(t *testing.T) {
+// Under node=on the SDL declares Node as entgql does: the interface, bound
+// to the generated package's Noder, each type with an ID implementing it,
+// and node and nodes first in the root query, which is there even with no
+// QueryField. By default there is none of it (ADR 0061).
+func TestNode(t *testing.T) {
 	post, tag := entity("Post", field("title", "string")), entity("Tag", field("name", "string"))
 	post.Annotations = ann(t, graphql.QueryField("posts"), graphql.RelayConnection())
-	sdl, err := RenderConfig(model(post, tag), Config{Veloxe: true, Package: "example.com/app/gen"})
+	sdl, err := RenderConfig(model(post, tag), Config{Node: "on", Package: "example.com/app/gen"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestVeloxeNode(t *testing.T) {
 		}
 	}
 
-	sdl, err = RenderConfig(model(entity("Tag", field("name", "string"))), Config{Veloxe: true})
+	sdl, err = RenderConfig(model(entity("Tag", field("name", "string"))), Config{Node: "on"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,11 +51,10 @@ func TestVeloxeNode(t *testing.T) {
 	}
 }
 
-// node=on declares Node outside compat, with velox's other defaults: the
-// type has no foreign key and names stay Go's. type Query is written for
-// node and nodes with no QueryField. Under entities= only the chosen
-// types implement Node (ADR 0125). node=off drops Node under compat, and
-// node=off and the default write none of it (ADR 0152).
+// node=on declares Node with velox's other defaults: names stay Go's. type
+// Query is written for node and nodes with no QueryField. Under entities=
+// only the chosen types implement Node (ADR 0125). node=off and the default
+// write none of it (ADR 0152).
 func TestNodeOption(t *testing.T) {
 	img := field("image_url", "string")
 	img.GoName = "ImageURL"
@@ -94,7 +93,7 @@ func TestNodeOption(t *testing.T) {
 		t.Errorf("node=on, entities=Post, sdlfiles=entity: no Node:\n%s", sdl)
 	}
 
-	for _, cfg := range []Config{{Veloxe: true, Node: "off"}, {Node: "off"}, {}} {
+	for _, cfg := range []Config{func() Config { c := wideConfig(); c.Node = "off"; return c }(), {Node: "off"}, {}} {
 		sdl, err := RenderConfig(model(post, tag), cfg)
 		if err != nil {
 			t.Fatal(err)
@@ -106,7 +105,7 @@ func TestNodeOption(t *testing.T) {
 		}
 	}
 
-	if _, err := RenderConfig(model(tag), Config{Node: "yes"}); err == nil || err.Error() != "velox-graphql: node=yes: node is on, which declares Relay's Node and node(id:), or off" {
+	if _, err := RenderConfig(model(tag), Config{Node: "yes"}); err == nil || err.Error() != "velox-graphql: node=yes: node is off, no Node; or on, Relay's Node and node(id:)" {
 		t.Errorf("node=yes: %v", err)
 	}
 }

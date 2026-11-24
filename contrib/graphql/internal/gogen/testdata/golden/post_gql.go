@@ -189,6 +189,7 @@ var postType = gqlgraph.Type{
 	AlwaysRead: []int{postColID, postColAuthorID},
 	Fields: []string{
 		postColID:          "id",
+		postColAuthorID:    "authorID",
 		postColTitle:       "title",
 		postColSlug:        "slug",
 		postColStatus:      "status",
@@ -209,7 +210,7 @@ var postType = gqlgraph.Type{
 		{Name: "and", Kind: gqlgraph.WhereAnd},
 		{Name: "or", Kind: gqlgraph.WhereOr},
 		{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: postColID},
-		{Name: "writerID", Kind: gqlgraph.WhereEdgeID, Ops: gqlgraph.OpsEquality, Col: postColAuthorID, Edge: postEdgeAuthor, Target: untyped.TableOf[User]},
+		{Name: "authorID", Kind: gqlgraph.WhereEdgeID, Ops: gqlgraph.OpsEquality, Col: postColAuthorID, Edge: postEdgeAuthor, Target: untyped.TableOf[User]},
 		{Name: "title", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: postColTitle},
 		{Name: "slug", Ops: gqlgraph.OpsEquality, Col: postColSlug},
 		{Name: "status", Ops: gqlgraph.OpsEquality, Col: postColStatus},
@@ -225,7 +226,7 @@ var postType = gqlgraph.Type{
 		postColTags:        "tags",
 		postColRating:      "rating",
 		postColEditedBy:    "editedBy",
-		postColAuthorID:    "writerID",
+		postColAuthorID:    "authorID",
 	},
 	UpdateInputs: []string{
 		postColTitle:       "title",
@@ -234,7 +235,7 @@ var postType = gqlgraph.Type{
 		postColTags:        "tags",
 		postColViews:       "views",
 		postColRating:      "rating",
-		postColAuthorID:    "writerID",
+		postColAuthorID:    "authorID",
 	},
 }
 
@@ -293,11 +294,11 @@ type PostWhereInput struct {
 	IDLT    *int64
 	IDLTE   *int64
 
-	// Predicates on the edge author (writer), by the ID of its node.
-	WriterID      *int64
-	WriterIDNEQ   *int64
-	WriterIDIn    []int64
-	WriterIDNotIn []int64
+	// Predicates on the edge author (authorID), by the ID of its node.
+	AuthorID      *int64
+	AuthorIDNEQ   *int64
+	AuthorIDIn    []int64
+	AuthorIDNotIn []int64
 
 	// Predicates on the field title.
 	Title             *string
@@ -362,8 +363,8 @@ type CreatePostInput struct {
 	Rating      *float64
 	// Who last edited the post; the update default fills it.
 	EditedBy string
-	// WriterID is the ID of the Account the edge author leads to.
-	WriterID int64
+	// AuthorID is the ID of the Account the edge author leads to.
+	AuthorID int64
 	// RelatedIDs are the IDs of the Post nodes the edge related leads to.
 	RelatedIDs []int64
 	// RelatedByIDs are the IDs of the Post nodes the edge related_by leads to.
@@ -394,7 +395,7 @@ func (in CreatePostInput) Setters() ([]velox.Setter[Post], error) {
 		set = append(set, Posts.Rating.Set(*v))
 	}
 	set = append(set, Posts.EditedBy.Set(in.EditedBy))
-	set = append(set, Posts.Author.Set(in.WriterID))
+	set = append(set, Posts.Author.Set(in.AuthorID))
 	if len(in.RelatedIDs) > 0 {
 		relatedIDs, err := gqlgraph.IDs("CreatePostInput.relatedIDs", in.RelatedIDs)
 		if err != nil {
@@ -426,8 +427,8 @@ type UpdatePostInput struct {
 	Rating           *float64
 	// ClearRating sets the field rating to NULL.
 	ClearRating bool
-	// WriterID is the ID of the Account the edge author leads to.
-	WriterID *int64
+	// AuthorID is the ID of the Account the edge author leads to.
+	AuthorID *int64
 	// AddRelatedIDs are the IDs of Post nodes to add to the edge related.
 	AddRelatedIDs []int64
 	// RemoveRelatedIDs are the IDs of Post nodes to remove from the edge
@@ -478,7 +479,7 @@ func (in UpdatePostInput) Setters() ([]velox.Setter[Post], error) {
 	} else if v := in.Rating; v != nil {
 		set = append(set, Posts.Rating.Set(*v))
 	}
-	if v := in.WriterID; v != nil {
+	if v := in.AuthorID; v != nil {
 		set = append(set, Posts.Author.Set(*v))
 	}
 	if in.ClearRelated {

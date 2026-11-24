@@ -39,7 +39,7 @@ func (SalesOrder) Edges() []schema.Edge {
 }
 
 func (SalesOrder) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("salesOrders")}
+	return []schema.Annotation{graphql.QueryField("salesOrders"), graphql.RelayConnection()}
 }
 `
 
@@ -144,9 +144,9 @@ func TestSchemaNames(t *testing.T) {
 `
 
 // TestNamesSchema generates with names=schema alone: fields are named from
-// their schema names (imageUrl), an edge's foreign-key predicates from the
-// edge (customerId, customerIdIn), the foreign key stays out of the type,
-// and the where input's semantics are velox's own. A query and a kept
+// their schema names (imageUrl), the foreign key too, in the type and its
+// predicates (customerId, customerIdIn), and the where input's semantics
+// are velox's own. A query and a kept
 // filter read with veloxgql.DecodeWhere use the same names.
 func TestNamesSchema(t *testing.T) {
 	t.Parallel() // its own module, in its own directory
@@ -173,9 +173,11 @@ func TestNamesSchema(t *testing.T) {
 		}
 	}
 	typ := sdl[strings.Index(sdl, "type SalesOrder {"):]
-	typ = typ[:strings.Index(typ, "}")]
-	for _, not := range []string{"customerId", "imageURL", "customerID", "interface Node"} {
-		if strings.Contains(typ, not) || not != "customerId" && strings.Contains(sdl, not) {
+	if typ = typ[:strings.Index(typ, "}")]; !strings.Contains(typ, "  customerId: ID!\n") {
+		t.Errorf("SalesOrder has no customerId:\n%s", sdl)
+	}
+	for _, not := range []string{"imageURL", "customerID", "interface Node"} {
+		if strings.Contains(sdl, not) {
 			t.Errorf("velox.graphql has %q:\n%s", not, sdl)
 		}
 	}

@@ -219,17 +219,15 @@ or token), and ignores any header the client sets for it.
 `User.email` carries the application's directive `@admin`, which
 `graph/app.graphql` declares and `main.go` implements: it lets the field
 through when the request's `X-Role` header is `admin`, and otherwise fails
-with an application error, code `FORBIDDEN`. velox-graphql copies a field's
-directives onto its `where` predicates (`email`, `emailHasPrefix`…), so the
-directive guards those too: without it, a client could find an email it may
-not read by filtering on it, a prefix at a time. That is why the directive is
-declared `on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`: gqlgen refuses the
-schema otherwise.
+with an application error, code `FORBIDDEN`. As in entgql, velox-graphql puts
+a field's directives on the field alone, not on its `where` predicates or its
+mutation inputs. So `email` has no `WhereOps`: a client could otherwise find
+an email it may not read by filtering on it, a prefix at a time.
 
-It guards the mutations' input fields as well: velox-graphql copies it onto
-`CreateUserInput.email` and `UpdateUserInput.email`, so a `createUser` that
-sets `email` without `X-Role: admin` fails with `FORBIDDEN`, at the path
-`["createUser", "input", "email"]`, and writes nothing.
+The application guards the mutations that set it: `createUser` and
+`updateUser` carry `@admin` in `graph/app.graphql`, so either without
+`X-Role: admin` fails with `FORBIDDEN`, at the path `["createUser"]`, and
+writes nothing.
 
 `email` has no `OrderField`: the order and the cursors would reveal its
 values, which no directive guards, so velox-graphql refuses `OrderField` on a
@@ -241,14 +239,6 @@ role is whoever it says. A real server takes the role from what
 authenticates the request. A directive is field-level access, as is gqlgen's
 `srv.AroundFields`; row-level access, which rows a caller may read, is the
 entity's `velox.Policy`.
-
-**Upgrading.** An application whose schema has a directive on a filterable
-field or edge must now also declare that directive on
-`INPUT_FIELD_DEFINITION` (`on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`), as
-`@admin` does here: velox-graphql copies it onto the `where` inputs, and
-gqlgen refuses to load a schema where a directive is used on a location it
-is not declared on. This is a breaking change, made before the first
-release, because those filters were unguarded before.
 
 ### What a client sees of an error
 

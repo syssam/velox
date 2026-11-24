@@ -21,7 +21,7 @@ func TestOldWhereInputSpellings(t *testing.T) {
 		posts.Annotations = ann(t, edgeAnn...)
 		user := entity("User", n)
 		user.Edges = []*plugin.Edge{posts}
-		user.Annotations = ann(t, append([]graphql.Annotation{graphql.QueryField("users")}, schemaAnn...)...)
+		user.Annotations = ann(t, append([]graphql.Annotation{graphql.QueryField("users"), graphql.RelayConnection()}, schemaAnn...)...)
 		title := field("title", "string")
 		title.Annotations = ann(t, graphql.WhereOps())
 		s, sdl := load(t, model(entity("Post", title), user))

@@ -640,13 +640,14 @@ func TestOrgIsolation(t *testing.T) {
 		stmts: stmts(globex),
 	})
 	// Without a org, every statement on Post fails before it is sent. A
-	// failed non-null field nulls its parent, up to data. The client is told
+	// failed non-null field nulls its parent, up to the nullable edges or
+	// node, as entgql's are. The client is told
 	// unauthenticated, with no entity named (scope.ErrNoScope's text holds
 	// veloxgen.Post).
 	const noOrg = `"message": "unauthenticated", "path": %s, "extensions": {"code": "UNAUTHENTICATED"}`
 	for _, c := range []struct{ query, want string }{
-		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["posts", "edges"]`) + `}], "data": null}`},
-		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["labels", "edges", 0, "node", "posts", "totalCount"]`) + `}], "data": null}`},
+		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["posts", "edges"]`) + `}], "data": {"posts": {"edges": null}}}`},
+		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{` + fmt.Sprintf(noOrg, `["labels", "edges", 0, "node", "posts", "totalCount"]`) + `}], "data": {"labels": {"edges": [{"node": null}]}}}`},
 	} {
 		var stmts []string
 		if strings.HasPrefix(c.query, "{ labels") {
@@ -680,13 +681,11 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 				{"name": "idGT"}, {"name": "idGTE"}, {"name": "idLT"}, {"name": "idLTE"},
 				{"name": "name"}, {"name": "nameNEQ"}, {"name": "nameIn"}, {"name": "nameNotIn"},
 				{"name": "nameContains"}, {"name": "nameHasPrefix"}, {"name": "nameHasSuffix"}, {"name": "nameEqualFold"}, {"name": "nameContainsFold"},
-				{"name": "email"}, {"name": "emailNEQ"}, {"name": "emailIn"}, {"name": "emailNotIn"},
-				{"name": "emailContains"}, {"name": "emailHasPrefix"}, {"name": "emailHasSuffix"}, {"name": "emailEqualFold"}, {"name": "emailContainsFold"},
 				{"name": "role"}, {"name": "roleNEQ"}, {"name": "roleIn"}, {"name": "roleNotIn"},
 				{"name": "hasPosts"}, {"name": "hasPostsWith"}
 			]},
 			"order": {"enumValues": [{"name": "NAME"}, {"name": "JOINED_AT"}, {"name": "POSTS_COUNT"}]},
-			"post": {"fields": [{"name": "id"}, {"name": "title"}, {"name": "status"}, {"name": "views"}, {"name": "publishedAt"}, {"name": "keywords"}, {"name": "author"}, {"name": "tags"}]},
+			"post": {"fields": [{"name": "id"}, {"name": "authorID"}, {"name": "title"}, {"name": "status"}, {"name": "views"}, {"name": "publishedAt"}, {"name": "keywords"}, {"name": "author"}, {"name": "tags"}]},
 			"tag": null
 		}}`,
 	})
@@ -835,39 +834,22 @@ func TestPublishedPosts(t *testing.T) {
 }
 
 // TestFieldDirective: User.email is @admin, which main.go implements from the
-// X-Role header. The directive guards the field and its where predicates
-// alike: without it, a client could find an email it may not read by
-// filtering on it, a prefix at a time. Refused, neither runs a statement.
+// X-Role header. The directive guards the field; it has no where predicates,
+// as a where input's fields carry no directive and a client could otherwise
+// find an email it may not read by filtering on it, a prefix at a time.
+// Refused, neither runs a statement.
 func TestFieldDirective(t *testing.T) {
 	s := newServer(t)
-	const filter = `{ users(where: {emailHasPrefix: "a"}) { totalCount } }`
 	const read = `{ users { edges { node { email } } } }`
 	const forbidden = `"message": "the admin role is required", "extensions": {"code": "FORBIDDEN"}`
+	for _, role := range []string{"", "member", "admin"} {
+		s.do(t, request{
+			role:  role,
+			query: `{ users(where: {emailHasPrefix: "a"}) { totalCount } }`,
+			want:  `{"errors": [{"message": "Field \"emailHasPrefix\" is not defined by type \"UserWhereInput\".", "locations": [{"line": 1, "column": 16}], "extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}], "data": null}`,
+		})
+	}
 	for _, role := range []string{"", "member"} {
-		s.do(t, request{
-			role:  role,
-			query: filter,
-			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "emailHasPrefix"]}], "data": null}`,
-		})
-		// The predicates that ignore case are guarded as the others are.
-		for _, pred := range []string{"emailEqualFold", "emailContainsFold"} {
-			s.do(t, request{
-				role:  role,
-				query: `{ users(where: {` + pred + `: "a"}) { totalCount } }`,
-				want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "` + pred + `"]}], "data": null}`,
-			})
-		}
-		// Nested in not or in or, the predicate is guarded alike.
-		s.do(t, request{
-			role:  role,
-			query: `{ users(where: {not: {emailHasPrefix: "a"}}) { totalCount } }`,
-			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "not", "emailHasPrefix"]}], "data": null}`,
-		})
-		s.do(t, request{
-			role:  role,
-			query: `{ users(where: {or: [{role: ADMIN}, {emailHasSuffix: "@example.com"}]}) { totalCount } }`,
-			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "or", 1, "emailHasSuffix"]}], "data": null}`,
-		})
 		s.do(t, request{
 			role:  role,
 			query: read,
@@ -875,16 +857,10 @@ func TestFieldDirective(t *testing.T) {
 				{` + forbidden + `, "path": ["users", "edges", 0, "node", "email"]},
 				{` + forbidden + `, "path": ["users", "edges", 1, "node", "email"]},
 				{` + forbidden + `, "path": ["users", "edges", 2, "node", "email"]}
-			], "data": null}`,
+			], "data": {"users": {"edges": [{"node": null}, {"node": null}, {"node": null}]}}}`,
 			stmts: []string{`SELECT "id", "email" FROM "users" ORDER BY "id" LIMIT 101 []`},
 		})
 	}
-	s.do(t, request{
-		role:  "admin",
-		query: filter,
-		want:  `{"data": {"users": {"totalCount": 1}}}`,
-		stmts: []string{`SELECT COUNT(*) FROM "users" WHERE "email" LIKE ? ESCAPE '!' [a%]`},
-	})
 	s.do(t, request{
 		role:  "admin",
 		query: read,
@@ -1249,16 +1225,16 @@ func TestMutationTransaction(t *testing.T) {
 	})
 }
 
-// TestCreateUserDirective: email is @admin, and the directive guards its
-// input field as it guards the field: without X-Role: admin, a createUser
-// that sets it is FORBIDDEN, and nothing is written. No query can select
+// TestCreateUserDirective: createUser is @admin, which the application puts
+// on the mutation, as an input's fields carry no directive: without X-Role:
+// admin it is FORBIDDEN, and nothing is written. No query can select
 // passwordHash, which is Sensitive.
 func TestCreateUserDirective(t *testing.T) {
 	s := newServer(t)
 	const create = `mutation { createUser(input: {name: "Dana", email: "dana@example.com", joinedAt: "2026-07-01T09:00:00Z"}, password: "correct horse") { name role } }`
 	s.do(t, request{
 		query: create,
-		want: `{"errors": [{"message": "the admin role is required", "path": ["createUser", "input", "email"], "extensions": {"code": "FORBIDDEN"}}],
+		want: `{"errors": [{"message": "the admin role is required", "path": ["createUser"], "extensions": {"code": "FORBIDDEN"}}],
 			"data": null}`,
 	})
 	s.do(t, request{

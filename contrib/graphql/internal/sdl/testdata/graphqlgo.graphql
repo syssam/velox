@@ -69,7 +69,7 @@ type Category @goModel(model: "example.com/app/gen.Category") {
 """A connection to a list of Category."""
 type CategoryConnection @goModel(model: "example.com/app/gen.CategoryConnection") {
   """The edges of this page."""
-  edges: [CategoryEdge!]!
+  edges: [CategoryEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -79,7 +79,7 @@ type CategoryConnection @goModel(model: "example.com/app/gen.CategoryConnection"
 """An edge in a connection to a list of Category."""
 type CategoryEdge @goModel(model: "example.com/app/gen.CategoryEdge") {
   """The Category at the end of the edge."""
-  node: Category!
+  node: Category
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -138,7 +138,7 @@ type Group @goModel(model: "example.com/app/gen.Group") {
 """A connection to a list of Group."""
 type GroupConnection @goModel(model: "example.com/app/gen.GroupConnection") {
   """The edges of this page."""
-  edges: [GroupEdge!]!
+  edges: [GroupEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -148,7 +148,7 @@ type GroupConnection @goModel(model: "example.com/app/gen.GroupConnection") {
 """An edge in a connection to a list of Group."""
 type GroupEdge @goModel(model: "example.com/app/gen.GroupEdge") {
   """The Group at the end of the edge."""
-  node: Group!
+  node: Group
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -170,6 +170,8 @@ enum GroupOrderField @goModel(model: "example.com/app/gen.GroupOrderField") {
 
 """A user's like of a post. Its key is two columns, so it has no ID."""
 type Like @goModel(model: "example.com/app/gen.Like") {
+  userID: ID!
+  postID: ID!
   weight: Int!
   createdAt: Time!
   user: Account
@@ -179,7 +181,7 @@ type Like @goModel(model: "example.com/app/gen.Like") {
 """A connection to a list of Like."""
 type LikeConnection @goModel(model: "example.com/app/gen.LikeConnection") {
   """The edges of this page."""
-  edges: [LikeEdge!]!
+  edges: [LikeEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -189,7 +191,7 @@ type LikeConnection @goModel(model: "example.com/app/gen.LikeConnection") {
 """An edge in a connection to a list of Like."""
 type LikeEdge @goModel(model: "example.com/app/gen.LikeEdge") {
   """The Like at the end of the edge."""
-  node: Like!
+  node: Like
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -208,6 +210,7 @@ input CreateLikeInput @goModel(model: "example.com/app/gen.CreateLikeInput") {
 
 type Post @goModel(model: "example.com/app/gen.Post") {
   id: ID!
+  authorID: ID!
   title: String!
   slug: String!
   status: PostStatus!
@@ -234,7 +237,7 @@ enum PostStatus @goModel(model: "example.com/app/gen.PostStatus") {
 """A connection to a list of Post."""
 type PostConnection @goModel(model: "example.com/app/gen.PostConnection") {
   """The edges of this page."""
-  edges: [PostEdge!]!
+  edges: [PostEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -244,7 +247,7 @@ type PostConnection @goModel(model: "example.com/app/gen.PostConnection") {
 """An edge in a connection to a list of Post."""
 type PostEdge @goModel(model: "example.com/app/gen.PostEdge") {
   """The Post at the end of the edge."""
-  node: Post!
+  node: Post
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -397,7 +400,7 @@ enum UserRole @goModel(model: "example.com/app/gen.UserRole") {
 """A connection to a list of Account."""
 type AccountConnection @goModel(model: "example.com/app/gen.AccountConnection") {
   """The edges of this page."""
-  edges: [AccountEdge!]!
+  edges: [AccountEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -407,7 +410,7 @@ type AccountConnection @goModel(model: "example.com/app/gen.AccountConnection") 
 """An edge in a connection to a list of Account."""
 type AccountEdge @goModel(model: "example.com/app/gen.AccountEdge") {
   """The Account at the end of the edge."""
-  node: Account!
+  node: Account
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -432,8 +435,8 @@ input AccountWhereInput @goModel(model: "example.com/app/gen.AccountWhereInput")
   nameContains: String
   nameHasPrefix: String
   nameHasSuffix: String
-  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
-  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPosts: Boolean
+  hasPostsWith: [PostWhereInput!]
 }
 
 """The input that creates an Account."""
@@ -444,7 +447,7 @@ input CreateAccountInput @goModel(model: "example.com/app/gen.CreateAccountInput
   name: String!
   email: String!
   role: UserRole
-  nickname: String @deprecated(reason: "Use \"displayName\".")
+  nickname: String
   bio: String
   age: Int
   passwordHash: String!

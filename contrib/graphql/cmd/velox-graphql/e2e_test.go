@@ -45,7 +45,7 @@ func (User) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		schema.Comment("A person who writes posts."),
 		graphql.Type("Account"),
-		graphql.QueryField("accounts"),
+		graphql.QueryField("accounts"), graphql.RelayConnection(),
 	}
 }
 
@@ -67,7 +67,7 @@ func (Post) Edges() []schema.Edge {
 
 func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
-		graphql.QueryField("posts"),
+		graphql.QueryField("posts"), graphql.RelayConnection(),
 		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate),
 	}
 }
@@ -295,12 +295,13 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		// Category's self-edges, read through OwnsKey: parent, mentor and the
 		// bidirectional twin hold their immutable keys on the row, so they are
 		// set on create only; children and mentee would re-point other rows'
-		// immutable keys, so they have no input. An edge's directives reach
-		// its inputs.
-		"input CreateCategoryInput {\n  title: String!\n  \"\"\"The ID of the Category the edge parent leads to.\"\"\"\n  parentID: ID\n  \"\"\"The ID of the Category the edge mentor leads to.\"\"\"\n  mentorID: ID\n  \"\"\"The ID of the Category the edge twin leads to.\"\"\"\n  twinID: ID @deprecated(reason: \"Use mentor.\")\n}\n",
+		// immutable keys, so they have no input. An edge's directives stay
+		// on its field, off its inputs.
+		"input CreateCategoryInput {\n  title: String!\n  \"\"\"The ID of the Category the edge parent leads to.\"\"\"\n  parentID: ID\n  \"\"\"The ID of the Category the edge mentor leads to.\"\"\"\n  mentorID: ID\n  \"\"\"The ID of the Category the edge twin leads to.\"\"\"\n  twinID: ID\n}\n",
 		"input UpdateCategoryInput {\n  title: String\n}\n",
-		// The key's where predicates are named after the edge that owns it.
-		"  or: [CategoryWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n}\n",
+		// The key's where predicates are named from its field, and test for
+		// NULL as it is nullable.
+		"  or: [CategoryWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n  mentorIDIsNil: Boolean\n  mentorIDNotNil: Boolean\n}\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in\n%s", want, got)
@@ -359,7 +360,7 @@ func (Event) Edges() []schema.Edge {
 }
 
 func (Event) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.MutationCreate)}
+	return []schema.Annotation{graphql.QueryField("events"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate)}
 }
 
 // Owner's key is an int64, as every key of a schema is of one Go type; its
@@ -387,7 +388,7 @@ func (Owner) Edges() []schema.Edge {
 }
 
 func (Owner) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("owners")}
+	return []schema.Annotation{graphql.QueryField("owners"), graphql.RelayConnection()}
 }
 `
 

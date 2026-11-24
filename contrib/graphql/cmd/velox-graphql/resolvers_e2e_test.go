@@ -30,7 +30,7 @@ func (Asset) Fields() []schema.Field {
 
 func (Asset) Annotations() []schema.Annotation {
 	return []schema.Annotation{
-		graphql.QueryField("assets"),
+		graphql.QueryField("assets"), graphql.RelayConnection(),
 		graphql.Resolvers(
 			graphql.Map("organization", "PublicOrganization").WithComment("Owning organization."),
 			graphql.Map("tags(first: Int)", "[String!]!"),

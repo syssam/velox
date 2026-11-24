@@ -173,9 +173,8 @@ func userFromHeader(next http.Handler) http.Handler {
 	})
 }
 
-// admin implements the directive @admin, on a field or on a where input's
-// field: it resolves the field, or reads the predicate, only when the role is
-// admin. Otherwise it fails with an error of the application's, which
+// admin implements the directive @admin, on a field: it resolves the
+// field only when the role is admin. Otherwise it fails with an error of the application's, which
 // gqlgenx.ErrorPresenter shows the client as it is, code and all.
 func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 	if role, _ := ctx.Value(roleKey{}).(string); role != "admin" {

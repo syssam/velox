@@ -151,8 +151,9 @@
 // inputs, and the enums only it uses. velox.graphql has the scalars,
 // PageInfo, OrderDirection, the root Query and the enums two entities use.
 // gqlc makes a Go package of each file, so Query's fields and the entities'
-// name their argument structs apart. sdlfiles=one, one file, is the default,
-// and sdlfiles=entity is under compat=veloxe.
+// name their argument structs apart. sdlfiles=one, one file, is the
+// default. An entity's file is named by its name in lower case
+// (velox_salesorder.graphql).
 //
 // entities= writes the SDL of the named schemas alone, separated by +:
 //
@@ -165,13 +166,15 @@
 // schema's type; under sdlfiles=entity it goes in velox.graphql. The Go is
 // the whole schema's either way (ADR 0125).
 //
-// apptypes= names the application's own types that the SDL of entities=
-// may name, separated by +:
+// apptypes= names the application's own types, separated by +:
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:entities=Post,apptypes=Decimal+Map ./veloxschema
 //
-// A field naming a type that neither velox-graphql declares nor apptypes=
-// lists is left out, such as a graphql.Map field of an application type
+// A scalar of velox-graphql's vocabulary it lists, JSON, UUID, Uint64,
+// Bytes or Time, is left out of velox.graphql for the application to
+// declare; any other type velox-graphql declares is refused. Under
+// entities=, a field naming a type that neither velox-graphql declares nor
+// apptypes= lists is left out, such as a graphql.Map field of an application type
 // the subset does not serve. An input naming one is refused, as graphql-go
 // binds every field of an input. Without apptypes= every such type stays,
 // and the application declares each (ADR 0130).
@@ -182,14 +185,14 @@
 // camel-cases the schema name, each word title-cased: imageUrl, customerId
 // and customerIdIn. Predicates, inputs and the names veloxgql.DecodeWhere
 // reads follow the field's name. Order values are graphql.OrderField's
-// either way. Nothing else changes: the foreign key stays out of the type.
+// either way.
 //
 // filters= chooses what a where input means. filters=strict, the default,
 // fails closed: an empty idIn or or matches no node, a false isNil means
-// IS NOT NULL, and MaxFilterWidth applies. filters=veloxe reads a where input
-// as veloxe did: an empty list or a false isNil adds nothing, a nested
-// empty input is an error, and the node budget is ten times larger
-// (veloxgql's gqlgraph.Type.VeloxeFilters).
+// IS NOT NULL, and MaxFilterWidth applies. filters=lenient reads a where
+// input leniently: an empty list or a false isNil adds nothing, a nested
+// empty input is an error (veloxgql.ErrEmptyWhereInput), and the node
+// budget is ten times larger (veloxgql's gqlgraph.Type.LenientFilters).
 //
 // node= chooses whether the schema has Relay's Node. node=off, the default,
 // writes none (ADR 0061). node=on declares interface Node, bound to the
@@ -203,11 +206,12 @@
 // WithNodeType and WithFixedNodeType, as entgql's, give an ID's type
 // instead: only that type is read, with no lookup (ADR 0152).
 //
-// compat=veloxe sets names=schema, filters=veloxe and node=on. An explicit
-// names=, filters= or node= wins, so compat=veloxe,filters=strict keeps
-// veloxe's API with fail-closed filters, for an application that keeps
-// access-policy filters as documents (ADR 0150), and compat=veloxe,node=off
-// drops Node (ADR 0152). Any other value is refused.
+// idops=, orderfields=, queryfields=, optional=, requirededges=, inputkeys=
+// and jsontypes= each shape one more part, for an application that keeps
+// an API another generator made; command velox-graphql lists their values,
+// and docs/guide.md the set an application of the old velox gives (ADR
+// 0155). Each refuses a value it does not know, and compat=, which they
+// replace, is refused with them.
 //
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
 // has the predicates of its key in it, before the fields': the key has id,
@@ -825,8 +829,7 @@
 // gqlc groups by SDL file and names an argument struct <Type><Field>Args,
 // and a root field's <Field>Args. In one velox.graphql, Query.postTags and
 // Post.tags then both declare PostTagsArgs, and the package does not build.
-// sdlfiles=entity, the default under compat=veloxe, puts Query in package
-// velox and Post in package post.
+// sdlfiles=entity puts Query in package velox and Post in package post.
 //
 // gqlc's NewSchema registers a group whose Bindings takes no Resolver
 // itself; passing it again makes graphql-go refuse its types as already
@@ -839,8 +842,8 @@
 // gqlc puts it on the Resolver, gqlc -check lists it, and its method is one
 // line. It returns the getter's value (obj.SettingsGQL()). Or it returns
 // the field itself, when the resolver's return type holds the field's Go
-// type: under compat that return type is the application's gqlc model of
-// the scalar, such as any for JSON.
+// type: under apptypes=JSON that return type is the application's gqlc
+// model of the scalar, such as any for JSON.
 //
 // gqlc does not read @goField(name:) yet, so velox-gen refuses, naming the
 // schema, the field and the reason, a field or edge that graphql.FieldName
@@ -876,18 +879,17 @@
 //
 // A nil []byte, a NULL bytes field, is null, as under gqlgen.
 //
-// Under compat=veloxe, velox.graphql declares neither JSON, UUID, Uint64
-// nor (when no field is bytes) Bytes, as veloxe left them to the
-// application. Its gqlc models of UUID, Uint64 and Bytes must then be
-// velox's Go types, uuid.UUID, uint64 and []byte, which graphqlgo.Scalars
-// binds, or gqlc leaves the fields to Resolver stubs. A schema that
-// declares only some of Time, UUID, Bytes and Uint64, such as one without
-// a UUID field under compat=veloxe, binds them with
+// Under apptypes=JSON+UUID+Uint64, velox.graphql declares none of those
+// scalars, and the application does. Its gqlc models of UUID, Uint64 and
+// Bytes must then be velox's Go types, uuid.UUID, uint64 and []byte, which
+// graphqlgo.Scalars binds, or gqlc leaves the fields to Resolver stubs. A
+// schema that declares only some of Time, UUID, Bytes and Uint64, such as
+// one whose application declares UUID, binds them with
 // graphqlgo.ScalarsOnly("Time", …): graphql-go's NewSchema refuses a
-// binding of a scalar the schema does not declare. JSON fields are on
-// the Resolver either way: with JSON modelled as any, as veloxe's
-// applications have it, each resolver returns the field (obj.Settings),
-// and with it modelled as veloxgql.JSON, the getter's value.
+// binding of a scalar the schema does not declare. JSON fields are on the
+// Resolver either way: with JSON modelled as any, each resolver returns
+// the field (obj.Settings), and with it modelled as veloxgql.JSON, the
+// getter's value.
 //
 // # IDs
 //

@@ -61,7 +61,7 @@ func (User) Edges() []velox.Edge {
 }
 
 func (User) Annotations() []velox.Annotation {
-	return []velox.Annotation{graphql.QueryField("users")}
+	return []velox.Annotation{graphql.QueryField("users"), graphql.RelayConnection()}
 }
 
 type Post struct{ velox.Schema }
@@ -85,7 +85,7 @@ func (Post) Edges() []velox.Edge {
 }
 
 func (Post) Annotations() []velox.Annotation {
-	return []velox.Annotation{graphql.QueryField("posts"), graphql.MultiOrder(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []velox.Annotation{graphql.QueryField("posts"), graphql.RelayConnection(), graphql.MultiOrder(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 type Tag struct{ velox.Schema }
@@ -102,7 +102,7 @@ func (Tag) Edges() []velox.Edge {
 }
 
 func (Tag) Annotations() []velox.Annotation {
-	return []velox.Annotation{graphql.Type("Label"), graphql.QueryField("labels")}
+	return []velox.Annotation{graphql.Type("Label"), graphql.QueryField("labels"), graphql.RelayConnection()}
 }
 
 // Like is the edge schema of Post.fans: its note has no default, so the
@@ -273,7 +273,8 @@ func TestServe(t *testing.T) {
 // schema and binds like any type; UpdatePostInput, which has no field that
 // adds fans, binds too. The application's module then builds and serves a
 // query and mutations through graphqlgo.With on SQLite, and graphql-go binds
-// every input of the test model's Go, compat or not, to its SDL by name
+// every input of the test model's Go, under the defaults and the old
+// velox's options, to its SDL by name
 // (TestInputNames).
 //
 // It builds three tools and a module, offline, from the module cache, as
@@ -394,16 +395,24 @@ func withGqlc(t *testing.T, dir string, run func(args ...string) (string, error)
 
 // inputNamesTest is a test of the application's module in which graphql-go
 // binds each input struct velox-graphql writes for the test model under
-// engine=graphql-go, compat=veloxe or not, to an input of the field names
-// velox.graphql gives it: each Go field, with its name and its graphql tag,
+// engine=graphql-go, under the defaults and the old velox's options, to an
+// input of the field names velox.graphql gives it: each Go field, with its name and its graphql tag,
 // must bind to one of them, so that graphql-go's own derivation of a GraphQL
 // name, and not gogen's copy of it, is checked on every input field. The
 // fields' types are String: the names are what is checked.
 func inputNamesTest(t *testing.T) string {
 	t.Helper()
 	var cases []string
-	for _, veloxe := range []bool{false, true} {
-		cfg := sdl.Config{GraphQLGo: true, Veloxe: veloxe, Package: "example.com/app/gen"}
+	old := sdl.Config{
+		Names: "schema", Filters: "lenient", Node: "on", IDOps: "equality", OrderFields: "all", QueryFields: "all",
+		Optional: "nullable", RequiredEdges: "nonnull", InputKeys: "column", JSONTypes: "named",
+	}
+	for _, wide := range []bool{false, true} {
+		cfg := sdl.Config{}
+		if wide {
+			cfg = old
+		}
+		cfg.GraphQLGo, cfg.Package = true, "example.com/app/gen"
 		m := modeltest.GraphQLGo(t)
 		schema, err := sdl.RenderConfig(m, cfg)
 		if err != nil {
@@ -441,7 +450,7 @@ func inputNamesTest(t *testing.T) string {
 			}
 			fields, ok := structs[def.Name]
 			if !ok || len(fields) != len(def.Fields) {
-				t.Fatalf("compat %v: input %s has %d fields, and its Go %d (found %v)", veloxe, def.Name, len(def.Fields), len(fields), ok)
+				t.Fatalf("wide %v: input %s has %d fields, and its Go %d (found %v)", wide, def.Name, len(def.Fields), len(fields), ok)
 			}
 			var sdlFields, goFields []string
 			for _, f := range def.Fields {
@@ -455,7 +464,7 @@ func inputNamesTest(t *testing.T) string {
 				goFields = append(goFields, f.Names[0].Name+" *string"+tag)
 			}
 			cases = append(cases, fmt.Sprintf("{%q, graphql.Validate(graphql.SDL(%q), graphql.Input[struct{ %s }](\"T\"), q)},",
-				fmt.Sprintf("compat %v: %s", veloxe, def.Name),
+				fmt.Sprintf("wide %v: %s", wide, def.Name),
 				"input T { "+strings.Join(sdlFields, " ")+" }\ntype Query { x: String }",
 				strings.Join(goFields, "; ")))
 		}

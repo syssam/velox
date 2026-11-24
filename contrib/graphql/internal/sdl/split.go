@@ -106,8 +106,8 @@ func refs(f gqlField) []string {
 // plan returns what g writes under cfg, or nil when it writes all of it to
 // one file.
 func (g *graph) plan(cfg Config) (*emit, error) {
-	if len(cfg.AppTypes) > 0 && len(cfg.Entities) == 0 {
-		return nil, fmt.Errorf("velox-graphql: apptypes= narrows the SDL of entities=, which is not given")
+	if err := checkAppTypes(g, cfg.AppTypes); err != nil {
+		return nil, err
 	}
 	if !cfg.PerEntity && len(cfg.Entities) == 0 {
 		return nil, nil
@@ -137,7 +137,7 @@ func (g *graph) plan(cfg Config) (*emit, error) {
 	}
 	e.placeEnums(g, cfg.PerEntity)
 	if cfg.PerEntity {
-		if err := e.name(g, cfg.Veloxe); err != nil {
+		if err := e.name(g); err != nil {
 			return nil, err
 		}
 	}
@@ -202,23 +202,33 @@ func (e *emit) closeInputs(g *graph) {
 	}
 }
 
-// dropAppTypes leaves out each field of a written type that names a type
-// the SDL does not declare and listed does not name (ADR 0130). The Go type
-// of an object may have more fields than its SDL type, as an edge to an
-// entity not written shows; an input's may not, so a written input field
-// that names such a type is refused. With listed empty it does nothing.
-func (e *emit) dropAppTypes(g *graph, listed []string) error {
-	if len(listed) == 0 {
-		return nil
-	}
-	app := map[string]bool{}
+// checkAppTypes refuses a name listed, apptypes=, that is not a GraphQL
+// name, or that names a type velox-graphql declares other than a scalar of
+// its vocabulary, which the application may declare itself.
+func checkAppTypes(g *graph, listed []string) error {
 	for _, n := range listed {
 		switch {
 		case !validName(n):
 			return fmt.Errorf("velox-graphql: apptypes= names %q, which is not a GraphQL name", n)
-		case g.declares(n):
+		case g.declares(n) && !slices.Contains(vocabularyScalars, n):
 			return fmt.Errorf("velox-graphql: apptypes= names %s, which velox-graphql declares itself", n)
 		}
+	}
+	return nil
+}
+
+// dropAppTypes leaves out each field of a written type that names a type
+// the SDL does not declare and listed does not name (ADR 0130). The Go type
+// of an object may have more fields than its SDL type, as an edge to an
+// entity not written shows; an input's may not, so a written input field
+// that names such a type is refused. With listed empty, or without
+// entities=, it does nothing.
+func (e *emit) dropAppTypes(g *graph, listed []string) error {
+	if len(listed) == 0 || !e.subset {
+		return nil
+	}
+	app := map[string]bool{}
+	for _, n := range listed {
 		app[n] = true
 	}
 	foreign := func(r string) bool { return !g.declares(r) && !app[r] }
@@ -311,23 +321,19 @@ func (e *emit) placeEnums(g *graph, perEntity bool) {
 	}
 }
 
-// name gives each object whose type is written its file:
-// velox_<label>.graphql, or under compat=veloxe velox_<name in lower
-// case>.graphql, as veloxe named it. The inputs written of an object whose
+// name gives each object whose type is written its file: velox_<schema name
+// in lower case>.graphql, which gqlc makes a Go package name of, with no
+// underscore or capital. The inputs written of an object whose
 // type is not go in the shared file (ADR 0130): gqlc would make a package of
 // a file of them alone whose bindings need no Resolver, and its NewSchema
 // registers such a package itself.
-func (e *emit) name(g *graph, veloxe bool) error {
+func (e *emit) name(g *graph) error {
 	by := map[string]string{}
 	for _, o := range g.objects {
 		if !e.full[o] {
 			continue // nothing, or only inputs another input names: the shared file's
 		}
-		stem := o.ent.Label
-		if veloxe {
-			stem = strings.ToLower(o.ent.Name)
-		}
-		f := "velox_" + stem + ".graphql"
+		f := "velox_" + strings.ToLower(o.ent.Name) + ".graphql"
 		if prev := by[f]; prev != "" {
 			return fmt.Errorf("velox-graphql: sdlfiles=entity writes schema %s and schema %s both to %s", prev, o.ent.Name, f)
 		}

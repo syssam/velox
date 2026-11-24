@@ -172,7 +172,6 @@ var userType = gqlgraph.Type{
 		{Name: "or", Kind: gqlgraph.WhereOr},
 		{Name: "id", Kind: gqlgraph.WhereID, Ops: gqlgraph.OpsEquality | gqlgraph.OpsOrder, Col: userColID},
 		{Name: "name", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: userColName},
-		{Name: "email", Ops: gqlgraph.OpsEquality | gqlgraph.OpsText, Col: userColEmail},
 		{Name: "role", Ops: gqlgraph.OpsEquality, Col: userColRole},
 		{Name: "hasPosts", Kind: gqlgraph.WhereHas, Edge: userEdgePosts, Target: untyped.TableOf[Post]},
 		{Name: "hasPostsWith", Kind: gqlgraph.WhereHasWith, Edge: userEdgePosts, Target: untyped.TableOf[Post]},
@@ -250,17 +249,6 @@ type UserWhereInput struct {
 	NameHasSuffix    *string
 	NameEqualFold    *string
 	NameContainsFold *string
-
-	// Predicates on the field email.
-	Email             *string
-	EmailNEQ          *string
-	EmailIn           []string
-	EmailNotIn        []string
-	EmailContains     *string
-	EmailHasPrefix    *string
-	EmailHasSuffix    *string
-	EmailEqualFold    *string
-	EmailContainsFold *string
 
 	// Predicates on the field role.
 	Role      *UserRole

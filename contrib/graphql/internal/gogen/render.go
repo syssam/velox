@@ -49,7 +49,7 @@ func RenderSurface(m *plugin.Model, s *sdl.Surface, outPath, outPkg string, cfg 
 		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
 	}
 	r := newRenderer(m, outPath, outPkg)
-	r.lenient, r.node, r.graphqlGo = cfg.VeloxeFilters(), cfg.NodeOn(), cfg.GraphQLGo
+	r.lenient, r.node, r.graphqlGo = cfg.LenientFilters(), cfg.NodeOn(), cfg.GraphQLGo
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t

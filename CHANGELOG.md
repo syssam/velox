@@ -829,6 +829,39 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `Type.VeloxeFilters` is `Type.LenientFilters`.
   `veloxgql.GeneratedCodeIsVersion29` is now `GeneratedCodeIsVersion30`:
   regenerate (ADR 0155).
+- velox-graphql: `compat=veloxe` is gone, and refused with the options
+  that replace it, each of which stands alone: `names=schema`,
+  `filters=lenient` (was `filters=veloxe`), `node=on`, `sdlfiles=entity`,
+  `orderfields=all`, `queryfields=all`, `optional=nullable`,
+  `requirededges=nonnull`, `jsontypes=named`, `idops=equality`,
+  `inputkeys=column` and `apptypes=JSON+UUID+Uint64`. Given together, with
+  `where=whitelist,engine=graphql-go`, they write what `compat=veloxe` wrote,
+  byte for byte but for the version line and comments (ADR 0155).
+- velox-graphql's defaults are entgql's (ADR 0155):
+  - a declared foreign key is an `ID` in its type beside its edge, and its
+    predicates and input field are named from it (`authorID`, not
+    `writerID` after a renamed edge); a key whose edge is skipped is
+    filtered as its ID still;
+  - no application directive is copied onto an input's, a where input's or
+    a `has`/`hasWith` field: a field that must not be filtered has no
+    `WhereOps`, and a mutation that must be guarded carries the directive
+    on its own field, as `examples/graphql` now does for `@admin`;
+  - a nullable field's predicates include `IsNil` and `NotNil`, and an
+    explicit `WhereOps` is the exact set of operators otherwise;
+  - a type with a `QueryField` and no `RelayConnection` has a list
+    (`[X!]!`) as its root field and no connection, order or edge
+    connection; a connection's `edges` is `[XEdge!]` and an edge's `node`
+    is `X`, both nullable;
+  - an entity's file under `sdlfiles=entity` is `velox_<name in lower
+    case>.graphql`;
+  - an annotation with no effect is a warning, and dropped, not an error:
+    `Resolvers`, `QueryField` or `Mutations` on a skipped schema, an order
+    or `WhereOps` on a sensitive or skipped field, default predicates on a
+    json field that has none, and a directive on the primary key; a
+    directive on a declared foreign key is allowed, on its field;
+  - `apptypes=` works without `entities=`, and leaves the vocabulary
+    scalars it lists (`JSON`, `UUID`, `Uint64`, `Bytes`, `Time`) to the
+    application.
 - velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
   the types that hold the IDs with one statement, then read only those
   types under their policies: `node(id:)` is 2 statements, not one per

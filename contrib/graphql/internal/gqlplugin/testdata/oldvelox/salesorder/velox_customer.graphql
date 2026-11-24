@@ -1,0 +1,48 @@
+# Customer
+
+type Customer implements Node @goModel(model: "example.com/app/gen.Customer") {
+  id: ID!
+  name: String!
+  tier: SalesOrderStatus!
+  vip: Boolean!
+  joinedAt: Time!
+}
+
+enum SalesOrderStatus @goModel(model: "example.com/app/schema.SalesOrderStatus") {
+  GOLD
+  SILVER
+}
+
+"""A connection to a list of Customer."""
+type CustomerConnection @goModel(model: "example.com/app/gen.CustomerConnection") {
+  """The edges of this page."""
+  edges: [CustomerEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Customer."""
+type CustomerEdge @goModel(model: "example.com/app/gen.CustomerEdge") {
+  """The Customer at the end of the edge."""
+  node: Customer
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Customer."""
+input CustomerOrder @goModel(model: "example.com/app/gen.CustomerOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: CustomerOrderField!
+}
+
+"""The fields connections to Customer can be ordered by."""
+enum CustomerOrderField @goModel(model: "example.com/app/gen.CustomerOrderField") {
+  NAME
+  TIER
+  VIP
+  JOINED_AT
+}

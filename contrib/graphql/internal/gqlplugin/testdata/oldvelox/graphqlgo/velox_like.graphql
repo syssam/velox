@@ -1,0 +1,54 @@
+# Like
+
+"""A user's like of a post. Its key is two columns, so it has no ID."""
+type Like @goModel(model: "example.com/app/gen.Like") {
+  userId: ID!
+  postId: ID!
+  weight: Int
+  createdAt: Time!
+  user: Account!
+  post: Post!
+}
+
+"""A connection to a list of Like."""
+type LikeConnection @goModel(model: "example.com/app/gen.LikeConnection") {
+  """The edges of this page."""
+  edges: [LikeEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Like."""
+type LikeEdge @goModel(model: "example.com/app/gen.LikeEdge") {
+  """The Like at the end of the edge."""
+  node: Like
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Like."""
+input LikeOrder @goModel(model: "example.com/app/gen.LikeOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: LikeOrderField!
+}
+
+"""The fields connections to Like can be ordered by."""
+enum LikeOrderField @goModel(model: "example.com/app/gen.LikeOrderField") {
+  USER_ID
+  POST_ID
+  CREATED_AT
+}
+
+"""The input that creates a Like."""
+input CreateLikeInput @goModel(model: "example.com/app/gen.CreateLikeInput") {
+  weight: Int
+  createdAt: Time
+  """The ID of the Account the edge user leads to."""
+  userId: ID!
+  """The ID of the Post the edge post leads to."""
+  postId: ID!
+}

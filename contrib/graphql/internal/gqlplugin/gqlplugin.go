@@ -3,6 +3,7 @@
 package gqlplugin
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -17,41 +18,36 @@ import (
 var Supports = plugin.Supports{Protocol: 2, Model: 3}
 
 // Generate answers a request: the schema, velox.graphql, and the Go files
-// gqlgen binds it to; or with only=enums, the enum marshalers alone. With
-// compat=veloxe, the API is the one veloxe's generator made (sdl.Config's
-// Veloxe). names=schema names fields by their schema names, imageUrl, and
-// names=go by their Go names, imageURL (sdl.Config's SchemaNames).
-// filters=veloxe gives where inputs veloxe's semantics, and filters=strict
-// velox's fail-closed ones (sdl.Config's VeloxeFilters). go and strict are
-// the defaults; compat=veloxe makes schema and veloxe the defaults, and an
-// explicit names= or filters= wins over it. node=on declares Relay's Node
-// and node(id:), with noder_gql.go, and node=off leaves them out
-// (sdl.Config's NodeOn); off is the default, and on is under compat=veloxe,
-// which an explicit node= overrides. With where=whitelist, only fields with WhereInput filter
+// gqlgen binds it to; or with only=enums, the enum marshalers alone.
+//
+// The options names=, filters=, node=, idops=, orderfields=, queryfields=,
+// optional=, requirededges=, inputkeys= and jsontypes= shape the SDL, each
+// apart, as sdl.Config's fields of those names say; each refuses a value it
+// does not know. With where=whitelist, only fields with WhereInput filter
 // (sdl.Config's WhereWhitelist); with engine=graphql-go, the schema and the
 // Go are for graphql-go's gqlc (sdl.Config's GraphQLGo), and engine=gqlgen
-// is the default. only=enums writes the same Go for either engine. It
-// refuses any other option, as the plugin protocol asks. It warns of each
-// many-to-many edge whose create or update input has no field that adds
-// links, as its edge schema has a column Add cannot fill, and under
-// compat=veloxe of each order it drops from a field of a type veloxe did not
-// order, such as a decimal (sdl.Surface's Warnings).
-//
+// is the default. only=enums writes the same Go for either engine.
 // sdlfiles=entity writes the SDL as velox.graphql and a file per entity,
-// and sdlfiles=one as velox.graphql alone; one is the default, and entity
-// is under compat=veloxe, as veloxe wrote it (sdl.Config's PerEntity).
-// entities=A+B writes the SDL of the entities A and B alone (sdl.Config's
-// Entities); the Go is the whole schema's. apptypes=A+B names the types
-// the application declares that their SDL may name; a field naming another
-// is left out (sdl.Config's AppTypes).
+// and sdlfiles=one, the default, as velox.graphql alone (sdl.Config's
+// PerEntity). entities=A+B writes the SDL of the entities A and B alone
+// (sdl.Config's Entities); the Go is the whole schema's. apptypes=A+B names
+// the types the application declares (sdl.Config's AppTypes).
+//
+// It refuses any other option, as the plugin protocol asks; compat= is
+// refused with the options that replace it. It warns of each many-to-many
+// edge whose create or update input has no field that adds links, as its
+// edge schema has a column Add cannot fill, and of each annotation that has
+// no effect (sdl.Surface's Warnings).
 func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	cfg, err := config(req)
 	if err != nil {
 		return nil, nil, err
 	}
 	if req.Options["only"] == "enums" {
-		if cfg.Veloxe || cfg.WhereWhitelist || cfg.Names != "" || cfg.Filters != "" || cfg.Node != "" || req.Options["sdlfiles"] != "" || len(cfg.Entities) > 0 || len(cfg.AppTypes) > 0 {
-			return nil, nil, fmt.Errorf("velox-graphql: compat=veloxe, names, filters, node, where=whitelist, sdlfiles, entities and apptypes shape the SDL velox-graphql writes, and only=enums writes none: give one or the other")
+		for k := range req.Options {
+			if k != "only" && k != "engine" {
+				return nil, nil, fmt.Errorf("velox-graphql: %s shapes the SDL velox-graphql writes, and only=enums writes none: give one or the other", k)
+			}
 		}
 		files, err := gogen.RenderEnums(req.Model, req.OutPath, req.OutPackage)
 		return files, nil, err
@@ -67,26 +63,30 @@ func Generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	return append(sdlFiles, gofiles...), surface.Warnings, nil
 }
 
+// compatGone is the error for the option compat=, which is gone: each
+// option that replaces one of its parts.
+const compatGone = "velox-graphql: compat= is gone; give the options it stood for, each apart: names=schema, filters=lenient, node=on, sdlfiles=entity, orderfields=all, queryfields=all, optional=nullable, requirededges=nonnull, jsontypes=named, idops=equality, inputkeys=column and apptypes= naming the scalars the application declares (such as JSON+UUID+Uint64)"
+
 // config is the sdl.Config of req's options.
 func config(req *plugin.Request) (sdl.Config, error) {
 	var cfg sdl.Config
 	for k, v := range req.Options {
 		switch {
+		case k == "compat":
+			return cfg, errors.New(compatGone)
 		case k == "only" && v == "enums":
-		case k == "compat" && v == "veloxe":
-			cfg.Veloxe, cfg.Package = true, req.OutPath
-		case k == "names" && v != "":
-			cfg.Names = v
-		case k == "filters" && v != "":
-			cfg.Filters = v
-		case k == "node" && v != "":
-			cfg.Node, cfg.Package = v, req.OutPath
+		case v != "" && cfg.SetOption(k, v):
+			if k == "node" {
+				cfg.Package = req.OutPath
+			}
 		case k == "where" && v == "whitelist":
 			cfg.WhereWhitelist = true
 		case k == "engine" && v == "gqlgen":
 		case k == "engine" && v == "graphql-go":
 			cfg.GraphQLGo, cfg.Package = true, req.OutPath
-		case k == "sdlfiles" && (v == "one" || v == "entity"):
+		case k == "sdlfiles" && v == "one":
+		case k == "sdlfiles" && v == "entity":
+			cfg.PerEntity = true
 		case k == "entities" && v != "":
 			for n := range strings.SplitSeq(v, "+") {
 				if n == "" || slices.Contains(cfg.Entities, n) {
@@ -102,14 +102,8 @@ func config(req *plugin.Request) (sdl.Config, error) {
 				cfg.AppTypes = append(cfg.AppTypes, n)
 			}
 		default:
-			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, compat=veloxe, names=go or names=schema, filters=strict or filters=veloxe, node=on or node=off, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", options(req.Options))
+			return cfg, fmt.Errorf("velox-graphql takes the options only=enums, %s, where=whitelist, engine=gqlgen or engine=graphql-go, sdlfiles=one or sdlfiles=entity, entities=A+B and apptypes=A+B; it is given %s", strings.Join(sdl.OptionHelp(), ", "), options(req.Options))
 		}
-	}
-	switch req.Options["sdlfiles"] {
-	case "entity":
-		cfg.PerEntity = true
-	case "":
-		cfg.PerEntity = cfg.Veloxe
 	}
 	return cfg, nil
 }

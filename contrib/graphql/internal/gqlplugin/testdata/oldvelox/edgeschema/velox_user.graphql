@@ -1,0 +1,37 @@
+# User
+
+type User implements Node @goModel(model: "example.com/app/gen.User") {
+  id: ID!
+  name: String!
+  groups: [Group!]!
+  following: [User!]!
+  followers: [User!]!
+  memberships: [Membership!]!
+  follows(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: FollowOrder): FollowConnection!
+}
+
+"""The input that creates a User."""
+input CreateUserInput @goModel(model: "example.com/app/gen.CreateUserInput") {
+  name: String!
+  """The IDs of the Group nodes the edge groups leads to."""
+  groupIDs: [ID!]
+}
+
+"""The input that updates a User: a field not given is left as it is."""
+input UpdateUserInput @goModel(model: "example.com/app/gen.UpdateUserInput") {
+  name: String
+  """The IDs of Group nodes to add to the edge groups."""
+  addGroupIDs: [ID!]
+  """The IDs of Group nodes to remove from the edge groups; an ID the edge does not lead to is ignored."""
+  removeGroupIDs: [ID!]
+  """Removes every Group from the edge groups, before the IDs to remove and to add."""
+  clearGroups: Boolean
+  """The IDs of User nodes to remove from the edge following; an ID the edge does not lead to is ignored."""
+  removeFollowingIDs: [ID!]
+  """Removes every User from the edge following, before the IDs to remove."""
+  clearFollowing: Boolean
+  """The IDs of User nodes to remove from the edge followers; an ID the edge does not lead to is ignored."""
+  removeFollowerIDs: [ID!]
+  """Removes every User from the edge followers, before the IDs to remove."""
+  clearFollowers: Boolean
+}

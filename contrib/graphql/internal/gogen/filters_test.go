@@ -18,7 +18,7 @@ func TestFiltersOption(t *testing.T) {
 	}{
 		{"default", sdl.Config{}, false},
 		{"filters=strict", sdl.Config{Filters: "strict"}, false},
-		{"filters=lenient", sdl.Config{Filters: "veloxe"}, true},
+		{"filters=lenient", sdl.Config{Filters: "lenient"}, true},
 	} {
 		files, err := RenderConfig(modeltest.Model(t), outPath, "gen", c.cfg)
 		if err != nil {

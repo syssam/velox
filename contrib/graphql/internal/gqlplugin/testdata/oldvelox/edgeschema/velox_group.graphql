@@ -1,0 +1,26 @@
+# Group
+
+type Group implements Node @goModel(model: "example.com/app/gen.Group") {
+  id: ID!
+  name: String!
+  users: [User!]!
+  memberships: [Membership!]!
+}
+
+"""The input that creates a Group."""
+input CreateGroupInput @goModel(model: "example.com/app/gen.CreateGroupInput") {
+  name: String!
+  """The IDs of the User nodes the edge users leads to."""
+  userIDs: [ID!]
+}
+
+"""The input that updates a Group: a field not given is left as it is."""
+input UpdateGroupInput @goModel(model: "example.com/app/gen.UpdateGroupInput") {
+  name: String
+  """The IDs of User nodes to add to the edge users."""
+  addUserIDs: [ID!]
+  """The IDs of User nodes to remove from the edge users; an ID the edge does not lead to is ignored."""
+  removeUserIDs: [ID!]
+  """Removes every User from the edge users, before the IDs to remove and to add."""
+  clearUsers: Boolean
+}

@@ -125,13 +125,14 @@ type Annotation struct {
 	Skip SkipMode `json:"skip,omitempty"`
 	// Type renames the entity's GraphQL type.
 	Type string `json:"type,omitempty"`
-	// QueryField is the root Query field that returns the entity's connection.
+	// QueryField is the root Query field that returns the entity's connection,
+	// or with no RelayConnection a list of its nodes.
 	QueryField string `json:"query_field,omitempty"`
 	// QueryFieldDefault asks for the Query field with the default name, the entity's
 	// plural in lower camel case (QueryField() with no name).
 	QueryFieldDefault bool `json:"query_field_default,omitempty"`
-	// RelayConnection is the old velox's switch for the entity's connection,
-	// which velox-graphql reads only under compat=veloxe (RelayConnection()).
+	// RelayConnection gives an entity with a QueryField its connection
+	// (RelayConnection()).
 	RelayConnection bool `json:"relay_connection,omitempty"`
 	// Mutations lists the mutations to generate for the entity.
 	Mutations []MutationKind `json:"mutations,omitempty"`
@@ -331,18 +332,21 @@ func Skip(modes ...SkipMode) Annotation {
 // name of the type's alias, connection and edge, so velox-graphql refuses
 // one that does not start with an upper-case letter.
 //
-// On a field it is the field's GraphQL type, as veloxe took it. On an enum
+// On a field it is the field's GraphQL type. On an enum
 // field it names the enum, which the fields of one Go type that give the
 // name share; velox-graphql declares it, and aliases velox-gen's Go type to
 // the name. On any other field it is a type the application declares and
 // binds to the field's Go type, a name or a list of one ("Map", "[ID!]"),
 // without the field's non-null mark. "ID" makes the predicates EQ, NEQ, In
-// and NotIn. An input that cannot take the type, an object type by veloxe's
-// judgement, takes a json field as JSON. On the key it takes only "ID".
+// and NotIn. An input that cannot take the type, a name that is neither a
+// common scalar (Time, UUID, JSON, Decimal, Map…), an input nor an enum,
+// takes a json field as JSON. On the key it takes only "ID".
 func Type(name string) Annotation { return Annotation{Type: name} }
 
 // QueryField adds a root Query field, with this name, that returns the
-// entity's connection. With no name it is the entity's plural in lower camel
+// entity's connection, with RelayConnection, or else a list of its nodes,
+// which the application's resolver returns, as in entgql. With no name it
+// is the entity's plural in lower camel
 // case, as entgql names it: User gives users and PerformanceGoal gives
 // performanceGoals. A second name is refused.
 func QueryField(name ...string) Annotation {
@@ -359,13 +363,12 @@ func QueryField(name ...string) Annotation {
 // by default.
 func (a Annotation) HasQueryField() bool { return a.QueryField != "" || a.QueryFieldDefault }
 
-// RelayConnection is the old velox's and entgql's switch for Relay-style cursor
-// connections. velox-graphql always writes them (a connection with edges,
-// pageInfo and totalCount, and the cursor pagination of Paginate), so by
-// default it adds nothing, and exists so that a port compiles. Under the
-// plugin option compat=veloxe it is read as the old velox read it: a schema
-// with QueryField and without RelayConnection has no connection, and its
-// Query field and to-many edges are lists.
+// RelayConnection is entgql's switch for Relay-style cursor connections: a
+// connection with edges, pageInfo and totalCount, and the cursor
+// pagination of Paginate. A schema with QueryField and without
+// RelayConnection has no connection, as in entgql: its Query field and the
+// to-many edges to it are lists. A schema with no QueryField has its
+// connection either way.
 func RelayConnection() Annotation { return Annotation{RelayConnection: true} }
 
 // Mutations generates the listed mutation inputs for the entity, as entgql's

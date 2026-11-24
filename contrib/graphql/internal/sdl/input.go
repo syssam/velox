@@ -179,14 +179,9 @@ func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip
 	if err != nil {
 		return nil, err
 	}
-	dirs, err := directives(a.Directives, where)
-	if err != nil {
-		return nil, err
-	}
-	if o.veloxe {
-		dirs = nil // veloxe put directives on the type's fields alone
-	}
-	if err := fs.add(gqlField{name: name, typ: t, def: def, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
+	// An input field carries no directive, as in entgql: one declared for
+	// FIELD_DEFINITION alone would make the SDL invalid.
+	if err := fs.add(gqlField{name: name, typ: t, def: def, desc: f.Comment, where: where}); err != nil {
 		return nil, err
 	}
 	v := g.goValue(f, a)
@@ -204,7 +199,7 @@ func (g *graph) fieldInputs(o *object, fs *inputFields, i int, create bool, skip
 	if create || !f.Nullable {
 		return gos, nil
 	}
-	cl := gqlField{name: "clear" + upper(name), typ: "Boolean", desc: "Sets the field " + f.Name + " to NULL.", dirs: dirs, where: where}
+	cl := gqlField{name: "clear" + upper(name), typ: "Boolean", desc: "Sets the field " + f.Name + " to NULL.", where: where}
 	if err := fs.add(cl); err != nil {
 		return nil, err
 	}
@@ -238,7 +233,7 @@ func (g *graph) inputType(o *object, i int, create bool, where string) (string, 
 		return "", "", err
 	}
 	if a.Type != "" && f.Type == "json" && !g.inputable(t) {
-		// A json field's object type, which no input takes: veloxe's JSON.
+		// A json field's object type, which no input takes: JSON.
 		// Any other field's column holds a scalar, which an input takes.
 		t = "JSON"
 	}
@@ -305,13 +300,6 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	fk := g.keyField(ed)
 	immutable := ed.Immutable || fk != nil && fk.Immutable
 	nullable := fk == nil || fk.Nullable
-	dirs, err := edgeInputDirs(o, i, where)
-	if err != nil {
-		return nil, err
-	}
-	if o.veloxe {
-		dirs = nil // veloxe put directives on the type's fields alone
-	}
 	goEdge := goOf(name, ed.GoName)
 	one, many, goOne := edgeInputNames(name, ed)
 	var out []edgeInput
@@ -321,17 +309,24 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 			goType, goPkg = "", ""
 		}
 		out = append(out, edgeInput{
-			name: name, typ: typ, desc: edgeInputDesc(kind, ed, t), dirs: inputDirs(dirs, typ), where: where,
+			name: name, typ: typ, desc: edgeInputDesc(kind, ed, t), where: where,
 			goField: InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!"),
 				GoType: goType, GoPkg: goPkg},
 		})
 	}
-	idName := o.idOf(name)
-	if o.veloxe && fk != nil && ed.FieldOn == o.ent.Name {
-		// veloxe's: the input takes the key field the edge is bound to.
+	idName, goID := o.idOf(name), goEdge+"ID"
+	if fk != nil && ed.FieldOn == o.ent.Name && (fk.Implicit == "" || o.cfg.columnKeys()) {
+		// The input names the key field the edge is bound to as the type
+		// shows it, as ent does; an implicit one by its column under
+		// inputkeys=column. Under gqlgen its Go name follows, as gqlgen
+		// binds an input field by name; graphql-go's struct tag binds the
+		// edge's.
 		idName = o.camel(fk.GoName, fk.Name)
+		if !o.cfg.GraphQLGo {
+			goID = goOf(idName, fk.GoName)
+		}
 	}
-	edgeID := func(typ string) { add(idName, typ, goEdge+"ID", InputEdgeID) }
+	edgeID := func(typ string) { add(idName, typ, goID, InputEdgeID) }
 	clearEdge := func() { add("clear"+upper(name), "Boolean", "Clear"+goEdge, InputClearEdge) }
 	switch {
 	case ed.Kind == plugin.M2M:
@@ -449,30 +444,6 @@ func unsettableEdge(o *object, ed *plugin.Edge, t *object, create bool, where st
 	return fmt.Errorf("%s: a required edge whose target %s %s: Create%sInput could never set it; skip the edge's create input with graphql.Skip(graphql.SkipMutationCreateInput), and set its key on the x the resolver gives Create%[4]sInput.Create, or in a hook", where, ed.Target, why, o.name)
 }
 
-// edgeInputDirs returns the directives the inputs of o's edge i carry: its
-// key's, when the key is on o's row, then the edge's own.
-func edgeInputDirs(o *object, i int, where string) ([]directive, error) {
-	ed := o.ent.Edges[i]
-	dirs, err := directives(o.eanns[i].Directives, where)
-	if err != nil {
-		return nil, err
-	}
-	// A key on o's row brings its own directives first, as to its where
-	// predicates.
-	if !ed.OwnsKey || ed.FieldOn != o.ent.Name {
-		return dirs, nil
-	}
-	k := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == ed.Field })
-	if k < 0 {
-		return dirs, nil
-	}
-	kds, err := directives(o.fanns[k].Directives, "schema "+o.ent.Name+", field "+ed.Field)
-	if err != nil {
-		return nil, err
-	}
-	return unite(kds, dirs), nil
-}
-
 // edgeInputNames returns the parts of the input names of the edge ed, whose
 // GraphQL name is name: the singular for an add or remove input (one), for
 // a create input (many), and for their Go names (goOne).
@@ -486,7 +457,7 @@ func edgeInputDirs(o *object, i int, where string) ([]directive, error) {
 func edgeInputNames(name string, ed *plugin.Edge) (one, many, goOne string) {
 	one, many = upper(plugin.Singular(name)), plugin.Singular(name)
 	goOne = one
-	if strings.EqualFold(camel(ed.GoName), name) || veloxeCamel(ed.Name) == name {
+	if strings.EqualFold(camel(ed.GoName), name) || schemaCamel(ed.Name) == name {
 		goOne = plugin.GoName(plugin.Singular(ed.Name))
 		many = camel(goOne)
 		one = upper(many)
@@ -599,16 +570,6 @@ func createDefault(f *plugin.Field, d json.RawMessage, where string) (string, er
 		return ` = "` + s + `"`, nil // the Uint64 scalar is a string
 	}
 	return " = " + s, nil
-}
-
-// inputDirs are the directives ds of an input field of the type typ: all of
-// them, except @deprecated on a required field, which GraphQL forbids, since
-// a client cannot stop sending it. The output field keeps it.
-func inputDirs(ds []directive, typ string) []directive {
-	if !strings.HasSuffix(typ, "!") {
-		return ds
-	}
-	return slices.DeleteFunc(slices.Clone(ds), func(d directive) bool { return d.name == "deprecated" })
 }
 
 // inputDesc is the description of o's create or update input.

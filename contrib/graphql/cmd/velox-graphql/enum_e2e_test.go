@@ -28,7 +28,7 @@ func (Alarm) Fields() []schema.Field {
 }
 
 func (Alarm) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Type("Alert"), graphql.QueryField("alerts")}
+	return []schema.Annotation{graphql.Type("Alert"), graphql.QueryField("alerts"), graphql.RelayConnection()}
 }
 
 type Tag struct{ schema.Schema }

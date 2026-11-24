@@ -1,0 +1,52 @@
+# Follow
+
+type Follow implements Node @goModel(model: "example.com/app/gen.Follow") {
+  id: ID!
+  note: String!
+  userId: ID!
+  followerId: ID!
+  user: User!
+  follower: User!
+}
+
+"""A connection to a list of Follow."""
+type FollowConnection @goModel(model: "example.com/app/gen.FollowConnection") {
+  """The edges of this page."""
+  edges: [FollowEdge!]
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Follow."""
+type FollowEdge @goModel(model: "example.com/app/gen.FollowEdge") {
+  """The Follow at the end of the edge."""
+  node: Follow
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+"""Ordering options for connections to Follow."""
+input FollowOrder @goModel(model: "example.com/app/gen.FollowOrder") {
+  """The direction of the order."""
+  direction: OrderDirection! = ASC
+  """The field to order by."""
+  field: FollowOrderField!
+}
+
+"""The fields connections to Follow can be ordered by."""
+enum FollowOrderField @goModel(model: "example.com/app/gen.FollowOrderField") {
+  NOTE
+  USER_ID
+  FOLLOWER_ID
+}
+
+"""The input that creates a Follow."""
+input CreateFollowInput @goModel(model: "example.com/app/gen.CreateFollowInput") {
+  note: String!
+  """The ID of the User the edge user leads to."""
+  userId: ID!
+  """The ID of the User the edge follower leads to."""
+  followerId: ID!
+}

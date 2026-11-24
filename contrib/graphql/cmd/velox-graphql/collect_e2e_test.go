@@ -36,7 +36,7 @@ func (Author) Edges() []schema.Edge {
 }
 
 func (Author) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("authors")}
+	return []schema.Annotation{graphql.QueryField("authors"), graphql.RelayConnection()}
 }
 
 type Book struct{ schema.Schema }

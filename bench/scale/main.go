@@ -335,7 +335,7 @@ func generate(n, services int, graphql bool) (schemas, svc map[string]string) {
 		nameField, annotations, gqlImport := `field.String("name")`, "", ""
 		if graphql {
 			nameField = `field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps())`
-			annotations = fmt.Sprintf("\nfunc (E%[1]d) Annotations() []schema.Annotation {\n\treturn []schema.Annotation{graphql.QueryField(\"e%[1]ds\")}\n}\n", i)
+			annotations = fmt.Sprintf("\nfunc (E%[1]d) Annotations() []schema.Annotation {\n\treturn []schema.Annotation{graphql.QueryField(\"e%[1]ds\"), graphql.RelayConnection()}\n}\n", i)
 			gqlImport = "\t\"github.com/syssam/velox/contrib/graphql\"\n"
 		}
 		fields.WriteString("\t\t" + nameField + ",\n\t\tfield.Float(\"amount\"),\n\t\tfield.Time(\"created_at\"),\n\t\t" + noteField + "\n")

@@ -1,0 +1,47 @@
+# Category
+
+"""A category of posts, in a tree."""
+type Category implements Node @goModel(model: "example.com/app/gen.Category") {
+  id: ID!
+  title: String!
+  """The subcategories."""
+  children: [Category!]!
+  parent: Category
+}
+
+"""Filters Category nodes: a node matches when every predicate given holds."""
+input CategoryWhereInput @goModel(model: "example.com/app/gen.CategoryWhereInput") {
+  not: CategoryWhereInput
+  and: [CategoryWhereInput!]
+  or: [CategoryWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  hasParent: Boolean
+  hasParentWith: [CategoryWhereInput!]
+}
+
+"""The input that creates a Category."""
+input CreateCategoryInput @goModel(model: "example.com/app/gen.CreateCategoryInput") {
+  title: String!
+  """The IDs of the Category nodes the edge children leads to."""
+  childIDs: [ID!]
+  """The ID of the Category the edge parent leads to."""
+  categoryChildren: ID
+}
+
+"""The input that updates a Category: a field not given is left as it is."""
+input UpdateCategoryInput @goModel(model: "example.com/app/gen.UpdateCategoryInput") {
+  title: String
+  """The IDs of Category nodes to add to the edge children."""
+  addChildIDs: [ID!]
+  """The IDs of Category nodes to remove from the edge children; an ID the edge does not lead to is ignored."""
+  removeChildIDs: [ID!]
+  """Removes every Category from the edge children, before the IDs to remove and to add."""
+  clearChildren: Boolean
+  """The ID of the Category the edge parent leads to."""
+  categoryChildren: ID
+  """Unlinks the edge parent: it leads to no Category afterwards."""
+  clearParent: Boolean
+}

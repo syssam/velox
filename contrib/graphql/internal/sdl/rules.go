@@ -61,34 +61,40 @@ func article(kind string) string { return english.Article(kind) + " " + kind }
 
 // checkSchema checks the annotation of an entity. It refuses an application
 // directive; GraphQL's own are allowed. A join entity has no type, so nothing
-// that needs one applies to it; a schema whose type is skipped has no root
-// field and no mutation, so asking for one is an error, except under
-// compat=veloxe (veloxe), whose generator ignored them on such a schema.
-func checkSchema(e *plugin.Entity, a graphql.Annotation, veloxe bool, where string) error {
+// that needs one applies to it. A schema whose type is skipped has no root
+// field and no mutation, so asking for one has no effect: it is a warning,
+// as ent ignores it.
+func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) (warnings []string, _ error) {
 	if err := ownDirective(a.Directives, where); err != nil {
-		return err
+		return nil, err
 	}
 	if err := misplaced(a, onSchema, where); err != nil {
-		return err
+		return nil, err
 	}
 	// gqlgen runs a type's directives only on fields that return the type,
 	// so one on an entity guards its objects and leaves its rows' values
 	// readable through the cursors, the where inputs, the order and
 	// totalCount: a guard that guards nothing.
 	if d := appDirective(a); d != "" {
-		return fmt.Errorf("%s: graphql.Directives with the directive @%s on a schema, which GraphQL runs on the type's objects only: its rows' values stay readable through the cursors, the filters, the order and totalCount; put the directive on the fields and edges it guards, or use a policy for row access", where, d)
+		return nil, fmt.Errorf("%s: graphql.Directives with the directive @%s on a schema, which GraphQL runs on the type's objects only: its rows' values stay readable through the cursors, the filters, the order and totalCount; put the directive on the fields and edges it guards, or use a policy for row access", where, d)
 	}
 	if !e.Join {
-		switch {
-		case a.Skip&graphql.SkipType == 0, veloxe:
-		case a.HasQueryField():
-			return fmt.Errorf("%s: graphql.QueryField on a schema whose type graphql.Skip leaves out", where)
-		case len(a.Mutations) > 0:
-			return fmt.Errorf("%s: graphql.Mutations on a schema whose type graphql.Skip leaves out", where)
-		case len(a.Resolvers) > 0:
-			return fmt.Errorf("%s: graphql.Resolvers on a schema whose type graphql.Skip leaves out", where)
+		if a.Skip&graphql.SkipType == 0 {
+			return nil, nil
 		}
-		return nil
+		for _, p := range []struct {
+			name string
+			set  bool
+		}{
+			{"graphql.QueryField", a.HasQueryField()},
+			{"graphql.Mutations", len(a.Mutations) > 0},
+			{"graphql.Resolvers", len(a.Resolvers) > 0},
+		} {
+			if p.set {
+				warnings = append(warnings, fmt.Sprintf("%s: %s has no effect on a schema whose type graphql.Skip leaves out", where, p.name))
+			}
+		}
+		return warnings, nil
 	}
 	for _, p := range []struct {
 		name string
@@ -101,22 +107,23 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, veloxe bool, where stri
 		{"graphql.Resolvers", len(a.Resolvers) > 0},
 	} {
 		if p.set {
-			return fmt.Errorf("%s: %s on a join entity, which has no GraphQL type", where, p.name)
+			return nil, fmt.Errorf("%s: %s on a join entity, which has no GraphQL type", where, p.name)
 		}
 	}
-	return nil
+	return nil, nil
 }
 
-// checkField checks the annotation of e's field i. fk says whether the field
-// is a foreign key, which an edge stands for. veloxe says whether the API is
-// veloxe's (compat=veloxe), whose generator put a directive on a foreign key
-// that the type shows, and never on the id.
-func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk, veloxe bool, where string) error {
+// checkField checks the annotation of e's field i, which adjust has read.
+// fk says whether the field is a foreign key, which an edge stands for.
+// orderAll says whether the order lists every orderable field
+// (orderfields=all), which no directive guards. warning is "" or says that
+// a directive on the key has no effect: the type's id never carries one.
+func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk, orderAll bool, where string) (warning string, _ error) {
 	if err := ownDirective(a.Directives, where); err != nil {
-		return err
+		return "", err
 	}
 	if err := misplaced(a, onField, where); err != nil {
-		return err
+		return "", err
 	}
 	f := e.Fields[i]
 	// A foreign key is never an input, so CreateInput and UpdateInput say
@@ -128,49 +135,42 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk, veloxe bool, 
 	}
 	pk := len(e.PrimaryKey) == 1 && i == e.PrimaryKey[0]
 	isTrue := func(p *bool) bool { return p != nil && *p }
+	if pk && keyBase(e) != "" && appDirective(a) != "" {
+		warning = fmt.Sprintf("%s: graphql.Directives with the directive @%s has no effect on the primary key: the id is readable through the cursors and every edge to the type, and carries no directive", where, appDirective(a))
+	}
 	switch {
 	case a.Type != "" && !validTypeRef(a.Type):
-		return fmt.Errorf("%s: graphql.Type(%q) on a field is not a GraphQL type: it is a name, or a list of one such as [ID!], and the field's nullability adds its non-null mark", where, a.Type)
+		return "", fmt.Errorf("%s: graphql.Type(%q) on a field is not a GraphQL type: it is a name, or a list of one such as [ID!], and the field's nullability adds its non-null mark", where, a.Type)
 	case a.Type != "" && pk && a.Type != "ID":
-		return fmt.Errorf("%s: graphql.Type(%q) on the key: the key is an ID", where, a.Type)
+		return "", fmt.Errorf("%s: graphql.Type(%q) on the key: the key is an ID", where, a.Type)
 	case a.Type != "" && f.Type == "enum" && a.Skip&graphql.SkipEnumField == 0 && !validName(a.Type):
-		return fmt.Errorf("%s: graphql.Type(%q) on an enum field names its enum, so it is a name", where, a.Type)
+		return "", fmt.Errorf("%s: graphql.Type(%q) on an enum field names its enum, so it is a name", where, a.Type)
 	case len(a.EnumValues) > 0 && f.Type != "enum":
-		return fmt.Errorf("%s: graphql.EnumValues on a field of type %s, which is not an enum", where, f.Type)
-	case a.OrderField != "" && f.Sensitive:
-		return fmt.Errorf("%s: graphql.OrderField on a sensitive field: its values would be in the cursors", where)
+		return "", fmt.Errorf("%s: graphql.EnumValues on a field of type %s, which is not an enum", where, f.Type)
 	case a.OrderField != "" && f.Type == "json":
-		return fmt.Errorf("%s: graphql.OrderField on a json field, which has no order", where)
+		return "", fmt.Errorf("%s: graphql.OrderField on a json field, which has no order", where)
 	case a.OrderField != "" && f.Type == "bytes":
-		return fmt.Errorf("%s: graphql.OrderField on a bytes field: keyset paging cannot continue after a bytes value, since velox's After refuses a slice column, which a nil []byte stores as NULL", where)
-	case a.OrderField != "" && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipOrderField == 0:
-		return fmt.Errorf("%s: graphql.OrderField on a field graphql.Skip leaves out of the type: its values would be in the cursors", where)
-	case a.OrderField != "" && a.Skip&graphql.SkipOrderField == 0 && !a.OrderUnguarded && !veloxe && appDirective(a) != "":
-		return fmt.Errorf("%s: graphql.OrderField on a field with the directive @%s: its values would be in the cursors and its order would reveal them, which no directive guards; add graphql.OrderUnguarded() to allow it", where, appDirective(a))
+		return "", fmt.Errorf("%s: graphql.OrderField on a bytes field: keyset paging cannot continue after a bytes value, since velox's After refuses a slice column, which a nil []byte stores as NULL", where)
+	case a.OrderField != "" && !a.OrderUnguarded && !orderAll && appDirective(a) != "":
+		return "", fmt.Errorf("%s: graphql.OrderField on a field with the directive @%s: its values would be in the cursors and its order would reveal them, which no directive guards; add graphql.OrderUnguarded() to allow it", where, appDirective(a))
 	case a.OrderUnguarded && a.OrderField == "":
-		return fmt.Errorf("%s: graphql.OrderUnguarded without graphql.OrderField says nothing", where)
-	case (fk && !veloxe || f.Implicit != "") && appDirective(a) != "":
-		return fmt.Errorf("%s: graphql.Directives with the directive @%s on a foreign key, which its edge stands for in GraphQL; put the directive on the edge, which guards the edge's field, its has and hasWith filters and the key's predicates", where, appDirective(a))
-	case pk && !veloxe && keyBase(e) != "" && appDirective(a) != "":
-		return fmt.Errorf("%s: graphql.Directives with the directive @%s on the primary key: the id is readable through the cursors and every edge to the type, so the directive would guard nothing", where, appDirective(a))
-	case a.WhereOps != 0 && f.Sensitive:
-		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
-	case a.WhereOps != 0 && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipWhereInput == 0:
-		return fmt.Errorf("%s: graphql.WhereOps on a field graphql.Skip leaves out of the type: a filter would reveal its values", where)
+		return "", fmt.Errorf("%s: graphql.OrderUnguarded without graphql.OrderField says nothing", where)
+	case f.Implicit != "" && appDirective(a) != "":
+		return "", fmt.Errorf("%s: graphql.Directives with the directive @%s on an edge's implicit foreign key, which GraphQL does not show; put the directive on the edge", where, appDirective(a))
 	case a.CreateInput != nil && never != "":
-		return fmt.Errorf("%s: graphql.CreateInput: %s", where, never)
+		return "", fmt.Errorf("%s: graphql.CreateInput: %s", where, never)
 	case a.UpdateInput != nil && never != "":
-		return fmt.Errorf("%s: graphql.UpdateInput: %s", where, never)
+		return "", fmt.Errorf("%s: graphql.UpdateInput: %s", where, never)
 	case a.CreateDefault != nil && never != "":
-		return fmt.Errorf("%s: graphql.CreateDefault: %s", where, never)
+		return "", fmt.Errorf("%s: graphql.CreateDefault: %s", where, never)
 	case a.CreateDefault != nil && pk:
-		return fmt.Errorf("%s: graphql.CreateDefault: the primary key is never an input", where)
+		return "", fmt.Errorf("%s: graphql.CreateDefault: the primary key is never an input", where)
 	case (isTrue(a.CreateInput) || isTrue(a.UpdateInput)) && pk:
-		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
+		return "", fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
-		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
+		return "", fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
 	}
-	return nil
+	return warning, nil
 }
 
 // zeroIsUnset reports whether a field of the type typ is a bool or a number,

@@ -47,7 +47,7 @@ func (Volume) Edges() []schema.Edge {
 }
 
 func (Volume) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("volumes"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{graphql.QueryField("volumes"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 `
 

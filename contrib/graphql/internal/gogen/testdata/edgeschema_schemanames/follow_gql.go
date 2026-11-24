@@ -102,8 +102,13 @@ var followType = gqlgraph.Type{
 	Table:      untyped.TableOf[Follow],
 	Key:        []gqlgraph.Column{{Name: "id", Index: followColID}},
 	AlwaysRead: []int{followColID, followColUserID, followColFollowerID},
-	Fields:     []string{followColID: "id", followColNote: "note"},
-	Edges:      []string{followEdgeUser: "user", followEdgeFollower: "follower"},
+	Fields: []string{
+		followColID:         "id",
+		followColNote:       "note",
+		followColUserID:     "userId",
+		followColFollowerID: "followerId",
+	},
+	Edges: []string{followEdgeUser: "user", followEdgeFollower: "follower"},
 	Inputs: []string{
 		followColNote:       "note",
 		followColUserID:     "userId",

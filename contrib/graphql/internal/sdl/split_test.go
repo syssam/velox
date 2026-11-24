@@ -86,12 +86,12 @@ func TestPerEntityGolden(t *testing.T) {
 	}
 }
 
-// TestPerEntityVeloxeNames: under compat=veloxe an entity's file is
-// velox_<name in lower case>.graphql, as veloxe named it; two entities
-// whose names differ only in case are refused.
-func TestPerEntityVeloxeNames(t *testing.T) {
+// TestPerEntityFileNames: an entity's file is velox_<schema name in lower
+// case>.graphql, a Go package name for gqlc; two entities whose names
+// differ only in case are refused.
+func TestPerEntityFileNames(t *testing.T) {
 	m := modeltest.Model(t)
-	files, _, err := RenderFiles(m, Config{PerEntity: true, Veloxe: true, Package: "example.com/app/gen"})
+	files, _, err := RenderFiles(m, Config{PerEntity: true, Node: "on", Package: "example.com/app/gen"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestPerEntityVeloxeNames(t *testing.T) {
 		g.objects = append(g.objects, o)
 		e.full[o] = true
 	}
-	if err := e.name(g, true); err == nil || !strings.Contains(err.Error(), "schema SalesOrder and schema Salesorder both to velox_salesorder.graphql") {
+	if err := e.name(g); err == nil || !strings.Contains(err.Error(), "schema SalesOrder and schema Salesorder both to velox_salesorder.graphql") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -249,8 +249,9 @@ func TestEntitiesAppTypes(t *testing.T) {
 
 // TestEntitiesAppTypesRefused: an input that names an application type
 // apptypes= does not list is refused, as graphql-go binds every field of an
-// input; so are a name velox-graphql declares and one that is no GraphQL
-// name, and apptypes= without entities=.
+// input; so are a name velox-graphql declares, other than a scalar of its
+// vocabulary, and one that is no GraphQL name. Without entities= apptypes=
+// only leaves the vocabulary's scalars it lists to the application.
 func TestEntitiesAppTypesRefused(t *testing.T) {
 	for _, c := range []struct {
 		m        *plugin.Model
@@ -260,14 +261,16 @@ func TestEntitiesAppTypesRefused(t *testing.T) {
 	}{
 		{appTypesModel(t, true), []string{"Asset"}, []string{"PublicUser"}, "AssetWhereInput.price names Money, which apptypes= does not list"},
 		{appTypesModel(t, false), []string{"Asset"}, []string{"Tag"}, "apptypes= names Tag, which velox-graphql declares itself"},
-		{appTypesModel(t, false), []string{"Asset"}, []string{"Time"}, "apptypes= names Time, which velox-graphql declares itself"},
+		{appTypesModel(t, false), []string{"Asset"}, []string{"Cursor"}, "apptypes= names Cursor, which velox-graphql declares itself"},
 		{appTypesModel(t, false), []string{"Asset"}, []string{"9x"}, `apptypes= names "9x", which is not a GraphQL name`},
-		{appTypesModel(t, false), nil, []string{"Money"}, "apptypes= narrows the SDL of entities=, which is not given"},
 	} {
 		_, err := RenderConfig(c.m, Config{Entities: c.entities, AppTypes: c.apptypes})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%v: err = %v, want %q", c.apptypes, err, c.want)
 		}
+	}
+	if got, err := RenderConfig(appTypesModel(t, false), Config{AppTypes: []string{"Money", "Time"}}); err != nil || strings.Contains(got, "scalar Time") || !strings.Contains(got, "  owner: PublicUser") {
+		t.Errorf("apptypes=Money+Time without entities=: %v\n%s", err, got)
 	}
 	// Without a where on price, Money is named by Asset's type alone, and
 	// apptypes=PublicUser leaves price out with owner kept.

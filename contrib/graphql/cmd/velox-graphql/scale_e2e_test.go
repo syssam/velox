@@ -77,7 +77,7 @@ func (E%[1]d) Edges() []schema.Edge {
 }
 
 func (E%[1]d) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("e%[1]ds")}
+	return []schema.Annotation{graphql.QueryField("e%[1]ds"), graphql.RelayConnection()}
 }
 `, i, fields.String(), edges.String())
 	}

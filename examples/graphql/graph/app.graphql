@@ -1,10 +1,9 @@
 """
-Restricts a field to admins, and its where predicates and mutation input
-fields too, since velox-graphql copies a field's directives onto them. main.go
-implements it from the X-Role header. It is declared on input fields as well
-as fields, or gqlgen refuses the schema.
+Restricts a field to admins. main.go implements it from the X-Role header.
+velox-graphql puts it on User.email; the application, on the mutations that
+manage users.
 """
-directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+directive @admin on FIELD_DEFINITION
 
 """
 The mutations, which the application declares: velox-graphql writes their
@@ -23,13 +22,13 @@ type Mutation {
   createLabel(input: CreateLabelInput!): Label!
   "Updates the label with this ID: only the fields given change."
   updateLabel(id: ID!, input: UpdateLabelInput!): Label!
-  "Creates a user with this password, which the server hashes."
-  createUser(input: CreateUserInput!, password: String!): User!
+  "Creates a user with this password, which the server hashes; admins only."
+  createUser(input: CreateUserInput!, password: String!): User! @admin
   """
   Updates the user with this ID: only the fields given change, the password
   too when it is given.
   """
-  updateUser(id: ID!, input: UpdateUserInput!, password: String): User!
+  updateUser(id: ID!, input: UpdateUserInput!, password: String): User! @admin
 }
 
 extend type Query {

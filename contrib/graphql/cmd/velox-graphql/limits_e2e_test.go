@@ -47,7 +47,7 @@ func (Member) Edges() []schema.Edge {
 }
 
 func (Member) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("members")}
+	return []schema.Annotation{graphql.QueryField("members"), graphql.RelayConnection()}
 }
 
 type Group struct{ schema.Schema }
@@ -81,7 +81,7 @@ func (Remark) Edges() []schema.Edge {
 }
 
 func (Remark) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("remarks")}
+	return []schema.Annotation{graphql.QueryField("remarks"), graphql.RelayConnection()}
 }
 
 type Doc struct{ schema.Schema }
@@ -98,7 +98,7 @@ func (Doc) Edges() []schema.Edge {
 }
 
 func (Doc) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("docs"), graphql.Mutations(graphql.MutationUpdate)}
+	return []schema.Annotation{graphql.QueryField("docs"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationUpdate)}
 }
 
 type Item struct{ schema.Schema }
@@ -116,7 +116,7 @@ func (Item) Fields() []schema.Field {
 }
 
 func (Item) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("items"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{graphql.QueryField("items"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 type Post struct{ schema.Schema }
@@ -137,7 +137,7 @@ func (Post) Edges() []schema.Edge {
 }
 
 func (Post) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("posts"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{graphql.QueryField("posts"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 type Thing struct{ schema.Schema }
@@ -152,7 +152,7 @@ func (Thing) Fields() []schema.Field {
 }
 
 func (Thing) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("things"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{graphql.QueryField("things"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 type Acct struct{ schema.Schema }
@@ -186,7 +186,7 @@ func (Flag) Fields() []schema.Field {
 }
 
 func (Flag) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("flags"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+	return []schema.Annotation{graphql.QueryField("flags"), graphql.RelayConnection(), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 // Pin belongs to a flag, and connections order it by the flag's nullable
@@ -202,7 +202,7 @@ func (Pin) Edges() []schema.Edge {
 }
 
 func (Pin) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("pins")}
+	return []schema.Annotation{graphql.QueryField("pins"), graphql.RelayConnection()}
 }
 
 // Page has a required slug the create input leaves out, as entgql users write
@@ -227,7 +227,7 @@ func (Type) Fields() []schema.Field {
 }
 
 func (Type) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("types")}
+	return []schema.Annotation{graphql.QueryField("types"), graphql.RelayConnection()}
 }
 
 type Field struct{ schema.Schema }
@@ -1079,7 +1079,7 @@ func TestCreateDefaultServed(t *testing.T) {
 
 // TestJSONListsServed: a JSON field of []string, []int, []float64 or []bool is
 // a list of the scalar, both ways; an empty list stores empty, a clear NULL,
-// one left out of a create empty, as veloxe wrote it (decision 0090),
+// one left out of a create empty, as the old velox wrote it (decision 0090),
 // and a null nothing.
 func TestJSONListsServed(t *testing.T) {
 	s := serve(t)

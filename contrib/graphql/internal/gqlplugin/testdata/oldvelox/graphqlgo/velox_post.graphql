@@ -1,0 +1,86 @@
+# Post
+
+type Post implements Node @goModel(model: "example.com/app/gen.Post") {
+  id: ID!
+  authorId: ID!
+  title: String!
+  slug: String!
+  status: PostStatus!
+  publishedAt: Time
+  tags: [String!]!
+  views: Int!
+  rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
+  """The user who wrote the post."""
+  author: Account!
+  likes: [Like!]!
+  """Posts this post links to; a join of Post to itself."""
+  related: [Post!]!
+  relatedBy: [Post!]!
+}
+
+enum PostStatus @goModel(model: "example.com/app/gen.PostStatus") {
+  DRAFT
+  IN_REVIEW
+  LIVE
+}
+
+"""Filters Post nodes: a node matches when every predicate given holds."""
+input PostWhereInput @goModel(model: "example.com/app/gen.PostWhereInput") {
+  not: PostWhereInput
+  and: [PostWhereInput!]
+  or: [PostWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  hasAuthor: Boolean
+  hasAuthorWith: [AccountWhereInput!]
+}
+
+"""The input that creates a Post."""
+input CreatePostInput @goModel(model: "example.com/app/gen.CreatePostInput") {
+  title: String!
+  slug: String!
+  status: PostStatus
+  publishedAt: Time
+  tags: [String!]
+  rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
+  """The ID of the Account the edge author leads to."""
+  authorId: ID!
+  """The IDs of the Post nodes the edge related leads to."""
+  relatedIDs: [ID!]
+  """The IDs of the Post nodes the edge related_by leads to."""
+  relatedByIDs: [ID!]
+}
+
+"""The input that updates a Post: a field not given is left as it is."""
+input UpdatePostInput @goModel(model: "example.com/app/gen.UpdatePostInput") {
+  title: String
+  status: PostStatus
+  publishedAt: Time
+  """Sets the field published_at to NULL."""
+  clearPublishedAt: Boolean
+  tags: [String!]
+  views: Int
+  rating: Float
+  """Sets the field rating to NULL."""
+  clearRating: Boolean
+  """The ID of the Account the edge author leads to."""
+  authorId: ID
+  """The IDs of Post nodes to add to the edge related."""
+  addRelatedIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related; an ID the edge does not lead to is ignored."""
+  removeRelatedIDs: [ID!]
+  """Removes every Post from the edge related, before the IDs to remove and to add."""
+  clearRelated: Boolean
+  """The IDs of Post nodes to add to the edge related_by."""
+  addRelatedByIDs: [ID!]
+  """The IDs of Post nodes to remove from the edge related_by; an ID the edge does not lead to is ignored."""
+  removeRelatedByIDs: [ID!]
+  """Removes every Post from the edge related_by, before the IDs to remove and to add."""
+  clearRelatedBy: Boolean
+}

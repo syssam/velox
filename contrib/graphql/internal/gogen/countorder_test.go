@@ -13,7 +13,11 @@ import (
 // owner's OrderField enum, a constant named for the edge's count, and a
 // Column of the type marked Count (velox decision 0112).
 func TestCountOrderConstant(t *testing.T) {
-	enc := func(a graphql.Annotation) map[string]json.RawMessage {
+	enc := func(as ...graphql.Annotation) map[string]json.RawMessage {
+		var a graphql.Annotation
+		for _, o := range as {
+			a = a.Merge(o).(graphql.Annotation)
+		}
 		b, err := json.Marshal(a)
 		if err != nil {
 			t.Fatal(err)
@@ -27,7 +31,7 @@ func TestCountOrderConstant(t *testing.T) {
 		Annotations: enc(graphql.OrderField("POSTS_COUNT"))}
 	user := &plugin.Entity{Name: "User", Label: "user", Handles: "Users", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{id()}, Edges: []*plugin.Edge{posts},
-		Annotations: enc(graphql.QueryField("users"))}
+		Annotations: enc(graphql.QueryField("users"), graphql.RelayConnection())}
 	post := &plugin.Entity{Name: "Post", Label: "post", Handles: "Posts", PrimaryKey: []int{0},
 		Fields: []*plugin.Field{id()}, Edges: []*plugin.Edge{},
 		Annotations: enc(graphql.QueryField("posts"))}

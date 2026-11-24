@@ -1,0 +1,9 @@
+# Group
+
+type Group implements Node @goModel(model: "example.com/app/gen.Group") {
+  id: ID!
+  name: String!
+  """Who can see the group; a String, as its enum is skipped."""
+  visibility: String!
+  users: [Account!]!
+}

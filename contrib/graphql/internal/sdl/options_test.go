@@ -8,9 +8,8 @@ import (
 	"github.com/syssam/velox/plugin"
 )
 
-// veloxeCamel names as veloxe's generator did; the names on the right are
-// in a veloxe application's API.
-func TestVeloxeCamel(t *testing.T) {
+// schemaCamel names a schema name under names=schema.
+func TestSchemaCamel(t *testing.T) {
 	for in, want := range map[string]string{
 		"customer_id":        "customerId",
 		"image_url":          "imageUrl",
@@ -23,14 +22,14 @@ func TestVeloxeCamel(t *testing.T) {
 		"userName":           "userName",
 		"deleted_by_user_id": "deletedByUserId",
 	} {
-		if got := veloxeCamel(in); got != want {
-			t.Errorf("veloxeCamel(%q) = %q, want %q", in, got, want)
+		if got := schemaCamel(in); got != want {
+			t.Errorf("schemaCamel(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
-// graphql.Type on a field is the field's GraphQL type, as veloxe took it: a
-// name or a list the application declares, or the name of an enum field's
+// graphql.Type on a field is the field's GraphQL type: a name or a list the
+// application declares, or the name of an enum field's
 // enum, which the fields of one Go type that give it share.
 func TestFieldType(t *testing.T) {
 	app := "scalar Map\ntype ProductTranslate { name: String }\n"
@@ -73,7 +72,7 @@ func TestFieldType(t *testing.T) {
 	if strings.Count(sdl, "enum ItemType") != 1 || s.Types["CreditNoteStatus"] != nil {
 		t.Errorf("enums:\n%s", sdl)
 	}
-	// An input takes no object type: the field is JSON there, as veloxe had it.
+	// An input takes no object type: the field is JSON there.
 	in := strings.Join(fieldsOf(s, "CreateCreditNoteInput"), "\n")
 	for _, want := range []string{"customFields: Map!", "organizationIds: [ID!]!", "translations: JSON!", "itemType: ItemType!"} {
 		if !strings.Contains(in, want) {
@@ -105,84 +104,88 @@ func TestFieldType(t *testing.T) {
 	}
 }
 
-// Under Config.Veloxe, a foreign key bound to an edge is an ID in the type,
-// named as veloxe named it, and its predicates are named from it.
-func TestVeloxeForeignKeys(t *testing.T) {
+// A foreign key bound to an edge is an ID in the type, as in ent, named
+// from the field by names=, and its predicates are named from it.
+func TestForeignKeyNames(t *testing.T) {
 	ck := &plugin.Field{Name: "customer_id", GoName: "CustomerID", Type: "int64", Annotations: ann(t, graphql.WhereOps())}
 	order := entity("SalesOrder", ck, &plugin.Field{Name: "image_url", GoName: "ImageURL", Type: "string"})
 	cust := edge("customer", plugin.M2O, "Customer")
 	cust.Field, cust.FieldOn, cust.OwnsKey, cust.Required = "customer_id", "SalesOrder", true, true
 	order.Edges = []*plugin.Edge{cust}
 	m := model(order, entity("Customer"))
-	sdl, err := RenderConfig(m, Config{Veloxe: true})
+	for cfg, wants := range map[string][]string{
+		"go":     {"  customerID: ID!\n", "  imageURL: String!\n", "  customerIDNEQ: ID\n", "  customerIDNotIn: [ID!]\n"},
+		"schema": {"  customerId: ID!\n", "  imageUrl: String!\n", "  customerIdNEQ: ID\n", "  customerIdNotIn: [ID!]\n"},
+	} {
+		sdl, err := RenderConfig(m, Config{Names: cfg})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(sdl, want) {
+				t.Errorf("names=%s lacks %q:\n%s", cfg, want, sdl)
+			}
+		}
+		if strings.Contains(sdl, "customerIDGT") || strings.Contains(sdl, "customerIdGT") {
+			t.Errorf("names=%s: a foreign key has an order predicate:\n%s", cfg, sdl)
+		}
+	}
+}
+
+// WhereOps() on a field named as a key gives its kind's predicates; under
+// idops=equality equality alone, with IsNil and NotNil when it is nullable.
+// Other strings keep theirs either way.
+func TestIDOps(t *testing.T) {
+	ref := &plugin.Field{Name: "reference_id", GoName: "ReferenceID", Type: "string", Annotations: ann(t, graphql.WhereOps())}
+	org := &plugin.Field{Name: "org_id", GoName: "OrgID", Type: "int64", Nullable: true, Annotations: ann(t, graphql.WhereOps())}
+	code := &plugin.Field{Name: "code", GoName: "Code", Type: "string", Annotations: ann(t, graphql.WhereOps())}
+	m := model(entity("Thing", ref, org, code))
+	sdl, err := RenderConfig(m, Config{IDOps: "equality"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"  customerId: ID!\n", "  imageUrl: String!\n", "  customerIdNEQ: ID\n", "  customerIdNotIn: [ID!]\n"} {
+	for _, want := range []string{"  referenceIDNotIn: [String!]\n", "  orgIDIsNil: Boolean\n", "  codeContains: String\n"} {
 		if !strings.Contains(sdl, want) {
 			t.Errorf("lacks %q:\n%s", want, sdl)
+		}
+	}
+	for _, bad := range []string{"referenceIDContains", "orgIDGT", "idGT"} {
+		if strings.Contains(sdl, bad) {
+			t.Errorf("has %s:\n%s", bad, sdl)
 		}
 	}
 	plain, err := Render(m)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(plain, "customerId") || !strings.Contains(plain, "customerIDNEQ: ID") || !strings.Contains(plain, "imageURL") {
-		t.Errorf("velox's names changed:\n%s", plain)
-	}
-}
-
-// Under Config.Veloxe, WhereOps() on a field named as a key gives equality
-// alone, as veloxe's defaults did; other strings keep theirs.
-func TestVeloxeIDDefaults(t *testing.T) {
-	ref := &plugin.Field{Name: "reference_id", GoName: "ReferenceID", Type: "string", Annotations: ann(t, graphql.WhereOps())}
-	org := &plugin.Field{Name: "org_id", GoName: "OrgID", Type: "int64", Nullable: true, Annotations: ann(t, graphql.WhereOps())}
-	code := &plugin.Field{Name: "code", GoName: "Code", Type: "string", Annotations: ann(t, graphql.WhereOps())}
-	m := model(entity("Thing", ref, org, code))
-	sdl, err := RenderConfig(m, Config{Veloxe: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"  referenceIdNotIn: [String!]\n", "  orgIdIsNil: Boolean\n", "  codeContains: String\n"} {
-		if !strings.Contains(sdl, want) {
-			t.Errorf("lacks %q:\n%s", want, sdl)
+	for _, want := range []string{"referenceIDContains", "orgIDGT", "idGT", "orgIDIsNil"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("the default lacks %s:\n%s", want, plain)
 		}
-	}
-	for _, bad := range []string{"referenceIdContains", "orgIdGT"} {
-		if strings.Contains(sdl, bad) {
-			t.Errorf("has %s:\n%s", bad, sdl)
-		}
-	}
-	if plain, err := Render(m); err != nil || !strings.Contains(plain, "referenceIDContains") {
-		t.Errorf("velox's defaults changed: %v\n%s", err, plain)
 	}
 }
 
 // An Other field compares in SQL: WhereOps gives it equality and order,
-// typed with its graphql.Type, and IsNil and NotNil when it is nullable.
+// typed with its graphql.Type, and IsNil and NotNil when it is nullable, as
+// ent's predicates do.
 func TestOtherPredicates(t *testing.T) {
 	amt := &plugin.Field{Name: "conversion_value", GoName: "ConversionValue", Type: "other", ElemType: "decimal.Decimal", PkgPath: "github.com/shopspring/decimal", Nullable: true,
 		Annotations: ann(t, graphql.Type("Decimal"), graphql.WhereOps(graphql.OpsComparison))}
 	m := model(entity("Participant", amt))
 	s, sdl := load(t, m, "scalar Decimal\n")
-	if typeOf(s, "Participant", "conversionValue") != "Decimal" || strings.Contains(sdl, "IsNil") {
+	if typeOf(s, "Participant", "conversionValue") != "Decimal" {
 		t.Errorf("type:\n%s", sdl)
 	}
-	// veloxe's: a nullable field's predicates test for NULL too.
-	sdl, err := RenderConfig(m, Config{Veloxe: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"  conversionValueGT: Decimal\n", "  conversionValueLTE: Decimal\n", "  conversionValueIsNil: Boolean\n"} {
+	for _, want := range []string{"  conversionValueGT: Decimal\n", "  conversionValueLTE: Decimal\n", "  conversionValueIsNil: Boolean\n", "  conversionValueNotNil: Boolean\n"} {
 		if !strings.Contains(sdl, want) {
 			t.Errorf("lacks %q:\n%s", want, sdl)
 		}
 	}
 }
 
-// Under Config.Veloxe, a foreign key whose edge GraphQL leaves out is an ID
-// in the type still, with its predicates named from it, as veloxe had them.
-func TestVeloxeSkippedEdgeKey(t *testing.T) {
+// A foreign key whose edge GraphQL leaves out is an ID in the type still,
+// with its predicates named from it.
+func TestSkippedEdgeKey(t *testing.T) {
 	fk := &plugin.Field{Name: "tax_code_id", GoName: "TaxCodeID", Type: "int64", ElemType: "int64", Nullable: true, Annotations: ann(t, graphql.WhereOps())}
 	asset := entity("Asset", fk)
 	ed := edge("tax_code", plugin.M2O, "TaxCode")
@@ -190,19 +193,43 @@ func TestVeloxeSkippedEdgeKey(t *testing.T) {
 	ed.Annotations = ann(t, graphql.Skip(graphql.SkipAll))
 	asset.Edges = []*plugin.Edge{ed}
 	m := model(asset, entity("TaxCode"))
-	sdl, err := RenderConfig(m, Config{Veloxe: true})
+	sdl, err := Render(m)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"  taxCodeId: ID\n", "  taxCodeIdNEQ: ID\n", "  taxCodeIdNotIn: [ID!]\n", "  taxCodeIdIsNil: Boolean\n"} {
+	for _, want := range []string{"  taxCodeID: ID\n", "  taxCodeIDNEQ: ID\n", "  taxCodeIDNotIn: [ID!]\n", "  taxCodeIDIsNil: Boolean\n"} {
 		if !strings.Contains(sdl, want) {
 			t.Errorf("lacks %q:\n%s", want, sdl)
 		}
 	}
-	if strings.Contains(sdl, "taxCode:") || strings.Contains(sdl, "taxCodeIdGT") {
+	if strings.Contains(sdl, "taxCode:") || strings.Contains(sdl, "taxCodeIDGT") {
 		t.Errorf("the edge or an order predicate is shown:\n%s", sdl)
 	}
-	if _, err := Render(m); err == nil || !strings.Contains(err.Error(), "whose edge is not in GraphQL") {
-		t.Errorf("velox's refusal: %v", err)
+}
+
+// Each string option refuses a value it does not know, naming the option
+// and its values; the empty value is the default.
+func TestCheckOptions(t *testing.T) {
+	m := model(entity("Thing", field("name", "string")))
+	for _, key := range []string{"names", "filters", "node", "idops", "orderfields", "queryfields", "optional", "requirededges", "inputkeys", "jsontypes"} {
+		var cfg Config
+		if !cfg.SetOption(key, "bogus") {
+			t.Fatalf("SetOption(%q) does not know it", key)
+		}
+		if _, err := RenderConfig(m, cfg); err == nil || !strings.Contains(err.Error(), key+"=bogus: "+key+" is ") {
+			t.Errorf("%s=bogus: %v", key, err)
+		}
+	}
+	var cfg Config
+	if cfg.SetOption("compat", "x") || cfg.SetOption("where", "whitelist") {
+		t.Error("SetOption takes an option that is not a string option")
+	}
+	for _, v := range []string{"kind", "equality"} {
+		if _, err := RenderConfig(m, Config{IDOps: v}); err != nil {
+			t.Errorf("idops=%s: %v", v, err)
+		}
+	}
+	if got := strings.Join(OptionHelp(), ", "); !strings.Contains(got, "idops=kind or idops=equality") || !strings.Contains(got, "names=go or names=schema") {
+		t.Errorf("OptionHelp: %s", got)
 	}
 }

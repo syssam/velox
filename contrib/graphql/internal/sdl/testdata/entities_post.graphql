@@ -53,6 +53,7 @@ type Query {
 
 type Post {
   id: ID!
+  authorID: ID!
   title: String!
   slug: String!
   status: PostStatus!
@@ -76,7 +77,7 @@ enum PostStatus {
 """A connection to a list of Post."""
 type PostConnection {
   """The edges of this page."""
-  edges: [PostEdge!]!
+  edges: [PostEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -86,7 +87,7 @@ type PostConnection {
 """An edge in a connection to a list of Post."""
 type PostEdge {
   """The Post at the end of the edge."""
-  node: Post!
+  node: Post
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -120,10 +121,10 @@ input PostWhereInput {
   idGTE: ID
   idLT: ID
   idLTE: ID
-  writerID: ID
-  writerIDNEQ: ID
-  writerIDIn: [ID!]
-  writerIDNotIn: [ID!]
+  authorID: ID
+  authorIDNEQ: ID
+  authorIDIn: [ID!]
+  authorIDNotIn: [ID!]
   title: String
   titleNEQ: String
   titleIn: [String!]
@@ -166,7 +167,7 @@ input CreatePostInput {
   """Who last edited the post; the update default fills it."""
   editedBy: String!
   """The ID of the Account the edge author leads to."""
-  writerID: ID!
+  authorID: ID!
   """The IDs of the Post nodes the edge related leads to."""
   relatedIDs: [ID!]
   """The IDs of the Post nodes the edge related_by leads to."""
@@ -186,7 +187,7 @@ input UpdatePostInput {
   """Sets the field rating to NULL."""
   clearRating: Boolean
   """The ID of the Account the edge author leads to."""
-  writerID: ID
+  authorID: ID
   """The IDs of Post nodes to add to the edge related."""
   addRelatedIDs: [ID!]
   """The IDs of Post nodes to remove from the edge related; an ID the edge does not lead to is ignored."""
@@ -223,6 +224,6 @@ input AccountWhereInput {
   displayNameContains: String
   displayNameHasPrefix: String
   displayNameHasSuffix: String
-  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
-  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPosts: Boolean
+  hasPostsWith: [PostWhereInput!]
 }

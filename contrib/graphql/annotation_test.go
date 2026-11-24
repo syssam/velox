@@ -440,9 +440,8 @@ func TestDirectivesCopyArgsOneLevel(t *testing.T) {
 	}
 }
 
-// RelayConnection is accepted and recorded, for compat=veloxe alone
-// (connections are otherwise always written), QueryField takes at most one name, and OpsNone offers no
-// predicate.
+// RelayConnection is accepted and recorded, QueryField takes at most one
+// name, and OpsNone offers no predicate.
 func TestPortSpellings(t *testing.T) {
 	if got := graphql.RelayConnection(); !reflect.DeepEqual(got, graphql.Annotation{RelayConnection: true}) {
 		t.Errorf("RelayConnection: %+v", got)

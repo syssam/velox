@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,7 +76,8 @@ func TestResolversRefused(t *testing.T) {
 }
 
 // TestResolversPlacement: Resolvers is on a schema whose type is shown; a
-// field, an edge, a skipped schema and a join entity have no type to add to.
+// field, an edge and a join entity have no type to add to, and on a skipped
+// schema it has no effect, a warning.
 func TestResolversPlacement(t *testing.T) {
 	r := graphql.Resolvers(graphql.Map("x", "Int"))
 
@@ -85,7 +87,9 @@ func TestResolversPlacement(t *testing.T) {
 
 	skipped := entity("Asset", field("name", "string"))
 	skipped.Annotations = ann(t, graphql.Skip(), r)
-	renderErr(t, model(entity("Other", field("n", "string")), skipped), "graphql.Resolvers on a schema whose type graphql.Skip leaves out")
+	if got := warningsOf(t, model(entity("Other", field("n", "string")), skipped), Config{}); !slices.Equal(got, []string{"schema Asset: graphql.Resolvers has no effect on a schema whose type graphql.Skip leaves out"}) {
+		t.Errorf("skipped: %q", got)
+	}
 
 	join := entity("Link", field("n", "string"))
 	join.Join = true

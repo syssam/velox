@@ -18,10 +18,12 @@ type Surface struct {
 	// Warnings say which M2M edges have a create or update input without
 	// the field that adds links, as their edge schema has a column Add
 	// cannot fill: "User.following: no add inputs; Follow.Note has no
-	// default", once per edge. Under compat=veloxe they say too which
-	// field's order was dropped, as veloxe ordered no field of its type:
-	// "Thing.amount: graphql.OrderField("AMOUNT") is dropped: compat=veloxe
-	// orders no field of type other (decimal.Decimal), as veloxe did not".
+	// default", once per edge. They say too which annotation has no
+	// effect, and is dropped: "User.secret: graphql.WhereOps has no effect
+	// on a sensitive field: a filter would reveal its values"; and, under
+	// orderfields=all, which field's order: "Thing.amount:
+	// graphql.OrderField("AMOUNT") is dropped: orderfields=all orders no
+	// field of type other (decimal.Decimal)".
 	Warnings []string
 }
 
@@ -295,8 +297,8 @@ func (g *graph) surface() *Surface {
 // otherwise name with its first letter in upper case, as for a name
 // graphql.FieldName gives.
 func goOf(name, goName string) string {
-	// Ignoring case, so that veloxe's customerId is CustomerID, as gqlgen
-	// binds it.
+	// Ignoring case, so that names=schema's customerId is CustomerID, as
+	// gqlgen binds it.
 	if strings.EqualFold(camel(goName), name) {
 		return goName
 	}
@@ -439,7 +441,7 @@ func (g *graph) goValue(f *plugin.Field, a graphql.Annotation) goValue {
 	}
 	if a.Type != "" && !v.own && f.ElemType != "" {
 		// graphql.Type: the application's own type, which its models bind
-		// to the field's Go type, as veloxe had it.
+		// to the field's Go type.
 		switch {
 		case f.PkgPath != "":
 			v = goValue{typ: f.ElemType, pkg: f.PkgPath, own: true}

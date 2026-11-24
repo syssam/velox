@@ -36,7 +36,7 @@ enum UserRole {
 """A connection to a list of Account."""
 type AccountConnection {
   """The edges of this page."""
-  edges: [AccountEdge!]!
+  edges: [AccountEdge!]
   """Information about this page."""
   pageInfo: PageInfo!
   """The number of nodes in the whole connection, not only on this page."""
@@ -46,7 +46,7 @@ type AccountConnection {
 """An edge in a connection to a list of Account."""
 type AccountEdge {
   """The Account at the end of the edge."""
-  node: Account!
+  node: Account
   """The cursor of this edge, for paging."""
   cursor: Cursor!
 }
@@ -71,8 +71,8 @@ input AccountWhereInput {
   displayNameContains: String
   displayNameHasPrefix: String
   displayNameHasSuffix: String
-  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
-  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPosts: Boolean
+  hasPostsWith: [PostWhereInput!]
 }
 
 """The input that creates an Account."""
@@ -83,7 +83,7 @@ input CreateAccountInput {
   displayName: String!
   email: String!
   role: UserRole
-  nickname: String @deprecated(reason: "Use \"displayName\".")
+  nickname: String
   bio: String
   age: Int
   passwordHash: String!

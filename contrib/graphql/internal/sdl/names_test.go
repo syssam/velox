@@ -21,10 +21,10 @@ func namesModel(t *testing.T) *plugin.Model {
 	return model(order, entity("Customer"))
 }
 
-// names=schema names a field by its schema name in plain mode, and keeps
-// velox's design otherwise: the foreign key stays out of the type, and its
-// predicates and input are named by the edge, customerId. Under
-// compat=veloxe, names=go names by the Go names and keeps veloxe's surface.
+// names=schema names a field by its schema name, imageUrl and customerId,
+// and names=go, the default, by its Go name, imageURL and customerID. The
+// foreign key is in the type, and its predicates and input are named as
+// the type names it.
 func TestNamesOption(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -34,7 +34,7 @@ func TestNamesOption(t *testing.T) {
 		{"names=schema", Config{Names: "schema"}, map[[2]string]string{
 			{"SalesOrder", "imageUrl"}:               "String!",
 			{"SalesOrder", "imageURL"}:               "",
-			{"SalesOrder", "customerId"}:             "",
+			{"SalesOrder", "customerId"}:             "ID!",
 			{"SalesOrder", "customer"}:               "Customer",
 			{"SalesOrderWhereInput", "imageUrl"}:     "String",
 			{"SalesOrderWhereInput", "imageUrlNEQ"}:  "String",
@@ -45,23 +45,13 @@ func TestNamesOption(t *testing.T) {
 			{"CreateSalesOrderInput", "customerId"}:  "ID!",
 		}},
 		{"names=go", Config{Names: "go"}, map[[2]string]string{
-			{"SalesOrder", "imageURL"}:               "String!",
-			{"SalesOrderWhereInput", "customerIDIn"}: "[ID!]",
-			{"CreateSalesOrderInput", "customerID"}:  "ID!",
-		}},
-		{"compat=veloxe,names=go", Config{Veloxe: true, Names: "go"}, map[[2]string]string{
 			{"SalesOrder", "imageURL"}:                "String!",
 			{"SalesOrder", "customerID"}:              "ID!",
 			{"SalesOrder", "customerId"}:              "",
 			{"SalesOrderWhereInput", "customerIDNEQ"}: "ID",
+			{"SalesOrderWhereInput", "customerIDIn"}:  "[ID!]",
 			{"SalesOrderWhereInput", "customerIdNEQ"}: "",
 			{"CreateSalesOrderInput", "customerID"}:   "ID!",
-		}},
-		{"compat=veloxe", Config{Veloxe: true}, map[[2]string]string{
-			{"SalesOrder", "imageUrl"}:                "String!",
-			{"SalesOrder", "customerId"}:              "ID!",
-			{"SalesOrderWhereInput", "customerIdNEQ"}: "ID",
-			{"CreateSalesOrderInput", "customerId"}:   "ID!",
 		}},
 	} {
 		sdl, err := RenderConfig(namesModel(t), c.cfg)
@@ -83,23 +73,22 @@ func TestNamesOption(t *testing.T) {
 		want string
 	}{
 		{Config{Names: "snake"}, "names=snake: names is go"},
-		{Config{Veloxe: true, Filters: "loose"}, "filters=loose: filters is strict"},
+		{Config{Filters: "loose"}, "filters=loose: filters is strict"},
 	} {
 		if _, err := RenderConfig(namesModel(t), c.cfg); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%+v: %v, want an error with %q", c.cfg, err, c.want)
 		}
 	}
 	for _, c := range []struct {
-		cfg              Config
-		schema, veloxeFs bool
+		cfg             Config
+		schema, lenient bool
 	}{
 		{Config{}, false, false},
-		{Config{Veloxe: true}, true, true},
-		{Config{Veloxe: true, Names: "go", Filters: "strict"}, false, false},
-		{Config{Names: "schema", Filters: "veloxe"}, true, true},
+		{Config{Names: "go", Filters: "strict"}, false, false},
+		{Config{Names: "schema", Filters: "lenient"}, true, true},
 	} {
-		if c.cfg.SchemaNames() != c.schema || c.cfg.VeloxeFilters() != c.veloxeFs {
-			t.Errorf("%+v: SchemaNames %v, VeloxeFilters %v; want %v, %v", c.cfg, c.cfg.SchemaNames(), c.cfg.VeloxeFilters(), c.schema, c.veloxeFs)
+		if c.cfg.SchemaNames() != c.schema || c.cfg.LenientFilters() != c.lenient {
+			t.Errorf("%+v: SchemaNames %v, LenientFilters %v; want %v, %v", c.cfg, c.cfg.SchemaNames(), c.cfg.LenientFilters(), c.schema, c.lenient)
 		}
 	}
 }
