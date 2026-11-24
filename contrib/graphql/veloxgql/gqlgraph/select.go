@@ -17,9 +17,9 @@ func selected(ctx context.Context, typ string) (fields []string, ok bool) {
 }
 
 // needSource fails with veloxgql.ErrNoSelectionSource, and ErrNoDB, when ctx
-// holds no adapter's state and no veloxgql.Service's: a read of generated
-// code outside an operation would read every column and batch nothing, so
-// it fails unless the caller asked for that.
+// holds no adapter's state and no veloxgql.Service's: a connection of a
+// query outside an operation would read every column, so it fails unless
+// the caller asked for that. An edge reads on its row's DB without one.
 func needSource(ctx context.Context) error {
 	if gqlcore.Source(ctx) != nil {
 		return nil

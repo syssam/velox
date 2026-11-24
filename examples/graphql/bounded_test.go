@@ -324,7 +324,7 @@ func TestIntrospectionOffShowsNothing(t *testing.T) {
 	if err := seed(t.Context(), db); err != nil {
 		t.Fatal(err)
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}, Directives: graph.DirectiveRoot{Admin: admin}}))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}, Directives: graph.DirectiveRoot{Admin: admin}}))
 	h := gqlgenx.Setup(srv, db)
 	srv.AddTransport(transport.POST{})
 	ts := httptest.NewServer(orgFromHeader(roleFromHeader(h)))

@@ -20,9 +20,14 @@ func DBFromContext(ctx context.Context) (*velox.DB, error) {
 	return db, nil
 }
 
-// DB returns the DB an adapter put in ctx, for a resolver:
+// DB returns the DB an adapter put in ctx: in a gqlgen mutation, the
+// mutation's transaction, which a mutation's resolver writes on:
 //
-//	return veloxgql.DB(ctx).Query[veloxgen.Post]().Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
+//	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+//
+// A query's resolver reads on the DB its Resolver holds (r.DB), and code
+// outside a resolver on the DB it was given; the rows either returns carry
+// that DB, and their edges read on it.
 //
 // It panics where DBFromContext fails, with DBFromContext's error: only a
 // schema served without an adapter has no DB, a mistake in the program,

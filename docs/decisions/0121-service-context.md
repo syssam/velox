@@ -1,6 +1,8 @@
 # 121. A service asks for reads outside a request
 
-Status: accepted, 2026-11-23. Amends 0105.
+Status: accepted, 2026-11-23. Amends 0105. Amended by 0171: an edge of a
+row a statement read reads on that row's DB, with or without `Service`;
+only a connection of a query still needs it.
 
 ## Context
 

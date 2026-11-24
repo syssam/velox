@@ -26,7 +26,7 @@ import (
 //
 // A batch is keyed by its group, the edge's field occurrence (so two aliases
 // are two batches, and so are two selections of one field), the edge (its name, the relation and the
-// target type), the DB veloxgql.DBFromContext reads, EdgeList's MaxList, the
+// target type), the edge's DB (its row's, Edge.db), EdgeList's MaxList, the
 // callers' row scope (velox.RowScopeFromContext: the scope values, the WithoutPolicy
 // reason and the WithShard shard, of the context each passes
 // to the edge function), the read of the target that velox would send under
@@ -80,7 +80,7 @@ func (e Edge) fieldName() string {
 }
 
 // paginate is Paginate of the edge: a connection of every node of c's type,
-// on the DB veloxgql.DBFromContext reads from ctx, that the edge leads to.
+// on the edge's DB (Edge.db), that the edge leads to.
 // When the owner's row is in a group and ctx is the edge's field, its page
 // is read with the pages of every row of the group whose arguments are the
 // same (edgeArgs), in one statement (TableQuery.LoadEach, of the page size
@@ -90,10 +90,7 @@ func (e Edge) fieldName() string {
 // become a group. Otherwise its queries are filtered by the relation of the
 // row.
 func (e Edge) paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error) {
-	if err := needSource(ctx); err != nil {
-		return nil, err
-	}
-	db, err := veloxgql.DBFromContext(ctx)
+	db, err := e.db(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +112,14 @@ type edgeArgs struct {
 }
 
 // EdgeOne returns the node of the to-one edge e as a *T of target's entity
-// T in an any, or nil. It reads, on the DB veloxgql.DBFromContext reads from
-// ctx, only the columns the field's selection of target's type needs
-// (selected, narrow, target.columns): with the other rows of the owner's
+// T in an any, or nil. It reads, on the edge's DB (Edge.db), only the
+// columns the field's selection of target's type needs (selected, narrow,
+// target.columns): with the other rows of the owner's
 // group in one statement (LoadEach, of one per owner) when ctx is the edge's
 // field, or alone. The node read alone is a group of its own, and so are the
 // nodes of a batch: their edges batch.
 func EdgeOne(ctx context.Context, target *Type, e Edge) (any, error) {
-	q, err := edgeQuery(ctx, target)
+	q, err := edgeQuery(ctx, target, e)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +139,7 @@ func EdgeOne(ctx context.Context, target *Type, e Edge) (any, error) {
 // edge's graphql.MaxList, when that is lower and not 0. Read alone, the row's
 // nodes are one LoadEach of it, a group of their own.
 func EdgeList(ctx context.Context, target *Type, e Edge, maxList int) (any, error) {
-	q, err := edgeQuery(ctx, target)
+	q, err := edgeQuery(ctx, target, e)
 	if err != nil {
 		return nil, err
 	}
@@ -153,13 +150,25 @@ func EdgeList(ctx context.Context, target *Type, e Edge, maxList int) (any, erro
 	return nodesOf(target, ps), nil
 }
 
-// edgeQuery is the query of target's rows that an edge reads, on the DB in
-// ctx, reading only the columns the selection of the field in ctx needs.
-func edgeQuery(ctx context.Context, target *Type) (untyped.TableQuery, error) {
-	if err := needSource(ctx); err != nil {
-		return untyped.TableQuery{}, err
+// db is the DB the edge e reads on: the one its row was read or written
+// through (untyped.SourceDB), which is never one WithoutPolicy, and, for a
+// row no statement made, the DB veloxgql.DBFromContext reads from ctx.
+func (e Edge) db(ctx context.Context) (*velox.DB, error) {
+	if db := untyped.SourceDB(e.owner.table(), e.x); db != nil {
+		return db, nil
 	}
 	db, err := veloxgql.DBFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("veloxgql: %s: %w, and %w", e.fieldName(), velox.ErrNoSource, err)
+	}
+	return db, nil
+}
+
+// edgeQuery is the query of target's rows that the edge e reads, on its DB
+// (Edge.db), reading only the columns the selection of the field in ctx
+// needs.
+func edgeQuery(ctx context.Context, target *Type, e Edge) (untyped.TableQuery, error) {
+	db, err := e.db(ctx)
 	if err != nil {
 		return untyped.TableQuery{}, err
 	}
@@ -293,7 +302,7 @@ type batchKey struct {
 	typ, field string            // the edge's GraphQL field: "Post" and "likes"
 	rel        int               // the relation's index on the owner
 	target     *velox.EntityInfo // the relation's target
-	db         *velox.DB         // veloxgql.DBFromContext's
+	db         *velox.DB         // the edge's (Edge.db): its row's
 	most       int               // EdgeList's MaxList; 0 for the others
 	scope      velox.RowScope
 	app        any // gqlgenx.WithBatchScope's value
@@ -324,7 +333,7 @@ func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args a
 	if !ok {
 		return nil, nil, 0
 	}
-	db, _ := veloxgql.DBFromContext(ctx)
+	db, _ := e.db(ctx)
 	if db == nil {
 		return nil, nil, 0
 	}

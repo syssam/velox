@@ -77,7 +77,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
 
    ```go
    func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.UserOrder, where *veloxgen.UserWhereInput) (*veloxgen.UserConnection, error) {
-   	return veloxgql.DB(ctx).Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
+   	return r.DB.Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
    }
 
    func (r *mutationResolver) CreatePost(ctx context.Context, input veloxgen.CreatePostInput) (*veloxgen.Post, error) {
@@ -109,7 +109,9 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    I/O; the resolver writes them. The insert takes the row with what the
    client must not choose already on it (the author). It trusts that row's
    own fields, foreign keys included, so `Author` checks first that the
-   viewer is a user. `veloxgql.DB(ctx)` is the request's DB, which the
+   viewer is a user. A query's resolver reads on `r.DB`, the DB `main.go`
+   puts in `graph.Resolver`; the rows it returns carry it, and their edges
+   read on it. A mutation's writes on `veloxgql.DB(ctx)`, which the
    extension puts there, in the mutation's transaction. The update's
    `One` writes the one row and returns it as written, `velox.ErrNotFound`
    when it names none the request may change, which the resolver shows as
@@ -394,7 +396,7 @@ pages every post:
 
 ```go
 func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*veloxgen.PostOrder, where *veloxgen.PostWhereInput) (*veloxgen.PostConnection, error) {
-	return veloxgql.DB(ctx).Query[veloxgen.Post]().Where(veloxgen.Posts.Status.EQ(veloxgen.PostStatusPublished)).Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
+	return r.DB.Query[veloxgen.Post]().Where(veloxgen.Posts.Status.EQ(veloxgen.PostStatusPublished)).Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))
 }
 ```
 

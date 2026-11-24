@@ -67,6 +67,9 @@ func Query(q untyped.TableQuery) Source { return query{q} }
 type query struct{ q untyped.TableQuery }
 
 func (s query) paginate(ctx context.Context, c *Type, args Args, order []Order) (*Connection, error) {
+	if err := needSource(ctx); err != nil {
+		return nil, err
+	}
 	return paginate(ctx, s.q, c, args, order)
 }
 
@@ -540,9 +543,6 @@ type Connection struct {
 // one context for all its owners, as Edge's paginate says: a value given
 // per owner separates the batch only through what the batch's key holds.
 func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection, error) {
-	if err := needSource(ctx); err != nil {
-		return nil, err
-	}
 	return from.paginate(ctx, c, args, args.Order)
 }
 

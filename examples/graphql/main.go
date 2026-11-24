@@ -108,7 +108,7 @@ func serve(ctx context.Context, ln net.Listener) error {
 // function admin.
 func server(db *velox.DB, opts ...gqlgenx.Option) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{
-		Resolvers:  &graph.Resolver{},
+		Resolvers:  &graph.Resolver{DB: db},
 		Directives: graph.DirectiveRoot{Admin: admin},
 	}))
 	h := gqlgenx.Setup(srv, db, opts...)

@@ -57,9 +57,10 @@ func bareExecutor(t *testing.T, db *velox.DB, opts ...graphql.ExecutorOption) *g
 	return newExecutor(s, opts...)
 }
 
-// TestNoWith: under graphql-go without graphqlgo.With, every gqlgraph read
-// fails with veloxgql.ErrNoSelectionSource, and ErrNoDB, and sends no
-// statement; with it, the same reads succeed.
+// TestNoWith: under graphql-go without graphqlgo.With, a connection of a
+// query fails with veloxgql.ErrNoSelectionSource, and ErrNoDB, and an edge
+// of a row built by hand, which has no DB of its own, with velox.ErrNoSource
+// and ErrNoDB; neither sends a statement. With it, the same reads succeed.
 func TestNoWith(t *testing.T) {
 	db, log := modelDB(t)
 	ctx := context.Background()
@@ -69,8 +70,12 @@ func TestNoWith(t *testing.T) {
 		t.Fatalf("errors %v, want one for each read", resp.Errors)
 	}
 	for _, e := range resp.Errors {
-		if !errors.Is(e.Err, veloxgql.ErrNoSelectionSource) || !errors.Is(e.Err, veloxgql.ErrNoDB) || !strings.Contains(e.Message, "graphqlgo.With") {
-			t.Errorf("%v at %v, want ErrNoSelectionSource and ErrNoDB, naming graphqlgo.With", e.Err, e.Path)
+		want := veloxgql.ErrNoSelectionSource
+		if strings.Contains(e.Message, "Post.author") {
+			want = velox.ErrNoSource
+		}
+		if !errors.Is(e.Err, want) || !errors.Is(e.Err, veloxgql.ErrNoDB) || !strings.Contains(e.Message, "graphqlgo.With") {
+			t.Errorf("%v at %v, want %v and ErrNoDB, naming graphqlgo.With", e.Err, e.Path, want)
 		}
 	}
 	if st, _ := log.take(); len(st) != 0 {

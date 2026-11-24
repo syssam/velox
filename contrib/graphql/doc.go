@@ -299,11 +299,17 @@
 // (see gqlgenx.Extension): do not defer fields of a mutation.
 //
 // The application writes the root query's resolvers: for each QueryField a
-// query's Paginate on the request's DB, veloxgql.DB(ctx):
+// query's Paginate on the DB it serves, which its Resolver holds as entgql's
+// holds the client:
 //
 //	func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *veloxgen.UserOrder, where *veloxgen.UserWhereInput) (*veloxgen.UserConnection, error) {
-//		return veloxgql.DB(ctx).Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
+//		return r.DB.Query[veloxgen.User]().Paginate(ctx, after, first, before, last, veloxgen.WithUserOrder(orderBy), veloxgen.WithUserFilter(where))
 //	}
+//
+// Each node carries the DB that read it, and its edges read on that DB:
+// batched with the page's other nodes in a request, alone outside one. A
+// mutation's resolver writes on veloxgql.DB(ctx), the mutation's
+// transaction, which the extension puts in the request context.
 //
 // The query may hold the application's own filters and With loads. It must
 // not be ordered, and must select the key and the order columns. The example

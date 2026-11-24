@@ -16,10 +16,14 @@ import (
 	"github.com/syssam/velox/examples/graphql/veloxgen"
 )
 
-// Resolver is the root resolver. It holds nothing: the generated code reads
-// the *velox.DB from the request context, where gqlgenx.NewExtension puts
-// it.
-type Resolver struct{}
+// Resolver is the root resolver. Its DB is the one the server serves, which
+// the root query's resolvers read on: the rows they return carry it, and
+// their edges read on it. A mutation's resolver writes on veloxgql.DB(ctx)
+// instead, the mutation's transaction, which gqlgenx.NewExtension puts in
+// the request context.
+type Resolver struct {
+	DB *velox.DB
+}
 
 // viewerKey is the context key of the request's viewer.
 type viewerKey struct{}

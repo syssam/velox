@@ -450,7 +450,9 @@ a table rebuild on SQLite.
 | a helper returning a `nil` predicate for "no condition", checked with `p == nil` | the zero `velox.Predicate{}` or `Pred[E]{}`, checked with `velox.IsZero(p)`: a `Pred` holds a slice, so it has no `nil` and no `==`. A zero `Pred` that reaches a query fails the statement |
 | a retry and a timeout in a helper around every transaction | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
 | `Select(f).Strings(ctx)`, `Ints(ctx)` | `q.Values(ctx, T.F)` |
-| `e.Unwrap()` | none: an entity is a plain struct, with no client in it |
+| `e.QueryPets()` | `e.QueryPets()`, a `velox.Query[Pet]` on the DB that read or wrote `e`, read only: a write names its DB. An entity built by hand fails with `velox.ErrNoSource` |
+| `cmp.Diff(want, got)` of two entities | `veloxtest.Equal(want, got)`, or go-cmp with `cmpopts.IgnoreUnexported`: an entity's unexported field holds its DB |
+| `e.Unwrap()` | none: an entity read in a transaction reads its edges on the transaction's parent once it ends, and one read `WithoutPolicy` reads them under the policy ([guide](guide.md#reading-an-edge-from-an-entity-queryx), [ADR 0171](decisions/0171-entities-carry-their-source.md)) |
 | a `softdelete` mixin of your own, with `deleted_by_*` | `softdelete.Mixin{Assign: …}`, and `Reads: softdelete.Unfiltered` for unfiltered reads ([guide](guide.md#soft-delete)) |
 | `entgql.Cursor` | `veloxgql.Cursor{Type, Terms, Key}`, bound to a type and an order |
 | `entgql.PageInfo` | `veloxgql.PageInfo` |
@@ -721,8 +723,10 @@ replacement.
   calls `client.Todo.Query().Paginate(ctx, after, first, before, last,
   ent.WithTodoOrder(orderBy), ent.WithTodoFilter(where.Filter))`, velox's
   calls `db.Query[veloxgen.Todo]().Paginate(ctx, after, first, before, last,
-  veloxgen.WithTodoOrder(orderBy), veloxgen.WithTodoFilter(where))`, with `db` from
-  `veloxgql.DB(ctx)`, as entgql's `ent.FromContext(ctx)`. The filter
+  veloxgen.WithTodoOrder(orderBy), veloxgen.WithTodoFilter(where))`, with `db`
+  the resolver's `r.DB`, as entgql's `r.client`. A mutation's resolver
+  writes on `veloxgql.DB(ctx)`, the mutation's transaction, as entgql's
+  `ent.FromContext(ctx)`. The filter
   option takes the where input itself. `Paginate` is generic and calls
   the entity's generated `PaginateQuery`, so it does not compile for an
   entity with no connection. The connection is lazy: it sends nothing

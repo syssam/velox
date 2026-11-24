@@ -47,6 +47,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `veloxtest.Equal` compares two values deeply, as `reflect.DeepEqual`
   does, but skips a `velox.Source`: an entity read from the database
   equals one built by hand.
+- A velox-graphql edge (a to-one or list edge, and an edge's connection)
+  reads on its row's DB, so it reads outside a request too: alone, every
+  column, one statement. In a request it batches as before (ADR 0171).
 
 - velox-gen's `-files dir` (`generate.Config.Files`) writes a plugin's
   files that are not Go, such as velox-graphql's SDL, below a directory of

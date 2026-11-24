@@ -54,8 +54,8 @@ func (r *renderer) nilKey(e *plugin.Entity, ed *plugin.Edge, tgt *plugin.Entity)
 
 // writeEdge writes the method of the edge field ed of t: the edge's node or
 // nodes, read through gqlgraph's batches (EdgeOne, EdgeList, or Paginate of
-// the edge in the target's paginate) on the DB veloxgql.DBFromContext reads
-// from ctx. Each gets the edge, x's relation, whose field t's gqlgraph.Type
+// the edge in the target's paginate) on the DB that read or wrote x, else
+// the one veloxgql.DBFromContext reads from ctx. Each gets the edge, x's relation, whose field t's gqlgraph.Type
 // names in its Edges; that field alone batches it, and a connection's batch
 // keeps its arguments. It never reads the relation's field: an
 // application's With may have loaded it filtered or limited.

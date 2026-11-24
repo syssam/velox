@@ -31,6 +31,7 @@ type owner struct {
 	Age      int64
 	Children velox.Many[child]
 	Tags     velox.Many[tag]
+	source   velox.Source
 }
 
 var owners = struct {
@@ -55,6 +56,7 @@ func ownerDescriptor() velox.Descriptor[owner] {
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[child]("children", 0, 1), velox.EdgeThrough[ownerTag, tag]("tags", 0, 0, 1, 0)},
 		FieldPtr:   func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
+		SourcePtr:  func(x *owner) *velox.Source { return &x.source },
 		EdgeFieldPtr: func(x *owner, i int) any {
 			switch i {
 			case 0:
@@ -74,6 +76,7 @@ type child struct {
 	EditorID *int64
 	Owner    velox.One[owner]
 	Editor   velox.One[owner]
+	source   velox.Source
 }
 
 var children = struct {
@@ -99,6 +102,7 @@ func childDescriptor() velox.Descriptor[child] {
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[owner]("owner", 1, 0), velox.EdgeTo[owner]("editor", 3, 0)},
 		FieldPtr:   func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
+		SourcePtr:  func(x *child) *velox.Source { return &x.source },
 		EdgeFieldPtr: func(x *child, i int) any {
 			switch i {
 			case 0:
