@@ -1,15 +1,16 @@
 package sdl
 
-// Node, under compat=veloxe: veloxe's generator declared Relay's interface
-// Node, made every type with an ID implement it and put node(id:) and
-// nodes(ids:) first in the root query; clients built against it ask for
-// them (nodes(ids:) with "... on Invoice" fragments). velox's own API has no
-// Node (ADR 0061). The Go side, Noder and IsNode, is gogen's noder_gql.go.
+// Node, under node=on, which compat=veloxe presets: Relay's interface Node,
+// which every type with an ID implements, and node(id:) and nodes(ids:)
+// first in the root query, as veloxe's generator declared them; clients
+// built against it ask for them (nodes(ids:) with "... on Invoice"
+// fragments). By default velox's API has no Node (ADRs 0061 and 0152). The
+// Go side, Noder and IsNode, is gogen's noder_gql.go.
 
-// hasNode reports whether the SDL declares Node: under Config.Veloxe, when
-// a type has an ID.
+// hasNode reports whether the SDL declares Node: under Config.NodeOn, when
+// a written type has an ID.
 func (g *graph) hasNode() bool {
-	if !g.cfg.Veloxe {
+	if !g.cfg.NodeOn() {
 		return false
 	}
 	for _, o := range g.objects {

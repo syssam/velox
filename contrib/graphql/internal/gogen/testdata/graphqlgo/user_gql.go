@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/untyped"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion28
+const _ = veloxgql.GeneratedCodeIsVersion29
 
 // Account is User under its GraphQL type name.
 type Account = User

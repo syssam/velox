@@ -21,6 +21,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- velox-graphql: `node=on|off` declares Relay's `Node`, with `node(id:)`
+  and `nodes(ids:)` and `noder_gql.go`, apart from `compat=veloxe`, which
+  presets `on`; `off` is the default, and `compat=veloxe,node=off` drops
+  Node. The generated `WithNodeType(fn)` and `WithFixedNodeType(name)`, as
+  entgql's, give `ResolveNode` and `ResolveNodes` an ID's type, so only
+  that type is read and no lookup statement runs (ADR 0152).
+
 - velox-graphql: `names=go|schema` names fields by their Go names
   (`imageURL`, the default) or by their schema names (`imageUrl`), for
   the type, predicates, inputs and `DecodeWhere` alike. `filters=strict|veloxe`
@@ -792,6 +799,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   predicates alone. `veloxgql.GeneratedCodeIsVersion27` is now
   `GeneratedCodeIsVersion28`: regenerate, since code generated under
   compat=veloxe before sets only `Veloxe` (ADR 0150).
+- `gqlgraph.ResolveNode` and `gqlgraph.ResolveNodes` take
+  `...gqlgraph.NodeOption`: `gqlgraph.WithNodeType[K]` and
+  `gqlgraph.WithFixedNodeType`. The generated `ResolveNode` and
+  `ResolveNodes` take `opts ...NodeOption`.
+  `veloxgql.GeneratedCodeIsVersion28` is now `GeneratedCodeIsVersion29`:
+  regenerate (ADR 0152).
 - Every `velox.Policy` function is given the DB its statement runs on, the
   transaction's inside `Tx`: `Read` and `Write` are
   `func(ctx, db *velox.DB) (velox.Predicate, error)`, `Insert`

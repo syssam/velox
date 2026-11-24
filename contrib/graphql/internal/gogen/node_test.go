@@ -32,8 +32,12 @@ func TestVeloxeNoder(t *testing.T) {
 		"func (*Post) IsNode() {}\n",
 		"func (*User) IsNode() {}\n",
 		"\t&categoryType,\n\t&groupType,\n\t&postType,\n}\n",
-		"func ResolveNode(ctx context.Context, db *velox.DB, id int64) (Noder, error) {\n",
-		"func ResolveNodes(ctx context.Context, db *velox.DB, ids []int64) ([]Noder, error) {\n",
+		"func ResolveNode(ctx context.Context, db *velox.DB, id int64, opts ...NodeOption) (Noder, error) {\n",
+		"\tn, err := gqlgraph.ResolveNode(ctx, db, nodeTypes, id, opts...)\n",
+		"func ResolveNodes(ctx context.Context, db *velox.DB, ids []int64, opts ...NodeOption) ([]Noder, error) {\n",
+		"type NodeOption = gqlgraph.NodeOption\n",
+		"func WithNodeType(fn func(ctx context.Context, id int64) (string, error)) NodeOption {\n\treturn gqlgraph.WithNodeType(fn)\n}\n",
+		"func WithFixedNodeType(name string) NodeOption { return gqlgraph.WithFixedNodeType(name) }\n",
 		"func NodeTypes() []*gqlgraph.Type { return slices.Clone(nodeTypes) }\n",
 	} {
 		if !strings.Contains(noder, want) {
@@ -51,6 +55,36 @@ func TestVeloxeNoder(t *testing.T) {
 	for name, src := range def {
 		if strings.Contains(src, "Veloxe") || strings.Contains(src, "IsNode") {
 			t.Errorf("velox's own %s holds Veloxe or IsNode", name)
+		}
+	}
+}
+
+// node=on writes noder_gql.go outside compat, and its type literals keep
+// velox's own semantics: no Veloxe. compat=veloxe,node=off writes no
+// noder_gql.go and keeps veloxe's Veloxe (ADR 0152).
+func TestNodeOption(t *testing.T) {
+	for _, c := range []struct {
+		cfg           sdl.Config
+		noder, veloxe bool
+	}{
+		{sdl.Config{Node: "on", Package: outPath}, true, false},
+		{sdl.Config{Veloxe: true, Node: "off", Package: outPath}, false, true},
+		{sdl.Config{Node: "off"}, false, false},
+	} {
+		files, err := RenderConfig(modeltest.Model(t), outPath, "gen", c.cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, f := range files {
+			got[f.Path] = f.Content
+		}
+		noder, ok := got["noder_gql.go"]
+		if ok != c.noder || ok && !strings.Contains(noder, "func WithFixedNodeType(name string) NodeOption") {
+			t.Errorf("%+v: noder_gql.go %v, want %v:\n%s", c.cfg, ok, c.noder, noder)
+		}
+		if v := strings.Contains(strings.Join(strings.Fields(got["post_gql.go"]), " "), " Veloxe: true,"); v != c.veloxe {
+			t.Errorf("%+v: post_gql.go's Veloxe %v, want %v", c.cfg, v, c.veloxe)
 		}
 	}
 }

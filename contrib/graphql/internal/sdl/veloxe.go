@@ -23,11 +23,9 @@ type Config struct {
 	//     alone by default on keys and Other fields, explicit WhereOps over
 	//     WhereInput's defaults, no directives on inputs, a named JSON type
 	//     by its Go name, and silence where veloxe ignored an annotation.
-	//   - the interface Node, which every type with an ID implements, and
-	//     node(id:) and nodes(ids:) first in the root query;
 	//   - a connection and a foreign key's predicates have veloxe's
 	//     semantics (gqlgraph.Type's Veloxe).
-	// Names and Filters default by it (ADR 0150).
+	// Names, Filters and Node default by it (ADRs 0150 and 0152).
 	Veloxe bool
 	// Names is how fields and edges are named (velox-graphql's option
 	// names=; ADR 0150): "go" by their Go names, so customer_id is
@@ -45,6 +43,14 @@ type Config struct {
 	// nothing, a nested empty input is an error and no width cap applies.
 	// "" is "veloxe" under Veloxe and "strict" otherwise (VeloxeFilters).
 	Filters string
+	// Node declares Relay's interface Node, which every type with an ID
+	// implements, and node(id:) and nodes(ids:) first in the root query,
+	// which is then written even with no QueryField; gogen then writes
+	// noder_gql.go (velox-graphql's option node=; ADRs 0088 and 0152): "on"
+	// or "off". An ID stays the entity's key (ADR 0061), so node(id:) needs
+	// IDs unique across types, as snowflakes and UUIDs are. "" is "on"
+	// under Veloxe and "off" otherwise (NodeOn).
+	Node string
 	// WhereWhitelist leaves out of the where inputs the predicates of every
 	// field but the key that lacks graphql.WhereInput (the old velox's
 	// EnableWhereInputs(true)), whatever its WhereOps (velox-graphql's option
@@ -63,7 +69,7 @@ type Config struct {
 	GraphQLGo bool
 
 	// Package is the generated package's import path, which binds Node to
-	// its Noder with @goModel under Veloxe, and every type under
+	// its Noder with @goModel under NodeOn, and every type under
 	// GraphQLGo; velox-graphql gives the request's.
 	Package string
 
@@ -106,13 +112,20 @@ func (c Config) VeloxeFilters() bool {
 	return c.Filters == "veloxe" || c.Filters == "" && c.Veloxe
 }
 
-// checkOptions refuses a Names or a Filters c does not know.
+// NodeOn reports whether c declares Node: Node is "on", or "" under Veloxe.
+func (c Config) NodeOn() bool {
+	return c.Node == "on" || c.Node == "" && c.Veloxe
+}
+
+// checkOptions refuses a Names, a Filters or a Node c does not know.
 func (c Config) checkOptions() error {
 	switch {
 	case c.Names != "" && c.Names != "go" && c.Names != "schema":
 		return fmt.Errorf("velox-graphql: names=%s: names is go, a field's Go name (imageURL), or schema, its schema name (imageUrl)", c.Names)
 	case c.Filters != "" && c.Filters != "strict" && c.Filters != "veloxe":
 		return fmt.Errorf("velox-graphql: filters=%s: filters is strict, where an empty In matches no node, or veloxe, where it adds nothing", c.Filters)
+	case c.Node != "" && c.Node != "on" && c.Node != "off":
+		return fmt.Errorf("velox-graphql: node=%s: node is on, which declares Relay's Node and node(id:), or off", c.Node)
 	}
 	return nil
 }

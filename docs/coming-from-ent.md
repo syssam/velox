@@ -527,15 +527,24 @@ replacement.
   until gqlgen resolves its fields. The query may carry the
   application's own filters; it must not be ordered. A where input's
   `Pred(ctx)` is entgql's `P()`: a `velox.Pred[T]` for any query.
-- **No Node, and an ID is the key.** velox-graphql writes no `Node`
-  interface, no `node` or `nodes` query and no `Noder`. An ID is the
+- **No Node by default, and an ID is the key.** entgql's `WithRelaySpec`,
+  on by default, turns on Relay connections and `Node` together.
+  velox-graphql always writes connections, and writes `Node` only with
+  `node=on`: the `Node` interface, `node` and `nodes` first in the root
+  query, and `Noder`, `ResolveNode` and `ResolveNodes`. An ID is the
   entity's key in its own Go type, which gqlgen decodes: a resolver takes
   `id int64`, and an input's `authorID` is an `int64`. Every key of a
   schema's GraphQL types has one Go type, since gqlgen binds every ID
   argument to the first model `gqlgen.yml` lists for `ID`: `gqlgenx.Int64ID`
   for int64, `gqlgenx.UUID` for UUID, gqlgen's `graphql.ID` for string.
-  velox-graphql refuses a schema whose keys differ. An application that
-  needs `node(id:)` declares and resolves it itself (ADR 0061).
+  velox-graphql refuses a schema whose keys differ (ADR 0061). Since an ID
+  holds no type, `node(id:)` needs IDs unique across types; auto-increment
+  keys collide, which is why `node=off` is the default. entgql finds an
+  ID's type from ent's universal-ID ranges or from `WithNodeType`; velox
+  finds the types that hold an ID with one statement, for any key type, and
+  reports an ID two types hold as ambiguous. The generated `WithNodeType`
+  and `WithFixedNodeType` are entgql's: with them, only the type given is
+  read and no lookup runs (ADR 0152).
 - **Where inputs read empty values as SQL does.** entgql adds nothing for
   them; velox-graphql gives each its meaning: `xIsNil: false` is `IS NOT
   NULL`, an empty `xIn` matches no row, `or: []` matches no row, and `not:

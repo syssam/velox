@@ -4,6 +4,9 @@ Status: accepted, 2026-11-08. Supersedes 0043's Node type, `GlobalID` and
 `node_gql.go`, and the global IDs that 0033, 0035, 0045 and 0046 decode.
 Amended by 0088: under velox-graphql's compat=veloxe, Node, `node` and
 `nodes` are back, as veloxe declared them; IDs stay keys.
+Amended 2026-11-24 by 0152: velox-graphql's option node=on declares that
+Node outside compat too, with IDs still keys; node=off, the default, keeps
+this record's API without Node.
 
 ## Context
 

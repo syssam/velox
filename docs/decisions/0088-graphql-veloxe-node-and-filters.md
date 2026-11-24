@@ -8,6 +8,10 @@ end.
 Amended 2026-11-24 by 0150: veloxe's where semantics are the option
 filters=veloxe and `gqlgraph.Type.VeloxeFilters`, which compat=veloxe
 presets and filters=strict overrides; `Type.Veloxe` no longer gives them.
+Amended 2026-11-24 by 0152: Node is the option node=on, which compat=veloxe
+presets and node=off overrides, and which works without compat;
+`ResolveNode` and `ResolveNodes` take `WithNodeType` and
+`WithFixedNodeType`, which give an ID's type and skip the lookup.
 
 ## Context
 

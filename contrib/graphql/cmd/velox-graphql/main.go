@@ -59,6 +59,16 @@
 //
 //	go tool velox-gen -out veloxgen -plugin velox-graphql:compat=veloxe,filters=strict ./veloxschema
 //
+// Node is a third such option (docs/decisions/0152). node=on declares
+// Relay's Node and node(id:) and nodes(ids:) with velox's own API, for an
+// application whose IDs are unique across types, as snowflakes and UUIDs
+// are; node=off, the default, leaves them out, and compat=veloxe,node=off
+// drops them from veloxe's API. The generated WithNodeType and
+// WithFixedNodeType give ResolveNode an ID's type, so it reads that type
+// alone and runs no lookup:
+//
+//	go tool velox-gen -out veloxgen -plugin velox-graphql:node=on ./veloxschema
+//
 // An application whose filters were opt-in field by field, as a veloxe
 // codegen hook made them, asks for where=whitelist: a field other than the
 // key then has predicates only with graphql.WhereInput (the old velox's

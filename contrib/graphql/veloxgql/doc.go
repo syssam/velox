@@ -4,7 +4,7 @@
 // client may ask for. It imports no engine.
 //
 // What only generated code calls is in package gqlgraph, whose names are
-// stable by GeneratedCodeIsVersion28 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion29 and not by semantic versioning. Where a
 // name below belongs to gqlgraph it is written gqlgraph.Name. An engine is
 // served through its adapter: package gqlgenx for gqlgen, package graphqlgo
 // for github.com/syssam/graphql-go. Generated code imports this package and
@@ -44,7 +44,7 @@
 // graphql.ID.
 //
 // An ID names a row of its type only where its type is known: the key 7 is
-// both Post 7 and User 7. There is no Node interface and no node query. A
+// both Post 7 and User 7. By default there is no Node interface and no node query. A
 // client may send any key, so a policy or a scope decides what it may read
 // or change, not the ID.
 //
@@ -236,8 +236,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion28 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion29 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
 // disagree. For generated code. It is replaced by the next number when generated
 // code must change.
-const GeneratedCodeIsVersion28 = true
+const GeneratedCodeIsVersion29 = true

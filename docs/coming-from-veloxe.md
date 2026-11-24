@@ -50,6 +50,7 @@ go tool velox-gen -out ./velox \
 | the API `graphqlgen` made | `compat=veloxe` ([ADR 0087](decisions/0087-graphql-veloxe-compat.md), [0088](decisions/0088-graphql-veloxe-node-and-filters.md), [0108](decisions/0108-veloxe-compat-paging-and-fk-filters.md)) |
 | veloxe's names alone (`imageUrl`, `customerId`) | `names=schema`; `compat=veloxe` sets it ([ADR 0150](decisions/0150-graphql-names-and-filters-options.md)) |
 | veloxe's where semantics alone (an empty `idIn` adds nothing) | `filters=veloxe`; `compat=veloxe` sets it, and `compat=veloxe,filters=strict` keeps fail-closed filters ([ADR 0150](decisions/0150-graphql-names-and-filters-options.md)) |
+| veloxe's `Node`, `node(id:)` and `nodes(ids:)` alone | `node=on`; `compat=veloxe` sets it, and `compat=veloxe,node=off` drops them ([ADR 0152](decisions/0152-graphql-node-option.md)) |
 | a hook that adds `SkipWhereInput` to every field without `WithWhereInputs(true)` | `where=whitelist` |
 | `graphqlgen.WithoutGQLGen()`, served by graphql-go | `engine=graphql-go` |
 | a hook that sets `OpsString` on filterable string fields | not needed: `OpsString` is a string field's default |
@@ -71,8 +72,10 @@ go tool velox-gen -out ./velox \
   field or a `Text`, is dropped, as veloxe dropped it, and velox-graphql
   warns of it, naming the entity and the field.
 - Every type with an ID implements `Node`, and the root query has
-  `node(id:)` and `nodes(ids:)`. The application answers them with the
-  generated `ResolveNode` and `ResolveNodes`.
+  `node(id:)` and `nodes(ids:)` (`node=on`; `node=off` drops them). The
+  application answers them with the generated `ResolveNode` and
+  `ResolveNodes`. `WithNodeType` or `WithFixedNodeType` gives an ID's
+  type, so only that type is read and no statement looks it up.
 - Where inputs behave as veloxe's did (`filters=veloxe`;
   `filters=strict` keeps velox's fail-closed semantics, where an empty
   `idIn` matches no node). An application that keeps access-policy

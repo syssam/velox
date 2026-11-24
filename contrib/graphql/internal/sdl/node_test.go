@@ -50,3 +50,63 @@ func TestVeloxeNode(t *testing.T) {
 		}
 	}
 }
+
+// node=on declares Node outside compat, with velox's other defaults: the
+// type has no foreign key and names stay Go's. type Query is written for
+// node and nodes with no QueryField. Under entities= only the chosen
+// types implement Node (ADR 0125). node=off drops Node under compat, and
+// node=off and the default write none of it (ADR 0152).
+func TestNodeOption(t *testing.T) {
+	img := field("image_url", "string")
+	img.GoName = "ImageURL"
+	tag := entity("Tag", img)
+	sdl, err := RenderConfig(model(tag), Config{Node: "on", Package: "example.com/app/gen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(sdl); err != nil {
+		t.Fatalf("%v\n%s", err, sdl)
+	}
+	for _, want := range []string{
+		"interface Node @goModel(model: \"example.com/app/gen.Noder\") {\n",
+		"type Tag implements Node {\n",
+		"  imageURL: String!\n",
+		"type Query {\n  \"\"\"Fetches an object given its ID.\"\"\"\n  node(id: ID!): Node\n  \"\"\"Lookup nodes by a list of IDs.\"\"\"\n  nodes(ids: [ID!]!): [Node]!\n}\n",
+	} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("node=on: SDL lacks %q:\n%s", want, sdl)
+		}
+	}
+
+	post := entity("Post", field("title", "string"))
+	sdl, err = RenderConfig(model(post, tag), Config{Node: "on", Entities: []string{"Post"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sdl, "type Post implements Node {\n") || strings.Contains(sdl, "type Tag") || !strings.Contains(sdl, "  node(id: ID!): Node\n") {
+		t.Errorf("node=on, entities=Post: Post does not implement Node, or Tag is written:\n%s", sdl)
+	}
+	sdl, err = RenderConfig(model(post, tag), Config{Node: "on", Entities: []string{"Post"}, PerEntity: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sdl, "interface Node {\n") || !strings.Contains(sdl, "type Post implements Node {\n") {
+		t.Errorf("node=on, entities=Post, sdlfiles=entity: no Node:\n%s", sdl)
+	}
+
+	for _, cfg := range []Config{{Veloxe: true, Node: "off"}, {Node: "off"}, {}} {
+		sdl, err := RenderConfig(model(post, tag), cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, not := range []string{"Node", "node(", "nodes(", "implements"} {
+			if strings.Contains(sdl, not) {
+				t.Errorf("%+v: SDL holds %q:\n%s", cfg, not, sdl)
+			}
+		}
+	}
+
+	if _, err := RenderConfig(model(tag), Config{Node: "yes"}); err == nil || err.Error() != "velox-graphql: node=yes: node is on, which declares Relay's Node and node(id:), or off" {
+		t.Errorf("node=yes: %v", err)
+	}
+}

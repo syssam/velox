@@ -49,7 +49,7 @@ func RenderSurface(m *plugin.Model, s *sdl.Surface, outPath, outPkg string, cfg 
 		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
 	}
 	r := newRenderer(m, outPath, outPkg)
-	r.veloxe, r.veloxeFilters, r.graphqlGo = cfg.Veloxe, cfg.VeloxeFilters(), cfg.GraphQLGo
+	r.veloxe, r.veloxeFilters, r.node, r.graphqlGo = cfg.Veloxe, cfg.VeloxeFilters(), cfg.NodeOn(), cfg.GraphQLGo
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 		r.typeOf[t.Entity.Name] = t
@@ -68,7 +68,7 @@ func RenderSurface(m *plugin.Model, s *sdl.Surface, outPath, outPkg string, cfg 
 }
 
 // surfaceFiles writes, unformatted, the file of each of s's types, and
-// under veloxe the Noder file, and stops at the first that fails: it
+// under node the Noder file, and stops at the first that fails: it
 // returns the files before it with its error.
 func (r *renderer) surfaceFiles(s *sdl.Surface) ([]plugin.File, error) {
 	files := make([]plugin.File, 0, len(s.Types)+1)
@@ -83,7 +83,7 @@ func (r *renderer) surfaceFiles(s *sdl.Surface) ([]plugin.File, error) {
 		}
 		files = append(files, f)
 	}
-	if r.veloxe {
+	if r.node {
 		f, ok, err := r.nodeFile(s.Types)
 		if err != nil {
 			return files, err
@@ -163,7 +163,8 @@ type renderer struct {
 	types         map[string]*sdl.Type    // the GraphQL types by name
 	typeOf        map[string]*sdl.Type    // the GraphQL types by their entity's name
 	ents          map[string]*plugin.Entity
-	veloxe        bool // sdl.Config.Veloxe: veloxe's connections, foreign keys and Node
+	veloxe        bool // sdl.Config.Veloxe: veloxe's connections and foreign keys
+	node          bool // sdl.Config.NodeOn: the Noder file
 	veloxeFilters bool // sdl.Config.VeloxeFilters: veloxe's where semantics
 	graphqlGo     bool // sdl.Config.GraphQLGo: inputs graphql-go binds by name
 }

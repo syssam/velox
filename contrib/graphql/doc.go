@@ -123,8 +123,8 @@
 //
 // That writes the entities, as velox-gen always does, and veloxgen/velox.graphql,
 // the GraphQL schema: a type for each entity, connections, ordering, where
-// inputs and mutation inputs. It has no Node interface and no node or nodes
-// query; see "IDs" below. velox-gen owns the file like
+// inputs and mutation inputs. By default it has no Node interface and no node or nodes
+// query (node= below); see "IDs". velox-gen owns the file like
 // its own: -check fails when the schema changed, and dropping -plugin
 // velox-graphql removes the file on the next run.
 //
@@ -191,10 +191,23 @@
 // empty input is an error, and the node budget is ten times larger
 // (veloxgql's gqlgraph.Type.VeloxeFilters).
 //
-// compat=veloxe sets names=schema and filters=veloxe. An explicit names=
-// or filters= wins, so compat=veloxe,filters=strict keeps veloxe's API with
-// fail-closed filters, for an application that keeps access-policy filters
-// as documents (ADR 0150). Any other value is refused.
+// node= chooses whether the schema has Relay's Node. node=off, the default,
+// writes none (ADR 0061). node=on declares interface Node, bound to the
+// generated Noder, makes every type with an ID implement it, and puts
+// node(id:) and nodes(ids:) first in the root query, which is then written
+// even with no QueryField. veloxgen/noder_gql.go holds Noder, ResolveNode
+// and ResolveNodes for the application's resolvers. An ID stays the key,
+// so node(id:) needs IDs unique across types, as snowflakes, UUIDs and
+// prefixed IDs are; auto-increment keys collide, and node(id:) is then
+// ambiguous. One statement finds the types that hold an ID. The generated
+// WithNodeType and WithFixedNodeType, as entgql's, give an ID's type
+// instead: only that type is read, with no lookup (ADR 0152).
+//
+// compat=veloxe sets names=schema, filters=veloxe and node=on. An explicit
+// names=, filters= or node= wins, so compat=veloxe,filters=strict keeps
+// veloxe's API with fail-closed filters, for an application that keeps
+// access-policy filters as documents (ADR 0150), and compat=veloxe,node=off
+// drops Node (ADR 0152). Any other value is refused.
 //
 // An entity that has a where input, by a WhereOps field or a WhereEdge edge,
 // has the predicates of its key in it, before the fields': the key has id,
@@ -245,7 +258,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlgraph for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion28", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion29", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -509,11 +522,11 @@
 //   - A Required one-to-one or many-to-one edge is T, not T!, in the type.
 //   - A field.Strings and the other JSON lists of scalars are [String!], as in
 //     entgql; any other JSON is the JSON scalar.
-//   - There is no Node interface, and no node or nodes query; a type does not
+//   - By default there is no Node interface, and no node or nodes query; a type does not
 //     implement Node. An ID is the entity's key, in its own Go type, as in
 //     entgql, and every key of a schema is of one Go type (see "IDs"). An
 //     application finds a row by its ID through a where input's id or idIn,
-//     or a query field of its own.
+//     or a query field of its own. node=on declares Node, as entgql does.
 //   - A where input reads some values as SQL does, where entgql adds nothing
 //     for them: <field>IsNil: false is IS NOT NULL, as <field>NotNil: true
 //     is; an empty <field>In matches no row; or: [] matches no row; and not:
@@ -906,7 +919,7 @@
 //
 // An ID is not opaque and holds no type: the ID 7 of a Post and of a User
 // are the same value, and an ID of one type given for another names the row
-// of that key, if any. There is no node or nodes query to look a row up by
+// of that key, if any. Without node=on there is no node or nodes query to look a row up by
 // its ID alone. A cursor stays opaque, holds its type's name, and a
 // connection refuses one of another type with veloxgql.ErrBadCursor. What a
 // caller may read or change by an ID is the entity's policy's to decide, as
