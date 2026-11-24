@@ -148,8 +148,9 @@ func (*Invoice) VeloxMeta() *velox.Meta[Invoice] {
 }
 
 // TestTxFromJoins: under a transaction's context, TxFrom gives a DB that
-// runs in that transaction, with the caller's own policy bypass; db.Tx
-// there fails. It is false outside a transaction, after it ended, and for
+// runs in that transaction, with the caller's own policy bypass; Tx there
+// on a DB that did not begin the transaction fails (the one that did makes
+// a savepoint, ADR 0171). It is false outside a transaction, after it ended, and for
 // another DB's.
 func TestTxFromJoins(t *testing.T) {
 	e := &fakeconn.Exec{}
@@ -161,8 +162,8 @@ func TestTxFromJoins(t *testing.T) {
 	var ended context.Context
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		ended = ctx
-		if err := db.Tx(ctx, touch); !errors.Is(err, velox.ErrOutsideTx) {
-			t.Errorf("db.Tx under the mark: %v", err)
+		if err := policied.Tx(ctx, touch); !errors.Is(err, velox.ErrOutsideTx) {
+			t.Errorf("policied.Tx under the mark: %v", err)
 		}
 		joined, ok := velox.TxFrom(ctx, db)
 		if !ok {

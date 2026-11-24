@@ -2,7 +2,6 @@ package apitest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -40,10 +39,11 @@ func ownerScope(read func(stmt *velox.DB) *velox.DB, errs *[]error) velox.Filter
 
 // TestFilterReadsThroughTheStatementsDB: a filter that reads through
 // the filter's db parameter gives a statement the same rows inside a Tx and
-// outside it, on SQLite's pool of one connection. The same filter reading on the DB it
-// captured fails inside the Tx with ErrOutsideTx, and under WithoutTx it
-// would wait for the connection the Tx holds, which is refused: the
-// statement then sees fewer rows inside the Tx than outside.
+// outside it, on SQLite's pool of one connection. So does the same filter
+// reading on the DB it captured, which began the Tx and so joins it (ADR
+// 0171); under WithoutTx it would wait for the connection the Tx holds,
+// which is refused: the statement then sees fewer rows inside the Tx than
+// outside.
 func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 	var errs []error
 	db := interceptorDB(t, velox.WithFilter(ownerScope(func(stmt *velox.DB) *velox.DB { return stmt }, &errs)))
@@ -87,7 +87,13 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if outside != 1 || inside != 0 || len(errs) != 1 || !withoutTx && !errors.Is(errs[0], velox.ErrOutsideTx) {
+		if !withoutTx {
+			if outside != 1 || inside != 1 || len(errs) != 0 {
+				t.Errorf("captured DB: %d notes outside a Tx, %d inside, want 1 and 1; lookups failed: %v", outside, inside, errs)
+			}
+			continue
+		}
+		if outside != 1 || inside != 0 || len(errs) != 1 {
 			t.Errorf("captured DB, WithoutTx %v: %d notes outside a Tx, %d inside; lookups failed: %v", withoutTx, outside, inside, errs)
 		}
 	}

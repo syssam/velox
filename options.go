@@ -95,7 +95,8 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // database to make its condition, such as a team's members or an
 // organization's subtree, reads through db and the ctx it is given, so
 // that a statement gets the same condition inside a transaction and
-// outside, where a DB captured at Connect fails with ErrOutsideTx:
+// outside. A DB captured at Connect joins a transaction it began, under the
+// transaction's ctx, but fails with ErrOutsideTx in one another DB began:
 //
 //	func(ctx context.Context, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
 //		if e.Name() != veloxgen.TypeOrder || op != velox.OpSelect {

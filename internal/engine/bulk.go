@@ -215,6 +215,7 @@ func bulkGroups(t *table, in *EntityInfo, rows []BulkRow, mus []*MutationState, 
 // transaction when there is more than one group: a savepoint inside the
 // caller's.
 func insertBulk(ctx context.Context, t *table, db *DB, gs []bulkGroup, out *Result) error {
+	db = db.In(ctx)
 	if len(gs) == 1 {
 		return t.insertMany(ctx, db, gs[0].rows, gs[0].cf, out)
 	}

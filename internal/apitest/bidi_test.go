@@ -703,7 +703,7 @@ func TestBidiOne(t *testing.T) {
 			db = openFake(velox.Postgres, e)
 			var err error
 			_ = db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
-				err = w(ctx, db) // db, not the transaction's
+				err = w(ctx, db.WithoutPolicy("another DB")) // not the transaction's, nor the DB that began it
 				return nil
 			})
 			check(t, "outside its transaction", err, velox.ErrOutsideTx, []string{"BEGIN", "COMMIT"}, e)

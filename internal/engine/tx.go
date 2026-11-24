@@ -180,6 +180,10 @@ func (c noTxCtx) String() string { return fmt.Sprint(c.Context) + ".WithoutTx" }
 // txKey is the context key of the mark a transaction's fn's context carries.
 type txKey struct{}
 
+// txSelfKey is the context key of the frame, the transaction's or a
+// savepoint's, whose fn's context it is (txCtx.self).
+type txSelfKey struct{}
+
 func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 
 // WithTxDefaults sets the options every Tx of the DB, and of its shards,
@@ -207,13 +211,16 @@ func WithTxDefaults(opts []TxOption) Option {
 // statement on tx either way.
 //
 // fn's ctx, and every context derived from it, is marked as the
-// transaction's. Under the mark, a statement on any *DB other than tx and its
-// savepoints fails before anything is sent, with ErrOutsideTx, as
-// "velox: <Entity>: statement outside its transaction". That includes db
-// itself, a DB from another Open, and another transaction's tx: such a
-// statement was most likely meant for tx. A Tx on such a *DB fails the same
-// way, as "velox: transaction: statement outside its transaction"; a nested
-// transaction is tx.Tx.
+// transaction's. Under the mark, a statement on db itself, the DB that began
+// the transaction, runs in it: on tx, or on the savepoint whose fn got the
+// context; and db.Tx there makes a savepoint, as tx.Tx does. So code that
+// holds only db, such as a GraphQL resolver, runs in the caller's
+// transaction (ADR 0171). Only that DB joins: not a copy of it with another
+// WithoutPolicy reason or recording. A statement on any other *DB fails
+// before anything is sent, with ErrOutsideTx, as "velox: <Entity>:
+// statement outside its transaction": a DB from another Open, another
+// transaction's tx, or such a copy. A Tx on such a *DB fails the same way,
+// as "velox: transaction: statement outside its transaction".
 //
 // The mark refuses nothing else. A statement under a context without the
 // mark runs as usual: one in a goroutine that fn starts with the ctx given to
@@ -289,6 +296,7 @@ func WithTxDefaults(opts []TxOption) Option {
 // rolls back with an error that says so. Overlaps outside the send, and an
 // Iter's loop, are not seen.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
+	db = db.In(ctx)
 	if db.misuse != nil {
 		return fmt.Errorf("velox: transaction: %w", db.misuse)
 	}
@@ -494,6 +502,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	defer f.ended.Store(true)                        // before the note, and after the rollback
 	// Its entities read on it while it is live, then on db (Source).
 	defer txSource(&f.db, db.src).end()
+	f.origin = db.src
 	finished, committedOK := false, false
 	defer func() {
 		if !finished {
@@ -760,13 +769,17 @@ func (db *DB) rollbackSavepoint(ctx context.Context, name string) error {
 type txCtx struct {
 	context.Context
 	root *txFrame
+	self *txFrame // the frame whose fn got the context: root, or a savepoint's
 }
 
 // Value returns the transaction's root frame for txKey, and the parent
 // context's value otherwise.
 func (c *txCtx) Value(key any) any {
-	if _, ok := key.(txKey); ok {
+	switch key.(type) {
+	case txKey:
 		return c.root
+	case txSelfKey:
+		return c.self
 	}
 	return c.Context.Value(key)
 }
@@ -794,6 +807,9 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 // transaction from several goroutines) races only on the connection, not on
 // velox's own state.
 type txFrame struct {
+	// origin is, on the root of a transaction velox began, the Source of
+	// the DB that began it (Joined); nil for an adopted one (UseTx).
+	origin     *Source
 	db         DB
 	ctx        txCtx
 	ended      atomic.Bool
@@ -856,8 +872,38 @@ func newTxFrame(ctx context.Context, db DB, root *txFrame) *txFrame {
 		root = f
 	}
 	f.db.txRoot, f.db.txSelf = root, f
-	f.ctx = txCtx{Context: ctx, root: root}
+	f.ctx = txCtx{Context: ctx, root: root, self: f}
 	return f
+}
+
+// In returns the DB a statement or Tx on db under ctx runs on: when ctx is
+// marked by a live transaction that db began (Joined), that transaction's
+// handle, or its savepoint's, whose fn got ctx; db otherwise. So the DB an
+// application holds runs in a transaction it began, under its context,
+// where another DB fails with ErrOutsideTx.
+func (db *DB) In(ctx context.Context) *DB {
+	if j := db.joined(ctx); j != nil {
+		return j
+	}
+	return db
+}
+
+// joined is the handle In returns in a transaction db began; nil when ctx
+// has no live transaction's mark, or db is in a transaction, or db did not
+// begin the transaction: its Source, WithoutPolicy reason and recording are
+// not the beginner's.
+func (db *DB) joined(ctx context.Context) *DB {
+	if db.txRoot != nil || db.src == nil {
+		return nil
+	}
+	root, _ := ctx.Value(txKey{}).(*txFrame)
+	if root == nil || root.origin != db.src || root.ended.Load() || root.db.bypass != db.bypass || root.db.rec != db.rec {
+		return nil
+	}
+	if self, _ := ctx.Value(txSelfKey{}).(*txFrame); self != nil && self.db.txRoot == root && !self.ended.Load() {
+		return &self.db
+	}
+	return &root.db
 }
 
 // Foreign reports whether ctx carries the mark of a transaction that has not

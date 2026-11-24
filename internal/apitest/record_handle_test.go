@@ -131,10 +131,13 @@ func TestRecordOuterHandleInTxIsRefused(t *testing.T) {
 	ctx := context.Background()
 	e := &fakeconn.Exec{Affected: 1}
 	var rec velox.Recorder
-	rdb := openFake(velox.Postgres, e).Record(&rec)
+	db := openFake(velox.Postgres, e)
+	rdb := db.Record(&rec)
 	var err error
-	if txErr := rdb.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
-		err = rdb.Insert(&fixture.Dnote{Owner: "x"}).Exec(ctx) // rdb, not the transaction's
+	if txErr := db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
+		// rdb records, the DB that began the transaction does not: rdb is
+		// not that DB, so it does not join its transaction.
+		err = rdb.Insert(&fixture.Dnote{Owner: "x"}).Exec(ctx)
 		return nil
 	}); txErr != nil {
 		t.Fatal(txErr)

@@ -10,8 +10,9 @@ import (
 // TxFrom returns the transaction ctx belongs to, as a DB like db: ctx is the
 // context a Tx of db (or of a DB derived from it, such as WithoutPolicy's)
 // gave its fn, or one derived from it. It is for a helper that is handed db
-// and ctx and should join the caller's transaction rather than fail with
-// ErrOutsideTx, as db.Tx under that ctx does:
+// and ctx and should join the caller's transaction with db's own policy
+// bypass, where db is not the DB that began it (which joins by itself) and
+// db.Tx under that ctx fails with ErrOutsideTx:
 //
 //	func WithTx(ctx context.Context, db *velox.DB, fn func(ctx context.Context, tx *velox.DB) error) error {
 //		if tx, ok := velox.TxFrom(ctx, db); ok {

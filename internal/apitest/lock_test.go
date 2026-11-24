@@ -170,10 +170,15 @@ func TestLockInsideAndOutsideTx(t *testing.T) {
 			}); err != nil || sent != one {
 				t.Errorf("savepoint: %v, %s", err, sent)
 			}
+			// db began the transaction, so a locking read built on it
+			// joins it under its context (ADR 0171).
+			if got, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).ForUpdate().All(ctx); err != nil || len(got) != 1 || e.SQL != one {
+				t.Errorf("built on db (hooked %v): %v, %v, %s", hooked, got, err, e.SQL)
+			}
 			calls := e.Calls
-			_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).ForUpdate().All(ctx)
+			_, err := db.WithoutPolicy("another DB").Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).ForUpdate().All(ctx)
 			if !errors.Is(err, velox.ErrOutsideTx) || e.Calls != calls {
-				t.Errorf("built on db (hooked %v): %v", hooked, err)
+				t.Errorf("built on another DB (hooked %v): %v", hooked, err)
 			}
 			// WithoutTx lifts the context's mark, not the handle's
 			// transaction: the tx handle still locks, on its connection,

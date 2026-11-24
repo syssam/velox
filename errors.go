@@ -90,9 +90,9 @@ var (
 	ErrNoShard = engine.ErrNoShard
 	// ErrOutsideTx is returned by a statement, or a Tx, under the context a
 	// transaction's fn got (or one derived from it), when its DB is neither
-	// that transaction nor one of its savepoints and the transaction has not
-	// ended: it was most likely meant for the transaction's DB. Nothing was
-	// sent. WithoutTx lifts the check.
+	// that transaction, one of its savepoints, nor the DB that began it, which
+	// joins it, and the transaction has not ended: it was most likely meant
+	// for the transaction's DB. Nothing was sent. WithoutTx lifts the check.
 	ErrOutsideTx = engine.ErrOutsideTx
 	// ErrCommitUnknown is returned, matched by errors.Is beside the driver's
 	// error, by a Tx whose COMMIT failed when the error does not say the

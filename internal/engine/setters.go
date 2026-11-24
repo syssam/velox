@@ -290,6 +290,7 @@ func PrepareInsert(in *EntityInfo, s Setters, rows []unsafe.Pointer, upsert, man
 // runs as InsertEdges says. An InsertBulk's s (BulkSetters) runs as
 // InsertBulk, its rows in place of rows.
 func Insert(ctx context.Context, db *DB, in *EntityInfo, s Setters, rows []unsafe.Pointer, cf *ConflictClause, many bool, send func(ctx context.Context, db *DB, mu *MutationState) error) error {
+	db = db.In(ctx)
 	if s.bulk != nil {
 		return InsertBulk(ctx, db, in, s, cf)
 	}
@@ -342,6 +343,7 @@ func InsertSQL(ctx context.Context, db *DB, in *EntityInfo, s Setters, mu *Mutat
 // Update runs st, an update, with the edge setters edges, as UpdateEdges
 // says; with none, it is Write's.
 func Update(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (int64, error) {
+	db = db.In(ctx)
 	if err := checkKeep(st.Entity, st.keep); err != nil {
 		return 0, err
 	}
@@ -395,6 +397,7 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 // when they assign nothing either, no UPDATE is sent and the row is read
 // back under the policies (ADR 0136). So does one of only edge setters.
 func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
+	db = db.In(ctx)
 	p, err := updateOne(ctx, db, st, edges)
 	if err == nil {
 		// Its row was read in a transaction velox ran: it reads on db.

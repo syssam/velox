@@ -425,6 +425,7 @@ func (t *table) insertMany(ctx context.Context, db *DB, xs TableRows, cf *Confli
 	if IsDryRun(ctx) {
 		return fmt.Errorf("velox: %s: %w", t.info.Name, ErrDryRun)
 	}
+	db = db.In(ctx)
 	if db.Foreign(ctx) {
 		return fmt.Errorf("velox: %s: %w", t.info.Name, ErrOutsideTx)
 	}
@@ -518,6 +519,7 @@ func (t *table) firstBatch(ctx context.Context, db *DB, xs TableRows, cf *Confli
 // shares, so that no entity compiles a batch insert of its own. set are
 // the columns the insert's setters store a value in (SetExplicit).
 func InsertAllRows(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, size uintptr, n int, set []int, cf *ConflictClause, out *Result) error {
+	db = db.In(ctx)
 	return InfoTable(in).state().insertMany(ctx, db, TableRows{p: p, size: size, n: n, info: in, explicit: set}, cf, out)
 }
 

@@ -220,6 +220,7 @@ func SetElem(p, v any) {
 // first, before any hook runs, so that a refused write has no hook's side
 // effects.
 func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
+	db = db.In(ctx)
 	return writeWith(ctx, db, st, dry, save, nil)
 }
 
@@ -235,6 +236,7 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 // is taken as the one row. Otherwise st runs in a transaction, a savepoint
 // inside one, which a count over one rolls back with ErrNotSingular.
 func DeleteOne(ctx context.Context, db *DB, st *Statement) error {
+	db = db.In(ctx)
 	if err := db.guard(st); err != nil {
 		return err
 	}

@@ -459,6 +459,7 @@ func (db *DB) LoadPin(at Target) Target {
 // load says MaxRows; 0 is the DB's cap. pin is the target their reads go
 // to (DB.LoadPin).
 func LoadRelations(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []unsafe.Pointer, specs []LoadSpec, maxRows int) error {
+	db = db.In(ctx)
 	for _, sp := range specs {
 		if err := loadOne(ctx, db, pin, owner, ptrs, sp, maxRows); err != nil {
 			return err

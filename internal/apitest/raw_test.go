@@ -288,12 +288,13 @@ func TestRawPipeline(t *testing.T) {
 	t.Run("outside the transaction", func(t *testing.T) {
 		e := &fakeconn.Exec{Rows: [][]any{{int64(1)}}, Cols: []string{"id"}}
 		db := openFake(velox.Postgres, e)
+		other := db.WithoutPolicy("another DB") // not the DB that began the transaction
 		err := db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
-			if _, err := db.Exec(ctx, "r", "DELETE FROM invoices"); !errors.Is(err, velox.ErrOutsideTx) {
-				t.Errorf("Exec on db in a transaction: %v", err)
+			if _, err := other.Exec(ctx, "r", "DELETE FROM invoices"); !errors.Is(err, velox.ErrOutsideTx) {
+				t.Errorf("Exec on another DB in a transaction: %v", err)
 			}
-			if _, err := db.Raw[testmodel.Invoice]("r", "SELECT id FROM invoices").All(ctx); !errors.Is(err, velox.ErrOutsideTx) {
-				t.Errorf("Raw on db in a transaction: %v", err)
+			if _, err := other.Raw[testmodel.Invoice]("r", "SELECT id FROM invoices").All(ctx); !errors.Is(err, velox.ErrOutsideTx) {
+				t.Errorf("Raw on another DB in a transaction: %v", err)
 			}
 			return nil
 		})

@@ -527,10 +527,12 @@ func TestThroughLoadChunksByOwner(t *testing.T) {
 }
 
 // TestStatementOutsideItsTx is Review Focus 1: under a context marked as a
-// transaction's, a statement on any DB but the transaction's and its
-// savepoints' (db, another Open's, another transaction's) fails with
-// ErrOutsideTx before it is sent; the transaction's own DB, its savepoints,
-// the TxAround hooks' work, a goroutine on the outer context and WithoutTx
+// transaction's, a statement on any DB but the transaction's, its
+// savepoints' and the DB that began it (a WithoutPolicy copy of that DB,
+// another Open's, another transaction's) fails with ErrOutsideTx before it
+// is sent; the transaction's own DB, its savepoints, the DB that began it,
+// which joins the transaction (ADR 0171), its Tx, a savepoint, the
+// TxAround hooks' work, a goroutine on the outer context and WithoutTx
 // run. Each case runs on a DB without hooks (plain) and on one with an Around
 // hook (run).
 func TestStatementOutsideItsTx(t *testing.T) {
@@ -544,63 +546,64 @@ func TestStatementOutsideItsTx(t *testing.T) {
 		fn      func(ctx context.Context, db, tx *velox.DB) error // ctx is fn's
 		outside bool
 		msg     string // the error's text when outside; the statement's by default
+		began   bool   // db is the DB that began the transaction; another DB (a WithoutPolicy copy) by default
 	}{
-		{"the transaction with its ctx", func(ctx context.Context, _, tx *velox.DB) error { return read(ctx, tx) }, false, ""},
+		{"the transaction with its ctx", func(ctx context.Context, _, tx *velox.DB) error { return read(ctx, tx) }, false, "", false},
 		{"the transaction with a ctx derived from its", func(ctx context.Context, _, tx *velox.DB) error {
 			return read(velox.WithTags(ctx, "k", "v"), tx)
-		}, false, ""},
-		{"the transaction with the outer ctx", func(_ context.Context, _, tx *velox.DB) error { return read(outer, tx) }, false, ""},
+		}, false, "", false},
+		{"the transaction with the outer ctx", func(_ context.Context, _, tx *velox.DB) error { return read(outer, tx) }, false, "", false},
 		{"a savepoint with its ctx", func(ctx context.Context, _, tx *velox.DB) error {
 			return tx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error { return read(ctx, sp) })
-		}, false, ""},
+		}, false, "", false},
 		{"a savepoint with the transaction's ctx", func(ctx context.Context, _, tx *velox.DB) error {
 			return tx.Tx(outer, func(_ context.Context, sp *velox.DB) error { return read(ctx, sp) })
-		}, false, ""},
+		}, false, "", false},
 		{"the transaction with a savepoint's ctx", func(ctx context.Context, _, tx *velox.DB) error {
 			return tx.Tx(ctx, func(ctx context.Context, _ *velox.DB) error { return read(ctx, tx) })
-		}, false, ""},
+		}, false, "", false},
 		{"a goroutine on db with the outer ctx", func(_ context.Context, db, _ *velox.DB) error {
 			errc := make(chan error)
 			go func() { errc <- read(outer, db) }()
 			return <-errc
-		}, false, ""},
-		{"db with the transaction's ctx", func(ctx context.Context, db, _ *velox.DB) error { return read(ctx, db) }, true, ""},
+		}, false, "", false},
+		{"db with the transaction's ctx", func(ctx context.Context, db, _ *velox.DB) error { return read(ctx, db) }, true, "", false},
 		{"db with a ctx derived from the transaction's", func(ctx context.Context, db, _ *velox.DB) error {
 			return read(velox.WithTags(ctx, "k", "v"), db)
-		}, true, ""},
+		}, true, "", false},
 		{"db with a savepoint's ctx", func(ctx context.Context, db, tx *velox.DB) error {
 			return tx.Tx(outer, func(ctx context.Context, _ *velox.DB) error { return read(ctx, db) })
-		}, true, ""},
-		{"a write on db", func(ctx context.Context, db, _ *velox.DB) error { return touch(ctx, db) }, true, ""},
+		}, true, "", false},
+		{"a write on db", func(ctx context.Context, db, _ *velox.DB) error { return touch(ctx, db) }, true, "", false},
 		{"a dry run on db", func(ctx context.Context, db, _ *velox.DB) error {
 			_, _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).SQL(ctx)
 			return err
-		}, true, ""},
+		}, true, "", false},
 		{"a transaction on db", func(ctx context.Context, db, _ *velox.DB) error {
 			return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) })
-		}, true, "velox: transaction: statement outside its transaction"},
+		}, true, "velox: transaction: statement outside its transaction", false},
 		{"an InsertAll in batches on db", func(ctx context.Context, db, _ *velox.DB) error {
 			defer setMaxParams(db, 18)()
 			return db.InsertAll([]testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}).Exec(ctx)
-		}, true, ""},
+		}, true, "", false},
 		{"an Iter on db", func(ctx context.Context, db, _ *velox.DB) error {
 			for _, err := range db.Query[testmodel.Invoice]().Limit(1).Iter(ctx) {
 				return err
 			}
 			return nil
-		}, true, ""},
+		}, true, "", false},
 		{"an Insert on db", func(ctx context.Context, db, _ *velox.DB) error {
 			return db.Insert(&testmodel.Invoice{OrgID: 1, Number: "A"}).Exec(ctx)
-		}, true, ""},
+		}, true, "", false},
 		{"a Save on db", func(ctx context.Context, db, _ *velox.DB) error {
 			return db.Save(&testmodel.Invoice{ID: 1, OrgID: 1, Number: "A"}, I.Number).Exec(ctx)
-		}, true, ""},
+		}, true, "", false},
 		{"an upsert on db", func(ctx context.Context, db, _ *velox.DB) error {
 			return db.Insert(&testmodel.Invoice{OrgID: 1, Number: "A"}).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx)
-		}, true, ""},
+		}, true, "", false},
 		{"a DB of another Open", func(ctx context.Context, _, _ *velox.DB) error {
 			return read(ctx, openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}))
-		}, true, ""},
+		}, true, "", false},
 		{"another transaction's DB", func(ctx context.Context, db, _ *velox.DB) error {
 			var err error
 			_ = db.Tx(outer, func(_ context.Context, other *velox.DB) error {
@@ -608,7 +611,7 @@ func TestStatementOutsideItsTx(t *testing.T) {
 				return nil
 			})
 			return err
-		}, true, ""},
+		}, true, "", false},
 		{"a savepoint of another transaction", func(ctx context.Context, db, _ *velox.DB) error {
 			var err error
 			_ = db.Tx(outer, func(_ context.Context, other *velox.DB) error {
@@ -616,22 +619,36 @@ func TestStatementOutsideItsTx(t *testing.T) {
 				return nil
 			})
 			return err
-		}, true, "velox: transaction: statement outside its transaction"},
+		}, true, "velox: transaction: statement outside its transaction", false},
+		{"the DB that began it with its ctx", func(ctx context.Context, db, _ *velox.DB) error { return read(ctx, db) }, false, "", true},
+		{"the DB that began it with a savepoint's ctx", func(ctx context.Context, db, tx *velox.DB) error {
+			return tx.Tx(outer, func(ctx context.Context, _ *velox.DB) error { return read(ctx, db) })
+		}, false, "", true},
+		{"a write on the DB that began it", func(ctx context.Context, db, _ *velox.DB) error { return touch(ctx, db) }, false, "", true},
+		{"an Iter on the DB that began it", func(ctx context.Context, db, _ *velox.DB) error {
+			for _, err := range db.Query[testmodel.Invoice]().Limit(1).Iter(ctx) {
+				return err
+			}
+			return nil
+		}, false, "", true},
+		{"a transaction on the DB that began it, a savepoint", func(ctx context.Context, db, _ *velox.DB) error {
+			return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) })
+		}, false, "", true},
 		{"another transaction's DB with its ctx", func(_ context.Context, db, _ *velox.DB) error {
 			return db.Tx(outer, func(ctx context.Context, other *velox.DB) error { return read(ctx, other) })
-		}, false, ""},
+		}, false, "", false},
 		{"db with WithoutTx", func(ctx context.Context, db, _ *velox.DB) error {
 			return read(velox.WithoutTx(ctx), db)
-		}, false, ""},
+		}, false, "", false},
 		{"the transaction with WithoutTx", func(ctx context.Context, _, tx *velox.DB) error {
 			return read(velox.WithoutTx(ctx), tx)
-		}, false, ""},
+		}, false, "", false},
 		{"a transaction on db with WithoutTx", func(ctx context.Context, db, _ *velox.DB) error {
 			return db.Tx(velox.WithoutTx(ctx), func(ctx context.Context, other *velox.DB) error { return read(ctx, other) })
-		}, false, ""},
+		}, false, "", false},
 		{"a transaction on db with the outer ctx", func(_ context.Context, db, _ *velox.DB) error {
 			return db.Tx(outer, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) })
-		}, false, ""},
+		}, false, "", false},
 	} {
 		for _, hooked := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/hooked=%v", c.name, hooked), func(t *testing.T) {
@@ -644,8 +661,12 @@ func TestStatementOutsideItsTx(t *testing.T) {
 				e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
 				db := openFake(velox.Postgres, e, opts...)
 				var got error
+				arg := db.WithoutPolicy("another DB")
+				if c.began {
+					arg = db
+				}
 				if err := db.Tx(outer, func(ctx context.Context, tx *velox.DB) error {
-					got = c.fn(ctx, db, tx)
+					got = c.fn(ctx, arg, tx)
 					return nil
 				}); err != nil {
 					t.Fatal(err)

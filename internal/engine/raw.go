@@ -234,6 +234,7 @@ func (db *DB) postgresTxGone(ctx context.Context) bool {
 
 // RawExec is DB.Exec, its arguments given as a slice.
 func (db *DB) RawExec(ctx context.Context, reason, query string, args []any) (int64, error) {
+	db = db.In(ctx)
 	if NoReason(reason) {
 		return 0, ErrNoReason(execInfo.Name)
 	}
@@ -249,6 +250,7 @@ func (db *DB) RawExec(ctx context.Context, reason, query string, args []any) (in
 // row, inside the Around hooks. It reports whether yield stopped the loop,
 // after which the caller must not call yield again.
 func (db *DB) RawRows(ctx context.Context, reason, query string, args []any, yield func(Rows) bool) (stopped bool, err error) {
+	db = db.In(ctx)
 	if NoReason(reason) {
 		return false, ErrNoReason(rowsInfo.Name)
 	}

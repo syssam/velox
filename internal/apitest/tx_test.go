@@ -392,7 +392,7 @@ func TestEndedTxMarksNothing(t *testing.T) {
 		_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			kept = ctx
 			_ = tx.Tx(ctx, func(ctx context.Context, _ *velox.DB) error { inner = ctx; return nil })
-			if err := read(kept, db); !errors.Is(err, velox.ErrOutsideTx) {
+			if err := read(kept, db.WithoutPolicy("another DB")); !errors.Is(err, velox.ErrOutsideTx) {
 				t.Errorf("rollback=%v: inside the transaction: %v, want ErrOutsideTx", rollback, err)
 			}
 			if rollback {
@@ -433,7 +433,7 @@ func TestEndedTxMarksNothingOnEveryEnd(t *testing.T) {
 			defer func() { _ = recover() }()
 			_ = db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
 				kept = ctx
-				if err := read(kept, db); !errors.Is(err, velox.ErrOutsideTx) {
+				if err := read(kept, db.WithoutPolicy("another DB")); !errors.Is(err, velox.ErrOutsideTx) {
 					t.Errorf("%s: inside the transaction: %v, want ErrOutsideTx", end, err)
 				}
 				if end == "panic" {

@@ -159,13 +159,16 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // statement on tx either way.
 //
 // fn's ctx, and every context derived from it, is marked as the
-// transaction's. Under the mark, a statement on any *DB other than tx and its
-// savepoints fails before anything is sent, with ErrOutsideTx, as
-// "velox: <Entity>: statement outside its transaction". That includes db
-// itself, a DB from another Open, and another transaction's tx: such a
-// statement was most likely meant for tx. A Tx on such a *DB fails the same
-// way, as "velox: transaction: statement outside its transaction"; a nested
-// transaction is tx.Tx.
+// transaction's. Under the mark, a statement on db itself, the DB that began
+// the transaction, runs in it: on tx, or on the savepoint whose fn got the
+// context; and db.Tx there makes a savepoint, as tx.Tx does. So code that
+// holds only db, such as a GraphQL resolver, runs in the caller's
+// transaction (ADR 0171). Only that DB joins: not a copy of it with another
+// WithoutPolicy reason or recording. A statement on any other *DB fails
+// before anything is sent, with ErrOutsideTx, as "velox: <Entity>:
+// statement outside its transaction": a DB from another Open, another
+// transaction's tx, or such a copy. A Tx on such a *DB fails the same way,
+// as "velox: transaction: statement outside its transaction".
 //
 // The mark refuses nothing else. A statement under a context without the
 // mark runs as usual: one in a goroutine that fn starts with the ctx given to

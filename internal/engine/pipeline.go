@@ -290,6 +290,9 @@ func (db *DB) observe(ctx context.Context, st *Statement) {
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, res *execResult) error {
+	if j := db.joined(ctx); j != nil {
+		db, st.InTx = j, true
+	}
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
@@ -363,6 +366,9 @@ func (db *DB) held(ctx context.Context, st *Statement) error {
 // Hooks may keep the statement, and next (which holds read), so both escape;
 // a statement with no hooks of either kind uses plain.
 func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res *execResult) error {
+	if j := db.joined(ctx); j != nil {
+		db, st.InTx = j, true
+	}
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
@@ -476,6 +482,9 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 // send, or the error it would fail with before sending: the SQL(ctx) methods'
 // work. It never executes st, so no Around hook runs.
 func (db *DB) DryRun(ctx context.Context, st *Statement) (string, []any, error) {
+	if j := db.joined(ctx); j != nil {
+		db, st.InTx = j, true
+	}
 	st.DryRun = true
 	if err := db.prepare(ctx, st); err != nil {
 		return "", nil, err

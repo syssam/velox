@@ -291,6 +291,7 @@ func InsertColumns(in *EntityInfo, skip int) []int {
 // InsertAllowed asks the policy's Insert about the row of in at p, prepared
 // and validated, unless WithoutPolicy.
 func InsertAllowed(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer) error {
+	db = db.In(ctx)
 	if pol := in.policy; pol != nil && pol.Insert != nil && db.bypass == "" {
 		if err := pol.Insert(ctx, db, p); err != nil {
 			if m, ok := errors.AsType[*rowMisuseError](err); ok {
@@ -472,6 +473,7 @@ func errBidiUpdate(in *EntityInfo) error {
 // Insert policy on the DB the insert runs on: inside the transaction it
 // begins, if it begins one.
 func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
+	db = db.In(ctx)
 	if db.rec != nil {
 		return recordInsertRow(ctx, db, p, st, gen, out)
 	}

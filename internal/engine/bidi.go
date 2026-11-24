@@ -313,6 +313,7 @@ func BidiInTx(st *Statement, p unsafe.Pointer) {
 // a statement under another transaction's mark, a transaction a savepoint
 // broke, and, outside a transaction, a context that names no shard.
 func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Context, tx *DB) error) error {
+	db = db.In(ctx)
 	if IsDryRun(ctx) {
 		return fmt.Errorf("velox: %s: %w", in.Name, ErrDryRun)
 	}

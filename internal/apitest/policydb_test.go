@@ -47,9 +47,9 @@ func ownerCond(ctx context.Context, db *velox.DB, errs *[]error) velox.Predicate
 // interceptor's Filter that read through the DB they are given (the
 // policy's and the Filter's db, the rule's q.DB()) give a statement the
 // same rows inside a Tx and outside it, on SQLite's pool of one
-// connection, with no package-level DB and no TxFrom. Each reading on a
-// DB it captured fails inside the Tx with ErrOutsideTx and narrows to
-// nothing.
+// connection, with no package-level DB and no TxFrom. Each reading on the
+// DB it captured, which began the Tx, joins the Tx (ADR 0171) and gives
+// the same rows too.
 func TestPolicyReadsThroughItsDB(t *testing.T) {
 	resetPNote(t)
 	o2 := context.Background()
@@ -98,14 +98,8 @@ func TestPolicyReadsThroughItsDB(t *testing.T) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				if given {
-					if outside != 1 || inside != 1 || len(errs) != 0 {
-						t.Errorf("%d notes outside a Tx, %d inside, want 1 and 1; lookups failed: %v", outside, inside, errs)
-					}
-					return
-				}
-				if outside != 1 || inside != 0 || len(errs) != 1 || !errors.Is(errs[0], velox.ErrOutsideTx) {
-					t.Errorf("%d notes outside a Tx, %d inside, want 1 and 0; lookups failed: %v, want ErrOutsideTx", outside, inside, errs)
+				if outside != 1 || inside != 1 || len(errs) != 0 {
+					t.Errorf("%d notes outside a Tx, %d inside, want 1 and 1; lookups failed: %v", outside, inside, errs)
 				}
 			})
 		}
