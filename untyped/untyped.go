@@ -260,8 +260,15 @@ func Count(t Term) Term { return engine.AggTerm(engine.TermCount, t) }
 func CountDistinct(t Term) Term { return engine.AggTerm(engine.TermCountDistinct, t) }
 
 // OrderByTerm orders by t, descending when desc: for TableQuery.OrderBy. NULL
-// sorts as an ordering by a column does. After and a cursor cannot follow it.
+// sorts as an ordering by a column does. After cannot follow it unless t is
+// a relation's aggregate; AfterValues can, with the values OrderValues read.
 func OrderByTerm(t Term, desc bool) velox.OrderTerm { return velox.OrderTerm{Expr: t, Desc: desc} }
+
+// OrderValueTerm reports whether o orders by an expression whose value
+// TableQuery.OrderValues reads beside each row and AfterValues takes back:
+// any expression but a relation's aggregate, which After computes from the
+// row's key.
+func OrderValueTerm(o velox.OrderTerm) bool { return engine.OrderValueTerm(o) }
 
 // TableInsert is an INSERT of rows of a Table's entity: InsertQuery with the
 // entity's type erased and columns by index.

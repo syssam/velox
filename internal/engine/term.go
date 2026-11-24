@@ -845,8 +845,9 @@ func sameProject(a, b *Projection) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// errAfterExpr is the refusal of After, and of a cursor, on an ordering by an
-// expression: they read the value of each ordering term from a row.
+// errAfterExpr is the refusal of After on an ordering by an expression: it
+// reads the value of each ordering term from a row, which holds none of an
+// expression's (AddAfterValues takes them).
 func errAfterExpr(entity string) error {
-	return fmt.Errorf("velox: %s: After and a cursor cannot follow an ordering by an expression, which is not a column of a row; order by columns, or page with Limit and Offset", entity)
+	return fmt.Errorf("velox: %s: After cannot follow an ordering by an expression, which is not a column of a row; read its values with untyped's OrderValues and page with AfterValues, or page a GraphQL connection, which does", entity)
 }

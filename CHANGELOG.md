@@ -28,6 +28,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `migrate.Config.NoForeignKeys` and `(*migrate.Schema).WithoutForeignKeys()`
   for Go code; `migrate sql -foreign-keys=false`; `veloxtest.WithoutForeignKeys()`
   for `veloxtest.Open` (ADR 0167).
+- `Query.Paginate` (a GraphQL connection) pages a query ordered by
+  expressions, such as a computed key with `NullsFirst` or `NullsLast`:
+  velox selects each value beside the row, the cursor carries it as an
+  `expr:<signature>` term, and the next page compares the same expression
+  with it; a cursor of another ordering is refused. Untyped queries have
+  `TableQuery.OrderValues`, `TableRows.OrderValues`, `AfterValues`,
+  `Order`, `Unordered` and `Table.OrderSig` (ADR 0166).
 - `Order.NullsFirst()` and `NullsLast()`: an ordering puts NULL before or
   after every value, in either direction, with the same rows in the same
   order on PostgreSQL and SQLite (`NULLS FIRST|LAST`) and MySQL (an

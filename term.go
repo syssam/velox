@@ -115,11 +115,13 @@ func Agg[E any](t Term[E]) Term[E] { return Term[E]{engine.AggMarkTerm(t.t)} }
 // is.
 func (t Term[E]) As[_ Lazy[E]](name string) Term[E] { return Term[E]{engine.NamedTerm(t.t, name)} }
 
-// Asc orders by t, ascending, NULL last as every ordering puts it. An entity
-// query ordered by an expression cannot be read After a row or by a cursor,
-// except by a relation's aggregate, Rel's Count, Sum, Avg, Min or Max. A
-// term that is a column (ColumnByName's) orders as the column's handle
-// does, and After and a cursor follow it.
+// Asc orders by t, ascending, NULL last as every ordering puts it. After
+// cannot follow an entity query ordered by an expression, except by a
+// relation's aggregate, Rel's Count, Sum, Avg, Min or Max: the row holds no
+// value of it. Query.Paginate can, and untyped's OrderValues and
+// AfterValues, which read the value beside the row (decision 0166). A term
+// that is a column (ColumnByName's) orders as the column's handle does,
+// and After and a cursor follow it.
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E] { return t.order(false) }
 
 // Desc orders by t, descending, NULL first as every descending ordering

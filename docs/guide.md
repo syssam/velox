@@ -736,6 +736,31 @@ for {
 }
 ```
 
+A row holds no value of an expression, so `After` refuses an ordering by
+one (a relation's aggregate excepted). A computed key, such as a number
+parsed from a JSON member, pages through `Paginate`, the GraphQL
+connection: order the query by the expression, and velox selects its
+value beside each row (`AS velox_order_0`), puts it in the cursor and
+compares the same expression with it on the next page, the key breaking
+ties, after any `orderBy` the client gives. NULL goes where the ordering
+puts it, `NullsFirst`, `NullsLast` or the default:
+
+```go
+// The last digit of the votes, NULL for a multiple of 10.
+key := velox.Calc[veloxgen.Post]("NULLIF(? % ?, ?)", P.Votes, int64(10), int64(0))
+conn, err := db.Query[veloxgen.Post]().OrderBy(key.Desc().NullsLast()).
+	Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy))
+```
+
+Outside GraphQL, `untyped.FromQuery(q).OrderValues()` reads the values
+(`rows.OrderValues(i)`) and `AfterValues(row, vals)` continues after a
+row. The expression must give the same value for a row each time it runs,
+and compare in SQL as the value read back compares: velox binds that value,
+an integer, a float, text, a time, a bool or NULL, as the driver read it. A
+decimal the driver reads as text is bound as text, and the database
+converts it back; MySQL compares a decimal with text as a double. A window
+function or an aggregate is refused.
+
 ## Relations
 
 ### Eager loading with With

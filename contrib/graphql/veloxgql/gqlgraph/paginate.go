@@ -247,6 +247,11 @@ type term struct {
 	// as a term of the node's entity; zero for a column.
 	count   untyped.Term
 	isCount bool
+
+	// expr is, for an ordering of the query by an expression, that
+	// ordering, whose value the page reads beside each row (exprTerm); nil
+	// for a column.
+	expr *velox.OrderTerm
 }
 
 // newTerm is the term of c, in direction dir, on the connection's entity t.
@@ -309,7 +314,16 @@ func baseType(ft reflect.Type) reflect.Type {
 }
 
 // order is the term's column ordered ascending, or descending for desc.
+// An expression keeps its NULL placement, turned with its direction.
 func (t *term) order(desc bool) velox.OrderTerm {
+	if t.expr != nil {
+		o := *t.expr
+		if desc != o.Desc && o.Nulls != 0 {
+			o.Nulls = velox.NullsFirst + velox.NullsLast - o.Nulls
+		}
+		o.Desc = desc
+		return o
+	}
 	if t.isCount {
 		return untyped.OrderByTerm(t.count, desc)
 	}
@@ -329,8 +343,8 @@ func (t *term) row(p any, own untyped.Table) any {
 // get returns the term's value in the connection's row p as the base type,
 // nil for NULL.
 func (t *term) get(p any, own untyped.Table) any {
-	if t.isCount {
-		return nil // not in the row: After computes it from the key
+	if t.isCount || t.expr != nil {
+		return nil // not in the row: After computes it from the key, or the page reads it beside the row
 	}
 	r := t.row(p, own)
 	if r == nil {
@@ -371,8 +385,8 @@ func (t *term) get(p any, own untyped.Table) any {
 // value: of the base type in a cursor from a page, a JSON value in one from
 // the wire, nil for NULL.
 func (t *term) set(p any, own untyped.Table, v any) error {
-	if t.isCount {
-		return nil // After computes it from the row's key
+	if t.isCount || t.expr != nil {
+		return nil // After computes it from the row's key, or takes the value
 	}
 	r := t.row(p, own)
 	if r == nil && t.edge != 0 && v == nil && !t.null {
@@ -449,9 +463,11 @@ type Connection struct {
 	typ   string             // the GraphQL type of the nodes
 	n     int                // the page size
 	back  bool               // paging backward: last, or before
-	terms []term             // the order's terms, then the key's columns
+	terms []term             // q's orderings by an expression, the order's terms, then the key's columns
 	key   int                // the index in terms of the key's first column
+	exprs int                // the number of q's orderings by an expression, first in terms
 	after any                // the row the page starts after, in the paging direction
+	vals  []any              // after's values of q's orderings by an expression
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
@@ -475,10 +491,14 @@ type Connection struct {
 // the field it resolves.
 //
 // A Query's q keeps its filters, its With loads and the scope the application gave
-// it. It must not be ordered, since its order would come first and break the
-// cursors, and it must select the key and the columns of order's own fields,
-// which the cursors hold: a q that does either wrong is refused with an
-// internal error. Its Offset is cleared and its Limit replaced, as the page
+// it. It may be ordered by expressions only (OrderBy of a Calc or another
+// Term that is not a column or a relation's aggregate, with its Nulls):
+// they come first in the order, before order and the key, and each page
+// reads their values beside the rows for the cursors, which hold them
+// (ordervalue.go, decision 0166). An ordering by a column would come first
+// too and break the cursors. It must select the key and the columns of
+// order's own fields, which the cursors hold: a q that does either wrong is
+// refused with an internal error. Its Offset is cleared and its Limit replaced, as the page
 // is the connection's. It reads only the columns the selection of the field
 // of ctx needs (selected, narrow, c.columns): a column the selection does
 // not need is left zero in the nodes, except the key, the foreign keys and
@@ -551,7 +571,15 @@ func connectionBase(ctx context.Context, q untyped.TableQuery, c *Type, order []
 func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
 	typ := c.Name
 	own := q.Table()
-	terms := make([]term, 0, len(order)+len(c.Key))
+	pre, err := exprTerms(q, c)
+	if err != nil {
+		return nil, err
+	}
+	if pre != nil {
+		q = q.Unordered()
+	}
+	terms := make([]term, 0, len(pre)+len(order)+len(c.Key))
+	terms = append(terms, pre...)
 	for _, o := range order {
 		col := c.find(o.Field)
 		if col == nil {
@@ -562,10 +590,6 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 			return nil, err
 		}
 		terms = append(terms, t)
-	}
-	if q.Ordered() {
-		// The application's bug, not the client's: an uncoded error.
-		return nil, fmt.Errorf("veloxgql: %s: q has an OrderBy; the connection orders by its orderBy argument", newConnFunc(c))
 	}
 	lim := veloxgql.LimitsFromContext(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)
@@ -590,7 +614,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 		}
 		terms = append(terms, t)
 	}
-	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order)}
+	conn := &Connection{query: q.Offset(0), typ: typ, n: n, back: back, key: len(pre) + len(order), exprs: len(pre)}
 	var joined []int
 	for _, t := range terms {
 		if t.edge != 0 && !t.isCount && !slices.Contains(joined, t.edge) {
@@ -674,7 +698,12 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 		orders[i] = c.terms[i].order((c.terms[i].dir == veloxgql.OrderDirectionDesc) != c.back)
 	}
 	q := c.query.OrderBy(orders...)
-	if c.after != nil {
+	switch {
+	case c.exprs > 0 && c.after != nil:
+		q = q.OrderValues().AfterValues(c.after, c.vals)
+	case c.exprs > 0:
+		q = q.OrderValues()
+	case c.after != nil:
 		q = q.After(c.after)
 	}
 	var rows untyped.Rows
@@ -692,12 +721,22 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	n := min(rows.Len(), c.n)
 	more := rows.Len() > c.n
 	p := &Page{Rows: make([]any, n), Cursors: make([]veloxgql.Cursor, n), t: c.query.Table()}
+	var vals [][]any // each row's values of q's orderings by an expression
+	if c.exprs > 0 {
+		vals = make([][]any, n)
+	}
 	for i := range n {
 		p.Rows[i] = rows.At(i)
+		if vals != nil {
+			if vals[i], err = cursorValues(rows.OrderValues(i)); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if c.back {
 		// The pointers, not the rows: a batch's rows are shared.
 		slices.Reverse(p.Rows)
+		slices.Reverse(vals)
 	}
 	// The cursors' terms are one slab, not a slice for each row.
 	last := len(c.terms) - 1
@@ -705,6 +744,9 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	own := c.query.Table()
 	for i, x := range p.Rows {
 		p.Cursors[i] = c.cursor(own, x, slab[i*last:(i+1)*last:(i+1)*last])
+		for k := range c.exprs {
+			p.Cursors[i].Terms[k].Value = vals[i][k]
+		}
 	}
 	if c.edge == nil {
 		// A batch made its rows a group already.
@@ -761,6 +803,16 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 	if err := checkCursor(cur, c.typ, order); err != nil {
 		return nil, err
 	}
+	if c.exprs > 0 {
+		c.vals = make([]any, c.exprs)
+		for i := range c.vals {
+			v, err := orderValue(cur.Terms[i].Value)
+			if err != nil {
+				return nil, gqlcore.Within(c.typ+" cursor", err)
+			}
+			c.vals[i] = v
+		}
+	}
 	own := c.query.Table()
 	x := own.New()
 	for i := range c.terms[:last] {
@@ -778,14 +830,15 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 // and order, as entgql reads one: its key is the key, and its values are
 // the order's, whatever order it was taken under. A cursor whose number of
 // values is not the order's number of terms, or a connection whose key has
-// more than one column, which a msgpack cursor cannot hold, is refused as a
-// cursor taken under another order. A term on the key's own column, as
+// more than one column, which a msgpack cursor cannot hold, or whose query
+// orders by an expression, which entgql never did, is refused as a cursor
+// taken under another order. A term on the key's own column, as
 // orderBy ID, whose value is nil takes the key: such a cursor holds the key
 // alone for it.
 func (c *Connection) msgpack(l *gqlcore.MsgpackCursor) (veloxgql.Cursor, error) {
 	last := len(c.terms) - 1
 	vs, ok := l.Values(c.key)
-	if !ok || c.key != last {
+	if !ok || c.key != last || c.exprs > 0 {
 		return veloxgql.Cursor{}, errOtherOrder(c.typ)
 	}
 	key := c.terms[last]

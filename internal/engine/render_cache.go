@@ -179,10 +179,10 @@ func bit(b bool) byte {
 // ShapeKey encodes everything about a statement's shape except its entity,
 // which keys the outer map.
 func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
-	// Seven flags in one byte: the key is built in a fixed buffer, and one
+	// Eight flags in one byte: the key is built in a fixed buffer, and one
 	// that outgrows it costs an allocation on every statement.
 	flags := bit(st.Count) | bit(st.Exists)<<1 | bit(st.Columns != nil)<<2 | bit(st.Limit > 0)<<3 | bit(st.Offset > 0)<<4 | bit(st.Project != nil)<<5 |
-		bit(st.Distinct)<<6
+		bit(st.Distinct)<<6 | bit(st.OrderValues)<<7
 	k = append(k, byte(d), byte(st.Op), flags, byte(st.Aggregate), byte(st.Lock), byte(st.LockWait))
 	if st.Limit > 0 {
 		// LIMIT is in the text (selectTail), so its value is shape.

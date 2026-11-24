@@ -326,6 +326,7 @@ type JoinClause = engine.JoinClause
 //	AllRows bool // UPDATE and DELETE: the statement said All
 //	PolicyBypass string // the WithoutPolicy reason, which lifts every policy, a scope's included; raw SQL's reason
 //	DryRun bool // built for SQL(ctx), not sent
+//	OrderValues bool // a SELECT of rows also reads each OrderBy expression's value, AS velox_order_<n> (untyped's OrderValues); a Rewrite hook may not change it
 //	InTx bool // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
 //	Tx *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise
 //	Dialect Dialect // the DB's: an Around hook has only the statement

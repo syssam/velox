@@ -45,6 +45,7 @@ type rewriteSnapshot struct {
 	writable, inTx bool
 	count, exists  bool
 	distinct       bool
+	orderVals      int // orderValueCount: -1 when the statement reads no order values
 	group          int
 	agg            Aggregate
 	lock           Lock
@@ -67,7 +68,7 @@ type rewriteSnapshot struct {
 func takeRewriteSnapshot(st *Statement) rewriteSnapshot {
 	return rewriteSnapshot{
 		entity: st.Entity, op: st.Op, writable: st.Writable, inTx: st.InTx,
-		count: st.Count, exists: st.Exists, distinct: st.Distinct, group: st.GroupBy, agg: st.Aggregate,
+		count: st.Count, exists: st.Exists, distinct: st.Distinct, orderVals: orderValueCount(st), group: st.GroupBy, agg: st.Aggregate,
 		lock: st.Lock, wait: st.LockWait, cols: st.Columns, joins: st.Joins, project: st.Project,
 		was: st.Each, returning: len(st.Returning) > 0,
 		bidi: stmtBidi(st), pin: stmtPin(st), iter: st.iter, loaded: st.loaded,
@@ -107,6 +108,11 @@ func (s *rewriteSnapshot) restoreAndCheck(st *Statement) error {
 	if st.Exists != s.exists {
 		// The scan depends on it: Exists reads no column.
 		return changed("Exists")
+	}
+	if orderValueCount(st) != s.orderVals {
+		// The scan depends on it: one value after the columns for each
+		// expression of OrderBy.
+		return changed("OrderValues, or the expressions of OrderBy whose values it reads")
 	}
 	if st.Distinct != s.distinct {
 		// The guard checked it.

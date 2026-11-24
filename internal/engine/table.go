@@ -227,6 +227,10 @@ type TableRows struct {
 	// ptrs, when not nil, are the rows themselves, wherever they are in
 	// memory: a group of an InsertBulk's rows. p and size are then unused.
 	ptrs []unsafe.Pointer
+	// vals are the order values a read of the rows read beside them
+	// (TableQuery.OrderValues), nv per row; nv is 0 for none.
+	vals []any
+	nv   int
 }
 
 // Len returns the number of rows.

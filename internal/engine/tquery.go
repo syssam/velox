@@ -53,6 +53,11 @@ type TableQuery struct {
 	loads []LoadSpec
 	after unsafe.Pointer // After's row, copied
 	joins *JoinSet
+	// afterVals are AfterValues' values; nil for After's row alone.
+	afterVals []any
+	// orderVals says All reads the order values beside the rows
+	// (OrderValues).
+	orderVals bool
 }
 
 // QueryTable starts a query on t's entity through e: untyped.Query.
@@ -186,7 +191,7 @@ func (q TableQuery) After(row any) TableQuery {
 	if err != nil {
 		return q.fail(fmt.Errorf("velox: %s: After: %w", q.t.info.Name, err))
 	}
-	q.after = q.t.copyRow(p)
+	q.after, q.afterVals = q.t.copyRow(p), nil
 	return q
 }
 
@@ -279,13 +284,18 @@ type tableRun struct {
 	joins *JoinSet
 	buf   reflect.Value // the rows' array, a []E
 	n     int
+	vals  *orderValueScan // the order values, when the statement reads them
 }
 
 // readTable reads every row into a.buf, anew should an around hook retry. It
 // allocates as readAll does.
 func readTable(a *tableRun, r Rows) error {
 	rootN := ColumnCount(&a.st)
-	dst := make([]any, rootN+a.joins.Width())
+	a.vals = newOrderValueScan(&a.st)
+	dst := make([]any, rootN+a.joins.Width()+a.vals.width())
+	if a.vals != nil {
+		copy(dst[len(dst)-a.vals.n:], a.vals.dst)
+	}
 	n := FirstCap(&a.st)
 	typ := a.t.slice.(reflect.Type)
 	a.buf, a.n = reflect.MakeSlice(typ, n, n), 0
@@ -305,10 +315,13 @@ func readTable(a *tableRun, r Rows) error {
 			if err := a.joins.Scan(r, a.st.Columns, rootN, dst, p); err != nil {
 				return err
 			}
+			if a.vals != nil {
+				a.vals.keep()
+			}
 			continue
 		}
-		bindTableRow(a.t, a.st.Columns, dst, p)
-		if err := r.Scan(dst...); err != nil {
+		bindTableRow(a.t, a.st.Columns, dst[:rootN], p)
+		if err := scanWithValues(r, dst, a.vals); err != nil {
 			return err
 		}
 	}
@@ -320,7 +333,11 @@ func (a *tableRun) rows() TableRows {
 	if a.n == 0 {
 		return TableRows{size: a.t.size, info: a.t.info}
 	}
-	return TableRows{p: a.buf.UnsafePointer(), size: a.t.size, n: a.n, info: a.t.info}
+	r := TableRows{p: a.buf.UnsafePointer(), size: a.t.size, n: a.n, info: a.t.info}
+	if a.vals != nil {
+		r.vals, r.nv = a.vals.vals, a.vals.n
+	}
+	return r
 }
 
 // check is the error any way of running q fails with before preparing it.
@@ -348,6 +365,7 @@ func (q TableQuery) read(ctx context.Context) (out TableRows, ran []int, at Targ
 	if err != nil {
 		return TableRows{}, nil, at, err
 	}
+	st.OrderValues = q.orderVals
 	if q.e.Hooked() {
 		a := &tableRun{st: st, t: q.t, joins: q.joins}
 		err = q.e.Run(ctx, &a.st, func(r Rows) error { return readTable(a, r) }, nil)
@@ -482,6 +500,7 @@ func (q TableQuery) SQL(ctx context.Context) (string, []any, error) {
 	if err != nil {
 		return "", nil, err
 	}
+	st.OrderValues = q.orderVals && st.Project == nil
 	text, args, err := q.e.DryRun(ctx, &st)
 	if err != nil {
 		return "", nil, err
@@ -552,9 +571,11 @@ func (q TableQuery) prepare() (Statement, error) {
 // prepareAny is prepare for a query that may hold a projection: SQL shows
 // it and Rows reads it.
 func (q TableQuery) prepareAny() (Statement, error) {
-	st, err := PrepareStmt(&q.st, q.t.info, q.after)
-	if err != nil {
-		return Statement{}, err
+	st := CloneStatement(&q.st)
+	if q.after != nil {
+		if err := AddAfterValues(&st, q.t.info, q.after, q.afterVals); err != nil {
+			return Statement{}, err
+		}
 	}
 	return st, q.t.checkStatement(&st)
 }

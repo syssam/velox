@@ -25,17 +25,32 @@ func sliceOrMap(t any) bool {
 // Of a left join, a row with no joined entity pages from NULL, as the join
 // read it. A term that is a relation's aggregate is compared with the same
 // aggregate bound to the row's key (relSource); any other expression is
-// refused.
+// refused: AddAfterValues pages over one.
 func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
+	return AddAfterValues(st, in, after, nil)
+}
+
+// AddAfterValues is AddAfter with vals, the row's values of st's orderings
+// that are expressions (OrderValueTerm), in order: each such term is
+// compared with its value (valueEqual, valuePast). A nil vals refuses such
+// a term, as AddAfter does; otherwise its length must be their number.
+func AddAfterValues(st *Statement, in *EntityInfo, after unsafe.Pointer, vals []any) error {
 	if len(st.OrderBy) == 0 {
 		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
 	}
+	n := 0
 	for _, o := range st.OrderBy {
-		if t, _ := o.Expr.(Term); o.Expr != nil && t.kind != termRel {
-			return errAfterExpr(in.Name)
+		if OrderValueTerm(o) {
+			if vals == nil {
+				return errAfterExpr(in.Name)
+			}
+			n++
 		}
 	}
-	srcs, ordered, err := afterSources(st, in, after)
+	if vals != nil && len(vals) != n {
+		return fmt.Errorf("velox: %s: AfterValues was given %d values for %d orderings by an expression", in.Name, len(vals), n)
+	}
+	srcs, ordered, err := afterSources(st, in, after, vals)
 	if err != nil {
 		return err
 	}
@@ -50,11 +65,19 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 // value from: the statement's own, or a joined one. It also returns the
 // set of the statement's own columns that the order names, and refuses a
 // term that After cannot page over.
-func afterSources(st *Statement, in *EntityInfo, after unsafe.Pointer) ([]afterSource, map[int]bool, error) {
+func afterSources(st *Statement, in *EntityInfo, after unsafe.Pointer, vals []any) ([]afterSource, map[int]bool, error) {
 	srcs := make([]afterSource, len(st.OrderBy))
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for i, o := range st.OrderBy {
 		src := afterSource{info: in, row: after}
+		if OrderValueTerm(o) {
+			var err error
+			if srcs[i], err = valueSource(in, o, vals[0]); err != nil {
+				return nil, nil, err
+			}
+			vals = vals[1:]
+			continue
+		}
 		if o.Expr != nil {
 			var err error
 			if srcs[i], err = relSource(st, in, after, o.Expr.(Term)); err != nil {
@@ -176,6 +199,10 @@ func afterCondition(st *Statement, srcs []afterSource) Node {
 				and = append(and, relEqual(prev.Expr.(Term), *r))
 				continue
 			}
+			if srcs[k].value {
+				and = append(and, valueEqual(prev, srcs[k].v))
+				continue
+			}
 			v := value(k)
 			if nullable(k) && nullValue(v) {
 				and = append(and, orderTerm(prev, OpIsNull, nil))
@@ -186,6 +213,11 @@ func afterCondition(st *Statement, srcs []afterSource) Node {
 		var past Node
 		if r := srcs[i].rel; r != nil {
 			past = relPast(o, *r)
+		} else if srcs[i].value {
+			var ok bool
+			if past, ok = valuePast(o, srcs[i].v); !ok {
+				continue // no row is past NULL
+			}
 		} else {
 			var ok bool
 			if past, ok = pastValue(o, value(i), nullable(i)); !ok {
@@ -271,6 +303,10 @@ type afterSource struct {
 	row  unsafe.Pointer
 	left bool  // of a left join: the column is NULL where the join found no row
 	rel  *Term // of an ordering by a relation's aggregate: it, bound to the row's key
+	// value says the term is an OrderValueTerm, whose value for the row
+	// is v, read beside it (AddAfterValues).
+	value bool
+	v     any
 }
 
 // joinedSource is the joined entity that o, an ordering by a joined relation, reads

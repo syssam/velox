@@ -244,6 +244,9 @@ func (w *writer) selectStmt(st *Statement) {
 		}
 		w.selectColumns(st.Columns, joined)
 		w.joinColumns()
+		if st.OrderValues {
+			w.orderValueColumns(st.OrderBy)
+		}
 	}
 	w.str(" FROM ")
 	w.table()
@@ -269,6 +272,24 @@ func (w *writer) joinColumns() {
 			w.str(".")
 			w.ident(t.Columns[c].Name)
 		}
+	}
+}
+
+// orderValueColumns writes, after the columns of a SELECT of rows, the
+// value of each term of os that is an expression (OrderValueTerm), the n-th
+// under the alias velox_order_<n>: Statement.OrderValues. Each copy binds
+// its own values, as an expression's IS NULL term in ORDER BY does.
+func (w *writer) orderValueColumns(os []OrderTerm) {
+	n := 0
+	for _, o := range os {
+		if !OrderValueTerm(o) {
+			continue
+		}
+		w.str(", ")
+		w.term(o.Expr.(Term))
+		w.str(" AS ")
+		w.ident("velox_order_" + strconv.Itoa(n))
+		n++
 	}
 }
 

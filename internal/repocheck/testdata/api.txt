@@ -91,6 +91,7 @@ Statement.MaxRows int
 Statement.Offset int
 Statement.Op Op
 Statement.OrderBy []OrderTerm
+Statement.OrderValues bool
 Statement.PolicyBypass string
 Statement.Project *Projection
 Statement.RawReasons() []string
@@ -1535,6 +1536,7 @@ package untyped
 PredOp is uint8
 Rows.At(i int) any
 Rows.Len() int
+Rows.OrderValues(i int) []any
 Table.Assign(col int, v any) (Assignment, error)
 Table.Convert(col int, v any) (any, error)
 Table.Err() error
@@ -1547,6 +1549,7 @@ Table.Info() *EntityInfo
 Table.New() any
 Table.NewRows(n int) TableRows
 Table.Of(edge int, target Table, owners ...any) Predicate
+Table.OrderSig(o OrderTerm) string
 Table.Pred(col int, op PredOp, v any) Predicate
 Table.RelAgg(edge int, target Table, agg Term, ps ...Predicate) Term
 Table.ScopedKey(p Predicate, edge int, target Table) Predicate
@@ -1564,6 +1567,7 @@ TableInsert.OnConflict(cols ...int) TableInsert
 TableInsert.SQL(ctx context.Context) (string, []any, error)
 TableInsert.Update(cols ...int) TableInsert
 TableQuery.After(row any) TableQuery
+TableQuery.AfterValues(row any, vals []any) TableQuery
 TableQuery.All(ctx context.Context) (TableRows, error)
 TableQuery.AllowUnbounded() TableQuery
 TableQuery.Columns(cs ...int) TableQuery
@@ -1582,13 +1586,16 @@ TableQuery.LoadEach(ctx context.Context, owner Table, edge, each int, owners []a
 TableQuery.MaxRows(n int) TableQuery
 TableQuery.Offset(n int) TableQuery
 TableQuery.One(ctx context.Context) (any, error)
+TableQuery.Order() []OrderTerm
 TableQuery.OrderBy(os ...OrderTerm) TableQuery
+TableQuery.OrderValues() TableQuery
 TableQuery.Ordered() bool
 TableQuery.Rows(ctx context.Context) RawRows
 TableQuery.SQL(ctx context.Context) (string, []any, error)
 TableQuery.Select(ts ...Term) TableQuery
 TableQuery.Selects(cs ...int) bool
 TableQuery.Table() Table
+TableQuery.Unordered() TableQuery
 TableQuery.Where(ps ...Predicate) TableQuery
 TableQuery.Writable() TableQuery
 TableUpdate.All() TableUpdate
@@ -1638,6 +1645,7 @@ func MutationTable(m *velox.Mutation) Table
 func Not(p velox.Predicate) velox.Predicate
 func Or(ps ...velox.Predicate) velox.Predicate
 func OrderByTerm(t Term, desc bool) velox.OrderTerm
+func OrderValueTerm(o velox.OrderTerm) bool
 func Query(db *velox.DB, t Table) TableQuery
 func Rewrites(db *velox.DB) bool
 func RowsOf[E any](r Rows) []E

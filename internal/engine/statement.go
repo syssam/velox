@@ -151,8 +151,13 @@ type Statement struct {
 	Unbounded    bool            // the query said AllowUnbounded
 	AllRows      bool            // UPDATE and DELETE: the statement said All
 	DryRun       bool            // built for SQL(ctx), not sent
-	InTx         bool            // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
-	Dialect      Dialect         // the DB's: an Around hook has only the statement
+	// OrderValues says a SELECT of rows also reads, after the columns and
+	// the joined columns, the value of each OrderBy term that is an
+	// expression (OrderValueTerm), under the alias velox_order_<n>:
+	// TableQuery.OrderValues; a Rewrite hook may not change it.
+	OrderValues bool
+	InTx        bool    // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
+	Dialect     Dialect // the DB's: an Around hook has only the statement
 	// Tags are the context's WithTags tags, set before the hooks run. A
 	// Rewrite hook gets its own copy; it may change them, and the SQL
 	// comment is rendered from what it leaves.
