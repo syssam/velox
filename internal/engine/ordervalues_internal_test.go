@@ -6,6 +6,8 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -238,6 +240,55 @@ func TestBoundValue(t *testing.T) {
 		text, arg := boundValue(c.d, c.v)
 		if text != c.text || !reflect.DeepEqual(arg, c.arg) {
 			t.Errorf("%v %#v: %s %#v, want %s %#v", c.d, c.v, text, arg, c.text, c.arg)
+		}
+	}
+}
+
+// TestOrderValueGrammars: the written-out checks accept exactly what the
+// grammars' regexps do, over strings built from the bytes they look at.
+func TestOrderValueGrammars(t *testing.T) {
+	for _, g := range []struct {
+		name string
+		re   *regexp.Regexp
+		f    func(string) bool
+	}{
+		{"decimal", regexp.MustCompile(`^-?[0-9]{1,200}(\.[0-9]{1,100})?$`), decimalText},
+		{"time", regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}( [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?)?$`), timeShape},
+		{"zero", regexp.MustCompile(`^0000-00-00( 00:00:00(\.0{1,6})?)?$`), zeroTimeText},
+		{"json", regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`), jsonNumber},
+	} {
+		seeds := []string{"", "0", "-0", "01", "1.", ".5", "-1.25", "1e5", "1E+5", "1e", "1.5e-3", "-", "0.0",
+			"2026-03-01", "2026-03-01 10:00:00", "2026-03-01 10:00:00.123456", "2026-03-01 10:00:00.1234567",
+			"2026-03-01 10:00:00.", "2026-03-01 10:00", "0000-00-00", "0000-00-00 00:00:00", "0000-00-00 00:00:00.000000",
+			"0000-00-00 00:00:00.0000000", "0000-00-00 00:00:01", "0000-00-00T00:00:00", strings.Repeat("9", 200), strings.Repeat("9", 201),
+			"1." + strings.Repeat("0", 100), "1." + strings.Repeat("0", 101)}
+		alphabet := "0123456789-.:eE+ T"
+		for _, s := range slices.Clone(seeds) { // each with one byte changed, cut or added
+			for i := range len(s) + 1 {
+				seeds = append(seeds, s[:i])
+				for _, c := range []byte(alphabet) {
+					seeds = append(seeds, s[:i]+string(c)+s[i:])
+					if i < len(s) {
+						seeds = append(seeds, s[:i]+string(c)+s[i+1:])
+					}
+				}
+			}
+		}
+		r := uint64(1)
+		for range 200000 {
+			r = r*6364136223846793005 + 1442695040888963407
+			n := int(r>>59) % 28
+			b := make([]byte, n)
+			for i := range b {
+				r = r*6364136223846793005 + 1442695040888963407
+				b[i] = alphabet[int(r>>33)%len(alphabet)]
+			}
+			seeds = append(seeds, string(b))
+		}
+		for _, s := range seeds {
+			if g.re.MatchString(s) != g.f(s) {
+				t.Errorf("%s %q: regexp %v, check %v", g.name, s, g.re.MatchString(s), g.f(s))
+			}
 		}
 	}
 }

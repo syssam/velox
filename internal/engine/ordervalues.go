@@ -9,7 +9,6 @@ import (
 	"hash/fnv"
 	"math"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -121,7 +120,7 @@ func zeroDate(d Dialect, v any) bool {
 	}
 	switch x := v.(type) {
 	case TimeText:
-		return zeroTimeText.MatchString(string(x))
+		return zeroTimeText(string(x))
 	case time.Time:
 		return x.IsZero()
 	}
@@ -145,7 +144,7 @@ func checkOrderValue(d Dialect, v any) error {
 	case DecimalText:
 		ok = d == Postgres || !specialDecimal(string(x))
 	case TimeText:
-		ok = d == MySQL || !zeroTimeText.MatchString(string(x))
+		ok = d == MySQL || !zeroTimeText(string(x))
 	case float64:
 		switch {
 		case math.IsNaN(x):
@@ -389,12 +388,12 @@ func EncodeOrderValue(v any) (any, error) {
 	case []byte:
 		return "s:" + string(x), nil
 	case DecimalText:
-		if !decimalText.MatchString(string(x)) && !specialDecimal(string(x)) {
+		if !decimalText(string(x)) && !specialDecimal(string(x)) {
 			return nil, fmt.Errorf("velox: an ordering by an expression read the decimal %q, which a cursor cannot hold", string(x))
 		}
 		return "d:" + string(x), nil
 	case TimeText:
-		if !validTimeText(string(x)) && !zeroTimeText.MatchString(string(x)) {
+		if !validTimeText(string(x)) && !zeroTimeText(string(x)) {
 			return nil, fmt.Errorf("velox: an ordering by an expression read the time %q, which a cursor cannot hold", string(x))
 		}
 		return "dt:" + string(x), nil
@@ -416,23 +415,108 @@ func floatOrderValue(f float64) any {
 	return json.Number(s)
 }
 
-// What DecodeOrderValue takes, as EncodeOrderValue writes it: a cursor is
+// What DecodeOrderValue takes is what EncodeOrderValue writes: a cursor is
 // the client's, and a value the database would cast to something else (a
 // hex or NaN decimal MySQL casts to 0, a time it casts to NULL) would page
-// from the wrong place.
-var (
-	// decimalText is a decimal as MySQL and PostgreSQL print one: digits,
-	// a sign and a point, no exponent.
-	decimalText = regexp.MustCompile(`^-?[0-9]{1,200}(\.[0-9]{1,100})?$`)
-	// timeText is MySQL's DATE, or DATETIME and TIMESTAMP with up to six
-	// fraction digits.
-	timeText = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}( [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?)?$`)
-	// zeroTimeText is MySQL's zero date as it prints it, with up to six
-	// zero fraction digits.
-	zeroTimeText = regexp.MustCompile(`^0000-00-00( 00:00:00(\.0{1,6})?)?$`)
-	// jsonNumber is a JSON number.
-	jsonNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
-)
+// from the wrong place. The checks are written out, not regexps, so that a
+// program that never pages by an expression links no regexp package.
+
+// digits is the count of ASCII digits s begins with.
+func digits(s string) int {
+	n := 0
+	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
+		n++
+	}
+	return n
+}
+
+// decimalText reports whether s is a decimal as MySQL and PostgreSQL print
+// one: an optional minus, 1 to 200 digits, and optionally a point and 1 to
+// 100 digits; no exponent.
+func decimalText(s string) bool {
+	s = strings.TrimPrefix(s, "-")
+	n := digits(s)
+	if n < 1 || n > 200 {
+		return false
+	}
+	s = s[n:]
+	if s == "" {
+		return true
+	}
+	if s[0] != '.' {
+		return false
+	}
+	n = digits(s[1:])
+	return n >= 1 && n <= 100 && n == len(s)-1
+}
+
+// timeShape reports whether s is shaped as MySQL's DATE (2006-01-02), or
+// DATETIME and TIMESTAMP (2006-01-02 15:04:05) with up to six fraction
+// digits, with digit and separator bytes in place.
+func timeShape(s string) bool {
+	const layout = "0000-00-00 00:00:00"
+	if len(s) != 10 && len(s) < len(layout) {
+		return false
+	}
+	for i := 0; i < len(s) && i < len(layout); i++ {
+		if layout[i] == '0' {
+			if s[i] < '0' || s[i] > '9' {
+				return false
+			}
+		} else if s[i] != layout[i] {
+			return false
+		}
+	}
+	if len(s) <= len(layout) {
+		return true
+	}
+	frac := s[len(layout):]
+	n := digits(frac[1:])
+	return frac[0] == '.' && n >= 1 && n <= 6 && n == len(frac)-1
+}
+
+// zeroTimeText reports whether s is MySQL's zero date as it prints it:
+// 0000-00-00, with 00:00:00 and up to six zero fraction digits.
+func zeroTimeText(s string) bool {
+	if !timeShape(s) {
+		return false
+	}
+	for i := range len(s) {
+		if c := s[i]; c != '0' && c != '-' && c != ' ' && c != ':' && c != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// jsonNumber reports whether s is a number as JSON spells one.
+func jsonNumber(s string) bool {
+	s = strings.TrimPrefix(s, "-")
+	n := digits(s)
+	if n == 0 || (n > 1 && s[0] == '0') {
+		return false
+	}
+	s = s[n:]
+	if s != "" && s[0] == '.' {
+		n = digits(s[1:])
+		if n == 0 {
+			return false
+		}
+		s = s[1+n:]
+	}
+	if s != "" && (s[0] == 'e' || s[0] == 'E') {
+		s = s[1:]
+		if s != "" && (s[0] == '+' || s[0] == '-') {
+			s = s[1:]
+		}
+		n = digits(s)
+		if n == 0 {
+			return false
+		}
+		s = s[n:]
+	}
+	return s == ""
+}
 
 // specialDecimal reports whether s is a PostgreSQL numeric that is not a
 // number, exactly as it prints it: NaN, which sorts after every number
@@ -444,7 +528,7 @@ func specialDecimal(s string) bool {
 // validTimeText reports whether s is a date or a time as MySQL prints one,
 // and a real date and time.
 func validTimeText(s string) bool {
-	if !timeText.MatchString(s) {
+	if !timeShape(s) {
 		return false
 	}
 	layout := "2006-01-02"
@@ -466,7 +550,7 @@ func DecodeOrderValue(v any) (any, error) {
 	case nil, bool, int64:
 		return x, nil
 	case json.Number:
-		if !jsonNumber.MatchString(string(x)) {
+		if !jsonNumber(string(x)) {
 			break
 		}
 		if n, err := strconv.ParseInt(string(x), 10, 64); err == nil {
@@ -491,11 +575,11 @@ func decodeTagged(x string) (any, error) {
 	case tag == "s":
 		return rest, nil
 	case tag == "d":
-		if decimalText.MatchString(rest) || specialDecimal(rest) {
+		if decimalText(rest) || specialDecimal(rest) {
 			return DecimalText(rest), nil
 		}
 	case tag == "dt":
-		if validTimeText(rest) || zeroTimeText.MatchString(rest) {
+		if validTimeText(rest) || zeroTimeText(rest) {
 			return TimeText(rest), nil
 		}
 	case tag == "u":
