@@ -2,12 +2,16 @@ package untyped_test
 
 import (
 	"context"
+	"database/sql"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
 	"github.com/syssam/velox/untyped"
+
+	_ "modernc.org/sqlite"
 )
 
 // TestTableOfNoEntity: the Table of a type that is not an entity holds the
@@ -50,5 +54,63 @@ func TestRewrites(t *testing.T) {
 	rw := velox.WithRewrite(func(context.Context, *velox.Statement) error { return nil })
 	if !untyped.Rewrites(velox.Open(velox.SQLite, nil, rw)) {
 		t.Error("a DB with a Rewrite hook: false")
+	}
+}
+
+// TestSourceDBNone: a row no statement made, and a value that is not a row
+// of the Table's entity, have no source DB.
+func TestSourceDBNone(t *testing.T) {
+	tk := untyped.TableOf[testmodel.Ticket]()
+	if db := untyped.SourceDB(tk, &testmodel.Ticket{ID: 1}); db != nil {
+		t.Errorf("a hand-built row: %v, want nil", db)
+	}
+	if db := untyped.SourceDB(tk, "not a row"); db != nil {
+		t.Errorf("not a row: %v, want nil", db)
+	}
+}
+
+// TestOrderValueRoundTrip: a value EncodeOrderValue writes reads back
+// through DecodeOrderValue; a value it does not write is an error.
+func TestOrderValueRoundTrip(t *testing.T) {
+	enc, err := untyped.EncodeOrderValue("abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dec, err := untyped.DecodeOrderValue(enc); err != nil || dec != "abc" {
+		t.Errorf("round trip of text: %v, %v", dec, err)
+	}
+	if _, err := untyped.DecodeOrderValue(struct{}{}); err == nil {
+		t.Error("decoding a struct: no error")
+	}
+}
+
+// TestInsertBulkOtherTable: a query of another Table fails the bulk insert.
+func TestInsertBulkOtherTable(t *testing.T) {
+	db := velox.Open(velox.SQLite, nil)
+	tk, inv := untyped.TableOf[testmodel.Ticket](), untyped.TableOf[testmodel.Invoice]()
+	q := untyped.Insert(db, inv, &testmodel.Invoice{})
+	if _, _, err := untyped.InsertBulk(db, tk, q).SQL(context.Background()); err == nil {
+		t.Error("an insert of another Table: no error")
+	}
+}
+
+// TestSourceDBOfARead: a row a statement read gives the DB it was read on.
+func TestSourceDBOfARead(t *testing.T) {
+	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "source.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	if _, err := raw.Exec(`CREATE TABLE tickets (id INTEGER PRIMARY KEY, created_by TEXT, org_id INTEGER, owner TEXT, title TEXT, done INTEGER, invoice_id INTEGER, parent_id INTEGER);
+INSERT INTO tickets VALUES (1, 'u', 1, 'o', 't', 0, 1, NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, raw)
+	tk, err := db.Raw[testmodel.Ticket]("test", `SELECT id, created_by, org_id, owner, title, done, invoice_id, parent_id FROM tickets`).One(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := untyped.SourceDB(untyped.TableOf[testmodel.Ticket](), tk); got == nil {
+		t.Error("a row db read: no source DB")
 	}
 }
