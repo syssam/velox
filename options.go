@@ -88,7 +88,10 @@ func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)
 // relation's two sides.
 //
 // db is the DB the statement runs on, never nil: inside Tx it is the
-// transaction's, as Mutation.DB is for a hook. A filter that reads the
+// transaction's, as Mutation.DB is for a hook. WithoutPolicy does not
+// lift a filter, so db has no WithoutPolicy reason: a read through it is
+// judged by the policies, even under a statement that skips them. A
+// filter that reads the
 // database to make its condition, such as a team's members or an
 // organization's subtree, reads through db and the ctx it is given, so
 // that a statement gets the same condition inside a transaction and

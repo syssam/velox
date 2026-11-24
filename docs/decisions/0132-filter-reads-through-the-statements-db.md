@@ -3,7 +3,8 @@
 - Status: accepted, 2026-11-23. Amends
   [0098](0098-hooks-and-filters-for-every-entity.md). Amended by
   [0151](0151-explicit-aggregates-filter-entity-policy-db.md): the entity
-  is a `FilterEntity`, not its name.
+  is a `FilterEntity`, not its name, and the DB has no WithoutPolicy
+  reason, as WithoutPolicy does not lift a filter.
 
 ## Context
 

@@ -159,8 +159,8 @@ the DB its Filter gets is the statement's without the WithoutPolicy
 reason: a read through it is judged by the policies, which the bypass
 would otherwise have lent the interceptor
 (`TestInterceptorDBKeepsPolicies`). A `WithFilter` filter, which
-WithoutPolicy does not lift either, still gets the statement's DB as it
-is (0132). `TxFrom` stays for helpers handed a DB and a
+WithoutPolicy does not lift either, gets the same DB, amending 0132's
+"the DB its statement runs on" (`TestFilterDBKeepsPolicies`). `TxFrom` stays for helpers handed a DB and a
 ctx, such as a `WithTx` that joins the caller's transaction; no behaviour
 function needs it. velox-gen checks policy keys, not function types, so it is unchanged, and
 the generated code is unchanged: no version change.

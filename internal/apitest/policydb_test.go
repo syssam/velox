@@ -203,6 +203,40 @@ func TestInterceptorDBKeepsPolicies(t *testing.T) {
 	}
 }
 
+// TestFilterDBKeepsPolicies: WithoutPolicy does not lift a WithFilter
+// filter, which runs under it, so the DB the filter gets has no bypass: a
+// read through it is judged by the policies. Before, it was the
+// statement's DB with the bypass on.
+func TestFilterDBKeepsPolicies(t *testing.T) {
+	resetPNote(t)
+	ctx := context.Background()
+	var bypass []string
+	var rows []int
+	fixture.PNoteRead = func(context.Context, *velox.DB) (velox.Predicate, error) {
+		return velox.FieldEQ("owner_id", 2), nil
+	}
+	db := interceptorDB(t, velox.WithFilter(func(ctx context.Context, db *velox.DB, e velox.FilterEntity, _ velox.Op) (velox.Predicate, error) {
+		if e.Name() != "PNote" {
+			return velox.Allow(), nil
+		}
+		bypass = append(bypass, db.PolicyBypass())
+		ns, err := db.Query[fixture.PNote]().Limit(10).All(ctx)
+		if err != nil {
+			return velox.Predicate{}, err
+		}
+		rows = append(rows, len(ns))
+		return velox.Allow(), nil
+	}))
+	for _, d := range []*velox.DB{db, db.WithoutPolicy("audit")} {
+		if _, err := d.Query[fixture.PNote]().Count(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(bypass, []string{"", ""}) || !slices.Equal(rows, []int{1, 1}) {
+		t.Errorf("the filter ran %d times, its db had bypass %q and read %v rows, want twice, no bypass and owner 2's 1 row each time", len(bypass), bypass, rows)
+	}
+}
+
 // TestInsertPolicyInImplicitTx: an insert that velox runs in a transaction
 // of its own, as a recording DB's does, asks the Insert policy inside it,
 // with a DB of that transaction, which reads through it. Before, the

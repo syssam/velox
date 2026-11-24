@@ -68,11 +68,10 @@ type Scoper struct {
 	// Filters are the DB's WithFilter filters, which every entity's row
 	// condition gets before its interceptors', given the op (RowCond).
 	Filters []EntityFilterFn
-	// db is the DB the statement runs on, which the filters are given;
-	// nil in a test that has none.
+	// db is the DB the statement runs on; nil in a test that has none.
 	db *DB
-	// kept is db without its WithoutPolicy reason, which the interceptors
-	// are given (keptDB); made on first use.
+	// kept is db without its WithoutPolicy reason, which the filters and
+	// interceptors are given (keptDB); made on first use.
 	kept *DB
 	// Reads is set for a statement that reads only (a SELECT that is not
 	// Writable): the policies' Query conditions apply to it, and to every
@@ -173,10 +172,10 @@ func (sc *Scoper) markCut(at int) {
 	}
 }
 
-// keptDB is the DB an interceptor's Filter is given: the statement's,
-// without its WithoutPolicy reason. WithoutPolicy does not lift an
-// interceptor, so a read the Filter makes through it is judged by the
-// policies (ADR 0151). A DB with no reason is given as it is.
+// keptDB is the DB a WithFilter filter and an interceptor's Filter are
+// given: the statement's, without its WithoutPolicy reason. WithoutPolicy
+// lifts neither, so a read one makes through it is judged by the policies
+// (ADR 0151). A DB with no reason is given as it is.
 func (sc *Scoper) keptDB() *DB {
 	if sc.db == nil || sc.db.bypass == "" {
 		return sc.db
@@ -195,7 +194,7 @@ func (sc *Scoper) rowCond(t *EntityInfo, op, fop Op) (Predicate, error) {
 	var kids []Node
 	if len(sc.Filters) > 0 {
 		for i := range sc.Filters {
-			p, skip, err := callFilter(sc.Ctx, sc.db, sc.Filters, i, t, fop)
+			p, skip, err := callFilter(sc.Ctx, sc.keptDB(), sc.Filters, i, t, fop)
 			if skip {
 				continue
 			}

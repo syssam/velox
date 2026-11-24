@@ -826,8 +826,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   statement's DB, the transaction's inside `Tx`, as a `Policy` function's
   and a `WithFilter` filter's are. A Filter that read joined with
   `velox.TxFrom` reads through `db` (ADR 0151). WithoutPolicy does not
-  lift an interceptor, so its `db` has no WithoutPolicy reason, and a read
-  through it is judged by the policies (ADR 0151).
+  lift an interceptor or a `WithFilter` filter, so the `db` either gets has
+  no WithoutPolicy reason, and a read through it is judged by the policies
+  (ADR 0151).
 - An insert that velox runs in a transaction of its own (a batch of
   several statements, a recording DB's insert, MySQL's upsert that reads
   its row back) asks the Insert policy and the Mutation rules inside it,
