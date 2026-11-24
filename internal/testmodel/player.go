@@ -14,6 +14,8 @@ type Player struct {
 	Name string `json:"name"`
 	// Edges holds Player's relations, filled by With.
 	Edges PlayerEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // PlayerEdges holds the relations of Player, filled by With.
@@ -96,6 +98,7 @@ func playerDescriptor() velox.Descriptor[Player] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Player) *velox.Source { return &x.source },
 	}
 }
 
@@ -106,3 +109,11 @@ func (p Player) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (p Player) GoString() string { return p.String() }
+
+// QueryTeams queries the edge teams, to Team, on the DB that read or wrote p.
+func (p *Player) QueryTeams() velox.Query[Team] { return velox.QueryEdge(p.source, p, Players.Teams) }
+
+// QueryRosters queries the edge rosters, to Roster, on the DB that read or wrote p.
+func (p *Player) QueryRosters() velox.Query[Roster] {
+	return velox.QueryEdge(p.source, p, Players.Rosters)
+}

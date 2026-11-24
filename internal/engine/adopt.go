@@ -46,6 +46,7 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 	}
 	f := newTxFrame(context.Background(), DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, bypass: db.bypass, rec: db.rec}, nil)
 	f.adopted = true
+	adoptedSource(&f.db)
 	return &f.db, nil
 }
 

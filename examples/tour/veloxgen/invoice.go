@@ -26,6 +26,8 @@ type Invoice struct {
 	TotalCents int64         `json:"total_cents"`
 	// Edges holds Invoice's relations, filled by With.
 	Edges InvoiceEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // InvoiceEdges holds the relations of Invoice, filled by With.
@@ -166,6 +168,7 @@ func invoiceDescriptor() velox.Descriptor[Invoice] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Invoice) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case invoiceColStatus:
@@ -192,6 +195,9 @@ func (i Invoice) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (i Invoice) GoString() string { return i.String() }
+
+// QueryLines queries the edge lines, to Line, on the DB that read or wrote i.
+func (i *Invoice) QueryLines() velox.Query[Line] { return velox.QueryEdge(i.source, i, Invoices.Lines) }
 
 // InvoiceStatus is the type of Invoice's status field.
 type InvoiceStatus string

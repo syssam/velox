@@ -23,6 +23,8 @@ type Membership struct {
 	GroupID  int64     `json:"group_id"`
 	// Edges holds Membership's relations, filled by With.
 	Edges MembershipEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // MembershipEdges holds the relations of Membership, filled by With.
@@ -134,6 +136,7 @@ func membershipDescriptor() velox.Descriptor[Membership] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Membership) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case membershipColRole:
@@ -157,6 +160,16 @@ func (m Membership) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (m Membership) GoString() string { return m.String() }
+
+// QueryUser queries the edge user, to User, on the DB that read or wrote m.
+func (m *Membership) QueryUser() velox.Query[User] {
+	return velox.QueryEdge(m.source, m, Memberships.User)
+}
+
+// QueryGroup queries the edge group, to Group, on the DB that read or wrote m.
+func (m *Membership) QueryGroup() velox.Query[Group] {
+	return velox.QueryEdge(m.source, m, Memberships.Group)
+}
 
 // MembershipRole is the type of Membership's role field.
 type MembershipRole string

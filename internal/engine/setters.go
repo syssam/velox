@@ -395,6 +395,16 @@ func UpdateSQL(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (st
 // when they assign nothing either, no UPDATE is sent and the row is read
 // back under the policies (ADR 0136). So does one of only edge setters.
 func UpdateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
+	p, err := updateOne(ctx, db, st, edges)
+	if err == nil {
+		// Its row was read in a transaction velox ran: it reads on db.
+		db.src.Put(st.Entity, p)
+	}
+	return p, err
+}
+
+// updateOne is UpdateOne without the row's Source.
+func updateOne(ctx context.Context, db *DB, st *Statement, edges []*EdgeSet) (unsafe.Pointer, error) {
 	in := st.Entity
 	if len(in.PrimaryKey) == 0 {
 		return nil, fmt.Errorf("velox: %s: One needs a primary key to read the row back", in.Name)

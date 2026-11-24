@@ -24,6 +24,8 @@ type Roster struct {
 	TeamID   int64  `json:"team_id"`
 	// Edges holds Roster's relations, filled by With.
 	Edges RosterEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // RosterEdges holds the relations of Roster, filled by With.
@@ -147,6 +149,7 @@ func rosterDescriptor() velox.Descriptor[Roster] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Roster) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case rosterColCode:
@@ -170,3 +173,11 @@ func (r Roster) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (r Roster) GoString() string { return r.String() }
+
+// QueryPlayer queries the edge player, to Player, on the DB that read or wrote r.
+func (r *Roster) QueryPlayer() velox.Query[Player] {
+	return velox.QueryEdge(r.source, r, Rosters.Player)
+}
+
+// QueryTeam queries the edge team, to Team, on the DB that read or wrote r.
+func (r *Roster) QueryTeam() velox.Query[Team] { return velox.QueryEdge(r.source, r, Rosters.Team) }

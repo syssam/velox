@@ -17,6 +17,8 @@ type Doc struct {
 	Shared bool   `json:"shared"`
 	// Edges holds Doc's relations, filled by With.
 	Edges DocEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // DocEdges holds the relations of Doc, filled by With.
@@ -105,6 +107,7 @@ func docDescriptor() velox.Descriptor[Doc] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Doc) *velox.Source { return &x.source },
 	}
 }
 
@@ -115,3 +118,8 @@ func (d Doc) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (d Doc) GoString() string { return d.String() }
+
+// QueryComments queries the edge comments, to Comment, on the DB that read or wrote d.
+func (d *Doc) QueryComments() velox.Query[Comment] {
+	return velox.QueryEdge(d.source, d, Docs.Comments)
+}

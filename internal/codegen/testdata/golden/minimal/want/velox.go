@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion31
+const _ = velox.GeneratedCodeIsVersion32
 
 // The names of the entities, as a velox.Filter's FilterEntity.Name gives them.
 const (

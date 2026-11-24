@@ -15,6 +15,8 @@ type Comment struct {
 	Body   string `json:"body"`
 	// Edges holds Comment's relations, filled by With.
 	Edges CommentEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // CommentEdges holds the relations of Comment, filled by With.
@@ -94,6 +96,7 @@ func commentDescriptor() velox.Descriptor[Comment] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Comment) *velox.Source { return &x.source },
 	}
 }
 
@@ -104,3 +107,6 @@ func (c Comment) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (c Comment) GoString() string { return c.String() }
+
+// QueryPost queries the edge post, to Post, on the DB that read or wrote c.
+func (c *Comment) QueryPost() velox.Query[Post] { return velox.QueryEdge(c.source, c, Comments.Post) }

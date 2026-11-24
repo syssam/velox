@@ -16,6 +16,8 @@ type Follow struct {
 	FollowerID int64  `json:"follower_id"`
 	// Edges holds Follow's relations, filled by With.
 	Edges FollowEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // FollowEdges holds the relations of Follow, filled by With.
@@ -114,6 +116,7 @@ func followDescriptor() velox.Descriptor[Follow] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Follow) *velox.Source { return &x.source },
 	}
 }
 
@@ -124,3 +127,11 @@ func (f Follow) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (f Follow) GoString() string { return f.String() }
+
+// QueryUser queries the edge user, to User, on the DB that read or wrote f.
+func (f *Follow) QueryUser() velox.Query[User] { return velox.QueryEdge(f.source, f, Follows.User) }
+
+// QueryFollower queries the edge follower, to User, on the DB that read or wrote f.
+func (f *Follow) QueryFollower() velox.Query[User] {
+	return velox.QueryEdge(f.source, f, Follows.Follower)
+}

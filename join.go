@@ -88,7 +88,7 @@ func (q Query[E]) join[T any](r Rel[E, T], left bool) Query[E] {
 	if q.s.Joins != nil {
 		set.Fills = slices.Clip(q.s.Joins.Fills)
 	}
-	set.Fills = append(set.Fills, engine.JoinFill{Width: n, Bind: func(dst []any) func(unsafe.Pointer) {
+	set.Fills = append(set.Fills, engine.JoinFill{Width: n, Off: off, Target: mt.Info, Bind: func(dst []any) func(unsafe.Pointer) {
 		t := new(T)
 		nulls := 0
 		for c := range n {

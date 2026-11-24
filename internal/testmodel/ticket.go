@@ -21,6 +21,8 @@ type Ticket struct {
 	ParentID  *int64 `json:"parent_id,omitempty"`
 	// Edges holds Ticket's relations, filled by With.
 	Edges TicketEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // TicketEdges holds the relations of Ticket, filled by With.
@@ -158,6 +160,7 @@ func ticketDescriptor() velox.Descriptor[Ticket] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Ticket) *velox.Source { return &x.source },
 	}
 }
 
@@ -173,3 +176,18 @@ func (t Ticket) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (t Ticket) GoString() string { return t.String() }
+
+// QueryInvoice queries the edge invoice, to Invoice, on the DB that read or wrote t.
+func (t *Ticket) QueryInvoice() velox.Query[Invoice] {
+	return velox.QueryEdge(t.source, t, Tickets.Invoice)
+}
+
+// QueryChildren queries the edge children, to Ticket, on the DB that read or wrote t.
+func (t *Ticket) QueryChildren() velox.Query[Ticket] {
+	return velox.QueryEdge(t.source, t, Tickets.Children)
+}
+
+// QueryParent queries the edge parent, to Ticket, on the DB that read or wrote t.
+func (t *Ticket) QueryParent() velox.Query[Ticket] {
+	return velox.QueryEdge(t.source, t, Tickets.Parent)
+}

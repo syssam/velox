@@ -36,6 +36,8 @@ type User struct {
 	UserSpouse *int64   `json:"-"`
 	// Edges holds User's relations, filled by With.
 	Edges UserEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // UserEdges holds the relations of User, filled by With.
@@ -244,6 +246,7 @@ func userDescriptor() velox.Descriptor[User] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *User) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case userColCreatedBy:
@@ -303,6 +306,18 @@ func (u User) String() string {
 
 // GoString is String, so that %#v does not print them either.
 func (u User) GoString() string { return u.String() }
+
+// QueryPosts queries the edge posts, to Post, on the DB that read or wrote u.
+func (u *User) QueryPosts() velox.Query[Post] { return velox.QueryEdge(u.source, u, Users.Posts) }
+
+// QueryGroups queries the edge groups, to Group, on the DB that read or wrote u.
+func (u *User) QueryGroups() velox.Query[Group] { return velox.QueryEdge(u.source, u, Users.Groups) }
+
+// QueryFriends queries the edge friends, to User, on the DB that read or wrote u.
+func (u *User) QueryFriends() velox.Query[User] { return velox.QueryEdge(u.source, u, Users.Friends) }
+
+// QuerySpouse queries the edge spouse, to User, on the DB that read or wrote u.
+func (u *User) QuerySpouse() velox.Query[User] { return velox.QueryEdge(u.source, u, Users.Spouse) }
 
 // UserRole is the type of User's role field.
 type UserRole string

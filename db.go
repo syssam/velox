@@ -26,6 +26,14 @@ type DB struct {
 // DB is the size of its engine.DB, which a *DB is cast from.
 var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 
+// newDB returns the *DB of e, with the Source of the entities its
+// statements read and write.
+func newDB(e engine.DB) *DB {
+	db := &DB{e: e}
+	engine.OwnSource(&db.e)
+	return db
+}
+
 // Connect opens a database and returns a DB on it. Close it when done. The
 // usual way to start:
 //
@@ -62,7 +70,7 @@ func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DB{e: e}, nil
+	return newDB(e), nil
 }
 
 // Pool returns the *sql.DB under db, a DB from Connect or Open, for its pool
@@ -103,12 +111,12 @@ func (db *DB) Close() error { return db.e.Close() }
 // methods of Query, UpdateQuery, DeleteQuery and the rest send nothing,
 // and a statement or Tx it would run fails with an error. A policy that
 // reads the database fails SQL on it, with that error.
-func Open(d Dialect, db *sql.DB, opts ...Option) *DB { return &DB{e: engine.Open(d, db, opts)} }
+func Open(d Dialect, db *sql.DB, opts ...Option) *DB { return newDB(engine.Open(d, db, opts)) }
 
 // OpenConn returns a DB of dialect d whose primary is c. veloxpgx.Open is this
 // with a veloxpgx.Conn. A zero Conn panics, as does a Conn that is valid only on
 // another dialect.
-func OpenConn(d Dialect, c Conn, opts ...Option) *DB { return &DB{e: engine.OpenConn(d, c, opts)} }
+func OpenConn(d Dialect, c Conn, opts ...Option) *DB { return newDB(engine.OpenConn(d, c, opts)) }
 
 // OpenShards returns a DB of dialect d whose statements each run on one of
 // shards, chosen from the statement's context:
@@ -133,7 +141,7 @@ func OpenConn(d Dialect, c Conn, opts ...Option) *DB { return &DB{e: engine.Open
 // whose Primary or a replica is the zero Conn, or a Conn valid only on another
 // dialect.
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
-	return &DB{e: engine.OpenShards(d, shards, opts)}
+	return newDB(engine.OpenShards(d, shards, opts))
 }
 
 // Dialect returns the DB's dialect.

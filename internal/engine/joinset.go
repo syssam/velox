@@ -22,7 +22,7 @@ func (s *JoinSet) Scanner() *JoinScan {
 	if s == nil {
 		return nil
 	}
-	return &JoinScan{Width: s.Width(), Bind: func(dst []any) func(unsafe.Pointer) {
+	return &JoinScan{Width: s.Width(), Fills: s.Fills, Bind: func(dst []any) func(unsafe.Pointer) {
 		attach := make([]func(unsafe.Pointer), len(s.Fills))
 		off := 0
 		for i := range s.Fills {
@@ -41,10 +41,23 @@ func (s *JoinSet) Scanner() *JoinScan {
 // entity's own, in the order of the query's joins.
 type JoinFill struct {
 	Width int // the target's column count
+	// Off is the offset of the owner's relation field the target is stored
+	// in, and Target the target's metadata, so that the target gets the
+	// statement's Source (Source.PutJoined); nil Target: it gets none.
+	Off    uintptr
+	Target *EntityInfo
 	// bind points dst, width long, at the fields of a new target, and returns
 	// the function that, once the row is scanned, stores the target in the
 	// owner's relation field.
 	Bind func(dst []any) func(owner unsafe.Pointer)
+}
+
+// JoinFills returns s's joins; nil for a nil s.
+func (s *JoinSet) JoinFills() []JoinFill {
+	if s == nil {
+		return nil
+	}
+	return s.Fills
 }
 
 // Width is how many columns the joins add to a row; 0 for no joins.

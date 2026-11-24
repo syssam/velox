@@ -45,6 +45,10 @@ type Descriptor[E any] struct {
 	Entities     func() *EntityTable
 	FieldPtr     func(x *E, i int) any // &x.<field of column i>
 	EdgeFieldPtr func(x *E, i int) any // &x.Edges.<field of edge i> in generated code: a *One[T] or *Many[T]
+	// SourcePtr returns &x.<its Source field>, which velox sets on every
+	// entity a statement reads or writes, for its edge reads (QueryEdge).
+	// nil for an entity without one, whose rows get none.
+	SourcePtr func(x *E) *Source
 
 	// Check runs the validators of column col on its value v, and is nil
 	// when no column has any. For a pointer field, v is the value the
@@ -117,6 +121,9 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](descriptor func() Descriptor[E]) *Meta[E] 
 			}
 			if a := d.EdgeFieldPtr; a != nil {
 				v.EdgeFieldPtr = func(i int) any { return a(x, i) }
+			}
+			if a := d.SourcePtr; a != nil {
+				v.SourcePtr = func() unsafe.Pointer { return unsafe.Pointer(a(x)) }
 			}
 			return v
 		})

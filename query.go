@@ -370,6 +370,7 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 	if err != nil {
 		return nil, nil, at, err
 	}
+	q.s.DB.Source().PutRows(q.meta.Info, unsafe.Pointer(unsafe.SliceData(out)), unsafe.Sizeof(*new(E)), len(out), q.s.Joins.JoinFills())
 	return out, ran, at, nil
 }
 
@@ -457,6 +458,7 @@ type iterRun[E any] struct {
 	st      Statement
 	m       *metaState[E]
 	joins   *engine.JoinSet
+	src     *engine.Source // the rows' Source
 	yield   func(E, error) bool
 	timed   bool // the DB has an Around hook: time the loop body
 	yielded bool // a row was yielded
@@ -478,9 +480,14 @@ func readIter[E any](it *iterRun[E], r engine.Rows) error {
 			if err := it.joins.Scan(r, it.st.Columns, rootN, dst, unsafe.Pointer(p)); err != nil {
 				return err
 			}
+			it.src.Put(it.m.Info, unsafe.Pointer(p))
+			it.src.PutJoined(it.joins.Fills, unsafe.Pointer(p))
 			e = *p
-		} else if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
-			return err
+		} else {
+			if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
+				return err
+			}
+			it.src.Put(it.m.Info, unsafe.Pointer(&e)) // inlined: e stays on the stack
 		}
 		it.yielded = true
 		engine.SetStmtHanded(&it.st)
@@ -544,11 +551,11 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		engine.SetStmtIter(&st)
 		var stopped bool
 		if q.s.DB.Hooked() {
-			it := &iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, yield: yield, timed: len(q.s.DB.Cfg.Arounds) > 0}
+			it := &iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, src: q.s.DB.Source(), yield: yield, timed: len(q.s.DB.Cfg.Arounds) > 0}
 			err = q.s.DB.Run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
-			it := iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, yield: yield}
+			it := iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, src: q.s.DB.Source(), yield: yield}
 			err = q.s.DB.Plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}

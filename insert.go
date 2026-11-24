@@ -403,9 +403,14 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	q.fillDefaults()
 	if q.set.Empty() && !q.db.e.HasHooks(q.meta.Info) {
 		var mu engine.MutationState
-		return q.send(ctx, &q.db.e, &mu)
+		err = q.send(ctx, &q.db.e, &mu)
+	} else {
+		err = engine.Insert(ctx, &q.db.e, q.meta.Info, q.set, q.mutation(false).Rows, q.conflict, q.one == nil, q.send)
 	}
-	return engine.Insert(ctx, &q.db.e, q.meta.Info, q.set, q.mutation(false).Rows, q.conflict, q.one == nil, q.send)
+	if err == nil {
+		engine.PutInserted(&q.db.e, q.meta.Info, unsafe.Pointer(q.one), unsafe.Pointer(unsafe.SliceData(q.many)), unsafe.Sizeof(*new(E)), len(q.many), q.set)
+	}
+	return err
 }
 
 // SQL returns the first statement and arguments Exec would send for ctx, or

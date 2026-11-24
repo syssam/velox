@@ -16,6 +16,8 @@ type Item struct {
 	Qty       int64  `json:"qty"`
 	// Edges holds Item's relations, filled by With.
 	Edges ItemEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // ItemEdges holds the relations of Item, filled by With.
@@ -103,6 +105,7 @@ func itemDescriptor() velox.Descriptor[Item] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Item) *velox.Source { return &x.source },
 	}
 }
 
@@ -113,3 +116,8 @@ func (i Item) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (i Item) GoString() string { return i.String() }
+
+// QueryInvoice queries the edge invoice, to Invoice, on the DB that read or wrote i.
+func (i *Item) QueryInvoice() velox.Query[Invoice] {
+	return velox.QueryEdge(i.source, i, Items.Invoice)
+}

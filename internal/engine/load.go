@@ -214,6 +214,8 @@ type JoinScan struct {
 	// Bind points dst, Width long, at the fields of new joined entities, and
 	// returns the function that stores them in the row, once it is scanned.
 	Bind func(dst []any) func(owner unsafe.Pointer)
+	// Fills are the joins, for the Source of the targets they store.
+	Fills []JoinFill
 }
 
 // joinRows reads, after the columns its Scan is given, the joined columns, and
@@ -816,6 +818,13 @@ func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityI
 		err = db.Run(ctx, st, read, nil)
 	} else {
 		err = db.Plain(ctx, st, read, nil)
+	}
+	if err == nil {
+		var fills []JoinFill
+		if joins != nil && len(st.Joins) > 0 {
+			fills = joins.Fills
+		}
+		db.src.putBlocks(t, part, fills)
 	}
 	return part, owners, err
 }

@@ -28,6 +28,8 @@ type Issue struct {
 	Status IssueStatus `json:"status"`
 	// Edges holds Issue's relations, filled by With.
 	Edges IssueEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // IssueEdges holds the relations of Issue, filled by With.
@@ -212,6 +214,7 @@ func issueDescriptor() velox.Descriptor[Issue] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Issue) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case issueColTitle:
@@ -246,6 +249,27 @@ func (i Issue) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (i Issue) GoString() string { return i.String() }
+
+// QueryProject queries the edge project, to Project, on the DB that read or wrote i.
+func (i *Issue) QueryProject() velox.Query[Project] {
+	return velox.QueryEdge(i.source, i, Issues.Project)
+}
+
+// QueryAuthor queries the edge author, to User, on the DB that read or wrote i.
+func (i *Issue) QueryAuthor() velox.Query[User] { return velox.QueryEdge(i.source, i, Issues.Author) }
+
+// QueryAssignee queries the edge assignee, to User, on the DB that read or wrote i.
+func (i *Issue) QueryAssignee() velox.Query[User] {
+	return velox.QueryEdge(i.source, i, Issues.Assignee)
+}
+
+// QueryComments queries the edge comments, to Comment, on the DB that read or wrote i.
+func (i *Issue) QueryComments() velox.Query[Comment] {
+	return velox.QueryEdge(i.source, i, Issues.Comments)
+}
+
+// QueryLabels queries the edge labels, to Label, on the DB that read or wrote i.
+func (i *Issue) QueryLabels() velox.Query[Label] { return velox.QueryEdge(i.source, i, Issues.Labels) }
 
 // IssueStatus is the type of Issue's status field.
 type IssueStatus string

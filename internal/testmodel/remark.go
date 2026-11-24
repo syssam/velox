@@ -16,6 +16,8 @@ type Remark struct {
 	Body    string        `json:"body"`
 	// Edges holds Remark's relations, filled by With.
 	Edges RemarkEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // RemarkEdges holds the relations of Remark, filled by With.
@@ -96,6 +98,7 @@ func remarkDescriptor() velox.Descriptor[Remark] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Remark) *velox.Source { return &x.source },
 	}
 }
 
@@ -106,3 +109,6 @@ func (r Remark) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (r Remark) GoString() string { return r.String() }
+
+// QueryPaper queries the edge paper, to Paper, on the DB that read or wrote r.
+func (r *Remark) QueryPaper() velox.Query[Paper] { return velox.QueryEdge(r.source, r, Remarks.Paper) }

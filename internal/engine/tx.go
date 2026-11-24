@@ -492,6 +492,8 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
 	defer releaseConn(db, holdConn(o.caller, db, f)) // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true)                        // before the note, and after the rollback
+	// Its entities read on it while it is live, then on db (Source).
+	defer txSource(&f.db, db.src).end()
 	finished, committedOK := false, false
 	defer func() {
 		if !finished {
@@ -624,6 +626,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	}()
 	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
 	defer f.ended.Store(true) // its handles are stale once it has returned (AfterCommit)
+	defer txSource(&f.db, db.src).end()
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		db.batch.truncate(mark)

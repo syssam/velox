@@ -15,6 +15,8 @@ type Topic struct {
 	Name string `json:"name"`
 	// Edges holds Topic's relations, filled by With.
 	Edges TopicEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // TopicEdges holds the relations of Topic, filled by With.
@@ -88,6 +90,7 @@ func topicDescriptor() velox.Descriptor[Topic] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Topic) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case topicColID:
@@ -108,3 +111,6 @@ func (t Topic) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (t Topic) GoString() string { return t.String() }
+
+// QueryPapers queries the edge papers, to Paper, on the DB that read or wrote t.
+func (t *Topic) QueryPapers() velox.Query[Paper] { return velox.QueryEdge(t.source, t, Topics.Papers) }

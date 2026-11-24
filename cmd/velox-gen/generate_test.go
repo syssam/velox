@@ -821,13 +821,16 @@ func TestVerifyGeneratedChecksRelations(t *testing.T) {
 	}
 	edit("user.go", `velox.EdgeTo[Post]("posts", userColID, 9)`, `velox.EdgeTo[Post]("posts", userColID, postColAuthorID)`)
 	// A handle that names another entity than the field holds: the target comes
-	// from the handle, so verify must compare it with the field.
+	// from the handle, so verify must compare it with the field. QueryPosts
+	// follows the handle, so that the package still builds.
 	edit("user.go", "velox.Rel[User, Post]", "velox.Rel[User, User]")
+	edit("user.go", "QueryPosts() velox.Query[Post]", "QueryPosts() velox.Query[User]")
 	code, out, errs = runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")
 	if code != 1 || !strings.Contains(errs, "User.posts: the field is a velox.Many[") || !strings.Contains(errs, "but the Rel handle names") || !strings.Contains(out, "with errors") {
 		t.Errorf("a mismatched handle: %d %q %q", code, out, errs)
 	}
 	edit("user.go", "velox.Rel[User, User]", "velox.Rel[User, Post]")
+	edit("user.go", "QueryPosts() velox.Query[User]", "QueryPosts() velox.Query[Post]")
 	// A target whose metadata is broken: the relation names it, and says so.
 	edit("post.go", "PrimaryKey: []int{postColID},", "PrimaryKey: []int{9},")
 	code, out, errs = runCLI(t, dir, "verify", "-out", "veloxgen", "./veloxschema")

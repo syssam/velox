@@ -14,6 +14,8 @@ type Author struct {
 	Name string `json:"name"`
 	// Edges holds Author's relations, filled by With.
 	Edges AuthorEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // AuthorEdges holds the relations of Author, filled by With.
@@ -104,6 +106,7 @@ func authorDescriptor() velox.Descriptor[Author] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Author) *velox.Source { return &x.source },
 	}
 }
 
@@ -114,3 +117,14 @@ func (a Author) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (a Author) GoString() string { return a.String() }
+
+// QueryPosts queries the edge posts, to Post, on the DB that read or wrote a.
+func (a *Author) QueryPosts() velox.Query[Post] { return velox.QueryEdge(a.source, a, Authors.Posts) }
+
+// QueryClubs queries the edge clubs, to Club, on the DB that read or wrote a.
+func (a *Author) QueryClubs() velox.Query[Club] { return velox.QueryEdge(a.source, a, Authors.Clubs) }
+
+// QueryMemberships queries the edge memberships, to Membership, on the DB that read or wrote a.
+func (a *Author) QueryMemberships() velox.Query[Membership] {
+	return velox.QueryEdge(a.source, a, Authors.Memberships)
+}

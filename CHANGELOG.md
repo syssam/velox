@@ -32,6 +32,22 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   with its Nulls. Such a connection takes no msgpack cursor, and a column
   that the query and `orderBy` both name is `ErrBadPagination`
   (ADR 0166 amendment).
+- An entity carries the DB that read or wrote it, as ent's entities carry
+  their client: each generated edge has `QueryX()` (ent's name), a
+  `velox.Query[T]` of the edge run on that DB, read only and under its
+  policy. A DB with a WithoutPolicy reason gives its entities its
+  policy-on DB; an entity read in a transaction that has ended reads on
+  the DB the transaction was begun on. An entity no statement made fails
+  with `velox.ErrNoSource`, which names `db.Query`. Writes stay explicit.
+  `velox.QueryEdge` and `velox.Source` are for generated code;
+  `untyped.SourceDB` reads a row's DB. Regenerate:
+  `velox.GeneratedCodeIsVersion32` replaces Version31, and an entity with
+  edges has an unexported `source` field. A field whose Go name is
+  `Query` then an edge's Go name is refused (ADR 0171).
+- `veloxtest.Equal` compares two values deeply, as `reflect.DeepEqual`
+  does, but skips a `velox.Source`: an entity read from the database
+  equals one built by hand.
+
 - velox-gen's `-files dir` (`generate.Config.Files`) writes a plugin's
   files that are not Go, such as velox-graphql's SDL, below a directory of
   the module instead of `-out`, at the same paths: `-files schema` puts

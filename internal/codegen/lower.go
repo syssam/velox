@@ -1481,6 +1481,22 @@ func (l *lowerer) placeChecks() {
 	l.out.Imports = slices.Compact(l.out.Imports)
 }
 
+// checkEdgeNames reports each field of e, an entity with the relations
+// rels, whose Go name is one an entity with relations declares: Edges, the
+// field that holds them, and QueryX, the method that queries the edge X.
+func (l *lowerer) checkEdgeNames(e *Entity, rels []*OutRel) {
+	for _, f := range e.Fields {
+		if f.GoName == "Edges" {
+			l.errs = append(l.errs, &Error{Pos: cmp.Or(f.Pos, e.Pos), Schema: e.Name, Where: fieldAt(f.Name), Reason: "its Go name Edges is reserved: it holds the entity's relations"})
+		}
+		for _, r := range rels {
+			if f.GoName == "Query"+r.GoName {
+				l.errs = append(l.errs, &Error{Pos: cmp.Or(f.Pos, e.Pos), Schema: e.Name, Where: fieldAt(f.Name), Reason: fmt.Sprintf("its Go name %s is reserved: it is the method that queries edge %s", f.GoName, r.Name)})
+			}
+		}
+	}
+}
+
 // checkDeclared reports each name the package declares at its top level
 // that collides with another.
 func (l *lowerer) checkDeclared(joins []*join) {
@@ -1533,11 +1549,7 @@ func (l *lowerer) checkDeclared(joins []*join) {
 			continue
 		}
 		add(e.Name+"Edges", "edges type", e.Name, loc{pos: e.Pos})
-		for _, f := range e.Fields {
-			if f.GoName == "Edges" {
-				l.errs = append(l.errs, &Error{Pos: cmp.Or(f.Pos, e.Pos), Schema: e.Name, Where: fieldAt(f.Name), Reason: "its Go name Edges is reserved: it holds the entity's relations"})
-			}
-		}
+		l.checkEdgeNames(e, o.Rels)
 	}
 	for _, e := range l.g.Entities {
 		add(plugin.GoPlural(e.Name), "handles variable", e.Name, loc{pos: e.Pos})

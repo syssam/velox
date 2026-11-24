@@ -407,7 +407,7 @@ A `//go:generate go run generate.go` line in another file of the package
 runs it.
 
 Generated code carries a version constant (today
-`velox.GeneratedCodeIsVersion31`). If you update velox and the shape of
+`velox.GeneratedCodeIsVersion32`). If you update velox and the shape of
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
@@ -811,6 +811,43 @@ authors, err := db.Query[veloxgen.Author]().
 `LimitEach(n)` loads at most n related rows per owner, in one statement:
 `With(A.Posts.OrderBy(P.Votes.Desc()).LimitEach(3))` gives each author their
 three best posts.
+
+### Reading an edge from an entity: QueryX
+
+An entity remembers the DB that read or wrote it, as ent's remembers its
+client. Each edge has a `QueryX` method, ent's name, which returns a
+`velox.Query[T]` of the edge's rows on that DB:
+
+```go
+invoice, err := db.Query[veloxgen.Invoice]().Where(I.ID.EQ(id)).One(ctx)
+if err != nil {
+	return err
+}
+lines, err := invoice.QueryLines().OrderBy(veloxgen.Lines.AmountCents.Desc()).Limit(50).All(ctx)
+```
+
+The query is a read like any other: it needs a `Limit`, takes `Where`,
+`With` and `Join`, and runs under the DB's filters, scope, interceptors
+and limits. Every path that makes an entity gives it its DB: `All`,
+`First`, `One`, `Iter`, `With`, a join's target, `Insert`, upserts,
+`UpdateQuery.One`, `Save`, `Paginate` and `db.Rows`. Two rules keep the
+DB from outliving what it should:
+
+- An entity read on a `WithoutPolicy` DB reads its edges with the policy
+  on, with the viewer in the edge query's context. Code that needs an
+  edge without the policy queries it on its own `WithoutPolicy` DB.
+- An entity read in `db.Tx` reads its edges in the transaction while it
+  runs, and on `db` once it has committed or rolled back. A nested `Tx`
+  falls back to the outer one. The entity does not keep the `*sql.Tx`.
+  On a `UseTx` DB, velox never sees the end: the entity reads on the
+  adopted transaction.
+
+The query is read only: a write names its DB, as in
+`db.Update[veloxgen.Line]().Where(...)`. An entity no statement made, built
+by hand or decoded from JSON, has no DB: its `QueryX` fails each statement
+with `velox.ErrNoSource`, which names `db.Query`. `reflect.DeepEqual` and
+go-cmp see the unexported field, as with ent; `veloxtest.Equal` compares
+two values and skips it ([ADR 0171](decisions/0171-entities-carry-their-source.md)).
 
 ### Filtering by a relation: Has and HasWith
 

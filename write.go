@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
 )
@@ -423,6 +424,7 @@ func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if v, ok := s.meta.Info.VersionColumn(); ok {
 		engine.BumpVersion(s.meta.Addr(s.x, v))
 	}
+	s.db.e.Source().Put(s.meta.Info, unsafe.Pointer(s.x))
 	return nil
 }
 

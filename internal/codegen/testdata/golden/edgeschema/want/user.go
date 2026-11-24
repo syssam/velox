@@ -14,6 +14,8 @@ type User struct {
 	Name string `json:"name"`
 	// Edges holds User's relations, filled by With.
 	Edges UserEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // UserEdges holds the relations of User, filled by With.
@@ -122,6 +124,7 @@ func userDescriptor() velox.Descriptor[User] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *User) *velox.Source { return &x.source },
 	}
 }
 
@@ -132,3 +135,24 @@ func (u User) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (u User) GoString() string { return u.String() }
+
+// QueryGroups queries the edge groups, to Group, on the DB that read or wrote u.
+func (u *User) QueryGroups() velox.Query[Group] { return velox.QueryEdge(u.source, u, Users.Groups) }
+
+// QueryFollowing queries the edge following, to User, on the DB that read or wrote u.
+func (u *User) QueryFollowing() velox.Query[User] {
+	return velox.QueryEdge(u.source, u, Users.Following)
+}
+
+// QueryFollowers queries the edge followers, to User, on the DB that read or wrote u.
+func (u *User) QueryFollowers() velox.Query[User] {
+	return velox.QueryEdge(u.source, u, Users.Followers)
+}
+
+// QueryMemberships queries the edge memberships, to Membership, on the DB that read or wrote u.
+func (u *User) QueryMemberships() velox.Query[Membership] {
+	return velox.QueryEdge(u.source, u, Users.Memberships)
+}
+
+// QueryFollows queries the edge follows, to Follow, on the DB that read or wrote u.
+func (u *User) QueryFollows() velox.Query[Follow] { return velox.QueryEdge(u.source, u, Users.Follows) }

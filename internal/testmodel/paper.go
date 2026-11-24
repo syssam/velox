@@ -18,6 +18,8 @@ type Paper struct {
 	Version int64         `json:"version"`
 	// Edges holds Paper's relations, filled by With.
 	Edges PaperEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // PaperEdges holds the relations of Paper, filled by With.
@@ -108,6 +110,7 @@ func paperDescriptor() velox.Descriptor[Paper] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Paper) *velox.Source { return &x.source },
 	}
 }
 
@@ -118,3 +121,11 @@ func (p Paper) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (p Paper) GoString() string { return p.String() }
+
+// QueryRemarks queries the edge remarks, to Remark, on the DB that read or wrote p.
+func (p *Paper) QueryRemarks() velox.Query[Remark] {
+	return velox.QueryEdge(p.source, p, Papers.Remarks)
+}
+
+// QueryTopics queries the edge topics, to Topic, on the DB that read or wrote p.
+func (p *Paper) QueryTopics() velox.Query[Topic] { return velox.QueryEdge(p.source, p, Papers.Topics) }

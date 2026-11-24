@@ -16,6 +16,8 @@ type Category struct {
 	CategoryChildren *int64 `json:"-"`
 	// Edges holds Category's relations, filled by With.
 	Edges CategoryEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // CategoryEdges holds the relations of Category, filled by With.
@@ -110,6 +112,7 @@ func categoryDescriptor() velox.Descriptor[Category] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Category) *velox.Source { return &x.source },
 	}
 }
 
@@ -120,3 +123,13 @@ func (c Category) String() string {
 
 // GoString is String, so that %#v does not print them either.
 func (c Category) GoString() string { return c.String() }
+
+// QueryChildren queries the edge children, to Category, on the DB that read or wrote c.
+func (c *Category) QueryChildren() velox.Query[Category] {
+	return velox.QueryEdge(c.source, c, Categories.Children)
+}
+
+// QueryParent queries the edge parent, to Category, on the DB that read or wrote c.
+func (c *Category) QueryParent() velox.Query[Category] {
+	return velox.QueryEdge(c.source, c, Categories.Parent)
+}

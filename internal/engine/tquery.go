@@ -232,7 +232,7 @@ func (q TableQuery) join(edge int, target Table, left bool) TableQuery {
 		set.Fills = slices.Clip(q.joins.Fills)
 	}
 	n := len(ts.info.Columns)
-	set.Fills = append(set.Fills, JoinFill{Width: n, Bind: func(dst []any) func(unsafe.Pointer) {
+	set.Fills = append(set.Fills, JoinFill{Width: n, Off: off, Target: ts.info, Bind: func(dst []any) func(unsafe.Pointer) {
 		row := ts.newRow()
 		nulls := 0
 		for c := range n {
@@ -378,6 +378,7 @@ func (q TableQuery) read(ctx context.Context) (out TableRows, ran []int, at Targ
 	if err != nil {
 		return TableRows{}, nil, at, err
 	}
+	q.e.src.PutRows(q.t.info, out.p, out.size, out.n, q.joins.JoinFills())
 	return out, ran, at, nil
 }
 

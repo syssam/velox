@@ -196,10 +196,11 @@ func BenchmarkOneRowWithDeadline(b *testing.B) {
 // TestTxAllocationBudget pins the transaction budget: with nothing
 // configured, a transaction makes no TxInfo. It is measured against the same
 // read outside a transaction, so that the read's allocations, which vary
-// between Go versions, cancel out. What is left is the transaction's own 3:
+// between Go versions, cancel out. What is left is the transaction's own 4:
 // Tx's options (opt(&o) makes them escape), the context its rollback runs
-// on, and the *DB fn is given, which holds fn's context, marked as the
-// transaction's. A TxInfo would be a fourth.
+// on, the *DB fn is given, which holds fn's context, marked as the
+// transaction's, and the Source its entities read their edges on, which
+// lets go of the transaction when it ends. A TxInfo would be a fifth.
 func TestTxAllocationBudget(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}})
 	read := func(ctx context.Context, db *velox.DB) error {
@@ -220,8 +221,8 @@ func TestTxAllocationBudget(t *testing.T) {
 		}
 	})
 	t.Logf("a one-row read makes %.0f allocations in a transaction, %.0f alone", inTx, alone)
-	if inTx > alone+3 {
-		t.Errorf("a transaction with nothing configured adds %.0f allocations to its read: over the budget of 3", inTx-alone)
+	if inTx > alone+4 {
+		t.Errorf("a transaction with nothing configured adds %.0f allocations to its read: over the budget of 4", inTx-alone)
 	}
 }
 
@@ -229,7 +230,7 @@ func TestTxAllocationBudget(t *testing.T) {
 // pass-through WithTxAround hook. The hook makes the transaction build a
 // TxInfo and run through the hook's closure chain, which keeps the closure
 // the root's Tx wraps fn in: measured 9 allocations more than the read alone,
-// against 3 without the hook (15 in the transaction and 6 alone, the same under
+// against 4 without the hook (15 in the transaction and 6 alone, the same under
 // -race).
 func TestTxAroundAllocationBudget(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}},

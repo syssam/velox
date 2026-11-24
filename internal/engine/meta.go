@@ -36,6 +36,7 @@ type EntityInfo struct {
 	hooks      []HookFn                   // the Hooks method's, outermost first
 	filters    []FilterFn                 // the interceptors' Filters, in order
 	names      map[string]int32           // each column's index by its name, for the conditions and mutations by name
+	srcOff     uintptr                    // 1 + the offset of the entity's *Source field; 0: it has none
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none

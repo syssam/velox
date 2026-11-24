@@ -14,6 +14,8 @@ type Club struct {
 	Name string `json:"name"`
 	// Edges holds Club's relations, filled by With.
 	Edges ClubEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // ClubEdges holds the relations of Club, filled by With.
@@ -98,6 +100,7 @@ func clubDescriptor() velox.Descriptor[Club] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Club) *velox.Source { return &x.source },
 	}
 }
 
@@ -108,3 +111,11 @@ func (c Club) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (c Club) GoString() string { return c.String() }
+
+// QueryMembers queries the edge members, to Author, on the DB that read or wrote c.
+func (c *Club) QueryMembers() velox.Query[Author] { return velox.QueryEdge(c.source, c, Clubs.Members) }
+
+// QueryMemberships queries the edge memberships, to Membership, on the DB that read or wrote c.
+func (c *Club) QueryMemberships() velox.Query[Membership] {
+	return velox.QueryEdge(c.source, c, Clubs.Memberships)
+}

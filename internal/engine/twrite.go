@@ -187,6 +187,15 @@ func (q TableInsert) DoNothing() TableInsert {
 
 // Exec runs the insert, as InsertQuery.Exec does.
 func (q TableInsert) Exec(ctx context.Context) error {
+	err := q.exec(ctx)
+	if err == nil && q.t != nil && q.t.info != nil {
+		PutInserted(q.e, q.t.info, q.one, q.many.p, q.many.size, q.many.n, q.bulk)
+	}
+	return err
+}
+
+// exec is Exec without the rows' Source.
+func (q TableInsert) exec(ctx context.Context) error {
 	if err := q.check(); err != nil {
 		return err
 	}

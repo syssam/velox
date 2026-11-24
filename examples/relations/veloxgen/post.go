@@ -16,6 +16,8 @@ type Post struct {
 	Votes    int64  `json:"votes"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // PostEdges holds the relations of Post, filled by With.
@@ -120,6 +122,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Post) *velox.Source { return &x.source },
 	}
 }
 
@@ -130,3 +133,14 @@ func (p Post) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (p Post) GoString() string { return p.String() }
+
+// QueryAuthor queries the edge author, to Author, on the DB that read or wrote p.
+func (p *Post) QueryAuthor() velox.Query[Author] { return velox.QueryEdge(p.source, p, Posts.Author) }
+
+// QueryComments queries the edge comments, to Comment, on the DB that read or wrote p.
+func (p *Post) QueryComments() velox.Query[Comment] {
+	return velox.QueryEdge(p.source, p, Posts.Comments)
+}
+
+// QueryTags queries the edge tags, to Tag, on the DB that read or wrote p.
+func (p *Post) QueryTags() velox.Query[Tag] { return velox.QueryEdge(p.source, p, Posts.Tags) }

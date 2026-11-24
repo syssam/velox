@@ -18,6 +18,8 @@ type Line struct {
 	AmountCents int64  `json:"amount_cents"`
 	// Edges holds Line's relations, filled by With.
 	Edges LineEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // LineEdges holds the relations of Line, filled by With.
@@ -113,6 +115,7 @@ func lineDescriptor() velox.Descriptor[Line] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Line) *velox.Source { return &x.source },
 	}
 }
 
@@ -127,3 +130,8 @@ func (l Line) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (l Line) GoString() string { return l.String() }
+
+// QueryInvoice queries the edge invoice, to Invoice, on the DB that read or wrote l.
+func (l *Line) QueryInvoice() velox.Query[Invoice] {
+	return velox.QueryEdge(l.source, l, Lines.Invoice)
+}

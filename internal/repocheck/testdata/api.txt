@@ -133,7 +133,7 @@ const EdgeClear
 const EdgePage
 const EdgeRemove
 const EdgeSet
-const GeneratedCodeIsVersion31
+const GeneratedCodeIsVersion32
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -823,6 +823,7 @@ func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
 func Pool(db *DB) *sql.DB
+func QueryEdge[E, T any](src Source, owner *E, r Rel[E, T]) Query[T]
 func RecordIgnore[E any](cols ...Column[E]) RecordOption
 func RecordKeep[E any](cols ...Column[E]) RecordOption
 func Reject(ops ...Op) Hook
@@ -898,7 +899,7 @@ type DateOption struct { }
 type DateUnit = engine.DateUnit
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor Entities func() *EntityTable FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any Check func(col int, v any) error Schema any }
+type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor Entities func() *EntityTable FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any SourcePtr func(x *E) *Source Check func(col int, v any) error Schema any }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type Edge = schema.Edge
@@ -986,6 +987,7 @@ type Selectable[E any] any
 type Setter[E any] struct { }
 type Shard = engine.Shard
 type Sink interface { Record(ctx context.Context, tx *DB, changes []Change) error }
+type Source struct { }
 type Statement = engine.Statement
 type StatementBudget = engine.StatementBudget
 type StatementCounter = engine.StatementCounter
@@ -1010,6 +1012,7 @@ var ErrLimitTooLarge
 var ErrLinked
 var ErrLocked
 var ErrNoShard
+var ErrNoSource
 var ErrNoWhere
 var ErrNotFound
 var ErrNotSingular
@@ -1527,6 +1530,7 @@ func Isolates[E any, V comparable](t testing.TB, ctx context.Context, db *velox.
 
 package veloxtest
 func Budget(t testing.TB, ctx context.Context, b velox.StatementBudget) context.Context
+func Equal(x, y any) bool
 func FilterEntity(name string, columns ...string) velox.FilterEntity
 func NoNPlusOne(t testing.TB, ctx context.Context) context.Context
 func Open(t testing.TB, driver, dsn string, schemas []schema.Interface, opts ...Option) *velox.DB
@@ -1658,6 +1662,7 @@ func Query(db *velox.DB, t Table) TableQuery
 func Rewrites(db *velox.DB) bool
 func RowsOf[E any](r Rows) []E
 func SetExpr(col int, text string, args ...any) velox.Assignment
+func SourceDB(t Table, row any) *velox.DB
 func Sum(t Term) Term
 func TableOf[E any]() Table
 func Update(db *velox.DB, t Table) TableUpdate

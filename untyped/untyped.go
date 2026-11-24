@@ -369,6 +369,20 @@ func RowsOf[E any](r Rows) []E {
 	return unsafe.Slice((*E)(p), n)
 }
 
+// SourceDB returns the DB row, a *E of t's entity, was read or written
+// through, which its edge queries run on (velox.QueryEdge): never one with
+// a WithoutPolicy reason, and, for a row read in a transaction that has
+// ended, the DB the transaction was begun on. It is nil when row is not
+// such a row, or no statement made it. velox-graphql's edges read through
+// it.
+func SourceDB(t Table, row any) *velox.DB {
+	e := engine.TableSourceDB(t, row)
+	if e == nil {
+		return nil
+	}
+	return (*velox.DB)(unsafe.Pointer(e))
+}
+
 // MutationTable returns the Table of m's entity, for a hook that makes the
 // write itself, such as a soft delete's update (see velox.Mutation).
 func MutationTable(m *velox.Mutation) Table {

@@ -28,6 +28,8 @@ type Post struct {
 	Visibility schema.Visibility `json:"visibility"`
 	// Edges holds Post's relations, filled by With.
 	Edges PostEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // PostEdges holds the relations of Post, filled by With.
@@ -161,6 +163,7 @@ func postDescriptor() velox.Descriptor[Post] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Post) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case postColTitle:
@@ -206,6 +209,9 @@ func (p Post) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (p Post) GoString() string { return p.String() }
+
+// QueryAuthor queries the edge author, to User, on the DB that read or wrote p.
+func (p *Post) QueryAuthor() velox.Query[User] { return velox.QueryEdge(p.source, p, Posts.Author) }
 
 // PostStatus is the type of Post's status field.
 type PostStatus string

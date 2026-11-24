@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
 )
@@ -162,7 +163,8 @@ func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 type rawRun[E any] struct {
 	st      Statement
 	m       *metaState[E]
-	limit   int // One's: stop after this many rows; 0: read them all
+	src     *engine.Source // the rows' Source
+	limit   int            // One's: stop after this many rows; 0: read them all
 	out     []E
 	yield   func(E, error) bool // Iter's; nil for All and One
 	timed   bool                // Iter's, on a DB with an Around hook: time the loop body
@@ -187,6 +189,7 @@ func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 			if err := scanRow(r, a.m, cols, dst, &a.out[len(a.out)-1]); err != nil {
 				return err
 			}
+			a.src.Put(a.m.Info, unsafe.Pointer(&a.out[len(a.out)-1]))
 			if len(a.out) == a.limit {
 				return nil
 			}
@@ -196,6 +199,7 @@ func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 		if err := scanRow(r, a.m, cols, dst, &e); err != nil {
 			return err
 		}
+		a.src.Put(a.m.Info, unsafe.Pointer(&e)) // inlined: e stays on the stack
 		a.yielded = true
 		engine.SetStmtHanded(&a.st)
 		if !yieldRow(a.yield, e, a.timed, &a.st.Result.LoopBody) {
@@ -212,7 +216,7 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &rawRun[E]{st: st, m: q.meta}
+	a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.Source()}
 	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
@@ -227,7 +231,7 @@ func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &rawRun[E]{st: st, m: q.meta, limit: 2}
+	a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.Source(), limit: 2}
 	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
@@ -253,7 +257,7 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			return
 		}
 		engine.SetStmtIter(&st)
-		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
+		a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.Source(), yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
 		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {
 			var zero E

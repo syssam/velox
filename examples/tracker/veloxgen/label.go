@@ -17,6 +17,8 @@ type Label struct {
 	Name  string `json:"name"`
 	// Edges holds Label's relations, filled by With.
 	Edges LabelEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // LabelEdges holds the relations of Label, filled by With.
@@ -101,6 +103,7 @@ func labelDescriptor() velox.Descriptor[Label] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Label) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case labelColName:
@@ -124,3 +127,6 @@ func (l Label) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (l Label) GoString() string { return l.String() }
+
+// QueryIssues queries the edge issues, to Issue, on the DB that read or wrote l.
+func (l *Label) QueryIssues() velox.Query[Issue] { return velox.QueryEdge(l.source, l, Labels.Issues) }

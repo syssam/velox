@@ -19,6 +19,8 @@ type Group struct {
 	Visibility schema.Visibility `json:"visibility"`
 	// Edges holds Group's relations, filled by With.
 	Edges GroupEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // GroupEdges holds the relations of Group, filled by With.
@@ -109,6 +111,7 @@ func groupDescriptor() velox.Descriptor[Group] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Group) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case groupColVisibility:
@@ -129,3 +132,6 @@ func (g Group) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (g Group) GoString() string { return g.String() }
+
+// QueryUsers queries the edge users, to User, on the DB that read or wrote g.
+func (g *Group) QueryUsers() velox.Query[User] { return velox.QueryEdge(g.source, g, Groups.Users) }

@@ -290,6 +290,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 	entityDescriptor(&w, o, e)
 	w.p("")
 	entityString(&w, e)
+	entityEdgeQueries(&w, e)
 	enums(&w, o, e.Name)
 	enumChecks(&w, e.Checks)
 	return w.String()
@@ -384,6 +385,8 @@ func entityStruct(w *writer, e *OutEntity) {
 	if len(e.Rels) > 0 {
 		w.p("// Edges holds %s's relations, filled by With.", e.Name)
 		w.p("Edges %sEdges `json:\"edges,omitzero\"`", e.Name)
+		w.p("// source is the DB that read or wrote the entity, which its edge queries run on.")
+		w.p("source velox.Source")
 	}
 	w.p("}")
 	if len(e.Rels) == 0 {
@@ -622,6 +625,9 @@ func entityDescriptor(w *writer, o *Out, e *OutEntity) {
 		w.p("return nil")
 		w.p("},")
 	}
+	if len(e.Rels) > 0 {
+		w.p("SourcePtr: func(x *%s) *velox.Source { return &x.source },", e.Name)
+	}
 	if e.CheckCode != "" {
 		w.p("Check: func(col int, v any) error {")
 		w.p("switch col {")
@@ -733,6 +739,17 @@ func entityString(w *writer, e *OutEntity) {
 		w.p("// GoString is String, so that %%#v prints the same text.")
 	}
 	w.p("func (%s %s) GoString() string { return %[1]s.String() }", x, e.Name)
+}
+
+// entityEdgeQueries writes, for each of e's edges, the method that queries
+// it on the DB that read or wrote the entity, ent's QueryX.
+func entityEdgeQueries(w *writer, e *OutEntity) {
+	x := strings.ToLower(e.Name[:1])
+	for _, r := range e.Rels {
+		w.p("")
+		w.p("// Query%s queries the edge %s, to %s, on the DB that read or wrote %s.", r.GoName, r.Name, r.Target, x)
+		w.p("func (%s *%s) Query%s() velox.Query[%s] { return velox.QueryEdge(%[1]s.source, %[1]s, %[5]s.%[3]s) }", x, e.Name, r.GoName, r.Target, e.Handles)
+	}
 }
 
 // literal is the composite literal of the fields xs, its type elided: on

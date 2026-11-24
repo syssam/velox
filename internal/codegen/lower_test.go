@@ -566,6 +566,12 @@ type ClEdgesField struct{ schema.Schema }
 func (ClEdgesField) Fields() []schema.Field { return []schema.Field{field.String("edges")} }
 func (ClEdgesField) Edges() []schema.Edge   { return []schema.Edge{edge.To("boxes", ClBox.Type)} }
 
+// ClQueryField has a field whose Go name is its edge's QueryX method's.
+type ClQueryField struct{ schema.Schema }
+
+func (ClQueryField) Fields() []schema.Field { return []schema.Field{field.String("query_boxes")} }
+func (ClQueryField) Edges() []schema.Edge   { return []schema.Edge{edge.To("boxes", ClBox.Type)} }
+
 // ClAb's column constant for col_x is clAbColColX, as is ClAbCol's for x.
 type ClAb struct{ schema.Schema }
 
@@ -612,6 +618,9 @@ func TestLowerCollisions(t *testing.T) {
 		}},
 		{"edges field", []schema.Interface{ClEdgesField{}, ClBox{}}, []string{
 			`schema ClEdgesField: field "edges": its Go name Edges is reserved: it holds the entity's relations`,
+		}},
+		{"query method", []schema.Interface{ClQueryField{}, ClBox{}}, []string{
+			`schema ClQueryField: field "query_boxes": its Go name QueryBoxes is reserved: it is the method that queries edge boxes`,
 		}},
 		{"column constant", []schema.Interface{ClAb{}, ClAbCol{}}, []string{
 			`schema ClAbCol: field "x": column constant clAbColColX collides with column constant clAbColColX`,

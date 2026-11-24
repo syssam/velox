@@ -14,6 +14,8 @@ type Tag struct {
 	Name string `json:"name"`
 	// Edges holds Tag's relations, filled by With.
 	Edges TagEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // TagEdges holds the relations of Tag, filled by With.
@@ -89,6 +91,7 @@ func tagDescriptor() velox.Descriptor[Tag] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Tag) *velox.Source { return &x.source },
 	}
 }
 
@@ -99,3 +102,6 @@ func (t Tag) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (t Tag) GoString() string { return t.String() }
+
+// QueryPosts queries the edge posts, to Post, on the DB that read or wrote t.
+func (t *Tag) QueryPosts() velox.Query[Post] { return velox.QueryEdge(t.source, t, Tags.Posts) }

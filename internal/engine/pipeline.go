@@ -65,6 +65,11 @@ type DB struct {
 	// batch is, on the handles of a recorded write's transaction or
 	// savepoint, the write's Changes so far (batched); nil elsewhere.
 	batch *batch
+	// src is the Source the DB's statements give the entities they read or
+	// write: its own, made with it (OwnSource), a transaction's (txSource),
+	// or, on a WithoutPolicy or Record copy, the one of the DB it copied.
+	// Nil on a DB made without one.
+	src *Source
 }
 
 // Open is velox.Open's DB, opts given as a slice. A nil db makes a DB that

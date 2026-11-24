@@ -22,6 +22,8 @@ type Project struct {
 	Name      string    `json:"name"`
 	// Edges holds Project's relations, filled by With.
 	Edges ProjectEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // ProjectEdges holds the relations of Project, filled by With.
@@ -134,6 +136,7 @@ func projectDescriptor() velox.Descriptor[Project] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Project) *velox.Source { return &x.source },
 		Check: func(col int, v any) error {
 			switch col {
 			case projectColName:
@@ -160,3 +163,8 @@ func (p Project) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (p Project) GoString() string { return p.String() }
+
+// QueryIssues queries the edge issues, to Issue, on the DB that read or wrote p.
+func (p *Project) QueryIssues() velox.Query[Issue] {
+	return velox.QueryEdge(p.source, p, Projects.Issues)
+}

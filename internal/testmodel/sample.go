@@ -27,6 +27,8 @@ type Sample struct {
 	Score     kind.Score   `json:"score"`
 	// Edges holds Sample's relations, filled by With.
 	Edges SampleEdges `json:"edges,omitzero"`
+	// source is the DB that read or wrote the entity, which its edge queries run on.
+	source velox.Source
 }
 
 // SampleEdges holds the relations of Sample, filled by With.
@@ -195,6 +197,7 @@ func sampleDescriptor() velox.Descriptor[Sample] {
 			}
 			return nil
 		},
+		SourcePtr: func(x *Sample) *velox.Source { return &x.source },
 	}
 }
 
@@ -213,3 +216,16 @@ func (s Sample) String() string {
 
 // GoString is String, so that %#v prints the same text.
 func (s Sample) GoString() string { return s.String() }
+
+// QueryLines queries the edge lines, to Line, on the DB that read or wrote s.
+func (s *Sample) QueryLines() velox.Query[Line] { return velox.QueryEdge(s.source, s, Samples.Lines) }
+
+// QueryChildren queries the edge children, to Sample, on the DB that read or wrote s.
+func (s *Sample) QueryChildren() velox.Query[Sample] {
+	return velox.QueryEdge(s.source, s, Samples.Children)
+}
+
+// QueryParent queries the edge parent, to Sample, on the DB that read or wrote s.
+func (s *Sample) QueryParent() velox.Query[Sample] {
+	return velox.QueryEdge(s.source, s, Samples.Parent)
+}
