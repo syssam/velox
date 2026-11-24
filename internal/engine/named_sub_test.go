@@ -66,6 +66,33 @@ func TestFieldInSelectTextKey(t *testing.T) {
 	}
 }
 
+// A text column against an integer key is compared as text too, the key
+// cast on the inner side (ADR 0157), by FieldInSelect and FieldInSelectRaw.
+func TestFieldInSelectTextColumn(t *testing.T) {
+	for _, p := range []velox.Predicate{
+		velox.FieldInSelect("title", "Org", "id"),
+		velox.FieldInSelectRaw("r", "title", "Org", "id"),
+	} {
+		s, _, err := nmSQL(t, p)
+		if want := `CAST("vx1"."id" AS TEXT) = "nm_docs"."title"`; err != nil || !strings.Contains(s, want) {
+			t.Errorf("got %s, %v; want it to hold %s", s, err, want)
+		}
+		s, _, err = nmSQLOn(t, velox.SQLite, p)
+		if want := `CAST("vx1"."id" AS TEXT) = "nm_docs"."title"`; err != nil || !strings.Contains(s, want) {
+			t.Errorf("SQLite: got %s, %v; want it to hold %s", s, err, want)
+		}
+		s, _, err = nmSQLOn(t, velox.MySQL, p)
+		if want := "CONCAT(`vx1`.`id`) = `nm_docs`.`title`"; err != nil || !strings.Contains(s, want) {
+			t.Errorf("MySQL: got %s, %v; want it to hold %s", s, err, want)
+		}
+	}
+	// A nullable text column too.
+	s, _, err := nmSQL(t, velox.FieldInSelect("note", "Org", "id"))
+	if want := `CAST("vx1"."id" AS TEXT) = "nm_docs"."note"`; err != nil || !strings.Contains(s, want) {
+		t.Errorf("nullable: got %s, %v; want it to hold %s", s, err, want)
+	}
+}
+
 // FieldInSelect fails the statement, naming what is wrong, for an entity that
 // is not linked, a column or key that is not there, columns of two types, and
 // a bad condition in the subquery.
@@ -78,7 +105,9 @@ func TestFieldInSelectRefusals(t *testing.T) {
 		{"unknown entity", velox.FieldInSelect("org_id", "Doc", "id"), `no entity or table "Doc"`},
 		{"owner column", velox.FieldInSelect("nope", "Org", "id"), `no column "nope"`},
 		{"key column", velox.FieldInSelect("org_id", "Org", "nope"), `Org has no column "nope"`},
-		{"two types", velox.FieldInSelect("title", "Org", "id"), "the key types differ"},
+		{"two types", velox.FieldInSelect("at", "Org", "id"), "the key types differ"},
+		{"raw: no reason", velox.FieldInSelectRaw(" ", "org_id", "Org", "id"), "needs a reason"},
+		{"raw: key column", velox.FieldInSelectRaw("r", "org_id", "Org", "nope"), `FieldInSelectRaw: Org has no column "nope"`},
 		{"a float and text", velox.FieldInSelect("score", "Org", "name"), "the key types differ"},
 		{"bad condition", velox.FieldInSelect("org_id", "Org", "id", velox.FieldEQ("nope", 1)), "no column"},
 	} {

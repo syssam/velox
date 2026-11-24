@@ -867,9 +867,10 @@ func (Doc) Policy() velox.Policy {
 It is the same `EXISTS`, so `Org`'s own Read policy applies inside it, and it
 is resolved when the statement is prepared: an unknown column or entity, or
 two columns of different types, is an error and never a dropped condition.
-One mismatch is allowed: an integer column against a text key, such as an
-approval's `entity_id` that holds the ids of several entities, is compared as
-text (`CAST(id AS TEXT)`, on MySQL `CONCAT(id)`).
+One mismatch is allowed: an integer and a text column, such as an
+approval's `entity_id` that holds the ids of several entities, are compared
+as text, the integer cast (`CAST(id AS TEXT)`, on MySQL `CONCAT(id)`), on
+whichever side it is.
 A rule that reaches its own entity again, as a participant's "a conversation
 I take part in" read through the participants' own policy does, is cut where
 it loops: that inner subquery gets none of the entity's own conditions, while
@@ -881,6 +882,33 @@ configuration. velox-gen checks every name it can read as a constant and warns
 about the others. Prefer `HasEdgeWith` where a relation exists: velox-gen then
 checks the whole rule ([ADR 0079](decisions/0079-field-in-select.md),
 [ADR 0081](decisions/0081-entity-table.md)).
+
+`velox.FieldInSelectRaw(reason, column, entity, key, conditions...)` is the
+same subquery with nothing but `conditions` inside it: no Read policy,
+`WithFilter` filter or interceptor of `entity` applies there, soft delete
+included. It is for a trail that must outlive the rows it names, such as an
+activity log whose text `entity_id` names a lead that was deleted later:
+
+```go
+func (ActivityLog) Policy() velox.Policy {
+	return velox.Policy{Read: func(ctx context.Context, _ *velox.DB) (velox.Predicate, error) {
+		orgs, err := orgsOf(ctx)
+		if err != nil {
+			return velox.Predicate{}, err
+		}
+		// entity_id IN (SELECT CAST(lead_id AS TEXT) FROM lead WHERE org_id IN (…))
+		return velox.FieldInSelectRaw("activity trail: a deleted lead keeps its history",
+			"entity_id", "Lead", "lead_id", velox.FieldIn("org_id", orgs...)), nil
+	}}
+}
+```
+
+The names resolve and the columns compare as `FieldInSelect`'s do. A
+relation or `FieldInSelect` among the conditions keeps its own target's
+policies. The statement around it keeps its own policies on its rows. The
+reason is required, and an Around hook reads it from
+`Statement.RawReasons()`, as it reads `ExprRaw`'s
+([ADR 0157](decisions/0157-field-in-select-raw.md)).
 
 ### SQL text in a condition: Expr
 
@@ -2265,8 +2293,9 @@ softdelete.Mixin{Assign: softdelete.Assigns(
 [sql.md](sql.md) lists every way to write SQL in velox, from a guarded
 condition to a raw statement, and which keep the policies. Reach for raw SQL
 only when `Expr`, `Calc` and `SetExpr` cannot say it. A single condition
-that must read past the policies is `ExprRaw`, which keeps them on the rest
-of the statement.
+that must read past the policies is `ExprRaw`, or `FieldInSelectRaw` for
+another entity named in a schema, which keep them on the rest of the
+statement.
 
 Raw SQL is the escape hatch for what the builder cannot express. Each call
 takes a reason, because velox applies no policy or scope to raw SQL; filtering

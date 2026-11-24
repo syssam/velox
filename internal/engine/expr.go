@@ -440,10 +440,10 @@ func swapExprData(d *exprData) *exprData {
 	return c.seal()
 }
 
-// RawReasons returns the reasons of the raw conditions (velox.ExprRaw) st
-// holds, in the order they are written: in Where, a join's On, a
-// projection's Having and an upsert's conditions, at any depth (inside Or,
-// Not or a relation's condition). It is nil when st holds none. An Around
+// RawReasons returns the reasons of the raw conditions (velox.ExprRaw and
+// velox.FieldInSelectRaw) st holds, in the order they are written: in
+// Where, a join's On, a projection's Having and an upsert's conditions, at
+// any depth (inside Or, Not or a relation's condition). It is nil when st holds none. An Around
 // hook reads it to record that a statement read past the policies, and why;
 // a raw condition does not set PolicyBypass, as the policies still apply to
 // the statement's own rows.
@@ -471,9 +471,20 @@ func (st *Statement) RawReasons() []string {
 // nodeRawReasons appends to rs the reasons of the raw conditions in n and
 // its kids.
 func nodeRawReasons(rs []string, n Node) []string {
-	if n.Op == OpExpr {
+	switch n.Op {
+	case OpExpr:
 		if d := n.V.(*exprData); d.reason != "" {
 			rs = append(rs, d.reason)
+		}
+	case opNamedSub:
+		// A FieldInSelectRaw not resolved yet.
+		if s := n.V.(*namedSub); s.reason != "" {
+			rs = append(rs, s.reason)
+		}
+	case OpExists:
+		// A FieldInSelectRaw once resolved.
+		if l, ok := n.V.(Link); ok && l.Raw != "" {
+			rs = append(rs, l.Raw)
 		}
 	}
 	for _, k := range n.Kids {

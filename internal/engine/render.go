@@ -1033,7 +1033,7 @@ func (w *writer) rowIn(n Node) {
 func (w *writer) through(n Node) {
 	join := n.V.(*EntityInfo)
 	in, outer, depth := w.in, w.alias, w.depth
-	w.subquery(join, n.W.(int), in, int(n.Col), false)
+	w.subquery(join, n.W.(int), in, int(n.Col), castNone)
 	for _, k := range n.Kids {
 		w.str(" AND ")
 		w.pred(k)
@@ -1054,11 +1054,11 @@ func (w *writer) exists(n Node) {
 	l := n.V.(Link)
 	owner, outer, depth := w.in, w.alias, w.depth
 	if l.Join != nil {
-		w.subquery(l.Join, l.JoinOwner, owner, l.OwnerCol, false)
+		w.subquery(l.Join, l.JoinOwner, owner, l.OwnerCol, castNone)
 		w.str(" AND ")
-		w.subquery(l.Target, l.TargetCol, l.Join, l.JoinTarget, false)
+		w.subquery(l.Target, l.TargetCol, l.Join, l.JoinTarget, castNone)
 	} else {
-		w.subquery(l.Target, l.TargetCol, owner, l.OwnerCol, l.TextKey)
+		w.subquery(l.Target, l.TargetCol, owner, l.OwnerCol, linkCast(l))
 	}
 	for _, k := range n.Kids {
 		w.str(" AND ")
@@ -1071,16 +1071,29 @@ func (w *writer) exists(n Node) {
 	w.in, w.alias, w.depth = owner, outer, depth
 }
 
+// linkCast is the cast of l's correlation: castOwner for Link.TextKey,
+// castTarget for Link.TextTarget, castNone otherwise.
+func linkCast(l Link) int {
+	switch {
+	case l.TextKey:
+		return castOwner
+	case l.TextTarget:
+		return castTarget
+	}
+	return castNone
+}
+
 // subquery opens an EXISTS on in, aliased one level deeper, correlated by
 // in.Columns[col] = from.Columns[fromCol], where from is the table of w.alias,
-// or the statement's table when there is no alias yet. With text, the outer
-// column is an integer made text, to meet a text key (Link.TextKey): the
-// cast is on the outer side, so an index on the key still serves. On MySQL
-// it is CONCAT(x), not CAST(x AS CHAR): a CAST's text has the connection's
-// collation as firmly as the column has its own, and MySQL refuses to compare
-// the two when they differ (error 1267), while CONCAT's yields to the
-// column's. It leaves w writing conditions on in.
-func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int, text bool) {
+// or the statement's table when there is no alias yet. With castOwner, the
+// outer column is an integer made text, to meet a text key (Link.TextKey):
+// the cast is on the outer side, so an index on the key still serves. With
+// castTarget, the key is an integer made text, to meet a text column
+// (Link.TextTarget). On MySQL it is CONCAT(x), not CAST(x AS CHAR): a CAST's
+// text has the connection's collation as firmly as the column has its own,
+// and MySQL refuses to compare the two when they differ (error 1267), while
+// CONCAT's yields to the column's. It leaves w writing conditions on in.
+func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int, cast int) {
 	w.depth++
 	alias := "vx" + strconv.Itoa(w.depth)
 	w.str("EXISTS (SELECT 1 FROM ")
@@ -1089,12 +1102,14 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 	w.str(" AS ")
 	w.ident(alias)
 	w.str(" WHERE ")
+	w.castOpen(cast == castTarget)
 	w.ident(alias)
 	w.str(".")
 	w.col(int32(col))
+	w.castClose(cast == castTarget)
 	w.str(" = ")
 	w.in = from
-	w.outerCol(w.alias, fromCol, text)
+	w.outerCol(w.alias, fromCol, cast == castOwner)
 	w.in = in
 	w.alias = alias
 }
@@ -1103,13 +1118,7 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 // outer, its alias, or by its table when there is no alias yet. With text,
 // it is an integer made text, as subquery says.
 func (w *writer) outerCol(outer string, col int, text bool) {
-	if text {
-		if w.d == MySQL {
-			w.str("CONCAT(")
-		} else {
-			w.str("CAST(")
-		}
-	}
+	w.castOpen(text)
 	if outer != "" {
 		w.ident(outer)
 	} else {
@@ -1117,12 +1126,29 @@ func (w *writer) outerCol(outer string, col int, text bool) {
 	}
 	w.str(".")
 	w.col(int32(col))
-	if text {
-		if w.d == MySQL {
-			w.str(")")
-		} else {
-			w.str(" AS TEXT)")
-		}
+	w.castClose(text)
+}
+
+// castOpen opens, when on, the cast of an integer to text that castClose
+// closes: CAST(x AS TEXT), or CONCAT(x) on MySQL, as subquery says.
+func (w *writer) castOpen(on bool) {
+	switch {
+	case !on:
+	case w.d == MySQL:
+		w.str("CONCAT(")
+	default:
+		w.str("CAST(")
+	}
+}
+
+// castClose closes castOpen's cast.
+func (w *writer) castClose(on bool) {
+	switch {
+	case !on:
+	case w.d == MySQL:
+		w.str(")")
+	default:
+		w.str(" AS TEXT)")
 	}
 }
 

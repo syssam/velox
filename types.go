@@ -282,9 +282,9 @@ type JoinClause = engine.JoinClause
 // must never change the shared one. Pointing it at another table does not
 // change the tables inside an EXISTS (see Rewrite).
 //
-// Its method RawReasons returns the reasons of the ExprRaw conditions it
-// holds, which read past the policies inside their text only; they do not
-// set PolicyBypass.
+// Its method RawReasons returns the reasons of the ExprRaw and
+// FieldInSelectRaw conditions it holds, which read past the policies inside
+// their text or subquery only; they do not set PolicyBypass.
 //
 // Its fields:
 //

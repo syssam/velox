@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.FieldInSelectRaw(reason, column, entity, key, ps...)`:
+  `FieldInSelect` with nothing but `ps` inside the subquery, so no Read
+  policy, `WithFilter` filter or interceptor of the other entity applies
+  there, soft delete included; the statement around it keeps its own. The
+  reason is required and `Statement.RawReasons()` reports it. velox-gen
+  checks its names as it checks `FieldInSelect`'s (ADR 0157).
+- `FieldInSelect` compares a text column with an integer key as text too,
+  the key cast (`CAST(k AS TEXT)`, `CONCAT(k)` on MySQL), as it already did
+  an integer column with a text key (ADR 0157).
 - `velox.LoadedOne(p)` and `velox.LoadedMany(s)` return a loaded relation,
   so code that builds an entity itself, such as a test's fixture, can set
   `x.Edges.Foo` as ent's `x.Edges.Foo = y` does. A nil `p` or `s` is a

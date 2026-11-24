@@ -70,6 +70,8 @@ func iOwnerDescriptor() velox.Descriptor[IOwner] {
 			velox.EdgeTo[INote]("pinned", 2, 0),
 			velox.EdgeThrough[IJoin, INote]("tagged", 0, 0, 1, 0),
 		},
+		// INote and SDoc, which FieldInSelect and FieldInSelectRaw name.
+		Entities: Entities(velox.LinkEntity[INote]("INote", "notes"), velox.LinkEntity[SDoc]("SDoc", "s_docs")),
 		FieldPtr: func(x *IOwner, i int) any {
 			return [...]any{&x.ID, &x.Name, &x.PinnedID}[i]
 		},

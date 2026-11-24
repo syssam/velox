@@ -19,6 +19,9 @@ func TestCheckFieldInSelectAccepts(t *testing.T) {
 		// An integer column with a text key is compared as text (ADR 0091).
 		"text key":          read("Comment", `velox.FieldInSelect("doc_id", "User", "name")`),
 		"unsigned text key": read("User", `velox.FieldInSelect("flags", "Doc", "title")`),
+		// A text column with an integer key too (ADR 0157).
+		"text column": read("Doc", `velox.FieldInSelect("title", "Comment", "doc_id")`),
+		"raw":         read("Doc", `velox.FieldInSelectRaw("history", "title", "Comment", "doc_id", velox.FieldEQ("doc_id", 1))`),
 	})
 }
 
@@ -33,7 +36,9 @@ func TestCheckFieldInSelectRefusals(t *testing.T) {
 		{"condition by table", read("Comment", `velox.FieldInSelect("doc_id", "docs", "id", velox.FieldEQ("name", "x"))`), `FieldInSelect`, `Doc, the subquery of Comment's FieldInSelect, has no column "name"`},
 		{"own column", read("Comment", `velox.FieldInSelect("docc_id", "Doc", "id")`), `FieldInSelect`, `Comment has no column "docc_id"; did you mean "doc_id"? (Comment.Policy)`},
 		{"key", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "ids")`), `FieldInSelect`, `Doc has no column "ids"; did you mean "id"? (Comment.Policy)`},
-		{"types", read("Doc", `velox.FieldInSelect("title", "Comment", "doc_id")`), `FieldInSelect`, `column "title" of Doc is a string and column "doc_id" of Comment is an int64: a subquery compares columns of one type, or an integer column with a text key`},
+		{"types", read("User", `velox.FieldInSelect("score", "Comment", "doc_id")`), `FieldInSelect`, `column "score" of User is a float32 and column "doc_id" of Comment is an int64: a subquery compares columns of one type, or an integer and a text column`},
+		{"raw key", read("Comment", `velox.FieldInSelectRaw("history", "doc_id", "Doc", "ids")`), `FieldInSelectRaw`, `Doc has no column "ids"; did you mean "id"? (Comment.Policy)`},
+		{"raw condition", read("Comment", `velox.FieldInSelectRaw("history", "doc_id", "Doc", "id", velox.FieldEQ("name", "x"))`), `FieldInSelectRaw`, `Doc, the subquery of Comment's FieldInSelect, has no column "name" (Comment.Policy)`},
 		{"a float and text", read("User", `velox.FieldInSelect("score", "Doc", "title")`), `FieldInSelect`, `a subquery compares columns of one type`},
 		{"condition", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("name", "x"))`), `FieldInSelect`, `Doc, the subquery of Comment's FieldInSelect, has no column "name" (Comment.Policy)`},
 		{"condition value", read("Comment", `velox.FieldInSelect("doc_id", "Doc", "id", velox.FieldEQ("title", 1))`), `FieldInSelect`, `column "title" of Doc, the subquery of Comment's FieldInSelect, is a string, not an int`},

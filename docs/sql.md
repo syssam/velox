@@ -17,6 +17,7 @@ another tenant's rows; `ExprRaw` and the last three can.
 | A value: an ordering, a result column, a group key | `velox.Calc`, `Query.SelectRaw` | kept | n/a |
 | A column set to an expression | `velox.SetExpr` | kept | run; `Mutation.Value` reports false |
 | A condition on another table | `HasWith`, `InSelect`, `FieldInSelect` | kept, the other table's too | n/a |
+| A condition on another table, read without its policies, by name | `velox.FieldInSelectRaw(reason, …)` | kept on the statement's rows, **none inside the subquery** | n/a (a read) or kept (in a write's Where) |
 | A condition with a subquery velox cannot guard | `velox.ExprRaw(reason, …)` | kept on the statement's rows, **none inside the text** | n/a (a read) or kept (in a write's Where) |
 | Grouped results | `Select`, `GroupBy`, `Having` with `Calc` | kept | n/a |
 | Rows of an entity, by any SELECT | `db.Raw[E](reason, …)` | **bypassed** | not run |
@@ -25,8 +26,8 @@ another tenant's rows; `ExprRaw` and the last three can.
 
 Every tool goes through the transaction check, the Around hooks, routing
 and the SQL comment. The raw ones show their reason to the Around
-hooks as `Statement.PolicyBypass`; `ExprRaw`'s reasons are
-`Statement.RawReasons()`.
+hooks as `Statement.PolicyBypass`; `ExprRaw`'s and `FieldInSelectRaw`'s
+reasons are `Statement.RawReasons()`.
 
 ## The text rules
 
@@ -179,7 +180,9 @@ db.Query[veloxgen.Author]().Where(A.ID.InSelect(P.AuthorID.Select(P.Votes.GT(20)
 … WHERE EXISTS (SELECT 1 FROM "lines" AS "vx1" WHERE "vx1"."invoice_id" = "invoices"."id" AND "amount_cents" > $1) …
 ```
 
-A schema's Policy names the other entity with `velox.FieldInSelect`. See
+A schema's Policy names the other entity with `velox.FieldInSelect`, or
+with `velox.FieldInSelectRaw` when nothing but its own conditions may apply
+inside ([ADR 0157](decisions/0157-field-in-select-raw.md)). See
 [ADR 0057](decisions/0057-column-subqueries.md).
 
 ## Raw: Raw, Rows and Exec

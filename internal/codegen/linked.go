@@ -33,10 +33,11 @@ import (
 //
 //   - velox.HasEdge(name) and HasEdgeWith(name, ...) name a relation of
 //     the entity. The conditions of HasEdgeWith name the target's columns.
-//   - velox.FieldInSelect(column, entity, key, ...) names an entity of the
-//     package, by its name in the schema or by its table, as velox finds it
-//     in the package's EntityTable; its column and key are of one type, and
-//     its conditions name the entity's columns.
+//   - velox.FieldInSelect(column, entity, key, ...), and FieldInSelectRaw
+//     after its reason, names an entity of the package, by its name in the
+//     schema or by its table, as velox finds it in the package's
+//     EntityTable; its column and key are of one type, or an integer and a
+//     text column, and its conditions name the entity's columns.
 //   - velox.FieldEQ(name, v) and the other Field functions name a column.
 //     The value fits the column: FieldEQ, FieldNEQ, FieldGT, FieldGTE,
 //     FieldLT and FieldLTE's, and each of FieldIn and FieldNotIn's.
@@ -186,7 +187,7 @@ const (
 	useEdge     useKind = iota // velox.HasEdge(name) or HasEdgeWith(name, ...)
 	useColumn                  // velox.FieldEQ(name, v) and the other Field functions
 	useMutation                // a *velox.Mutation's or a velox.Row's method
-	useSub                     // velox.FieldInSelect(column, entity, key, ...)
+	useSub                     // velox.FieldInSelect(column, entity, key, ...) or FieldInSelectRaw(reason, ...)
 )
 
 // subStep is the chain step that a FieldInSelect's conditions are after: the
@@ -419,13 +420,17 @@ func (sc *sources) call(c *ast.CallExpr, prefix []string, w *walked) bool {
 			sc.inspectAll(c.Args[1:], append(slices.Clone(prefix), name), w)
 		}
 		return false
-	case fn == "FieldInSelect" && len(c.Args) >= 3:
-		entity := sc.constString(c.Args[1])
+	case fn == "FieldInSelect" && len(c.Args) >= 3, fn == "FieldInSelectRaw" && len(c.Args) >= 4:
+		args := c.Args
+		if fn == "FieldInSelectRaw" {
+			args = args[1:] // after the reason, which velox checks
+		}
+		entity := sc.constString(args[1])
 		u := use{kind: useSub, chain: prefix, pos: c.Pos(), call: c, entity: entity,
-			name: sc.constString(c.Args[0]), key: sc.constString(c.Args[2])}
+			name: sc.constString(args[0]), key: sc.constString(args[2])}
 		w.uses = append(w.uses, u)
 		if entity != "" {
-			sc.inspectAll(c.Args[3:], append(slices.Clone(prefix), subStep+entity), w)
+			sc.inspectAll(args[3:], append(slices.Clone(prefix), subStep+entity), w)
 		}
 		return false
 	case fieldOps[fn]:

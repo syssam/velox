@@ -411,18 +411,9 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		if _, lazy := n.V.(linkRef); lazy {
 			n.V, resolved = l, true // n is a copy
 		}
-		read, err := sc.target(t)
-		if err != nil {
-			return n, false, sc.inExists(t, err)
-		}
-		if read.n.Op != opZero {
-			if kids == nil {
-				kids = make([]Node, len(n.Kids), len(n.Kids)+1)
-				copy(kids, n.Kids)
-			}
-			for _, c := range conjuncts(NewPredicate(read.n)) {
-				kids = append(kids, c.n)
-			}
+		var err error
+		if kids, err = sc.readKids(n, l, kids); err != nil {
+			return n, false, err
 		}
 	}
 	if kids == nil {
@@ -430,6 +421,32 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	}
 	n.Kids = kids // n is a copy
 	return n, true, nil
+}
+
+// readKids returns kids, the scoped kids of the EXISTS n on l (nil when none
+// changed), with l's target's Read conditions appended, on a copy of n's kids
+// when kids is nil. A FieldInSelectRaw (Link.Raw) gets none: only its own
+// conditions apply inside (ADR 0157); a relation among them keeps its
+// target's.
+func (sc *Scoper) readKids(n Node, l Link, kids []Node) ([]Node, error) {
+	if l.Raw != "" {
+		return kids, nil
+	}
+	read, err := sc.target(l.Target)
+	if err != nil {
+		return nil, sc.inExists(l.Target, err)
+	}
+	if read.n.Op == opZero {
+		return kids, nil
+	}
+	if kids == nil {
+		kids = make([]Node, len(n.Kids), len(n.Kids)+1)
+		copy(kids, n.Kids)
+	}
+	for _, c := range conjuncts(NewPredicate(read.n)) {
+		kids = append(kids, c.n)
+	}
+	return kids, nil
 }
 
 // exprNode is Node of the OpExpr n: with its relations' aggregates scoped

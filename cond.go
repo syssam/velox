@@ -119,12 +119,37 @@ func FieldContainsFold(name, s string) Predicate { return engine.FieldContainsFo
 // can read as constants. A name that is no entity or table, or that is one
 // entity's name and another's table, a column that is not there, or two
 // columns of different types fail the statement that holds it. An integer
-// column against a text key is the exception: it is compared as text, the
-// integer cast, for a key that holds ids as text. The column
+// and a text column are the exception: they are compared as text, the
+// integer cast (CONCAT on MySQL, so the text takes the column's collation),
+// for a column or a key that holds ids as text. The column
 // must not be an encoded (JSON) column. On MySQL a subquery that reads the table
 // an UPDATE or DELETE changes fails with error 1093.
 func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
 	return engine.FieldInSelect(column, entity, key, ps...)
+}
+
+// FieldInSelectRaw is FieldInSelect with no policy inside the subquery:
+// only ps apply there. The entity's Read policy, the DB's WithFilter
+// filters and its interceptors, soft delete among them, do not, so a row
+// the caller may not read, or one soft-deleted, still matches:
+//
+//	// an activity row's entity_id, text, names a lead by its integer id;
+//	// a deleted lead keeps its history
+//	velox.FieldInSelectRaw("activity trail: a deleted lead keeps its history",
+//		"entity_id", "Lead", "lead_id", velox.FieldIn("org_id", orgs...))
+//
+// The names resolve as FieldInSelect's, and the columns compare as its do.
+// A relation or FieldInSelect among ps keeps its own target's policies.
+// The statement around it keeps its own Read or Write policy, filters and
+// interceptors, on its own rows. It works in Or, And and Not, and in an
+// update's or a delete's Where.
+//
+// reason says why the subquery reads past the policies; empty or white
+// space fails the statement. Statement.RawReasons returns it, as it
+// returns ExprRaw's, so an Around hook can record it. The render cache
+// keys neither the reason nor the values.
+func FieldInSelectRaw(reason, column, entity, key string, ps ...Predicate) Predicate {
+	return engine.FieldInSelectRaw(reason, column, entity, key, ps...)
 }
 
 // FieldIsNull is true when the nullable column of the given name is NULL.

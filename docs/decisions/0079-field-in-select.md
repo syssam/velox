@@ -7,6 +7,10 @@
 - Amended 2026-11-19 by [0091](0091-policy-cycles-and-text-keys.md): a cycle is
   cut, not refused, and an integer column against a text key is compared as
   text.
+- Amended 2026-11-24 by [0157](0157-field-in-select-raw.md): a text column
+  against an integer key is compared as text too, the key cast, and
+  `FieldInSelectRaw` is the same subquery with no policy, filter or
+  interceptor of the target inside.
 
 ## Context
 

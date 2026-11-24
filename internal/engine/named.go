@@ -106,8 +106,9 @@ func HasEdgeWith(name string, ps ...Predicate) Predicate {
 }
 
 // namedSub is what an opNamedSub holds: the owner's column, the target
-// entity's name and the target's key column.
-type namedSub struct{ column, entity, key string }
+// entity's name and the target's key column, and the reason of a
+// FieldInSelectRaw, empty for a FieldInSelect.
+type namedSub struct{ column, entity, key, reason string }
 
 // FieldInSelect is true when the column of the given name is among the values
 // of the key column of the entity named entity, in the rows that meet every
@@ -116,11 +117,27 @@ type namedSub struct{ column, entity, key string }
 // target's Read policy applies inside it. entity is the target's name in the
 // schema or its table, which the owner's EntityTable finds (namedSubquery).
 func FieldInSelect(column, entity, key string, ps ...Predicate) Predicate {
+	return namedSubPred(&namedSub{column, entity, key, ""}, ps)
+}
+
+// FieldInSelectRaw is FieldInSelect with nothing but ps inside the
+// subquery: no Read policy, filter or interceptor of the target applies
+// there (ADR 0157). reason says why, and must say something; it is what
+// Statement.RawReasons reports.
+func FieldInSelectRaw(reason, column, entity, key string, ps ...Predicate) Predicate {
+	if NoReason(reason) {
+		return Predicate{Node{Op: OpInvalid, V: fmt.Errorf("velox: FieldInSelectRaw(%q, %q, %q) needs a reason, as no policy applies inside its subquery", column, entity, key)}}
+	}
+	return namedSubPred(&namedSub{column, entity, key, reason}, ps)
+}
+
+// namedSubPred is the opNamedSub of s with the conditions ps.
+func namedSubPred(s *namedSub, ps []Predicate) Predicate {
 	kids := make([]Node, len(ps))
 	for i, p := range ps {
 		kids[i] = p.n
 	}
-	return Predicate{Node{Op: opNamedSub, V: &namedSub{column, entity, key}, Kids: kids}}
+	return Predicate{Node{Op: opNamedSub, V: s, Kids: kids}}
 }
 
 // nameIndex is each column's index by its name.
@@ -338,52 +355,72 @@ func namedEdge(in *EntityInfo, n Node) (Node, error) {
 // namedSubquery resolves n, an EXISTS on another entity by name, against in:
 // the owner's column equals the target's key column, and its conditions are
 // resolved against the target, so the target's Read policy and interceptors
-// apply inside it, as they do inside a typed InSelect.
+// apply inside it, as they do inside a typed InSelect, unless it is a
+// FieldInSelectRaw, whose link carries its reason (Link.Raw).
 func namedSubquery(in *EntityInfo, n Node) (Node, error) {
 	s := n.V.(*namedSub)
+	what := "FieldInSelect"
+	if s.reason != "" {
+		what = "FieldInSelectRaw"
+	}
 	oc, ok := in.names[s.column]
 	if !ok {
-		return n, fmt.Errorf("FieldInSelect: no column %q", s.column)
+		return n, fmt.Errorf("%s: no column %q", what, s.column)
 	}
 	t, err := in.entityTable()
 	if err != nil {
-		return n, fmt.Errorf("FieldInSelect: %w", err)
+		return n, fmt.Errorf("%s: %w", what, err)
 	}
 	target, err := t.entity(s.entity)
 	if err != nil {
-		return n, fmt.Errorf("FieldInSelect: %w", err)
+		return n, fmt.Errorf("%s: %w", what, err)
 	}
 	tc, ok := target.names[s.key]
 	if !ok {
-		return n, fmt.Errorf("FieldInSelect: %s has no column %q", s.entity, s.key)
+		return n, fmt.Errorf("%s: %s has no column %q", what, s.entity, s.key)
 	}
-	text, err := subKey(in, int(oc), target, int(tc))
+	cast, err := subKey(in, int(oc), target, int(tc))
 	if err != nil {
-		return n, fmt.Errorf("FieldInSelect: %w", err)
+		return n, fmt.Errorf("%s: %w", what, err)
 	}
 	l, err := ColRef{Owner: func() (*EntityInfo, error) { return in, nil }, Target: func() (*EntityInfo, error) { return target, nil }, OwnerCol: oc, TargetCol: tc}.Link()
 	if err != nil {
 		return n, err
 	}
-	l.TextKey = text
+	l.TextKey, l.TextTarget, l.Raw = cast == castOwner, cast == castTarget, s.reason
 	kids, _, err := resolveKids(l.Target, n.Kids)
 	if err != nil {
-		return n, fmt.Errorf("FieldInSelect %s: %w", s.entity, err)
+		return n, fmt.Errorf("%s %s: %w", what, s.entity, err)
 	}
 	return Node{Op: OpExists, Col: -1, V: l, Kids: kids}, nil
 }
 
+// The casts subKey reports.
+const (
+	castNone   = iota // one type: no cast
+	castOwner         // an integer column against a text key: the column made text
+	castTarget        // a text column against an integer key: the key made text
+)
+
 // subKey checks the owner's column oc against the target's key column tc,
 // as a typed InSelect does (sameKey: one type, a nullable column keying as
-// its type), with one exception: an integer column against a text key is
-// compared as text, and subKey reports it. Such a key holds ids of several
-// entities as text, as an approval's entity_id does (ADR 0091).
-func subKey(in *EntityInfo, oc int, target *EntityInfo, tc int) (bool, error) {
+// its type), with two exceptions, compared as text: an integer column
+// against a text key, whose key holds ids of several entities as text, as
+// an approval's entity_id does (ADR 0091), and a text column against an
+// integer key, as an activity log's entity_id is against a lead's id (ADR
+// 0157). subKey reports which side is cast.
+func subKey(in *EntityInfo, oc int, target *EntityInfo, tc int) (int, error) {
 	x, y := in.Columns[oc], target.Columns[tc]
-	if !x.Codec && !y.Codec && isInteger(base(x.Type).Kind()) && base(y.Type).Kind() == reflect.String {
-		return true, nil
+	if !x.Codec && !y.Codec {
+		xk, yk := base(x.Type).Kind(), base(y.Type).Kind()
+		switch {
+		case isInteger(xk) && yk == reflect.String:
+			return castOwner, nil
+		case xk == reflect.String && isInteger(yk):
+			return castTarget, nil
+		}
 	}
-	return false, sameKey(in, oc, target, tc)
+	return castNone, sameKey(in, oc, target, tc)
 }
 
 // isInteger reports whether k is a signed or unsigned integer kind.

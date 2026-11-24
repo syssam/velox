@@ -2,6 +2,9 @@
 
 - Status: accepted, 2026-11-19. Amends [0079](0079-field-in-select.md) and
   [0081](0081-entity-table.md).
+- Amended 2026-11-24 by [0157](0157-field-in-select-raw.md): a text column
+  against an integer key is compared as text too, the key cast inside the
+  subquery.
 
 ## Context
 

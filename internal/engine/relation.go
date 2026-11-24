@@ -80,6 +80,14 @@ type Link struct {
 	// column as text, casting the owner's side: a FieldInSelect whose key
 	// column holds ids as text (ADR 0091).
 	TextKey bool
+	// TextTarget compares the owner's text column with the target's integer
+	// column as text, casting the target's side: a FieldInSelect whose
+	// column holds ids as text (ADR 0157).
+	TextTarget bool
+	// Raw is the reason of a FieldInSelectRaw: when it is set, the scope
+	// adds none of the target's Read conditions inside the EXISTS (ADR
+	// 0157), and Statement.RawReasons reports it.
+	Raw string
 }
 
 // RelTarget is a relation's target as the use site names it: the getter of
