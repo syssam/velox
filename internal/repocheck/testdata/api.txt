@@ -760,6 +760,7 @@ func DriverCode(err error) (string, bool)
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDescriptor
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int, unfilled ...int) EdgeDescriptor
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDescriptor
+func Entities[E any, PE Entity[E]]() ([]*EntityInfo, error)
 func Excluded[E any](c Column[E]) Term[E]
 func ExprRaw[E any](reason, text string, args ...any) Pred[E]
 func Expr[E any](text string, args ...any) Pred[E]

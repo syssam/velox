@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sync"
 )
 
@@ -91,4 +94,54 @@ func (in *EntityInfo) entityTable() (*EntityTable, error) {
 		return nil, fmt.Errorf("%s has no entity table: velox-gen writes one in a package whose schema declares a Policy, Hooks or Interceptors; elsewhere use the relation's typed condition (Rel.Has, Rel.HasWith)", in.Name)
 	}
 	return in.entities(), nil
+}
+
+// PackageEntities returns a copy of the metadata of every entity of the
+// table in's descriptor names, sorted by Name. err is in's own build error,
+// returned as it is. An entity whose metadata fails to build is an error;
+// every such error is joined, and no entities are returned with them.
+func PackageEntities(in *EntityInfo, err error) ([]*EntityInfo, error) {
+	if err != nil {
+		return nil, err
+	}
+	if in == nil {
+		return nil, errors.New("velox: the entity has no metadata")
+	}
+	t, err := in.entityTable()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*EntityInfo, 0, len(t.links))
+	var errs []error
+	for _, l := range t.links {
+		x, err := l.Get()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		out = append(out, x.clone())
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	slices.SortFunc(out, func(a, b *EntityInfo) int { return cmp.Compare(a.Name, b.Name) })
+	return out, nil
+}
+
+// clone returns a copy of in that shares no memory a caller can change:
+// its slices are copied, and so is a Default that holds references.
+func (in *EntityInfo) clone() *EntityInfo {
+	c := *in
+	c.Columns = slices.Clone(in.Columns)
+	for i := range c.Columns {
+		if col := &c.Columns[i]; col.copyDefault {
+			col.Default = defaultValue(col.Default).Interface()
+		}
+	}
+	c.PrimaryKey = slices.Clone(in.PrimaryKey)
+	c.Indexes = slices.Clone(in.Indexes)
+	for i := range c.Indexes {
+		c.Indexes[i].Columns = slices.Clone(c.Indexes[i].Columns)
+	}
+	return &c
 }

@@ -34,7 +34,10 @@ const (
 // EntityInfo is what velox knows about an entity, built once on its first use.
 // It is the non-generic view that hooks see in a Statement, and the runtime
 // view of the generated Descriptor it is built from. For generated code
-// and extensions; outside the 1.0 compatibility promise.
+// and extensions; outside the 1.0 compatibility promise, but for what
+// Entities returns: the fields Name, Table, Schema, Columns, PrimaryKey and
+// Indexes, and ColumnInfo's Field, Name, SchemaName and Nullable, keep
+// their meaning.
 //
 // One EntityInfo is shared by every query on the entity, in every goroutine,
 // so it must be treated as read-only, slices included. A hook that needs
@@ -58,7 +61,8 @@ type EntityInfo = engine.EntityInfo
 
 // ColumnInfo describes one column. It is the runtime view of the generated
 // ColumnDescriptor it is built from. For generated code and extensions;
-// outside the 1.0 compatibility promise.
+// outside the 1.0 compatibility promise, but for the fields EntityInfo
+// names.
 //
 // Its fields:
 //

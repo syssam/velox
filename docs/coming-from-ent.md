@@ -434,6 +434,7 @@ a table rebuild on SQLite.
 | `client.Intercept(...)`, `intercept.Func` | `velox.WithFilter(func(ctx, db *velox.DB, e velox.FilterEntity, op velox.Op) (velox.Predicate, error))`, which returns `velox.Allow()` for no condition ([guide](guide.md#hooks-and-filters-for-every-entity)) |
 | `client.Use(hooks...)`, `m.Type()` | `velox.WithHooksAll(hooks...)`, `m.Entity()` |
 | the generated package's `ent.TypeUser` | `veloxgen.TypeUser`, the same value: the `Name()` of the entity a filter receives and `m.Entity()` ([ADR 0139](decisions/0139-entity-type-constants.md)) |
+| the generated `migrate.Tables`, read for each table's name and primary key | `velox.Entities[veloxgen.User]()` (any entity of the package): every entity's `Table`, `Schema`, `Columns` and `PrimaryKey`, copies sorted by Go type name; a package whose schema declares no behaviour has no list ([ADR 0164](decisions/0164-entities-of-a-package.md)) |
 | a privacy rule's `WhereP(func(*sql.Selector))` | `Filter.Where(velox.Predicate)` |
 | `ForUpdate()` on SQLite | the read fails, unless the option `velox.WithSQLiteLockingReads()` runs it without the clause ([guide](guide.md#row-locks), [ADR 0123](decisions/0123-sqlite-locking-reads-opt-in.md)) |
 | the generated package's `IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` | `velox.IsConstraintError(err)`, `IsValidationError`, `IsNotSingular`, `IsNotFound` |

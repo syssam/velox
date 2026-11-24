@@ -410,6 +410,33 @@ Generated code carries a version constant (today
 generated code has changed, the old `veloxgen` stops compiling until you run
 velox-gen again. [stability.md](stability.md) explains the rule.
 
+### The entities of a package
+
+`velox.Entities[E]()` returns the metadata of every entity of E's generated
+package, sorted by Go type name: each one's table, its database schema, its
+columns (name, Go field, nullability) and its primary key, as indexes into
+the columns. Any one entity of the package names it. It is what ent's
+generated `migrate.Tables` gives code that works from table names, such as
+a report layer that needs each table's key columns:
+
+```go
+infos, err := velox.Entities[veloxgen.User]()
+if err != nil {
+	return err
+}
+keys := map[string][]string{}
+for _, in := range infos {
+	for _, k := range in.PrimaryKey {
+		keys[in.Table] = append(keys[in.Table], in.Columns[k].Name)
+	}
+}
+```
+
+Each call returns new copies, which the caller may change. velox-gen writes
+the package's list only when its schema declares a Policy, Hooks or
+Interceptors (its own or a mixin's); elsewhere `Entities` returns an error.
+An entity whose metadata fails to build fails the call, with its error.
+
 ## Migrations
 
 velox plans migrations itself by comparing your schema with the last

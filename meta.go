@@ -58,6 +58,31 @@ func CheckEntity[E any, PE Entity[E]]() error {
 	return PE(nil).VeloxMeta().d.Err
 }
 
+// Entities returns the metadata of every entity of E's generated package,
+// sorted by Name: what ent's generated migrate.Tables lists. E is any one
+// entity of the package. Each entity's table, its database schema, its
+// columns and its primary key are there:
+//
+//	infos, err := velox.Entities[veloxgen.User]()
+//	for _, in := range infos {
+//		for _, k := range in.PrimaryKey {
+//			fmt.Println(in.Table, in.Columns[k].Name)
+//		}
+//	}
+//
+// velox-gen writes the package's list of entities only when its schema
+// declares behaviour (a Policy, Hooks or Interceptors, its own or a
+// mixin's); for any other package, and for an entity written by hand,
+// Entities returns an error. It returns E's error, or the errors of the
+// entities whose metadata fails to build, and then no entities.
+//
+// Each call builds new values: a caller may change them, and velox's own
+// metadata stays as it was.
+func Entities[E any, PE Entity[E]]() ([]*EntityInfo, error) {
+	m := PE(nil).VeloxMeta()
+	return engine.PackageEntities(m.d.Info, m.d.Err)
+}
+
 // HasRowFilter reports whether entity E's rows are filtered for reads: by an
 // interceptor, or by a Read policy the schema declares or a scope adds. For
 // generated code, such as a GraphQL filter that treats a key whose row is

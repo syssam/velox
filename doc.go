@@ -324,6 +324,8 @@
 // statement, which changes as velox does. They are outside the 1.0
 // compatibility promise: a minor release may change them, with a changelog
 // line.
+// The fields of EntityInfo and ColumnInfo that Entities is for, an entity's
+// table, columns and primary key, are inside it.
 //
 // Package github.com/syssam/velox/untyped is an entity's queries and writes
 // with its type erased, for code compiled once for every entity: velox-graphql's

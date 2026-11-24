@@ -31,6 +31,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   instant an RFC 3339 string spells in any offset, compared and ordered as
   numbers and instants on PostgreSQL, MySQL and SQLite; anything else is
   NULL, never an error. `JSONTime` is new (ADR 0165).
+- `velox.Entities[E]()`: the metadata of every entity of E's generated
+  package, as copies sorted by Go type name, for code that works from table
+  names (ent's `migrate.Tables`). The table, columns and primary key of
+  `EntityInfo` are inside the 1.0 promise (ADR 0164).
 - `JSONArray.HasFieldKey(key)`: true where a JSON array holds an object with
   the member `key` and a value that is not a JSON null, on PostgreSQL
   (`jsonb_path_exists`), MySQL and SQLite (ADR 0160).
