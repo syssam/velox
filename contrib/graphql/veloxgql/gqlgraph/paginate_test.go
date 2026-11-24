@@ -726,3 +726,42 @@ func TestJoinedTermInABatchedEdgeConnection(t *testing.T) {
 	oneEach(t, "the load", loads, "ROW_NUMBER()")
 	oneEach(t, "the count", counts, "GROUP BY")
 }
+
+// TestOrderViaDeniedTarget: when the related entity's Read is denied
+// outright, ordering by its column still pages every row, each related term
+// NULL, as for a row whose related row is hidden; the connection and its
+// totalCount do not fail. An inner join to the denied entity still fails.
+func TestOrderViaDeniedTarget(t *testing.T) {
+	_, raw, _ := edgeDB(t)
+	deny := func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if fe.Name() == "owner" && op == velox.OpSelect {
+			return velox.Predicate{}, velox.Deny("owners are closed")
+		}
+		return velox.Allow(), nil
+	}
+	db := velox.Open(velox.SQLite, raw, velox.WithFilter(deny))
+	ctx := context.Background()
+	for _, dir := range []veloxgql.OrderDirection{veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionDesc} {
+		c, err := gqlgraph.NewConnectionOf(ctx, db.Query[child](), "Child", gqlgraph.Args{}, ownerNameOrder(dir), childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := c.Page(ctx)
+		if err != nil {
+			t.Fatalf("%s: page: %v", dir, err)
+		}
+		want := []int64{1, 2, 3, 4, 5, 6, 7}
+		if dir == veloxgql.OrderDirectionDesc {
+			want = []int64{7, 6, 5, 4, 3, 2, 1}
+		}
+		if got := childIDs(p.Rows); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: %v, want %v", dir, got, want)
+		}
+		if n, err := c.TotalCount(ctx); err != nil || n != 7 {
+			t.Errorf("%s: totalCount %d, %v; want 7", dir, n, err)
+		}
+	}
+	if _, err := db.Query[child]().Join(children.Owner).Limit(10).All(ctx); !errors.Is(err, velox.ErrDenied) {
+		t.Errorf("an inner join to a denied entity: %v, want ErrDenied", err)
+	}
+}

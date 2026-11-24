@@ -1763,6 +1763,18 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A left join to an entity whose Read policy or filter denies outright keeps
+  every row, loaded and empty, instead of failing the statement; an inner
+  join to it still fails with `ErrDenied`, and the error names the join. A
+  GraphQL connection ordered by such an edge (`OrderVia`) and its
+  `totalCount` no longer fail (ADR 0031).
+- veloxgql: `node(id:)` and `nodes(ids:)` read every type on a DB with a
+  Rewrite hook, which may point a type at another table than the lookup's
+  raw SQL names; such a row was NOT_FOUND. `untyped.Rewrites` reports the
+  hook.
+- velox-gen: hints name `sqlschema.Table` and `sqlschema.Schema`, not
+  `schema.Table` and `schema.TableIn`; a name-clash error prints a path
+  relative to the working directory.
 - `Query.Values` and `Query.IDs` make no allocation per row for a value that
   needs none: each row is scanned into the result's own backing array through
   one reused argument slice, sized as `All` sizes its rows. 100 int64 IDs went

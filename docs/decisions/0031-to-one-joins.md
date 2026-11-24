@@ -1,7 +1,8 @@
 # 31. A query joins a to-one relation, and conditions and orderings reach its columns
 
-Status: accepted, 2026-11-02. Its `After` of a left join and the GraphQL
-plugin's inner join are amended by the review of 2026-11-22, at the end.
+Status: accepted, 2026-11-02. Its `After` of a left join, the GraphQL
+plugin's inner join and a denied target are amended by the reviews of
+2026-11-22 and 2026-11-24, at the end.
 
 ## Context
 
@@ -99,3 +100,13 @@ in `internal/apitest`; `TestJoinedTermPages` and `TestOrderViaKeepsRows` (a
 missing and a hidden target: the same rows and `totalCount` with and without
 the order, paged both ways) in `contrib/graphql/veloxgql/gqlgraph`;
 `TestConnectionOrderedByAnEdge`, served by `TestConnectionsRun`.
+
+2026-11-24, a denied target: a left join to an entity whose Read policy or
+filter denies outright failed the statement, so an `OrderVia` connection and
+its `totalCount` failed though the docs say a hidden target sorts as null.
+A left join to a denied target now joins on a condition that matches
+nothing (`1 = 0`): every row stays, loaded and empty, and nothing of the
+target is read. An inner join to it still fails with `ErrDenied`, and the
+error names the join, not an EXISTS. Evidence: `TestJoinToADeniedTarget` in
+`internal/apitest`; `TestOrderViaDeniedTarget` in
+`contrib/graphql/veloxgql/gqlgraph`.

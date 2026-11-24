@@ -581,11 +581,16 @@ func (sc *Scoper) inExists(t *EntityInfo, err error) error {
 type existsError struct {
 	entity string
 	path   []string // the EXISTS targets, outermost first
+	join   bool     // the outermost target is a join's, not an EXISTS's
 	err    error
 }
 
 func (e *existsError) Error() string {
-	return "velox: " + e.entity + ": in the EXISTS on " + strings.Join(e.path, ", then on ") + ": " + strings.TrimPrefix(e.err.Error(), "velox: "+e.path[len(e.path)-1]+": ")
+	in := ": in the EXISTS on "
+	if e.join {
+		in = ": in the join to "
+	}
+	return "velox: " + e.entity + in + strings.Join(e.path, ", then on ") + ": " + strings.TrimPrefix(e.err.Error(), "velox: "+e.path[len(e.path)-1]+": ")
 }
 
 func (e *existsError) Unwrap() error { return e.err }
@@ -786,8 +791,19 @@ func (sc *Scoper) scopeJoins(st *Statement) error {
 	for i := range joins {
 		t := joins[i].Link.Target
 		read, err := sc.target(t)
-		if err != nil {
-			return sc.inExists(t, err)
+		switch {
+		case err != nil && joins[i].Left && errors.Is(err, ErrDenied):
+			// The policy hides every target, so none matches: a left join
+			// keeps each row with no target, as it keeps a row whose target
+			// a condition hides. Nothing of the target is read.
+			joins[i].On = []Predicate{NewPredicate(Group(OpOr, nil))}
+			continue
+		case err != nil:
+			err = sc.inExists(t, err)
+			if e, ok := errors.AsType[*existsError](err); ok {
+				e.join = true
+			}
+			return err
 		}
 		joins[i].On = conjuncts(read)
 	}

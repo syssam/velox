@@ -2,6 +2,7 @@ package apitest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -379,5 +380,40 @@ func TestJoinFillBuildsTheRowAfterPagesFrom(t *testing.T) {
 	}
 	if v, ok := It.Invoice.Filled(&testmodel.Item{}); ok || v != nil {
 		t.Errorf("Filled of a row with none: %v, %v", v, ok)
+	}
+}
+
+// A target whose Read is denied outright matches no row: a left join keeps
+// every row, loaded and empty, and reads none of the target; an inner join
+// fails with ErrDenied, naming the join.
+func TestJoinToADeniedTarget(t *testing.T) {
+	deny := func(_ context.Context, _ *velox.DB, fe velox.FilterEntity, op velox.Op) (velox.Predicate, error) {
+		if fe.Name() == "Invoice" && op == velox.OpSelect {
+			return velox.Predicate{}, velox.Deny("invoices are closed")
+		}
+		return velox.Allow(), nil
+	}
+	e := &fakeconn.Exec{Rows: [][]any{itemInvoiceRow(itemRow(10, 1, "A", 1), nulls(10))}}
+	db := openFake(velox.Postgres, e, velox.WithFilter(deny))
+	items, err := db.Query[testmodel.Item]().LeftJoin(It.Invoice).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := ` LEFT JOIN "invoices" AS "vxj1" ON "vxj1"."id" = "items"."invoice_id" AND 1 = 0 LIMIT 10`; !strings.Contains(e.Log[0], want) {
+		t.Errorf("no condition that matches nothing in %s", e.Log[0])
+	}
+	if inv, loaded := items[0].Edges.Invoice.Get(); !loaded || inv != nil {
+		t.Errorf("item 0: loaded %v, invoice %+v", loaded, inv)
+	}
+	// A condition on the denied target sees NULL: no row, not an error.
+	e.Rows = nil
+	n := len(e.Log)
+	items, err = db.Query[testmodel.Item]().LeftJoin(It.Invoice).Where(It.Invoice.Is(I.Paid.EQ(true))).Limit(10).All(ctx)
+	if err != nil || len(items) != 0 || !strings.Contains(e.Log[n], `AND 1 = 0 WHERE "vxj1"."paid"`) {
+		t.Errorf("a condition on a denied left join: %v, %d rows, %s", err, len(items), e.Log[n])
+	}
+	_, err = db.Query[testmodel.Item]().Join(It.Invoice).Limit(10).All(ctx)
+	if !errors.Is(err, velox.ErrDenied) || !strings.Contains(err.Error(), "in the join to testmodel.Invoice") {
+		t.Errorf("an inner join: %v, want ErrDenied naming the join", err)
 	}
 }
