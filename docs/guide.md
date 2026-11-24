@@ -763,6 +763,22 @@ exactly. The cursor's term hashes the values the expression binds: an
 expression bound to a value that changes per request, such as the time now,
 makes earlier cursors invalid. A window function or an aggregate is refused.
 
+The query may mix expressions with the entity's own columns, in any order,
+each with its Nulls: a user's chosen sort keys go in `OrderBy`, and the
+`orderBy` option gives the tie-break. A column then pages as an expression
+does, its value beside the row, so its kind is its Go type's. A column that
+the query orders by and `orderBy` names too is refused. velox does not read
+a Calc's text, so mark it with `velox.Text`, `Integer`, `Time` or `Bool`
+(or `Decimal`) and a forged cursor value of another kind is refused before
+the database sees it:
+
+```go
+title := velox.Text(velox.Calc[veloxgen.Post]("substr(lower(?), 1, 256)", P.Title))
+conn, err := db.Query[veloxgen.Post]().
+	OrderBy(title.Asc().NullsLast(), P.Votes.Desc()).
+	Paginate(ctx, after, first, before, last, veloxgen.WithPostOrder(orderBy))
+```
+
 ## Relations
 
 ### Eager loading with With

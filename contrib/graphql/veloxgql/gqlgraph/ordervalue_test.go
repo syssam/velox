@@ -161,7 +161,7 @@ func TestConnectionExpressionThenOrderBy(t *testing.T) {
 // TestConnectionExpressionCursorRefused: a cursor taken under another
 // expression, the same one with another bound value or another NULL
 // placement, or none, is taken under another order; a value no page wrote
-// is a bad cursor, as is one no read on the dialect gives; and a column ordering of q is still refused.
+// is a bad cursor, as is one no read on the dialect gives.
 func TestConnectionExpressionCursorRefused(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
@@ -192,9 +192,6 @@ func TestConnectionExpressionCursorRefused(t *testing.T) {
 		if _, err := gqlgraph.PageWith(ctx, q, "Person", gqlgraph.Args{First: new(2), After: &bad}, nil, personKey()); !errors.Is(err, veloxgql.ErrBadCursor) {
 			t.Errorf("value %#v: %v, want ErrBadCursor", v, err)
 		}
-	}
-	if _, err := gqlgraph.PageWith(ctx, db.Query[person]().OrderBy(by(3).Asc(), people.Age.Asc()), "Person", gqlgraph.Args{First: new(2)}, nil, personKey()); err == nil || !strings.Contains(err.Error(), "q may be ordered only by expressions") {
-		t.Errorf("a column ordering after an expression: %v", err)
 	}
 }
 

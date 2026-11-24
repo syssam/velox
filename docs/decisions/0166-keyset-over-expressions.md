@@ -5,6 +5,9 @@
   by expressions. Amends 0142's recipe for a computed sort key and 0163's
   "connections never meet a Nulls term". Amended 2026-11-24: a cursor's
   value of another kind than its term gives is refused (see the
+  amendment below). Amended again 2026-11-24: `velox.Text`, `Integer`,
+  `Time` and `Bool` mark a Calc's kind, and a connection's query may
+  order by the node's own columns, mixed with expressions (second
   amendment below).
 
 ## Context
@@ -207,3 +210,67 @@ that a forged cursor is `ErrBadCursor`, never a wrong page.
   Number, Time and Text orderings on every dialect, and refuses
   mismatched values and PostgreSQL's NUL. gqlgraph's
   `TestConnectionExpressionValueKind` refuses them at the connection.
+
+## Amendment, 2026-11-24: kind marks, and columns in a connection's query
+
+The downstream application sorts by 1 to n keys a user picks, JSON
+expressions and record columns mixed, each `NullsLast`, some `Desc`, with
+the id tie-break from the generated `orderBy` option. It wrapped each
+column as `Calc("?", col)` to pass the connection's check, and kept its
+own cursor checker, since a plain Calc, such as `substr(lower(?), 1,
+256)`, has no kind.
+
+- **Kind marks are functions.** `velox.Text(t)`, `Integer(t)`, `Time(t)`
+  and `Bool(t)` mark an expression's kind, as `Decimal` marks a number.
+  They are functions, as `velox.Agg` is, not Term methods. Four methods
+  added 2064 bytes to every entity package (`entityDescMixin` 929358, over
+  its bound of 927744 by 1614), and one method taking a kind constant 684
+  bytes (927984, over by 240): a generic method's declaration is in every
+  package that names `Term[E]`. A function costs only its callers.
+- **What a mark checks.** A marked Calc's cursor value is checked as a
+  column of that kind is (the first amendment's table): text a string;
+  a time a `time.Time`, a `TimeText`, and on SQLite a string; a bool a
+  bool, and on MySQL and SQLite an integer. `Integer` is a new kind: a Go
+  integer, or a `DecimalText` with no point (MySQL reads `FLOOR` of a
+  decimal as DECIMAL); a float is refused. The dialect refusals of
+  `checkOrderValue` apply as before.
+- **A mark changes no SQL.** It is neither in the render cache's key nor
+  in `OrderSig` nor in `SameTerm`. A mark of a term that is not an
+  expression, a second mark of another kind, and a mark with `Decimal`
+  fail the statement, both ways round.
+- **Size.** The engine's Term holds the mark in the byte `dec` was, as
+  `mark uint8` (`kindDecimal` for Decimal): a field of a defined type
+  `valueKind` put that type in every entity package's export data, about
+  230 bytes more. `valueKind` is an alias of uint8 and its `name` method a
+  function `kindName`. The bounds stay: `entityDescMixin` measured 927324
+  (927296 before), `entityDescHooks` 881844 (881816), `entityDescUse`
+  795830 (795802), `entityDescriptor` 145892 (145888).
+- **A connection's query may order by columns.** gqlgraph takes an
+  ordering of q by the node's own column, mixed with expressions in any
+  order, as the ordering by the column's term (`untyped.Col`), with its
+  direction and Nulls. It takes the expression path: the page reads the
+  value beside the row, the cursor names it `expr:<signature>`, and
+  `AfterValues` checks its value against the column's kind
+  (`termValueKind` of a column). Every expression is taken to be nullable,
+  so a nullable column pages with 0163's `IS NULL` conditions, as 0032 and
+  0163 page an `orderBy` column.
+  - A q with any ordering stays on that path: a msgpack (entgql) cursor
+    holds the `orderBy` field alone, so it is refused as taken under
+    another order, and no page writes one.
+  - A column q orders by that `orderBy` also names is refused with
+    `ErrBadPagination`, an input error, never dropped from either.
+  - A column must be a string, a bool, a number or a time, or a pointer
+    to one, with no Value or Scan method and no codec, so that its kind
+    is known; another is refused with an internal error. So are a related
+    row's column (`Rel.By`) and a relation's aggregate in q: they come
+    from `orderBy`, whose cursors read them from the row or the key.
+- **Tests.** `TestCheckMarkedValueKind`, `TestMarkKind` and
+  `TestValueSourceMarked` (engine), `TestKindMarks` (apitest) and
+  `ExampleText` cover the marks on each dialect.
+  `TestOrderValuesWire` pages a `Text` Calc in each direction and NULL
+  placement, and an `Integer` Calc, then the nullable time column
+  `paid_at` descending, then the string column `number`, each NullsLast,
+  forward and backward against a reference sort, and refuses forged
+  values for both marks. gqlgraph's `TestConnectionMixedOrder`,
+  `TestConnectionMixedOrderMsgpack`, `TestConnectionColumnInQAndOrderBy`
+  and `TestConnectionColumnValueKind` cover the connection on SQLite.

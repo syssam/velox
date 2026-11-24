@@ -493,27 +493,40 @@ func TestPaginateClearsOffset(t *testing.T) {
 	}
 }
 
-// TestConnectionRefusesOrderedQuery: a base query with an OrderBy would put
-// its order before the connection's and break every cursor after the first
-// page. It is the application's bug, so the error is internal (uncoded), and
-// nothing is queried.
+// TestConnectionRefusesOrderedQuery: a base query ordered by a related
+// row's column or by a relation's aggregate, whose value a cursor does not
+// carry beside the row, is refused. It is the application's bug, so the
+// error is internal (uncoded), and nothing is queried.
 func TestConnectionRefusesOrderedQuery(t *testing.T) {
-	db, st := peopleDB(t)
+	db, _, log := edgeDB(t)
 	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
-	q := db.Query[person]().OrderBy(people.Age.Asc())
-	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
-	want := "veloxgql: Paginate of Person: q may be ordered only by expressions (Calc); a column ordering comes from the orderBy argument"
+	uncoded := func(err error) {
+		t.Helper()
+		if coded, ok := errors.AsType[interface {
+			error
+			Extensions() map[string]any
+		}](err); ok {
+			t.Errorf("the error is coded: %v", coded.Extensions())
+		}
+	}
+	q := db.Query[child]().OrderBy(children.Owner.By(owners.Name.Asc()))
+	c, err := gqlgraph.NewConnectionOf(ctx, q, "Child", gqlgraph.Args{First: new(2)}, nil, childKey())
+	want := "veloxgql: Paginate of Child: q may be ordered by the node's own columns and by expressions; a related row's column comes from the orderBy argument"
 	if c.Connection != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)
 	}
-	if coded, ok := errors.AsType[interface {
-		error
-		Extensions() map[string]any
-	}](err); ok {
-		t.Errorf("the error is coded: %v", coded.Extensions())
+	uncoded(err)
+	oq := db.Query[owner]().OrderBy(owners.Children.Count().Desc())
+	o, err := gqlgraph.NewConnectionOf(ctx, oq, "Owner", gqlgraph.Args{First: new(2)}, nil, ownerKey())
+	want = "veloxgql: Paginate of Owner: q may be ordered by expressions (Calc) and the node's own columns, not by a relation's aggregate; a count comes from the orderBy argument"
+	if o.Connection != nil || err == nil || err.Error() != want {
+		t.Fatalf("%v %v, want no connection and %q", o, err, want)
 	}
-	if ran := st.take(); len(ran) != 0 {
-		t.Errorf("ran %v", ran)
+	uncoded(err)
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	if len(log.sql["children"])+len(log.sql["owners"]) != 0 {
+		t.Errorf("ran %v", log.sql)
 	}
 }
 

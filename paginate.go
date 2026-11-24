@@ -14,9 +14,12 @@ type Paged[E, K, O, C any] interface {
 // Paginate is the connection to the page of q's rows that after, first,
 // before and last select, shaped by opts: E's PaginateQuery, which
 // velox-graphql generates. An order by fields is an option. q may be
-// ordered by expressions only, such as a Calc with its Nulls: they come
-// before the option's order and the key, and the cursors carry their values
-// (decision 0166). An ordering of q by a column is refused.
+// ordered by expressions, such as a Calc, and by E's own columns, in any
+// order, each with its Nulls: they come before the option's order and the
+// key, and the cursors carry their values (decision 0166). A column that q
+// orders by and the option names too is refused, as is an ordering of q by
+// a relation's aggregate or a related row's column. Mark a Calc with Text,
+// Integer, Time or Bool so that a cursor's value of it is checked.
 //
 //	db.Query[veloxgen.Post]().Paginate(ctx, after, first, before, last,
 //		veloxgen.WithPostOrder(orderBy), veloxgen.WithPostFilter(where))

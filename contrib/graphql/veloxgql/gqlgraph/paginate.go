@@ -463,9 +463,9 @@ type Connection struct {
 	typ   string             // the GraphQL type of the nodes
 	n     int                // the page size
 	back  bool               // paging backward: last, or before
-	terms []term             // q's orderings by an expression, the order's terms, then the key's columns
+	terms []term             // q's orderings, the order's terms, then the key's columns
 	key   int                // the index in terms of the key's first column
-	exprs int                // the number of q's orderings by an expression, first in terms
+	exprs int                // the number of q's orderings, first in terms, each read beside the row
 	after any                // the row the page starts after, in the paging direction
 	vals  []any              // after's values of q's orderings by an expression
 	// edge is set by edgeConnection when the connection is its part of a
@@ -491,14 +491,19 @@ type Connection struct {
 // graphqlgo.With), which tells it nothing of the field it resolves.
 //
 // A Query's q keeps its filters, its With loads and the scope the
-// application gave it. It may be ordered by expressions only (OrderBy of a
-// Calc or another Term that is not a column or a relation's aggregate, with
-// its Nulls): they come first in the order, before order and the key, and
-// each page reads their values beside the rows for the cursors, which hold
-// them (ordervalue.go, decision 0166). An ordering by a column would come
-// first too and break the cursors. It must select the key and the columns of
-// order's own fields, which the cursors hold: a q that does either wrong is
-// refused with an internal error. Its Offset is cleared and its Limit
+// application gave it. It may be ordered by expressions (a Calc, a JSON
+// path or another Term that is not a relation's aggregate) and by the
+// node's own columns of a string, bool, number or time type, mixed in any
+// order, each with its Nulls: they come first in the order, before order
+// and the key, and each page reads their values beside the rows for the
+// cursors, which hold them (ordervalue.go, decision 0166). A cursor's value
+// of a column, or of an expression whose kind velox knows, is checked
+// against that kind. A column that q orders by and order names too fails
+// with ErrBadPagination. An ordering by a relation's aggregate or by a
+// related row's column is refused with an internal error: it comes from
+// order. q must select the key and the columns of order's own fields,
+// which the cursors hold: a q that does either wrong is refused with an
+// internal error. Its Offset is cleared and its Limit
 // replaced, as the page is the connection's. It reads only the columns the
 // selection of the field of ctx needs (selected, narrow, c.columns): a
 // column the selection does not need is left zero in the nodes, except the
@@ -570,7 +575,7 @@ func connectionBase(ctx context.Context, q untyped.TableQuery, c *Type, order []
 func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
 	typ := c.Name
 	own := q.Table()
-	pre, err := exprTerms(q, c)
+	pre, err := exprTerms(q, c, order)
 	if err != nil {
 		return nil, err
 	}
@@ -833,7 +838,8 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 // the order's, whatever order it was taken under. A cursor whose number of
 // values is not the order's number of terms, or a connection whose key has
 // more than one column, which a msgpack cursor cannot hold, or whose query
-// orders by an expression, which entgql never did, is refused as a cursor
+// is ordered at all, by an expression or a column, which entgql's cursor
+// never held, is refused as a cursor
 // taken under another order. A term on the key's own column, as
 // orderBy ID, whose value is nil takes the key: such a cursor holds the key
 // alone for it.

@@ -21,6 +21,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `velox.Text`, `Integer`, `Time` and `Bool` mark a Calc's kind, as
+  `Decimal` marks a number: `AfterValues` and a GraphQL connection then
+  refuse a forged cursor value of another kind (`untyped.ErrOrderValue`,
+  `ErrBadCursor`). They are functions, as `velox.Agg` is, so no entity
+  package grows. A GraphQL connection's query (`Query.Paginate`) may now
+  order by the node's own string, bool, number and time columns, mixed
+  with expressions in any order: they page as expressions do, each value
+  beside the row and checked against the column's kind, a nullable one
+  with its Nulls. Such a connection takes no msgpack cursor, and a column
+  that the query and `orderBy` both name is `ErrBadPagination`
+  (ADR 0166 amendment).
 - velox-gen's `-files dir` (`generate.Config.Files`) writes a plugin's
   files that are not Go, such as velox-graphql's SDL, below a directory of
   the module instead of `-out`, at the same paths: `-files schema` puts
