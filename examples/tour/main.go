@@ -426,10 +426,10 @@ func (t *tour) deadlines() error {
 	// in it gets that deadline, whatever context it is given.
 	say("\n== 9. Deadlines")
 	err := db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
-		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
+		time.Sleep(600 * time.Millisecond) // slow work while the transaction is open
 		_, err := tx.Query[veloxgen.Invoice]().Count(ctx)
 		return err
-	}, velox.TxTimeout(10*time.Millisecond))
+	}, velox.TxTimeout(300*time.Millisecond)) // room for BEGIN on a loaded machine
 	say("transaction past its TxTimeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",
 		errors.Is(err, velox.ErrTimeout), errors.Is(err, context.DeadlineExceeded), err)
 	return nil
