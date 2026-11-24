@@ -40,6 +40,7 @@ var publicAPI = []string{
 	"EncodeCursor",
 	"ErrBadCursor",
 	"ErrBadPagination",
+	"ErrEmptyWhereInput",
 	"ErrFilterTooDeep",
 	"ErrFilterTooLarge",
 	"ErrFilterTooWide",

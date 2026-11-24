@@ -36,6 +36,11 @@ var (
 	// ErrFilterTooLarge: a where argument over its budget of the
 	// MaxFilterNodes of LimitsFromContext(ctx) inputs, predicates and values.
 	ErrFilterTooLarge = errors.New("filter is too large")
+	// ErrEmptyWhereInput: under gqlgraph.Type's LenientFilters
+	// (filters=lenient), a where input that sets no predicate, nested in an
+	// or, a not or a has<Edge>With, as entgql's generated
+	// ErrEmpty<T>WhereInput. An and leaves such an input out.
+	ErrEmptyWhereInput = errors.New("empty predicate where input")
 	// ErrTooCostly: a request whose gqlgenx.Cost is over the MaxCost of the
 	// adapter's limits. It is returned with the code CodeTooCostly, before
 	// any statement runs.

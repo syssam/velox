@@ -112,23 +112,19 @@ func (f *Filter) Pred() (velox.Predicate, error) {
 	case f.lenient && f.depth > 0 && len(f.ps) == 0:
 		// entgql refuses a nested input that sets no predicate; an and
 		// skips one (list), and a not, an or and a has<Edge>With fail.
-		return velox.Predicate{}, &gqlcore.Error{Code: gqlcore.CodeBadUserInput, Msg: "empty predicate " + f.typ + "WhereInput", Err: errEmptyPredicate}
+		return velox.Predicate{}, &gqlcore.Error{Code: gqlcore.CodeBadUserInput, Msg: "empty predicate " + f.typ + "WhereInput", Err: veloxgql.ErrEmptyWhereInput}
 	case len(f.ps) == 1:
 		return f.ps[0], nil
 	}
 	return untyped.And(f.ps...), nil
 }
 
-// errEmptyPredicate is what Pred's error wraps, under Type.LenientFilters, for a
-// nested input that sets no predicate.
-var errEmptyPredicate = errors.New("empty predicate")
-
 // emptyPredicate reports whether err is Pred's own error for an input that
 // sets no predicate, not one nested deeper that a helper wrapped: an and
 // skips only an entry that is itself empty.
 func emptyPredicate(err error) bool {
-	e, ok := err.(*gqlcore.Error)           //nolint:errorlint // the input's own error, never a wrapped one
-	return ok && e.Err == errEmptyPredicate //nolint:errorlint // likewise
+	e, ok := err.(*gqlcore.Error)                     //nolint:errorlint // the input's own error, never a wrapped one
+	return ok && e.Err == veloxgql.ErrEmptyWhereInput //nolint:errorlint // likewise
 }
 
 // budget is what is left of a where argument's budget of nodes, and the

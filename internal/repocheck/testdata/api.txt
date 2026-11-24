@@ -1770,6 +1770,7 @@ type UUID [16]byte
 type Uint64 uint64
 var ErrBadCursor
 var ErrBadPagination
+var ErrEmptyWhereInput
 var ErrFilterTooDeep
 var ErrFilterTooLarge
 var ErrFilterTooWide

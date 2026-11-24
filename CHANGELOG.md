@@ -53,6 +53,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   same columns in one multi-row INSERT and several statements in one
   transaction. `InsertQuery.SQL`'s work moved into the engine, which
   took about 7.5 KB off each entity package (ADR 0153).
+- veloxgql: `ErrEmptyWhereInput`, as entgql's `ErrEmpty<T>WhereInput`, is
+  what the `BAD_USER_INPUT` error wraps when a where input nested in an
+  `or`, a `not` or a `has<Edge>With` sets nothing under `filters=lenient`:
+  `errors.Is(err, veloxgql.ErrEmptyWhereInput)` holds on what a where
+  input's `Predicate` and `Paginate` return. The message is unchanged
+  (ADR 0155).
 
 - velox-graphql: `node=on|off` declares Relay's `Node`, with `node(id:)`
   and `nodes(ids:)` and `noder_gql.go`, apart from `compat=veloxe`, which

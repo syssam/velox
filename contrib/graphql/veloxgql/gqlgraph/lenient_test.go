@@ -140,6 +140,31 @@ func TestLenientWhere(t *testing.T) {
 	}
 }
 
+// TestErrEmptyWhereInput: a nested input that sets nothing under
+// LenientFilters, in an or, in a not, or in an or beside a real condition,
+// fails with BAD_USER_INPUT wrapping veloxgql.ErrEmptyWhereInput, through
+// the input's Predicate and through Paginate's where argument alike.
+func TestErrEmptyWhereInput(t *testing.T) {
+	db, _ := peopleDB(t)
+	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	for name, w := range map[string]*vWhere{
+		"or [{}]":           {Or: []*vWhere{{}}},
+		"not {}":            {Not: &vWhere{}},
+		"or [{}] beside id": {ID: new(int64(1)), Or: []*vWhere{{}, {ID: new(int64(1))}}},
+	} {
+		_, err := vPeople(t, db, w)
+		if !errors.Is(err, veloxgql.ErrEmptyWhereInput) || codeOf(err) != veloxgql.CodeBadUserInput {
+			t.Errorf("%s: %v (code %q), want BAD_USER_INPUT wrapping ErrEmptyWhereInput", name, err, codeOf(err))
+		}
+		typ := gqlgraph.TableType[person]("Person")
+		typ.LenientFilters = true
+		_, err = gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.FromQuery(db.Query[person]())), typ, gqlgraph.Args{Where: gqlgraph.WhereOf(w, (*vWhere).predicate)})
+		if !errors.Is(err, veloxgql.ErrEmptyWhereInput) || codeOf(err) != veloxgql.CodeBadUserInput {
+			t.Errorf("%s through Paginate: %v (code %q)", name, err, codeOf(err))
+		}
+	}
+}
+
 // TestLenientBindLimit: under LenientFilters, a where argument whose In lists hold
 // more values than any dialect binds is BAD_USER_INPUT ErrFilterTooLarge,
 // before any statement, even when MaxFilterNodes allows them; the
