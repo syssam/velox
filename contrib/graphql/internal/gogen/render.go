@@ -14,22 +14,11 @@ import (
 
 // The import paths of the packages the generated code uses.
 const (
-	veloxPath     = "github.com/syssam/velox"
-	veloxgqlPath  = "github.com/syssam/velox/contrib/graphql/veloxgql"
-	gqlgraphPath  = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
-	untypedPath   = "github.com/syssam/velox/untyped"
-	gqlgenxPath   = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
-	graphqlgoPath = "github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
+	veloxPath    = "github.com/syssam/velox"
+	veloxgqlPath = "github.com/syssam/velox/contrib/graphql/veloxgql"
+	gqlgraphPath = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
+	untypedPath  = "github.com/syssam/velox/untyped"
 )
-
-// adapterPath is the import path of the adapter of the engine the code is
-// for: graphqlgo under engine=graphql-go, gqlgenx otherwise.
-func (r *renderer) adapterPath() string {
-	if r.graphqlGo {
-		return graphqlgoPath
-	}
-	return gqlgenxPath
-}
 
 // Render returns the Go files of m's GraphQL types, for the generated
 // package outPkg at the import path outPath, without the generated-file
@@ -229,11 +218,6 @@ func (r *renderer) declare(name, what string) error {
 func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 	e := t.Entity
 	f := newFile()
-	// The engine's adapter, blank: its init registers the source that
-	// gives generated code its field and its table, so a server needs no
-	// setup (decision 0173), and a program that links this file cannot
-	// leave it out.
-	f.imports[r.adapterPath()] = "_"
 	what := "schema " + e.Name
 	n := t.Name
 
@@ -372,7 +356,7 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 	case r.outPath:
 		return name, nil
 	}
-	if prev, ok := f.imports[pkg]; ok && prev != "_" { // the adapter's blank import names nothing
+	if prev, ok := f.imports[pkg]; ok {
 		return prev + "." + name, nil
 	}
 	if (locals[q] || indexedLocal(q)) && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlgraphPath && pkg != untypedPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {

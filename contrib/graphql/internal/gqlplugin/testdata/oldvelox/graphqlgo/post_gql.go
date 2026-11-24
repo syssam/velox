@@ -8,7 +8,6 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
-	_ "github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
 	"github.com/syssam/velox/untyped"
 )
 
