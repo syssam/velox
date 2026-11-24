@@ -37,7 +37,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `Order`, `Unordered`, `Table.OrderSig`, `EncodeOrderValue`,
   `DecodeOrderValue`, `DecimalText` and `TimeText`; a decimal or a time
   the driver reads as text is bound back cast to its type, and PostgreSQL's
-  NaN and MySQL's zero date page too (ADR 0166).
+  NaN and MySQL's zero date page too; a value no read on the dialect gives
+  is `untyped.ErrOrderValue` (ADR 0166).
 - `Order.NullsFirst()` and `NullsLast()`: an ordering puts NULL before or
   after every value, in either direction, with the same rows in the same
   order on PostgreSQL and SQLite (`NULLS FIRST|LAST`) and MySQL (an

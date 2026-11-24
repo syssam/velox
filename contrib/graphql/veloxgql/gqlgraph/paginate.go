@@ -714,6 +714,9 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 		// cap, which may be below it, must not fail a full page.
 		rows, err = q.Limit(c.n + 1).MaxRows(c.n + 1).All(ctx)
 	}
+	if errors.Is(err, untyped.ErrOrderValue) {
+		return nil, InputErrorf("%w: a value of an ordering by an expression is not one a page wrote", veloxgql.ErrBadCursor)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package engine
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"math"
 	"reflect"
 	"strings"
@@ -177,6 +178,40 @@ func FuzzOrderValue(f *testing.F) {
 			t.Fatalf("%#v: %#v back as %#v", in, v, back)
 		}
 	})
+}
+
+// TestCheckOrderValue: a value no read on a dialect gives is refused there
+// with ErrOrderValue: NaN and the infinities as decimals off PostgreSQL,
+// the zero date off MySQL, a NaN float off PostgreSQL, an infinite one on
+// MySQL, an unsigned integer past int64 off MySQL.
+func TestCheckOrderValue(t *testing.T) {
+	big := uint64(math.MaxInt64) + 1
+	for _, c := range []struct {
+		v  any
+		ok [3]bool // SQLite, PostgreSQL, MySQL
+	}{
+		{DecimalText("NaN"), [3]bool{false, true, false}},
+		{DecimalText("Infinity"), [3]bool{false, true, false}},
+		{DecimalText("-Infinity"), [3]bool{false, true, false}},
+		{DecimalText("1.5"), [3]bool{true, true, true}},
+		{TimeText("0000-00-00 00:00:00"), [3]bool{false, false, true}},
+		{TimeText("0000-00-00"), [3]bool{false, false, true}},
+		{TimeText("2026-03-01"), [3]bool{true, true, true}},
+		{math.NaN(), [3]bool{false, true, false}},
+		{math.Inf(1), [3]bool{true, true, false}},
+		{math.Inf(-1), [3]bool{true, true, false}},
+		{1.5, [3]bool{true, true, true}},
+		{big, [3]bool{false, false, true}},
+		{uint64(3), [3]bool{true, true, true}},
+		{nil, [3]bool{true, true, true}},
+	} {
+		for i, d := range []Dialect{SQLite, Postgres, MySQL} {
+			err := checkOrderValue(d, c.v)
+			if (err == nil) != c.ok[i] || (err != nil && !errors.Is(err, ErrOrderValue)) {
+				t.Errorf("%v %#v: %v", d, c.v, err)
+			}
+		}
+	}
 }
 
 // TestBoundValue: a decimal read as text is bound cast to a decimal, and a

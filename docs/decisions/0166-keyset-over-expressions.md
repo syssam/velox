@@ -86,7 +86,14 @@ connection type the resolver returns.
   it as) sorts first, and its conditions are `YEAR(e) = 0 AND MONTH(e) = 0
   AND DAY(e) = 0` and its negation. A real date 0001-01-01 read with
   parseTime is the zero `time.Time` too, so MySQL pages it as the zero
-  date. `FuzzOrderValue` holds the round trip.
+  date. Decoding has no dialect, so `AfterValues` refuses with
+  `untyped.ErrOrderValue` (a GraphQL connection's `ErrBadCursor`) a value
+  no read on the statement's dialect gives, before the database sees it:
+  a NaN or infinite decimal off PostgreSQL (MySQL casts `'NaN'` to 0), the
+  zero date off MySQL (PostgreSQL fails to read it as a time, SQLite
+  compares it as text), a NaN float off PostgreSQL, an infinite float on
+  MySQL, an unsigned integer past int64 off MySQL. `FuzzOrderValue` holds
+  the round trip.
 - **A decimal or a time read as text is bound cast to its type.** The
   read takes each value column's database type when the rows tell it
   (`sql.ColumnType.DatabaseTypeName`): text in a DECIMAL or NUMERIC column

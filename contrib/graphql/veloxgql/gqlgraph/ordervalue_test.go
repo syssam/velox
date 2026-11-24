@@ -161,7 +161,7 @@ func TestConnectionExpressionThenOrderBy(t *testing.T) {
 // TestConnectionExpressionCursorRefused: a cursor taken under another
 // expression, the same one with another bound value or another NULL
 // placement, or none, is taken under another order; a value no page wrote
-// is a bad cursor; and a column ordering of q is still refused.
+// is a bad cursor, as is one no read on the dialect gives; and a column ordering of q is still refused.
 func TestConnectionExpressionCursorRefused(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
@@ -184,7 +184,9 @@ func TestConnectionExpressionCursorRefused(t *testing.T) {
 	}
 	q := db.Query[person]().OrderBy(by(3).Asc())
 	for _, v := range []any{"x", "s", "t:yesterday", "f:1.5", 1.5,
-		"d:nan", "d:+NaN", "d:0x1p-2", "d:1e999999", "dt:yesterday", "dt:2026-13-45 99:00:00", "dt:0000-00-00 99:00:00"} {
+		"d:nan", "d:+NaN", "d:0x1p-2", "d:1e999999", "dt:yesterday", "dt:2026-13-45 99:00:00", "dt:0000-00-00 99:00:00",
+		// No SQLite read gives these.
+		"d:NaN", "d:-Infinity", "dt:0000-00-00 00:00:00", "f:NaN", "u:18446744073709551615"} {
 		bad := cur
 		bad.Terms = []veloxgql.CursorTerm{{Field: cur.Terms[0].Field, Direction: cur.Terms[0].Direction, Value: v}}
 		if _, err := gqlgraph.PageWith(ctx, q, "Person", gqlgraph.Args{First: new(2), After: &bad}, nil, personKey()); !errors.Is(err, veloxgql.ErrBadCursor) {

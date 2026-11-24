@@ -128,6 +128,40 @@ func zeroDate(d Dialect, v any) bool {
 	return false
 }
 
+// ErrOrderValue is the error of AfterValues given an order value that no
+// read on the statement's dialect gives: a cursor's that was forged, or
+// written on another dialect.
+var ErrOrderValue = errors.New("velox: an order value this dialect never reads")
+
+// checkOrderValue refuses v, an order value given to AfterValues, when no
+// read on dialect d gives it, since d would cast it to another value or
+// fail with a driver's error. A NaN, Infinity or -Infinity decimal is
+// PostgreSQL's alone; the zero date MySQL's alone; a NaN float
+// PostgreSQL's alone, an infinite one not MySQL's; an unsigned integer past
+// int64 MySQL's alone.
+func checkOrderValue(d Dialect, v any) error {
+	ok := true
+	switch x := v.(type) {
+	case DecimalText:
+		ok = d == Postgres || !specialDecimal(string(x))
+	case TimeText:
+		ok = d == MySQL || !zeroTimeText.MatchString(string(x))
+	case float64:
+		switch {
+		case math.IsNaN(x):
+			ok = d == Postgres
+		case math.IsInf(x, 0):
+			ok = d != MySQL
+		}
+	case uint64:
+		ok = d == MySQL || x <= math.MaxInt64
+	}
+	if !ok {
+		return fmt.Errorf("%w: %#v on %v", ErrOrderValue, v, d)
+	}
+	return nil
+}
+
 // boundValue is how v, an order value, is bound on dialect d: the text that
 // stands for it and the argument. A DecimalText is cast to a decimal (on
 // MySQL DECIMAL(65,30)), so that it compares as a decimal: MySQL compares a

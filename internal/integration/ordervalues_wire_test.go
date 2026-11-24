@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -287,4 +288,43 @@ func mysqlNoParseTime(t *testing.T) *velox.DB {
 	db := sql.OpenDB(conn)
 	t.Cleanup(func() { _ = db.Close() })
 	return velox.Open(velox.MySQL, db).WithoutPolicy("velox tests")
+}
+
+// TestOrderValuesForged: a cursor's value that no read on the dialect gives
+// fails with ErrOrderValue before the database sees it: a NaN or infinite
+// decimal off PostgreSQL (MySQL would cast it to 0), the zero date off
+// MySQL (PostgreSQL would fail to read it as a time).
+func TestOrderValuesForged(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		row := newInvoice(7, "F01")
+		row.ID = 790
+		if err := tg.db.Insert(&row).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range []struct {
+			v    string
+			term velox.Term[testmodel.Invoice]
+			on   velox.Dialect // the one dialect a read gives it on
+		}{
+			{"d:NaN", velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2)), velox.Postgres},
+			{"d:-Infinity", velox.Calc[testmodel.Invoice]("? * ?", I.Total, int64(2)), velox.Postgres},
+			{"dt:0000-00-00 00:00:00", velox.Calc[testmodel.Invoice]("CASE WHEN ? > ? THEN ? END", I.ID, int64(0), I.PaidAt), velox.MySQL},
+		} {
+			v, err := untyped.DecodeOrderValue(c.v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			q := untyped.FromQuery(tg.db.Query[testmodel.Invoice]().Where(I.ID.GTE(790)).OrderBy(c.term.Asc(), I.ID.Asc()).Limit(5)).OrderValues()
+			_, err = q.AfterValues(&row, []any{v}).All(ctx)
+			if tg.d == c.on {
+				if err != nil {
+					t.Errorf("%s: %v", c.v, err)
+				}
+				continue
+			}
+			if !errors.Is(err, untyped.ErrOrderValue) {
+				t.Errorf("%s: %v, want ErrOrderValue", c.v, err)
+			}
+		}
+	})
 }

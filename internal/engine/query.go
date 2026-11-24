@@ -51,6 +51,11 @@ func AddAfterValues(st *Statement, in *EntityInfo, after unsafe.Pointer, vals []
 	if vals != nil && len(vals) != n {
 		return fmt.Errorf("velox: %s: AfterValues was given %d values for %d orderings by an expression", in.Name, len(vals), n)
 	}
+	for _, v := range vals {
+		if err := checkOrderValue(d, v); err != nil {
+			return fmt.Errorf("velox: %s: %w", in.Name, err)
+		}
+	}
 	srcs, ordered, err := afterSources(st, in, after, vals, d)
 	if err != nil {
 		return err

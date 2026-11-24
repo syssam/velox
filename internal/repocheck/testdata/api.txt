@@ -1667,6 +1667,7 @@ type TableQuery = engine.TableQuery
 type TableUpdate = engine.TableUpdate
 type Term = engine.Term
 type TimeText = engine.TimeText
+var ErrOrderValue
 
 package contrib/graphql
 const MutationCreate MutationKind

@@ -291,6 +291,11 @@ type TimeText = engine.TimeText
 // them. Any other value is an error.
 func EncodeOrderValue(v any) (any, error) { return engine.EncodeOrderValue(v) }
 
+// ErrOrderValue is the error of a read whose AfterValues holds a value no
+// read on its dialect gives, such as a NaN decimal off PostgreSQL or the
+// zero date off MySQL: a forged cursor's, or another dialect's.
+var ErrOrderValue = engine.ErrOrderValue
+
 // DecodeOrderValue is v, a value EncodeOrderValue wrote, after a JSON round
 // trip that reads a number as a json.Number, back as the order value, for
 // AfterValues. Any value EncodeOrderValue does not write is an error.
