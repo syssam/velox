@@ -581,6 +581,18 @@ func (m *Mutation) Set(name string, v any) error
 func (m *Mutation) SetAffected(n int64)
 func (m *Mutation) Value(name string) (any, bool)
 func (m *Mutation) Where(ps ...Predicate)
+func (m JSONTime[E]) Asc[_ Lazy[E]]() Order[E]
+func (m JSONTime[E]) Between[_ Lazy[E]](lo, hi time.Time) Pred[E]
+func (m JSONTime[E]) Desc[_ Lazy[E]]() Order[E]
+func (m JSONTime[E]) EQ[_ Lazy[E]](v time.Time) Pred[E]
+func (m JSONTime[E]) GTE[_ Lazy[E]](v time.Time) Pred[E]
+func (m JSONTime[E]) GT[_ Lazy[E]](v time.Time) Pred[E]
+func (m JSONTime[E]) IsNull[_ Lazy[E]]() Pred[E]
+func (m JSONTime[E]) LTE[_ Lazy[E]](v time.Time) Pred[E]
+func (m JSONTime[E]) LT[_ Lazy[E]](v time.Time) Pred[E]
+func (m JSONTime[E]) NEQ[_ Lazy[E]](v time.Time) Pred[E]
+func (m JSONTime[E]) NotNull[_ Lazy[E]]() Pred[E]
+func (m JSONTime[E]) Term[_ Lazy[E]]() Term[E]
 func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
 func (m Many[T]) MarshalJSON() ([]byte, error)
 func (n JSONNumber[E]) Asc[_ Lazy[E]]() Order[E]
@@ -696,7 +708,9 @@ func (t JSONText[E]) IsNull[_ Lazy[E]]() Pred[E]
 func (t JSONText[E]) NEQ[_ Lazy[E]](v string) Pred[E]
 func (t JSONText[E]) NotIn[_ Lazy[E]](vs ...string) Pred[E]
 func (t JSONText[E]) NotNull[_ Lazy[E]]() Pred[E]
+func (t JSONText[E]) Number[_ Lazy[E]]() JSONNumber[E]
 func (t JSONText[E]) Term[_ Lazy[E]]() Term[E]
+func (t JSONText[E]) Time[_ Lazy[E]]() JSONTime[E]
 func (t Term[E]) As[_ Lazy[E]](name string) Term[E]
 func (t Term[E]) Asc[_ Lazy[E]]() Order[E]
 func (t Term[E]) Avg[_ Lazy[E]]() Term[E]
@@ -907,6 +921,7 @@ type JSONBool[E any] struct { }
 type JSONCol[E, V any] struct { I int32 }
 type JSONNumber[E any] struct { }
 type JSONText[E any] struct { }
+type JSONTime[E any] struct { }
 type JoinClause = engine.JoinClause
 type Lazy[T any] interface{ *T }
 type Lock = veloxtype.Lock

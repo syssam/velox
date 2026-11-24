@@ -27,6 +27,14 @@ const (
 	// the path is missing or holds no array. Its path may be empty: the
 	// column's own document.
 	JSONKindLen
+	// JSONKindTextNumber reads a number, or a string that spells one in
+	// JSON's grammar (jsonNumberText): SQL NULL for any other value and
+	// where the path is missing.
+	JSONKindTextNumber
+	// JSONKindTextTime reads a string that spells an RFC 3339 time
+	// (jsonTimeText) as its instant: SQL NULL for any other value and
+	// where the path is missing.
+	JSONKindTextTime
 )
 
 // JSONPath is a path of object keys into a JSON column, and what a
@@ -94,8 +102,12 @@ func (w *writer) json(n Node) {
 // key, or MySQL's and SQLite's whole path, is an argument. The forms read
 // alike on every dialect: a string is compared as written, with case.
 func (w *writer) jsonValue(i int32, p JSONPath) {
-	if p.Kind == JSONKindLen {
+	switch p.Kind {
+	case JSONKindLen:
 		w.jsonLen(i, p)
+		return
+	case JSONKindTextNumber, JSONKindTextTime:
+		w.jsonParsed(i, p)
 		return
 	}
 	switch w.d {

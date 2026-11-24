@@ -783,6 +783,27 @@ db.Query[veloxgen.Account]().Where(A.Attrs.Text("name").HasPrefix("Acme")).
 
 See [ADR 0115](decisions/0115-json-append-len-patterns-order.md).
 
+A string at a path can be read as a number or as a time. `Number()` reads a
+JSON number or a string that spells one, so `{"seats": 10}` and
+`{"seats": "10"}` both read 10. `Time()` reads an RFC 3339 string as an
+instant, so `"2026-03-01T10:00:00+08:00"` equals `"2026-03-01T02:00:00Z"`
+and sorts before `"2026-03-01T03:00:00Z"`:
+
+```go
+seats, due := A.Attrs.Text("plan", "seats").Number(), A.Attrs.Text("due").Time()
+db.Query[veloxgen.Account]().Where(seats.GTE(10), due.LT(time.Now())).
+	OrderBy(due.Asc()).Limit(20)
+```
+
+Anything else is NULL, and never fails the statement: `"abc"`, `"01"`,
+`" 7"`, a boolean or a missing key for `Number`; a date alone, a time with
+no offset, `2026-02-30` or a number for `Time`. A number is JSON's grammar,
+with an exponent of at most two digits. A time has an upper-case `T` and
+`Z`, a fraction of up to nine digits, an offset within ±14:59 and a year
+from 1000 to 9999. PostgreSQL and MySQL compare times to the microsecond.
+`Time().Term()` scans into a `time.Time`. See
+[ADR 0165](decisions/0165-json-text-number-and-time.md).
+
 ### Inside a JSON array: Has, HasSome, HasEvery and IsEmpty
 
 A column that is itself an array (`field.Strings("tags")`, or any

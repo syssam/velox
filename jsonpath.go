@@ -2,6 +2,7 @@ package velox
 
 import (
 	"slices"
+	"time"
 
 	"github.com/syssam/velox/internal/engine"
 )
@@ -19,7 +20,8 @@ type JSONText[E any] struct {
 // JSONNumber is the number at a path of object keys in a JSON column of
 // entity E, made by a JSON handle's Number, as a float64. It is NULL where
 // the path is missing or holds a value that is not a number. A JSON handle's
-// Len is one too: the length of an array. Its conditions read alike on
+// Len is one too: the length of an array, and JSONText's Number, which also
+// reads a string that spells a number. Its conditions read alike on
 // PostgreSQL (jsonb), MySQL and SQLite.
 type JSONNumber[E any] struct {
 	col  int32
@@ -36,6 +38,41 @@ type JSONBool[E any] struct {
 	path engine.JSONPath
 }
 
+// JSONTime is the instant that an RFC 3339 string at a path of object keys
+// in a JSON column of entity E spells, made by JSONText's Time. It is NULL
+// where the path is missing or holds anything else. Its conditions compare
+// instants, so "2026-03-01T10:00:00+08:00" equals "2026-03-01T02:00:00Z",
+// and read alike on PostgreSQL (jsonb), MySQL and SQLite.
+type JSONTime[E any] struct {
+	col  int32
+	path engine.JSONPath
+}
+
+// Number returns the number at the path, or the number a string there
+// spells, so that {"n": 10} and {"n": "10"} both read 10. A string spells a
+// number in JSON's grammar, with an exponent of at most two digits and at
+// most 200 characters: "10", "-2.5", "0.5", "1e3" and "1E+05" do; "+1",
+// "01", ".5", "1.", " 1", "1e100", "1,000" and "NaN" do not. Anything
+// else, a boolean, an object or an array included, is NULL, never an error.
+// The number compares as JSONNumber's does: as a float64 on MySQL and
+// SQLite, and as PostgreSQL's numeric against a float64.
+func (t JSONText[E]) Number[_ Lazy[E]]() JSONNumber[E] {
+	return JSONNumber[E]{t.col, engine.JSONPath{Kind: engine.JSONKindTextNumber, Keys: t.path.Keys}}
+}
+
+// Time returns the instant the string at the path spells in RFC 3339:
+// YYYY-MM-DDTHH:MM:SS, an optional fraction of one to nine digits, then Z
+// or an offset within ±14:59, with an upper-case T and Z and a real date of
+// a year from 1000 to 9999, 9999-12-31 aside. "2026-03-01T10:00:00Z",
+// "2026-03-01T10:00:00.5+08:00" and "2026-03-01T10:00:00-05:30" do; a date
+// alone, a time with no zone, a space for the T, a lower-case z, 2026-02-30
+// and a leap second do not, and are NULL, never an error, as a number or a
+// missing path is. PostgreSQL and MySQL compare to the microsecond, rounding
+// finer digits; SQLite to the nanosecond.
+func (t JSONText[E]) Time[_ Lazy[E]]() JSONTime[E] {
+	return JSONTime[E]{t.col, engine.JSONPath{Kind: engine.JSONKindTextTime, Keys: t.path.Keys}}
+}
+
 // Term returns the value as a Term: a result column of Select, which
 // Scan reads into a string field, a key of GroupBy, or an operand of Calc.
 func (t JSONText[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTerm(t.col, t.path)} }
@@ -47,6 +84,10 @@ func (n JSONNumber[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTer
 // Term returns the value as a Term, as JSONText's Term does: Scan reads it
 // into a bool field.
 func (b JSONBool[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTerm(b.col, b.path)} }
+
+// Term returns the value as a Term, as JSONText's Term does: Scan reads it
+// into a time.Time field, in UTC.
+func (m JSONTime[E]) Term[_ Lazy[E]]() Term[E] { return Term[E]{engine.JSONTerm(m.col, m.path)} }
 
 func jsonPath(kind engine.JSONKind, keys []string) engine.JSONPath {
 	return engine.JSONPath{Kind: kind, Keys: slices.Clone(keys)}
@@ -231,6 +272,67 @@ func (b JSONBool[E]) IsNull[_ Lazy[E]]() Pred[E] {
 // NotNull is true where the path holds a boolean.
 func (b JSONBool[E]) NotNull[_ Lazy[E]]() Pred[E] {
 	return jsonPred[E](b.col, b.path, engine.Node{Op: engine.OpNotNull})
+}
+
+// EQ is true where the string at the path spells the instant v, in any
+// offset. v, as every time a JSONTime's condition takes, is bound in UTC,
+// as velox binds a time.
+func (m JSONTime[E]) EQ[_ Lazy[E]](v time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpEQ, V: v.UTC()})
+}
+
+// NEQ is true where the path holds a time that is not the instant v. Like a
+// nullable column's, it is false where the path holds no time.
+func (m JSONTime[E]) NEQ[_ Lazy[E]](v time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpNEQ, V: v.UTC()})
+}
+
+// GT is true where the time at the path is after v.
+func (m JSONTime[E]) GT[_ Lazy[E]](v time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpGT, V: v.UTC()})
+}
+
+// GTE is true where the time at the path is v or after it.
+func (m JSONTime[E]) GTE[_ Lazy[E]](v time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpGTE, V: v.UTC()})
+}
+
+// LT is true where the time at the path is before v.
+func (m JSONTime[E]) LT[_ Lazy[E]](v time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpLT, V: v.UTC()})
+}
+
+// LTE is true where the time at the path is v or before it.
+func (m JSONTime[E]) LTE[_ Lazy[E]](v time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpLTE, V: v.UTC()})
+}
+
+// Between is true where the time at the path is from lo to hi, both
+// included.
+func (m JSONTime[E]) Between[_ Lazy[E]](lo, hi time.Time) Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpBetween, V: lo.UTC(), W: hi.UTC()})
+}
+
+// Asc orders by the instant at the path, earliest first, NULL last: where
+// the path is missing or holds no time. An entity query ordered so cannot
+// be read After a row or by a cursor.
+func (m JSONTime[E]) Asc[_ Lazy[E]]() Order[E] {
+	return Order[E]{OrderTerm{Expr: engine.JSONTerm(m.col, m.path)}}
+}
+
+// Desc orders by the instant at the path, latest first, NULL first.
+func (m JSONTime[E]) Desc[_ Lazy[E]]() Order[E] {
+	return Order[E]{OrderTerm{Expr: engine.JSONTerm(m.col, m.path), Desc: true}}
+}
+
+// IsNull is true where the path is missing or holds no time.
+func (m JSONTime[E]) IsNull[_ Lazy[E]]() Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpIsNull})
+}
+
+// NotNull is true where the path holds a time.
+func (m JSONTime[E]) NotNull[_ Lazy[E]]() Pred[E] {
+	return jsonPred[E](m.col, m.path, engine.Node{Op: engine.OpNotNull})
 }
 
 // JSONArray is the JSON array at a path of object keys in a JSON column of

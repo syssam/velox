@@ -26,6 +26,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   order on PostgreSQL and SQLite (`NULLS FIRST|LAST`) and MySQL (an
   `IS NULL` term); `After` pages it. `OrderTerm.Nulls` with
   `velox.NullsFirst` and `velox.NullsLast` for an untyped query (ADR 0163).
+- `JSONText.Number()` and `JSONText.Time()`: a string in a JSON column read
+  as a number, as `{"n": "10"}` and `{"n": 10}` both read 10, or as the
+  instant an RFC 3339 string spells in any offset, compared and ordered as
+  numbers and instants on PostgreSQL, MySQL and SQLite; anything else is
+  NULL, never an error. `JSONTime` is new (ADR 0165).
 - `JSONArray.HasFieldKey(key)`: true where a JSON array holds an object with
   the member `key` and a value that is not a JSON null, on PostgreSQL
   (`jsonb_path_exists`), MySQL and SQLite (ADR 0160).

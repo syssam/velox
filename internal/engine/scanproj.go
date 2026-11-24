@@ -166,6 +166,8 @@ func (s *ScanPlan) termType(t Term) (typ reflect.Type, numeric bool) {
 			return reflect.TypeFor[string](), false
 		case JSONKindBool:
 			return reflect.TypeFor[bool](), false
+		case JSONKindTextTime:
+			return timeType, false
 		}
 		return reflect.TypeFor[float64](), false
 	case termDate:
