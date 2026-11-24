@@ -1723,6 +1723,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- `Query.Values` and `Query.IDs` make no allocation per row for a value that
+  needs none: each row is scanned into the result's own backing array through
+  one reused argument slice, sized as `All` sizes its rows. 100 int64 IDs went
+  from 216 allocations to 10, and 100 strings use half the bytes of
+  `Columns(h).All`.
 - `velox.Connect("sqlite", dsn)` turns foreign keys on when the DSN holds
   `_fk=1`, which modernc.org/sqlite ignores: on the "sqlite" driver only
   `_pragma=foreign_keys(…)` counts as the DSN's own setting (ADR 0147).

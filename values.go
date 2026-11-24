@@ -7,18 +7,31 @@ import (
 )
 
 // valuesRun is the state of one read of a single column.
-type valuesRun[V any] struct{ out []V }
+type valuesRun[V any] struct {
+	out  []V
+	hint int // the capacity the first read starts with: engine.FirstCap, as All's
+}
 
 // readValues reads every row's one column into a.out, anew should an around
-// hook retry.
+// hook retry. Each row is scanned into its own element of a.out through one
+// reused argument slice: a local, or a fresh variadic slice, passed through
+// Scan's interface would cost a heap allocation per row.
 func readValues[V any](a *valuesRun[V], r engine.Rows) error {
-	a.out = nil
+	if a.out == nil {
+		a.out = make([]V, 0, a.hint)
+	}
+	a.out = a.out[:0]
+	var zero V
+	dst := make([]any, 1) // one Scan argument slice for every row
 	for r.Next() {
-		var v V
-		if err := r.Scan(&v); err != nil {
+		a.out = append(a.out, zero)
+		dst[0] = &a.out[len(a.out)-1]
+		if err := r.Scan(dst...); err != nil {
 			return err
 		}
-		a.out = append(a.out, v)
+	}
+	if len(a.out) == 0 {
+		a.out = nil // no row: nil, as documented
 	}
 	return nil
 }
@@ -39,7 +52,7 @@ func columnValues[E, V any](ctx context.Context, q Query[E], col int, what strin
 	if err := engine.ColumnRead(&st, col, what); err != nil {
 		return nil, err
 	}
-	a := &valuesRun[V]{}
+	a := &valuesRun[V]{hint: engine.FirstCap(&st)}
 	if err := q.s.DB.Run(ctx, &st, func(r engine.Rows) error { return readValues(a, r) }, nil); err != nil {
 		return nil, err
 	}
