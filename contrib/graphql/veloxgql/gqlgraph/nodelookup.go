@@ -181,11 +181,20 @@ func bindKey(k any) any {
 // lookupNodes returns, by type, whether ResolveNode or ResolveNodes must
 // read the type for ids: true for a type the lookup found a row of, and
 // for one it cannot read. A lookup that a hook denies finds every type, so
-// each is read as before; any other error is returned.
+// each is read as before; any other error is returned. On a DB with a
+// Rewrite hook, which may point a type at another table than the one the
+// lookup's raw SQL names, there is no lookup and every type is read.
 func lookupNodes(ctx context.Context, db *velox.DB, types []*Type, ids []any) ([]bool, error) {
 	p, err := planFor(types)
 	if err != nil {
 		return nil, err
+	}
+	if untyped.Rewrites(db) {
+		read := make([]bool, len(types))
+		for i := range read {
+			read[i] = true
+		}
+		return read, nil
 	}
 	read := slices.Clone(p.always)
 	parts, uniform := p.parts(ids)

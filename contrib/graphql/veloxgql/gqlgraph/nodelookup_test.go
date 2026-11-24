@@ -2,6 +2,7 @@ package gqlgraph_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"maps"
 	"testing"
@@ -104,5 +105,48 @@ func TestNodeLookupFallback(t *testing.T) {
 	}
 	if got := log.counts(); !maps.Equal(got, map[string]int{"blobs": 1}) {
 		t.Errorf("blob 1: statements by table %v, want blobs alone (no integer key holds it)", got)
+	}
+}
+
+// TestNodeLookupRewritten: a Rewrite hook may point an entity's statements
+// at another table, which the lookup's raw SQL never sees. On such a DB
+// every type is read, so an ID whose row is only in the rewritten table is
+// found, as LoadNode finds it.
+func TestNodeLookupRewritten(t *testing.T) {
+	_, types, _ := nodeDB(t)
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	sqlDB.SetMaxOpenConns(1)
+	for _, s := range []string{
+		"CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)",
+		"CREATE TABLE people_t1 (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)",
+		"CREATE TABLE badges (id INTEGER PRIMARY KEY)",
+		"CREATE TABLE vaults (id INTEGER PRIMARY KEY)",
+		"INSERT INTO people_t1 (id, name, age) VALUES (50, 'tenant', 5)",
+	} {
+		if _, err := sqlDB.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tenant := func(_ context.Context, st *velox.Statement) error {
+		if st.Entity != nil && st.Entity.Table == "people" {
+			c := *st.Entity
+			c.Table = "people_t1"
+			st.Entity = &c
+		}
+		return nil
+	}
+	db := velox.Open(velox.SQLite, sqlDB, velox.WithRewrite(tenant))
+	ctx := context.Background()
+	n, err := gqlgraph.ResolveNode(ctx, db, types, int64(50))
+	if p, ok := n.(*person); err != nil || !ok || p.Name != "tenant" {
+		t.Errorf("node 50: %#v, %v; want the tenant's person", n, err)
+	}
+	ns, err := gqlgraph.ResolveNodes(ctx, db, types, []int64{50, 99})
+	if err != nil || len(ns) != 2 || ns[0] == nil || ns[1] != nil {
+		t.Errorf("nodes 50, 99: %#v, %v; want the tenant's person and nil", ns, err)
 	}
 }

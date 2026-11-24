@@ -1639,6 +1639,7 @@ func Not(p velox.Predicate) velox.Predicate
 func Or(ps ...velox.Predicate) velox.Predicate
 func OrderByTerm(t Term, desc bool) velox.OrderTerm
 func Query(db *velox.DB, t Table) TableQuery
+func Rewrites(db *velox.DB) bool
 func RowsOf[E any](r Rows) []E
 func SetExpr(col int, text string, args ...any) velox.Assignment
 func Sum(t Term) Term

@@ -334,6 +334,12 @@ func MutationTable(m *velox.Mutation) Table {
 	return engine.MutationTable((*engine.MutationState)(unsafe.Pointer(m)))
 }
 
+// Rewrites reports whether db has a Rewrite hook (velox.WithRewrite). Such
+// a hook may point a statement at another table or schema, which raw SQL
+// that names an entity's table never sees: an extension that reads the
+// tables by name should read through queries instead on such a DB.
+func Rewrites(db *velox.DB) bool { return len(engineOf(db).Cfg.Rewrites) > 0 }
+
 // Query starts a query on t's entity: velox's Query, untyped. See
 // TableQuery.
 func Query(db *velox.DB, t Table) TableQuery { return engine.QueryTable(engineOf(db), t) }
