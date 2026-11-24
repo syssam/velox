@@ -63,9 +63,9 @@ text itself; the database does (`TestCalcAgg`).
 
 ```go
 type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predicate, error)
-type FilterEntity struct{ /* the entity's *engine.EntityInfo */ }
-func (e FilterEntity) Name() string
-func (e FilterEntity) HasColumn(column string) bool
+type FilterEntity = filterent.Entity // struct{ in *engine.EntityInfo }
+func (e Entity) Name() string
+func (e Entity) HasColumn(column string) bool
 ```
 
 `FilterEntity` is a value holding the entity's metadata. `Name` is what
@@ -78,9 +78,17 @@ The zero value names nothing. `velox.HasColumn`, `engine.HasColumn`,
 generated `TypeX` comment says the value is `FilterEntity.Name`'s; a
 comment only, so no version change.
 
-`FilterEntity` is declared in the root and the engine hands a filter the
-`*EntityInfo`: an engine type with methods that `DB` reaches is described
-by every package that uses a DB.
+`FilterEntity` is an alias of `internal/filterent`'s `Entity`, as the
+root's names alias the engine's (0020), and the engine hands a filter the
+`*EntityInfo`, which the root wraps with `filterent.New`. It is not an
+engine type: one with methods that `DB` reaches is described by every
+package that uses a DB. `veloxtest.FilterEntity(name, columns...)` is
+`filterent.StandIn`, a stand-in for a filter's test. A first version
+declared the struct in the root and let veloxtest build one through an
+exported engine variable, set by the root's `init`, returning `any` that
+veloxtest asserted back: hidden state, which this record set out to
+remove. The package costs an entity package 2 bytes
+(`entityDescHooks` 880850).
 
 The name `FilterEntity` was chosen over `EntityInfo` and `Meta`, which
 name other things, and over `Entity`, taken.

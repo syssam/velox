@@ -395,9 +395,10 @@ var genericObjects = []struct {
 	// entityDescMixin 926264, within their bounds.
 	//
 	// ADR 0151 keeps these bounds: velox.Agg is a function, not a Term
-	// method (one cost 432 bytes); FilterEntity is the root's; and the
-	// policy functions EntityInfo reaches take the DB as engine.StmtDB, an
-	// any, since a *DB in them cost entityDescriptor 25 KB.
+	// method (one cost 432 bytes); FilterEntity is internal/filterent's,
+	// not the engine's; and the policy functions EntityInfo reaches take
+	// the DB as engine.StmtDB, an any, since a *DB in them cost
+	// entityDescriptor 25 KB.
 	{"entityDescUse", "", entityDescUseSrc, 796160}, // measured 795500
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took

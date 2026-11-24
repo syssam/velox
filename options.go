@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/internal/filterent"
 	"github.com/syssam/velox/veloxtype"
 )
 
@@ -133,30 +134,10 @@ type Filter func(ctx context.Context, db *DB, entity FilterEntity, op Op) (Predi
 //		return velox.FieldIsNull("deleted_at"), nil
 //	})
 //
-// Both read the entity's own metadata: nothing global, no lock.
-type FilterEntity struct{ in *engine.EntityInfo }
-
-func init() {
-	engine.WrapFilterEntity = func(in *engine.EntityInfo) any { return FilterEntity{in} }
-}
-
-// Name is the entity's name in the schema: "Invoice".
-func (e FilterEntity) Name() string {
-	if e.in == nil {
-		return ""
-	}
-	return engine.EntityName(e.in)
-}
-
-// HasColumn reports whether the entity has a column of the given name, as
-// FieldEQ finds one.
-func (e FilterEntity) HasColumn(column string) bool {
-	if e.in == nil {
-		return false
-	}
-	_, ok := engine.ColumnNamed(e.in, column)
-	return ok
-}
+// Both read the entity's own metadata: nothing global, no lock. The zero
+// FilterEntity names nothing and has no column. veloxtest.FilterEntity
+// makes one for a filter's test.
+type FilterEntity = filterent.Entity
 
 // WithFilter adds f to the row filters of every entity, for the DB and every
 // Tx and shard it opens, as ent's client.Intercept adds an interceptor for
@@ -194,7 +175,7 @@ func WithFilter(f Filter) Option {
 		panic("velox: WithFilter(nil)")
 	}
 	return engine.WithFilter(func(ctx context.Context, db *engine.DB, entity *engine.EntityInfo, op Op) (Predicate, error) {
-		return f(ctx, (*DB)(unsafe.Pointer(db)), FilterEntity{entity}, op) // DB is its engine.DB (see DB)
+		return f(ctx, (*DB)(unsafe.Pointer(db)), filterent.New(entity), op) // DB is its engine.DB (see DB)
 	})
 }
 

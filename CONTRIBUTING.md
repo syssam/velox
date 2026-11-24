@@ -17,8 +17,10 @@ each.
   `internal/`:
   - The product: the non-generic runtime (`engine`), the executors (`conn`), the
     generator (`codegen`), velox-gen's generate run and its all-or-nothing
-    writer (`genrun`), the DDL writer (`ddl`), the reader of the drivers' errors (`dberr`), the writer of the root's
-    `handles.go` (`handlegen`) and the name of the module a program is built from (`buildinfo`).
+    writer (`genrun`), the DDL writer (`ddl`), the reader of the drivers'
+    errors (`dberr`), the entity a Filter is called for (`filterent`), the
+    writer of the root's `handles.go` (`handlegen`) and the name of the
+    module a program is built from (`buildinfo`).
   - The tests: of the public API (`apitest`), against real databases
     (`integration`) and of the repository itself (`repocheck`).
   - What the tests use: the generated models (`testmodel`, `testbind`), a fake

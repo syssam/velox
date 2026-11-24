@@ -157,8 +157,9 @@ func WithAllHooks(hs []HookFn) Option {
 // EntityFilterFn is a filter WithFilter adds, as the engine runs it: given
 // the statement's context, the DB the statement runs on (never nil), the
 // entity and the op it is read for (RowCond's fop), it returns the entity's
-// row condition. The root wraps entity as a velox.FilterEntity: a type
-// here with methods is described by every package that reaches DB.
+// row condition. The root wraps entity as a velox.FilterEntity, which is
+// filterent.Entity: a type here with methods is described by every
+// package that reaches DB.
 type EntityFilterFn func(ctx context.Context, db *DB, entity *EntityInfo, op Op) (Predicate, error)
 
 // WithFilter adds f to the row filters of every entity, for every DB the

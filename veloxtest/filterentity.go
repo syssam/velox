@@ -2,7 +2,7 @@ package veloxtest
 
 import (
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/internal/filterent"
 )
 
 // FilterEntity is a stand-in for the entity a velox.Filter is called
@@ -13,5 +13,5 @@ import (
 //	e := veloxtest.FilterEntity("Invoice", "id", "org_id", "deleted_at")
 //	p, err := filter(ctx, nil, e, velox.OpSelect)
 func FilterEntity(name string, columns ...string) velox.FilterEntity {
-	return engine.WrapFilterEntity(engine.StandInInfo(name, columns...)).(velox.FilterEntity)
+	return filterent.StandIn(name, columns...)
 }

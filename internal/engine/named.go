@@ -473,7 +473,7 @@ func NamedAssignment(in *EntityInfo, name string, v any) (Assignment, error) {
 }
 
 // StandInInfo is the metadata of an entity named name that has exactly the
-// given columns and nothing else, for veloxtest.FilterEntity: a filter's
+// given columns and nothing else, for filterent.StandIn: a filter's
 // test needs its name and columns, not a schema.
 func StandInInfo(name string, columns ...string) *EntityInfo {
 	cols := make([]ColumnInfo, len(columns))
@@ -482,7 +482,3 @@ func StandInInfo(name string, columns ...string) *EntityInfo {
 	}
 	return &EntityInfo{Name: name, Columns: cols, names: nameIndex(cols)}
 }
-
-// WrapFilterEntity is how veloxtest makes a velox.FilterEntity of in: the
-// root sets it to its constructor, which only it can call.
-var WrapFilterEntity func(in *EntityInfo) any
