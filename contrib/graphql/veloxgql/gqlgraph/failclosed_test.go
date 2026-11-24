@@ -139,6 +139,9 @@ func TestEdgeReadsOnItsRowsDB(t *testing.T) {
 			if p, err = conn.Page(ctx); err == nil && len(p.Rows) != 4 {
 				t.Errorf("%s: the edge's connection read %d rows, want 4", name, len(p.Rows))
 			}
+			if err == nil && len(p.Rows) > 0 && untyped.SourceDB(untyped.TableOf[child](), p.Rows[0]) != db {
+				t.Errorf("%s: a node of the page does not carry the DB that read it", name)
+			}
 		}
 		if err != nil {
 			t.Errorf("%s: Paginate of an edge: %v", name, err)
