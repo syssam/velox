@@ -435,6 +435,8 @@ These hold with or without compat:
   rule's list, so a rule that reads its own entity ends
   ([ADR 0135](decisions/0135-policies-read-through-the-transaction.md),
   [ADR 0151](decisions/0151-explicit-aggregates-filter-entity-policy-db.md)).
+  A test's own `privacy.Query` or `privacy.Mutation` stand-in needs a
+  `DB() *velox.DB` method too; one that reads nothing returns nil.
 - `Optional` stays NOT NULL, and `Nillable` makes a column NULL-able
   ([ADR 0003](decisions/0003-nullability.md)).
 
