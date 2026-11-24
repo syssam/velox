@@ -180,7 +180,8 @@ func DecimalTerm(t Term) Term {
 // as SUM(?) or PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ?), computes one
 // value of a group, so it is placed and refused as an aggregate Term is
 // (hasAgg). velox does not read the text to find one (decision 0151). Any
-// other term, and a window function, is an InvalidTerm.
+// other term, a window function and an expression holding an aggregate
+// Term, as an aggregate of an aggregate, are InvalidTerms.
 func AggMarkTerm(t Term) Term {
 	switch {
 	case t.kind == termInvalid:
@@ -189,6 +190,8 @@ func AggMarkTerm(t Term) Term {
 		return InvalidTerm(errors.New("velox: Agg marks an expression, such as a Calc, as an aggregate; an aggregate Term, such as Sum, is one already, and a column is not one"))
 	case hasWindow(t):
 		return InvalidTerm(errors.New("velox: Agg marks an expression as an aggregate, and a window function (OVER) is not one"))
+	case !t.agg && hasAgg(t):
+		return InvalidTerm(errors.New("velox: an aggregate of an aggregate: Agg marks an expression that holds an aggregate, such as SUM of a Sum"))
 	}
 	t.agg = true
 	return t.seal()
