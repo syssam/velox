@@ -14,9 +14,8 @@ import (
 )
 
 // A Warning is a difference between a database and its snapshot that is not
-// a change: a spelling the database prints its own way, an expression
-// default, a primary key Diff cannot change, or what the model has no place
-// for.
+// a change: what the comparison cannot settle, such as an expression the
+// normaliser cannot parse, or what the model has no place for.
 type Warning struct {
 	Object  string // "users.users_active_idx"
 	Message string
@@ -58,14 +57,16 @@ type keep struct {
 // a copy of inspected, what differs only in spelling takes snapshot's
 // spelling before Diff compares the two: a predicate or check that
 // samePredicateIn calls the same with the enum types of both, an expression
-// default (with a warning when it does not), a number default of one value
+// default it calls the same, or that cannot be parsed (with a warning when
+// the texts differ), a literal default in parentheses, a number default of one value
 // on a number column (0.00 and 0), a date or time literal default of one
 // value (PostgreSQL's cast, MySQL's padded), a predicate or check
 // the normaliser cannot read (with a warning when the texts differ), MySQL's
 // RESTRICT for no action, the names SQLite does not keep, matched by
-// definition, and a primary key Diff would refuse (with a warning); on
-// MySQL, a primary key's name, always PRIMARY there, and the index MySQL
-// makes for a foreign key no index covers.
+// definition, and a primary key Diff would refuse, which is an
+// alter-primary-key change after Diff's; on MySQL, a primary key's name,
+// always PRIMARY there, and the index MySQL makes for a foreign key no index
+// covers.
 func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error) {
 	c, err := compare(inspected, notes, snapshot, false)
 	if err != nil {
@@ -83,6 +84,9 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 	changes, err := Diff(c.db, snap, DiffOptions{})
 	if err != nil {
 		return nil, err
+	}
+	for _, k := range c.keys {
+		changes = append(changes, k)
 	}
 	sortWarnings(c.warnings)
 	return &DriftReport{Changes: changes, Warnings: c.warnings}, nil
@@ -158,7 +162,8 @@ type drifter struct {
 	other    string          // what the warnings call snap: "the snapshot", or Baseline's "the schema"
 	enums    map[string]bool // the enum types of both, as enumCasts
 	warnings []Warning
-	implicit []implicitIndex // MySQL: the indexes it made for foreign keys
+	implicit []implicitIndex   // MySQL: the indexes it made for foreign keys
+	keys     []alterPrimaryKey // the primary keys that differ, which Diff refuses to change
 }
 
 // implicitIndex is an index MySQL made for a foreign key of table.
@@ -199,32 +204,42 @@ func (c *drifter) table(t, u *Table) {
 	}
 }
 
-// primaryKey warns of a primary key, or its name, that differs from u's, and
-// gives t u's unless the drifter adopts the database's.
+// primaryKey records a primary key that differs from u's, in its columns or
+// in having a name, as a change, and gives t u's, which Diff would refuse to
+// change; Baseline instead keeps the database's, with a warning.
 func (c *drifter) primaryKey(t, u *Table) {
 	ref := t.Ref().String()
-	if !slices.Equal(t.PrimaryKey, u.PrimaryKey) {
-		c.warn(ref, "the database has %s and %s %s; change it by hand", keyText(t.PrimaryKey), c.other, keyText(u.PrimaryKey))
-		if !c.adopt {
-			t.PrimaryKey = slices.Clone(u.PrimaryKey)
-		}
-	}
 	if c.d == velox.MySQL && !c.adopt {
 		// MySQL names every primary key PRIMARY and holds no other name.
 		// Baseline keeps the database's, which has a key or none.
 		t.PrimaryKeyName = u.PrimaryKeyName
 	}
-	if (t.PrimaryKeyName == "") != (u.PrimaryKeyName == "") && c.d != velox.MySQL {
-		c.warn(ref, "the database names the primary key %q and %s %q; change it by hand", t.PrimaryKeyName, c.other, u.PrimaryKeyName)
-		if !c.adopt {
-			t.PrimaryKeyName = u.PrimaryKeyName
+	cols := !slices.Equal(t.PrimaryKey, u.PrimaryKey)
+	named := (t.PrimaryKeyName == "") != (u.PrimaryKeyName == "") && c.d != velox.MySQL
+	if c.adopt {
+		if cols {
+			c.warn(ref, "the database has %s and %s %s; change it by hand", keyText(t.PrimaryKey), c.other, keyText(u.PrimaryKey))
 		}
+		if named {
+			c.warn(ref, "the database names the primary key %q and %s %q; change it by hand", t.PrimaryKeyName, c.other, u.PrimaryKeyName)
+		}
+		return
+	}
+	if !cols && !named {
+		return
+	}
+	c.keys = append(c.keys, alterPrimaryKey{Table: t.Ref(), From: slices.Clone(t.PrimaryKey), To: slices.Clone(u.PrimaryKey),
+		FromName: t.PrimaryKeyName, ToName: u.PrimaryKeyName})
+	t.PrimaryKey = slices.Clone(u.PrimaryKey)
+	if named {
+		t.PrimaryKeyName = u.PrimaryKeyName
 	}
 }
 
 // columnDefault gives tc, a column of t, uc's default where the two differ
-// only in spelling, and warns of one that differs in value. uc is nil when
-// u has no such column.
+// only in spelling, and warns of an expression that cannot be parsed whose
+// text differs; one that differs in value is left for Diff, a change. uc is
+// nil when u has no such column.
 func (c *drifter) columnDefault(t *Table, tc, uc *Column) {
 	ref := t.Ref().String()
 	if uc != nil && c.d == velox.MySQL && mysqlBinaryType(tc.Type) && mysqlBinaryType(uc.Type) &&
@@ -255,12 +270,24 @@ func (c *drifter) columnDefault(t *Table, tc, uc *Column) {
 		}
 		return
 	}
-	if uc == nil || tc.Default == uc.Default || tc.Default == "" || uc.Default == "" ||
-		literalDefault(c.d, tc.Default) || literalDefault(c.d, uc.Default) {
+	if uc == nil || tc.Default == uc.Default || tc.Default == "" || uc.Default == "" {
 		return
 	}
-	if same, _ := c.same(tc.Default, uc.Default); !same {
-		c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in %s", tc.Default, uc.Default, c.other)
+	same, parsed := c.same(tc.Default, uc.Default)
+	if literalDefault(c.d, tc.Default) || literalDefault(c.d, uc.Default) {
+		// A literal is a change from anything but itself in parentheses,
+		// as SQLite keeps ('active').
+		if same && parsed {
+			tc.Default = uc.Default
+		}
+		return
+	}
+	switch {
+	case same:
+	case parsed:
+		return // another expression: a change
+	default:
+		c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Default, uc.Default, c.other)
 		if c.adopt {
 			return
 		}

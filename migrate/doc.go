@@ -72,8 +72,9 @@
 //     SQLite 3.35; MariaDB is refused), names no MySQL database, or is a
 //     PostgreSQL session with standard_conforming_strings off; or a MySQL
 //     session whose sql_mode holds NO_BACKSLASH_ESCAPES or ANSI_QUOTES when
-//     a file to apply holds a literal the mode would read otherwise; or a
-//     SQLite database in memory that would end with Up's connection.
+//     a file to apply, or a statement of Create, holds a literal the mode
+//     would read otherwise; or a SQLite database in memory that would end
+//     with Up's connection.
 //   - "history": the history table holds what the runner cannot read, a
 //     file is pending below the highest applied version, a dirty version
 //     to resume runs in a transaction or has versions above the
@@ -141,11 +142,15 @@
 // before an ASCII one, are dropped, so two literals compared with each other
 // can be called the same where their collations differ on trailing spaces. A
 // MySQL binary or varbinary literal default is compared by its bytes. A
-// Warning is what the comparison cannot settle: an expression default that
-// differs, a predicate the normaliser cannot read whose text differs, a
-// primary key that differs, or what the model has no place for, such as a
-// MySQL table that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
-// constraint. A PostgreSQL 18 column whose NOT NULL is NOT VALID is read as
+// primary key that differs, in its columns or in having a name, is an
+// alter-primary-key change, which Diff never gives and Render refuses: it
+// is changed by hand. Two expression defaults that both parse and differ
+// are a change too. A SQLite literal default in parentheses is the literal,
+// and an INTEGER PRIMARY KEY column, a rowid, is NOT NULL. A Warning is what
+// the comparison cannot settle: an expression default or a predicate the
+// normaliser cannot read whose text differs, or what the model has no place
+// for, such as a MySQL table that is not InnoDB, an invalid PostgreSQL index
+// or a NOT VALID constraint. A PostgreSQL 18 column whose NOT NULL is NOT VALID is read as
 // nullable, with a Warning, as rows from before it may hold NULL. A
 // PostgreSQL index the database holds as a UNIQUE constraint
 // and schema.json as a plain index, or the reverse, is a Warning, not a

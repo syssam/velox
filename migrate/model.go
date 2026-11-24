@@ -61,6 +61,10 @@ type Column struct {
 	Sequence string `json:"sequence,omitempty"` // PostgreSQL: the sequence the column owns, an identity's or a serial's; "" otherwise
 	Comment  string `json:"comment,omitempty"`  // "" on SQLite
 	Pos      string `json:"-"`
+	// GoDefault is set by velox-gen when the field has a Default in Go
+	// and the column none: Lint's advice reads it. It is not compared or
+	// stored.
+	GoDefault bool `json:"-"`
 }
 
 // An Index is a secondary index.

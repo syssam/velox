@@ -477,6 +477,10 @@ func TestRenderRefuses(t *testing.T) {
 		{velox.SQLite, migrate.SetTableComment{Table: users, To: "x"}},
 		{velox.SQLite, migrate.SetTableCollation{Table: users, To: "x"}},
 		{velox.SQLite, migrate.AlterColumn{Table: users, What: migrate.ColumnComment}},
+		// Only Drift gives a primary key change, which is made by hand.
+		{velox.Postgres, migrate.AlterPrimaryKey{Table: users, From: []string{"id"}, To: []string{"id", "email"}}},
+		{velox.MySQL, migrate.AlterPrimaryKey{Table: users, From: []string{"id"}, To: []string{"id", "email"}}},
+		{velox.SQLite, migrate.AlterPrimaryKey{Table: users, From: []string{"id"}, To: []string{"id", "email"}}},
 	} {
 		_, err := migrate.Render(s(tc.d), s(tc.d), []migrate.Change{tc.c}, migrate.RenderOptions{})
 		if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "render" {

@@ -79,7 +79,8 @@ func TestAdoptKeepsDifferences(t *testing.T) {
 		t.Errorf("an unreadable predicate: %q, warnings:\n%s", got, adoptWarnings(ws))
 	}
 
-	// A check the normaliser cannot read, and an expression default.
+	// A check the normaliser cannot read, with a warning, and an expression
+	// default that differs, a change for the next diff.
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
 		tb.Checks = []migrate.Check{{Name: "users_qty_check", Expr: "((email || 'x'::text) <> 'y'::text)"}}
 		tb.Columns = append(tb.Columns, migrate.Column{Name: "created_at", Type: "timestamp with time zone", Default: "now()::date"})
@@ -91,7 +92,7 @@ func TestAdoptKeepsDifferences(t *testing.T) {
 	snap, ws = adoptOf(t, inspected, want)
 	tb := table(snap, "users")
 	if tb.Checks[0].Expr != "((email || 'x'::text) <> 'y'::text)" || column(tb, "created_at").Default != "now()::date" ||
-		!slices.Equal(warningObjects(ws), []string{"users.created_at", "users.users_qty_check"}) {
+		!slices.Equal(warningObjects(ws), []string{"users.users_qty_check"}) {
 		t.Errorf("check %q, default %q, warnings:\n%s", tb.Checks[0].Expr, column(tb, "created_at").Default, adoptWarnings(ws))
 	}
 
@@ -543,8 +544,8 @@ func TestAdoptKeepsEnumTypes(t *testing.T) {
 	}
 }
 
-// TestAdoptWarningsNameTheSchema: a warning of Baseline's names the schema
-// where Drift's names the snapshot.
+// TestAdoptWarningsNameTheSchema: a warning of Baseline's names the schema;
+// Drift gives a change instead.
 func TestAdoptWarningsNameTheSchema(t *testing.T) {
 	t.Parallel()
 	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey = []string{"id", "qty"} }))
@@ -553,8 +554,9 @@ func TestAdoptWarningsNameTheSchema(t *testing.T) {
 	if got := adoptWarnings(ws); got != "users: the database has the primary key (id, qty) and the schema the primary key (id); change it by hand" {
 		t.Errorf("AdoptOf:\n%s", got)
 	}
-	if got := adoptWarnings(driftOf(t, inspected, want).Warnings); got != "users: the database has the primary key (id, qty) and the snapshot the primary key (id); change it by hand" {
-		t.Errorf("DriftOf:\n%s", got)
+	// Drift's is a change.
+	if got := changeStrings(driftOf(t, inspected, want).Changes); !slices.Equal(got, []string{"alter-primary-key users (id, qty → id)"}) {
+		t.Errorf("DriftOf: %q", got)
 	}
 }
 

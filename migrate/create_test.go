@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-sql-driver/mysql"
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
@@ -212,5 +213,33 @@ func TestCreateFails(t *testing.T) {
 	}
 	if len(held.Tables) != 0 {
 		t.Errorf("a failed Create left %d tables", len(held.Tables))
+	}
+}
+
+// TestCreateMySQLSQLMode: Create refuses a MySQL session whose sql_mode holds
+// NO_BACKSLASH_ESCAPES when a statement holds a backslash in a literal, as
+// Up refuses a file, and makes nothing.
+func TestCreateMySQLSQLMode(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, dsn := freshDB(t, velox.MySQL)
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Params = map[string]string{"sql_mode": "'NO_BACKSLASH_ESCAPES'"}
+	db := openDB(t, "mysql", cfg.FormatDSN())
+	model := &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{Name: "t", PrimaryKey: []string{"id"}, PrimaryKeyName: "PRIMARY",
+		Columns: []migrate.Column{{Name: "id", Type: "bigint", Identity: true}, {Name: "s", Type: "varchar(10)", Default: `'a\\b'`}}}}}
+	const want = "Create's statements hold a backslash in a literal, which NO_BACKSLASH_ESCAPES would store as two; turn the mode off for migrating"
+	if e := createErr(t, migrate.Create(ctx, db, model)); e.Code != "session" || e.Reason != want {
+		t.Errorf("Create: %v; want Code session, %q", e, want)
+	}
+	held, err := migrate.Inspect(ctx, db, velox.MySQL, []migrate.TableRef{{Name: "t"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(held.Tables) != 0 {
+		t.Errorf("Create made %v", held.Tables)
 	}
 }

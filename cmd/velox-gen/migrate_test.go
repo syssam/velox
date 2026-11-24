@@ -1350,23 +1350,58 @@ func TestMigrateDriftWarning(t *testing.T) {
 		PrimaryKey: []string{"id"},
 	}}}
 	handDirOf(t, dir, snap, map[string]string{
-		"0001_t.sql": "CREATE TABLE t (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, at text NOT NULL DEFAULT (datetime('now')));\n",
+		"0001_t.sql": "CREATE TABLE t (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, at text NOT NULL DEFAULT CURRENT_TIMESTAMP COLLATE NOCASE);\n",
 	})
 	dsn := filepath.Join(dir, "app.db")
 	if code, _, errs := runCLI(t, dir, "migrate", "apply", "-dir", ".", "-db", dsn); code != 0 {
 		t.Fatalf("apply: %d %s", code, errs)
 	}
+	const msg = "the column has COLLATE NOCASE, which the model cannot hold; it is compared without"
 	code, out, errs := runCLI(t, dir, "migrate", "drift", "-dir", ".", "-db", dsn)
-	want(t, "drift", code, out, errs, 0, "warning: t.at: the default is (datetime('now')) in the database and CURRENT_TIMESTAMP in the snapshot\n", "")
+	want(t, "drift", code, out, errs, 0, "warning: t.at: "+msg+"\n", "")
 	code, out, errs = runCLI(t, dir, "migrate", "drift", "-dir", ".", "-db", dsn, "-json")
 	want(t, "drift -json", code, out, errs, 0, `{
   "changes": [],
   "warnings": [
     {
       "object": "t.at",
-      "message": "the default is (datetime('now')) in the database and CURRENT_TIMESTAMP in the snapshot"
+      "message": "`+msg+`"
     }
   ]
 }
 `, "")
+}
+
+// TestMigrateDriftPrimaryKey: a primary key changed by hand, or an
+// expression default, is a change, and exit 3.
+func TestMigrateDriftPrimaryKey(t *testing.T) {
+	dir := t.TempDir()
+	snap := &migrate.Schema{Dialect: velox.SQLite, Tables: []migrate.Table{{
+		Name:       "friends",
+		Columns:    []migrate.Column{{Name: "user_id", Type: "integer"}, {Name: "friend_id", Type: "integer"}, {Name: "at", Type: "text", Default: "CURRENT_TIMESTAMP"}},
+		PrimaryKey: []string{"user_id", "friend_id"},
+	}}}
+	handDirOf(t, dir, snap, map[string]string{
+		"0001_t.sql": "CREATE TABLE friends (user_id integer NOT NULL, friend_id integer NOT NULL, at text NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, friend_id));\n",
+	})
+	dsn := filepath.Join(dir, "app.db")
+	if code, _, errs := runCLI(t, dir, "migrate", "apply", "-dir", ".", "-db", dsn); code != 0 {
+		t.Fatalf("apply: %d %s", code, errs)
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	for _, s := range []string{
+		"CREATE TABLE friends2 (user_id integer NOT NULL, friend_id integer NOT NULL, at text NOT NULL DEFAULT CURRENT_DATE, PRIMARY KEY (user_id))",
+		"DROP TABLE friends",
+		"ALTER TABLE friends2 RENAME TO friends",
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	code, out, errs := runCLI(t, dir, "migrate", "drift", "-dir", ".", "-db", dsn)
+	want(t, "drift", code, out, errs, 3, "change: alter-column friends.at (default)\nchange: alter-primary-key friends (user_id → user_id, friend_id)\n", "")
 }

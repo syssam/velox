@@ -1404,7 +1404,7 @@ type Change interface { Kind() Kind Target() TableRef String() string isChange()
 type Check struct { Name string Expr string Pos string }
 type ChecksumError struct { Version uint64 Path string Applied, Now string }
 type Class uint8
-type Column struct { Name string Type string Nullable bool Default string Identity bool Sequence string Comment string Pos string }
+type Column struct { Name string Type string Nullable bool Default string Identity bool Sequence string Comment string Pos string GoDefault bool }
 type ColumnRef struct { Table TableRef Column string }
 type Config struct { Dialect velox.Dialect Table string LockTimeout time.Duration NoForeignKeys bool }
 type DiffOptions struct { RenameTables map[TableRef]TableRef RenameColumns map[ColumnRef]string }

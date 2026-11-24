@@ -129,9 +129,13 @@ func TestDriftDefaultExpression(t *testing.T) {
 			tb.Columns = append(tb.Columns, migrate.Column{Name: "created_at", Type: "timestamp with time zone", Default: def})
 		}))
 	}
-	r := driftOf(t, withDefault("now()"), withDefault("CURRENT_TIMESTAMP"))
+	// Two expressions that both parse and differ are a change.
+	wantDrift(t, driftOf(t, withDefault("now()"), withDefault("CURRENT_TIMESTAMP")), []string{"alter-column users.created_at (default)"})
+	wantDrift(t, driftOf(t, withDefault("(1 + 2)"), withDefault("(1 + 1)")), []string{"alter-column users.created_at (default)"})
+	// One that cannot be parsed is not compared: a warning with both texts.
+	r := driftOf(t, withDefault("(now() AT TIME ZONE 'utc')"), withDefault("CURRENT_TIMESTAMP"))
 	wantDrift(t, r, nil, "users.created_at")
-	if m := r.Warnings[0].Message; !strings.Contains(m, "now()") || !strings.Contains(m, "CURRENT_TIMESTAMP") {
+	if m := r.Warnings[0].Message; !strings.Contains(m, "(now() AT TIME ZONE 'utc')") || !strings.Contains(m, "CURRENT_TIMESTAMP") {
 		t.Errorf("the warning does not name both defaults: %s", m)
 	}
 	wantDrift(t, driftOf(t, withDefault("'x'"), withDefault("'y'")), []string{"alter-column users.created_at (default)"})
@@ -141,7 +145,7 @@ func TestDriftDefaultExpression(t *testing.T) {
 	wantDrift(t, driftOf(t, withDefault("NOW()"), withDefault("now()")), nil)
 	// The regclass cast PostgreSQL adds is no difference; another cast is.
 	wantDrift(t, driftOf(t, withDefault("nextval('users_id_seq'::regclass)"), withDefault("nextval('users_id_seq')")), nil)
-	wantDrift(t, driftOf(t, withDefault("now()::date"), withDefault("now()")), nil, "users.created_at")
+	wantDrift(t, driftOf(t, withDefault("now()::date"), withDefault("now()")), []string{"alter-column users.created_at (default)"})
 }
 
 func TestDriftEnumCheck(t *testing.T) {
@@ -246,12 +250,13 @@ func TestDriftUnnamedConstraints(t *testing.T) {
 func TestDriftPrimaryKey(t *testing.T) {
 	t.Parallel()
 	snap := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
-	r := driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey = []string{"id", "email"} })), snap)
-	wantDrift(t, r, nil, "users")
-	if m := r.Warnings[0].Message; !strings.Contains(m, "(id, email)") || !strings.Contains(m, "(id)") {
-		t.Errorf("the warning does not name both keys: %s", m)
-	}
-	wantDrift(t, driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKeyName = "" })), snap), nil, "users")
+	// A key of other columns, or none, is a change, which Diff refuses.
+	wantDrift(t, driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey = []string{"id", "email"} })), snap),
+		[]string{"alter-primary-key users (id, email → id)"})
+	wantDrift(t, driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey, tb.PrimaryKeyName = nil, "" })), snap),
+		[]string{"alter-primary-key users (none → id)"})
+	wantDrift(t, driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKeyName = "" })), snap),
+		[]string{"alter-primary-key users (no name → users_pkey)"})
 	// Two names are a rename, which Diff plans.
 	wantDrift(t, driftOf(t, schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKeyName = "users_pk" })), snap),
 		[]string{"rename-constraint users.users_pk → users_pkey"})
@@ -311,8 +316,7 @@ func TestDriftUnknownTables(t *testing.T) {
 // spelled is a pair of schemas apart in every spelling drift copies over.
 func spelled() (db, snap *migrate.Schema) {
 	db = schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) {
-		tb.PrimaryKey = []string{"id", "email"}
-		tb.Columns = append(tb.Columns, migrate.Column{Name: "created_at", Type: "timestamp with time zone", Default: "now()"})
+		tb.Columns = append(tb.Columns, migrate.Column{Name: "created_at", Type: "timestamp with time zone", Default: "(now() AT TIME ZONE 'utc')"})
 		tb.Indexes = []migrate.Index{{Name: "users_active", Columns: []string{"email"}, Where: `(status = 'active'::text)`}}
 		tb.Checks = []migrate.Check{{Name: "users_qty_check", Expr: "(qty > 0)"}, {Name: "users_a_check", Expr: "(qty < 9)"}}
 	}))
@@ -364,8 +368,8 @@ func TestDriftDeterministic(t *testing.T) {
 	sorted := slices.IsSortedFunc(a.Warnings, func(x, y migrate.Warning) int {
 		return cmp.Or(cmp.Compare(x.Object, y.Object), cmp.Compare(x.Message, y.Message))
 	})
-	if !sorted || len(a.Warnings) != 4 {
-		t.Errorf("warnings not sorted by object and message, or not 4:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
+	if !sorted || len(a.Warnings) != 3 {
+		t.Errorf("warnings not sorted by object and message, or not 3:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
 	}
 	if !slices.Contains(warningStrings(a.Warnings), "users.users_x: b; also, a") {
 		t.Errorf("the notes on users.users_x are not one warning, b; also, a:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
@@ -437,15 +441,15 @@ func TestDriftNotesMerged(t *testing.T) {
 	}
 
 	db, snap := spelled()
-	r = driftOf(t, db, snap, migrate.Note{Table: users, Object: "users", Message: "z"})
+	r = driftOf(t, db, snap, migrate.Note{Table: users, Object: "users.created_at", Message: "z"})
 	var own []string
 	for _, w := range r.Warnings {
-		if w.Object == "users" {
+		if w.Object == "users.created_at" {
 			own = append(own, w.String())
 		}
 	}
-	if len(own) != 2 || !strings.HasPrefix(own[0], "users: the database has the primary key") || own[1] != "users: z" {
-		t.Errorf("drift's own warning and a note on users:\n%s", strings.Join(own, "\n"))
+	if len(own) != 2 || !strings.HasPrefix(own[0], "users.created_at: the default is") || own[1] != "users.created_at: z" {
+		t.Errorf("drift's own warning and a note on users.created_at:\n%s", strings.Join(own, "\n"))
 	}
 }
 
@@ -503,6 +507,9 @@ func TestChangeStrings(t *testing.T) {
 		{migrate.DropEnum{Enum: migrate.Enum{Name: "mood"}}, "drop-enum mood"},
 		{migrate.RenameEnum{From: migrate.TableRef{Name: "mood"}, To: migrate.TableRef{Name: "feeling"}}, "rename-enum mood → feeling"},
 		{migrate.AlterEnum{From: migrate.Enum{Name: "mood", Values: []string{"a", "b"}}, To: migrate.Enum{Name: "mood", Values: []string{"b", "c"}}}, "alter-enum mood (a, b → b, c)"},
+		{migrate.AlterPrimaryKey{Table: users, From: []string{"id"}, To: []string{"id", "org_id"}}, "alter-primary-key users (id → id, org_id)"},
+		{migrate.AlterPrimaryKey{Table: billing, To: []string{"id"}}, "alter-primary-key billing.invoices (none → id)"},
+		{migrate.AlterPrimaryKey{Table: users, From: []string{"id"}, To: []string{"id"}, ToName: "users_pkey"}, "alter-primary-key users (no name → users_pkey)"},
 	} {
 		if got := c.c.String(); got != c.want {
 			t.Errorf("%s: %q, want %q", c.c.Kind(), got, c.want)

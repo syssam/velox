@@ -862,6 +862,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `migrate drift` reports a primary key that differs from the snapshot's,
+  in its columns or in having a name, as an `alter-primary-key` change, and
+  two expression defaults that both parse and differ as `alter-column
+  (default)`: it exits 3, and `migrate.Create`, so `veloxtest.Open` on a
+  file, refuses such a database. Only an expression the normaliser cannot
+  parse stays a warning (ADR 0168).
+- velox-gen's `add-required-column` lint says, for a field whose Default is
+  Go's, that the column needs a DEFAULT of its own (`sqlschema.Default`,
+  `sqlschema.DefaultExpr`) or the field Nillable. `migrate.Column.GoDefault`
+  carries it.
 - `veloxtest.Open` takes `veloxtest.Option`s, as enttest does: the DB's
   `velox.Option`s go in `veloxtest.WithOptions(...)` (ADR 0167).
 - `FieldInSelect` and `FieldInSelectRaw` keep an integer key bare against
@@ -1781,6 +1791,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - velox-gen: hints name `sqlschema.Table` and `sqlschema.Schema`, not
   `schema.Table` and `schema.TableIn`; a name-clash error prints a path
   relative to the working directory.
+- `migrate.Create` refuses a MySQL session whose sql_mode holds
+  `NO_BACKSLASH_ESCAPES` or `ANSI_QUOTES` when a statement holds a literal
+  the mode would read otherwise, as `Up` does.
+- SQLite drift: a literal default in parentheses, `DEFAULT ('active')`, is
+  the literal, and an `INTEGER PRIMARY KEY` without `NOT NULL` is NOT NULL.
 - `Query.Values` and `Query.IDs` make no allocation per row for a value that
   needs none: each row is scanned into the result's own backing array through
   one reused argument slice, sized as `All` sizes its rows. 100 int64 IDs went

@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -24,7 +25,7 @@ type Change interface {
 // "rename-index", "add-foreign-key", "drop-foreign-key", "add-check",
 // "drop-check", "rename-constraint", "set-table-comment",
 // "set-table-collation", "create-enum", "rename-enum", "alter-enum" and
-// "drop-enum".
+// "drop-enum". Drift alone gives "alter-primary-key", which no plan holds.
 type Kind string
 
 // A columnMask is the set of what an alterColumn changes.
@@ -174,6 +175,15 @@ type renameEnum struct{ From, To TableRef }
 // reorders or removes them.
 type alterEnum struct{ From, To Enum }
 
+// alterPrimaryKey changes a table's primary key, its columns or whether it
+// is named. Diff refuses such a change, so only Drift gives it, and Render
+// refuses it: a primary key is changed by hand.
+type alterPrimaryKey struct {
+	Table            TableRef
+	From, To         []string // the key's columns, none for no key
+	FromName, ToName string
+}
+
 // DiffOptions are the renames Diff cannot see.
 type DiffOptions struct {
 	RenameTables  map[TableRef]TableRef // a table of from → its name in to
@@ -248,6 +258,9 @@ func (renameEnum) Kind() Kind { return "rename-enum" }
 // Kind is "alter-enum".
 func (alterEnum) Kind() Kind { return "alter-enum" }
 
+// Kind is "alter-primary-key".
+func (alterPrimaryKey) Kind() Kind { return "alter-primary-key" }
+
 // Target is the table it creates.
 func (c createTable) Target() TableRef { return c.Table.Ref() }
 
@@ -314,6 +327,9 @@ func (c renameEnum) Target() TableRef { return c.To }
 // Target is the enum type's ref.
 func (c alterEnum) Target() TableRef { return c.To.ref() }
 
+// Target is the key's table.
+func (c alterPrimaryKey) Target() TableRef { return c.Table }
+
 func (createTable) isChange()       {}
 func (dropTable) isChange()         {}
 func (renameTable) isChange()       {}
@@ -336,6 +352,7 @@ func (createEnum) isChange()        {}
 func (dropEnum) isChange()          {}
 func (renameEnum) isChange()        {}
 func (alterEnum) isChange()         {}
+func (alterPrimaryKey) isChange()   {}
 
 // String is "<kind> <object>": the object is the table, "<table>.<column>",
 // "<table>.<index or constraint>" or the enum type, as named when the change
@@ -415,6 +432,24 @@ func (c renameSequence) String() string {
 // String is "alter-enum <type> (<from values> → <to values>)".
 func (c alterEnum) String() string {
 	return kindOf(c, c.To.ref().String()+" ("+strings.Join(c.From.Values, ", ")+" → "+strings.Join(c.To.Values, ", ")+")")
+}
+
+// String is "alter-primary-key <table> (<from> → <to>)": each side is the
+// key's columns, or "none"; when the columns are one, each side is the key's
+// name, or "no name".
+func (c alterPrimaryKey) String() string {
+	side := func(cols []string, name string) string {
+		switch {
+		case !slices.Equal(c.From, c.To) && len(cols) == 0:
+			return "none"
+		case !slices.Equal(c.From, c.To):
+			return strings.Join(cols, ", ")
+		case name == "":
+			return "no name"
+		}
+		return name
+	}
+	return kindOf(c, c.Table.String()+" ("+side(c.From, c.FromName)+" → "+side(c.To, c.ToName)+")")
 }
 
 func kindOf(c Change, object string) string { return string(c.Kind()) + " " + object }

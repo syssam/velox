@@ -10,11 +10,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/dialect/sqlschema"
 	"github.com/syssam/velox/internal/codegen/loadjson"
 	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/field"
 )
 
@@ -144,6 +146,32 @@ func TestLintCases(t *testing.T) {
 				t.Errorf("findings\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(w, "\n"))
 			}
 		})
+	}
+}
+
+// TestLintAddColumnGoDefault: a field whose Default is Go's writes no
+// column DEFAULT (decisions 0063, 0090), so the advice for a populated table
+// is a DEFAULT in the database, or Nillable, not a Default.
+func TestLintAddColumnGoDefault(t *testing.T) {
+	t.Parallel()
+	for _, f := range []schema.Field{
+		field.Time("joined_at").Default(time.Now),
+		field.Strings("tags").Default([]string{"a"}),
+	} {
+		c := testCase{name: "add-column-go-default", to: func(m *loadjson.Model) { addField(m, "User", f) }}
+		for _, d := range allDialects {
+			from, to := models(t, c, d)
+			var got []migrate.Finding
+			for _, fd := range lint(t, from, diff(t, from, to, c.opts)) {
+				if fd.Code == "add-required-column" {
+					got = append(got, fd)
+				}
+			}
+			const want = "the field's Default is Go's, which writes no column DEFAULT: give the column one with sqlschema.Default or sqlschema.DefaultExpr, or make the field Nillable"
+			if len(got) != 1 || !strings.Contains(got[0].Message, want) {
+				t.Errorf("%s on %v: %+v; want one add-required-column saying %q", f.Descriptor().Name, d, got, want)
+			}
+		}
 	}
 }
 

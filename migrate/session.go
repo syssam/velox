@@ -330,16 +330,44 @@ func (s *session) checkModes(files []File) error {
 	if s.d != velox.MySQL {
 		return nil
 	}
-	modes := strings.Split(strings.ToUpper(s.sqlMode), ",")
-	noBackslash := slices.Contains(modes, "NO_BACKSLASH_ESCAPES")
-	ansiQuotes := slices.Contains(modes, "ANSI_QUOTES")
 	for _, f := range files {
-		switch {
-		case noBackslash && f.backslash:
-			return refuseSession("%s holds a backslash in a literal, which NO_BACKSLASH_ESCAPES would store as two; turn the mode off for migrating", f.Path)
-		case ansiQuotes && f.dquote:
-			return refuseSession("%s holds a \"…\" literal, which ANSI_QUOTES would read as a name; turn the mode off for migrating", f.Path)
+		if err := s.modeRefusal(f.Path+" holds", f.backslash, f.dquote); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+// createModes is checkModes of Create's statements, plan's, read as one
+// file.
+func (s *session) createModes(plan *Plan) error {
+	if s.d != velox.MySQL {
+		return nil
+	}
+	var src strings.Builder
+	for _, sc := range plan.Scripts {
+		for _, st := range sc.Statements {
+			src.WriteString(st.SQL)
+			src.WriteString(";\n")
+		}
+	}
+	sp := splitter{d: s.d, src: src.String()}
+	if err := sp.run(); err != nil {
+		return err
+	}
+	return s.modeRefusal("Create's statements hold", sp.backslash, sp.dquote)
+}
+
+// modeRefusal is the refusal of the session's sql_mode for what holds a
+// backslash in a literal, or a "…" literal: holds is its subject and verb,
+// as "0002_b.sql holds".
+func (s *session) modeRefusal(holds string, backslash, dquote bool) error {
+	modes := strings.Split(strings.ToUpper(s.sqlMode), ",")
+	switch {
+	case backslash && slices.Contains(modes, "NO_BACKSLASH_ESCAPES"):
+		return refuseSession("%s a backslash in a literal, which NO_BACKSLASH_ESCAPES would store as two; turn the mode off for migrating", holds)
+	case dquote && slices.Contains(modes, "ANSI_QUOTES"):
+		return refuseSession("%s a \"…\" literal, which ANSI_QUOTES would read as a name; turn the mode off for migrating", holds)
 	}
 	return nil
 }

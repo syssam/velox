@@ -548,7 +548,11 @@ func (l *linter) addColumn(i int, c addColumn) {
 	col, target := c.Column, colTarget(c.Table, c.Column.Name)
 	if l.existing(c.Table) {
 		if !col.Nullable && col.Default == "" && !col.Identity {
-			l.add(i, "add-required-column", Destructive, target, col.Pos, "adds column %s as NOT NULL with no default; it fails if the table has rows: give the field a Default or make it Nillable, or allow it only on an empty table", target)
+			way := "give the field a Default or make it Nillable"
+			if col.GoDefault {
+				way = "the field's Default is Go's, which writes no column DEFAULT: give the column one with sqlschema.Default or sqlschema.DefaultExpr, or make the field Nillable"
+			}
+			l.add(i, "add-required-column", Destructive, target, col.Pos, "adds column %s as NOT NULL with no default; it fails if the table has rows: %s, or allow it only on an empty table", target, way)
 		}
 		if !col.Nullable && !col.Identity && zeroLiteral(l.d, col.Default) {
 			l.add(i, "zero-default", Review, target, col.Pos, "adds column %s as NOT NULL with default %s; existing rows get %s: give the field a Default or make it Nillable if that is not their value", target, col.Default, col.Default)

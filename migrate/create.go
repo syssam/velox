@@ -32,7 +32,9 @@ import (
 // keeps it open; Create checks it did. In a larger pool, the database must
 // be a shared-cache one (file:x?mode=memory&cache=shared), which Create
 // keeps open with a second connection while it runs; another is refused
-// with Code "session". A nil db or schema is Code "nil";
+// with Code "session". So is a MySQL session whose sql_mode holds
+// NO_BACKSLASH_ESCAPES or ANSI_QUOTES when a statement holds a literal the
+// mode would read otherwise, as Up refuses a file. A nil db or schema is Code "nil";
 // a schema of no dialect migrate knows is Code "dialect".
 func Create(ctx context.Context, db *sql.DB, schema *Schema) error {
 	switch {
@@ -66,6 +68,9 @@ func (s *session) create(ctx context.Context, plan *Plan, schema *Schema) error 
 		return err
 	}
 	if done, err := s.created(ctx, schema); done || err != nil {
+		return err
+	}
+	if err := s.createModes(plan); err != nil {
 		return err
 	}
 	if err := s.strict(ctx); err != nil {

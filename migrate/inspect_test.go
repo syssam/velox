@@ -376,13 +376,13 @@ func TestDriftMySQLBinaryDefaults(t *testing.T) {
 			t.Errorf("%s: database %s, model %s: changes %q, warnings %v; want %q", c.typ, c.db, c.model, changes, r.Warnings, c.changes)
 		}
 	}
-	// An expression that differs is a warning, as on any other column.
+	// An expression that differs is a change, as on any other column.
 	r, err := migrate.DriftOf(schema("binary(16)", "uuid_to_bin(uuid(),1)"), schema("binary(16)", "(uuid_to_bin(uuid()))"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Changes) > 0 || len(r.Warnings) != 1 || r.Warnings[0].Object != "t.c" {
-		t.Errorf("a differing expression: changes %v, warnings %v; want one warning on t.c", r.Changes, r.Warnings)
+	if len(r.Changes) != 1 || r.Changes[0].String() != "alter-column t.c (default)" || len(r.Warnings) > 0 {
+		t.Errorf("a differing expression: changes %v, warnings %v; want alter-column t.c (default)", r.Changes, r.Warnings)
 	}
 }
 

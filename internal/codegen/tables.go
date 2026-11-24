@@ -345,6 +345,7 @@ func (t *tabler) column(e *Entity, i int, f *Field) migrate.Column {
 		if c.Default == "" && i != 0 && autoDefault(f) {
 			c.Default = t.zeroDefault(f, c.Type)
 		}
+		c.GoDefault = c.Default == "" && (len(f.Default) > 0 || f.DefaultFunc)
 	}
 	return c
 }

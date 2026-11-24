@@ -47,6 +47,7 @@ type liteTable struct {
 	db   string
 	sql  string
 	ct   sqliteCreateTable
+	read bool // ct was read from sql
 	t    Table
 	cols []string // every column's name, generated ones too
 	says []string
@@ -121,8 +122,8 @@ func (r *liteReader) tables(refs []TableRef) ([]liteTable, error) {
 // checks from its CREATE text. What the table itself has that the model
 // cannot hold is one note on it.
 func (r *liteReader) table(lt *liteTable) error {
-	var ok bool
-	if lt.ct, ok = parseCreateTable(lt.sql); !ok {
+	lt.ct, lt.read = parseCreateTable(lt.sql)
+	if !lt.read {
 		lt.says = append(lt.says, "its CREATE TABLE cannot be read, so its checks, its foreign keys' names and AUTOINCREMENT are not read")
 	} else if len(lt.ct.options) > 0 {
 		lt.says = append(lt.says, "the table is "+strings.Join(lt.ct.options, ", ")+", which the model cannot hold; it is compared without")
@@ -174,6 +175,7 @@ func (r *liteReader) columns(lt *liteTable) error {
 	type keyed struct {
 		pk   int
 		name string
+		typ  string // as declared
 	}
 	var key []keyed
 	err := r.each(liteColumnsQuery, []any{lt.t.Name, lt.db}, func(rows *sql.Rows) error {
@@ -204,7 +206,7 @@ func (r *liteReader) columns(lt *liteTable) error {
 			c.Default = def.String // as written
 		}
 		if pk > 0 {
-			key = append(key, keyed{pk, c.Name})
+			key = append(key, keyed{pk, c.Name, typ})
 		}
 		if coll := lt.ct.collations[c.Name]; coll != "" && !strings.EqualFold(coll, "BINARY") {
 			r.note(lt, c.Name, "the column has COLLATE "+coll+", which the model cannot hold; it is compared without")
@@ -218,6 +220,12 @@ func (r *liteReader) columns(lt *liteTable) error {
 	slices.SortFunc(key, func(a, b keyed) int { return cmp.Compare(a.pk, b.pk) })
 	for _, k := range key {
 		lt.t.PrimaryKey = append(lt.t.PrimaryKey, k.name)
+	}
+	// A rowid alias, one key column declared INTEGER, holds no NULL with or
+	// without NOT NULL; INTEGER PRIMARY KEY DESC on the column is none, and
+	// keyDesc is read only with the rest of the text.
+	if len(key) == 1 && strings.EqualFold(key[0].typ, "INTEGER") && lt.read && !lt.ct.keyDesc && !slices.Contains(lt.ct.options, "WITHOUT ROWID") {
+		lt.t.column(key[0].name).Nullable = false
 	}
 	// Only an integer key with AUTOINCREMENT never reuses a deleted top ID.
 	if len(lt.t.PrimaryKey) == 1 && lt.ct.autoincrement {

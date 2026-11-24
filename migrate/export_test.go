@@ -208,6 +208,7 @@ type (
 	AddIndex          = addIndex
 	AlterColumn       = alterColumn
 	AlterEnum         = alterEnum
+	AlterPrimaryKey   = alterPrimaryKey
 	ColumnChange      = columnMask
 	CreateEnum        = createEnum
 	DropCheck         = dropCheck
