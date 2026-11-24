@@ -53,6 +53,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   same columns in one multi-row INSERT and several statements in one
   transaction. `InsertQuery.SQL`'s work moved into the engine, which
   took about 7.5 KB off each entity package (ADR 0153).
+- velox-graphql: a field with an application directive that has where
+  predicates (`WhereOps`, `WhereInput`) or an order value (`OrderField`,
+  `orderfields=all`) is a warning naming the type, the field and the
+  directive, since neither carries it; `graphql.OrderUnguarded` silences
+  the order's. The output does not change (ADR 0156).
 - veloxgql: `ErrEmptyWhereInput`, as entgql's `ErrEmpty<T>WhereInput`, is
   what the `BAD_USER_INPUT` error wraps when a where input nested in an
   `or`, a `not` or a `has<Edge>With` sets nothing under `filters=lenient`:

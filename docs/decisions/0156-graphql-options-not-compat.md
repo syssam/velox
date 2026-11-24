@@ -172,12 +172,32 @@ Since directives no longer reach where inputs, its `email` field lost
 mutation fields in app.graphql, the directive declared on
 `FIELD_DEFINITION` only.
 
-## Open
+### Directives that do not reach predicates or orders
 
-- A field guarded by an application directive has where predicates that
-  are not guarded. A warning was considered and not added, as it would
-  change the warnings an existing schema gets.
-- `graphql.FieldName` on a foreign key does not rename its input field.
+Since a directive reaches no input or where field, a field it guards in
+the type would leak through a filter or an order unremarked. So a field
+with an application directive that has where predicates (from `WhereOps`
+or `WhereInput`) or an order value (from `OrderField` or
+`orderfields=all`) is a warning that names the type, the field and the
+directive:
+
+```
+Post.email has @admin, but its where predicates are not guarded by it;
+drop graphql.WhereOps or graphql.WhereInput, or guard the field another way
+```
+
+`graphql.OrderUnguarded` on the field accepts its order value, which is
+then not warned of. Under `orderfields=annotated` an `OrderField` on such
+a field without `OrderUnguarded` is refused, as before. The key is left
+out: a directive on it already warns that it has no effect. A warning
+changes no output.
+
+### Known limit
+
+`graphql.FieldName` on a foreign key renames the field in the type and the
+where input, but not the key's field in the create and update inputs,
+which keeps the field's own name as `names=` spells it. A port that
+renames a key keeps that input name, or renames the field.
 
 ## Rejected
 
@@ -203,6 +223,7 @@ mutation fields in app.graphql, the directive declared on
 - `TestIDOpsEquality`, `TestIDOps`; `TestInputKeys`,
   `TestForeignKeyNames`, `TestSkippedEdgeKey`; `TestWhereCarriesNoDirectives`,
   `TestInputsCarryNoDirectives`, `TestOrderFieldUnderDirective`,
+  `TestUnguardedWarns`, `TestOrderFieldsAllWarns`,
   `TestDirectiveOnKey`; `TestWhereDefaults`; `TestConnectionsDefault`,
   `TestQueryFieldsAll`; `TestEdges`; `TestAnnotationMisuse`,
   `TestResolversPlacement`, `TestNoEffectWarns`, in
