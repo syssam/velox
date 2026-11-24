@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
 )
 
@@ -14,7 +13,7 @@ import (
 func TestDistinct(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		q := tg.db.Query[testmodel.Invoice]().Distinct().OrderBy(I.OrgID.Asc()).Limit(10)
-		orgs, err := velox.Values(ctx, q, I.OrgID.Key())
+		orgs, err := q.Values(ctx, I.OrgID)
 		if err != nil || !slices.Equal(orgs, []int64{1, 2}) {
 			t.Errorf("Values: %v, %v", orgs, err)
 		}

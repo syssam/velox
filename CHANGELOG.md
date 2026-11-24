@@ -867,6 +867,19 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
     scalars it lists (`JSON`, `UUID`, `Uint64`, `Bytes`, `Time`) to the
     application.
 - velox-graphql's `node(id:)` and `nodes(ids:)` under the compat option find
+- `q.Values(ctx, I.Number)` and `q.IDs[int64](ctx)` (ADR 0158) are methods
+  of `Query` that end its chain, as `All` does, and replace the functions
+  `velox.Values(ctx, q, I.Number.Key())` and `velox.IDs[int64](ctx, q)`.
+  `Values` takes the bare handle and infers its value type, a pointer for a
+  nullable column; a JSON handle and another entity's handle do not
+  compile. Each column handle kind but `JSONCol` and `NullJSONCol` has a
+  field, always nil, that names that type: a handle holds a nil pointer
+  beside its index, 16 bytes on a 64-bit platform, not 4.
+  The generated code is unchanged: no regeneration, no new
+  `GeneratedCodeIsVersionN`. A package that calls `IDs` no longer
+  instantiates `reflect.TypeFor` for its key type.
+
+- velox-graphql's `node(id:)` and `nodes(ids:)` under compat=veloxe find
   the types that hold the IDs with one statement, then read only those
   types under their policies: `node(id:)` is 2 statements, not one per
   type of Node. Results, policy denials and ambiguity are unchanged; the
@@ -1623,6 +1636,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `Open` and `OpenShards` panic on an unknown dialect. `Connect` returns an error.
 
 ### Removed
+
+- The functions `velox.Values` and `velox.IDs`: call `q.Values(ctx, h)`
+  and `q.IDs[K](ctx)` (ADR 0158).
 
 - `velox.NoFilter()`, which was `velox.Allow()` under a second name. A
   `WithFilter` filter returns `velox.Allow()` for an entity it does not

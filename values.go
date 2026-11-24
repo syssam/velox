@@ -2,8 +2,6 @@ package velox
 
 import (
 	"context"
-	"fmt"
-	"reflect"
 
 	"github.com/syssam/velox/internal/engine"
 )
@@ -48,38 +46,53 @@ func columnValues[E, V any](ctx context.Context, q Query[E], col int, what strin
 	return a.out, nil
 }
 
-// Values returns the values of one column of the rows q reads, in q's
+// Values returns the values of column h of the rows q reads, in q's
 // order, as All would read the rows: q's Where, After, OrderBy, Limit and
 // Offset, the Read policy, the scope, the interceptors and WithFilter's
 // filters apply, q needs a Limit or AllowUnbounded, and the row cap counts
-// the rows. The column is a handle's Key, so V is its value type, a pointer
-// for a nullable column (nil for NULL):
+// the rows. h is one of E's column handles, and V is its value type, a
+// pointer for a nullable column (nil for NULL):
 //
-//	numbers, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100), I.Number.Key())
+//	numbers, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100).Values(ctx, I.Number)
 //
 // It reads nothing else: q's Columns, Omit and With are ignored. A q that
 // joins, or is a projection (Select), fails with an error before anything
-// is sent; so does an encoded column, which a JSON handle is and which has
-// no Key. The result is nil when no row matches. It is a function, not a
-// method of Query, as Sum is (ADR 0022).
+// is sent. A JSON column's stored bytes are not its value, so its handle
+// does not compile here, nor does another entity's handle. The result is
+// nil when no row matches.
 //
 // It reads the column as Count reads, by setting the statement's one
 // column, not through Select and Rows: a projection refuses With and After,
 // which Values keeps, and would scan through RawRow by position.
-func Values[E, V any](ctx context.Context, q Query[E], key GroupKey[E, V]) ([]V, error) {
-	return columnValues[E, V](ctx, q, int(key.i), "Values")
+func (q Query[E]) Values[H valueColumn[E, V], V any](ctx context.Context, h H) ([]V, error) {
+	return columnValues[E, V](ctx, q, int(valueShape[V](h).I), "Values")
+}
+
+// valueColumn is satisfied by each column handle of E that Values reads:
+// every kind but JSONCol and NullJSONCol. Its struct names V, the type
+// Values returns elements of, in a field of no size, from which a call
+// infers V.
+type valueColumn[E, V any] interface {
+	Column[E]
+	~valueShape[V]
+}
+
+// valueShape is the struct of a handle whose values are V.
+type valueShape[V any] = struct {
+	_ *V
+	I int32
 }
 
 // IDs returns the primary keys of the rows q reads, as Values reads a
 // column: the same policies, filters, Limit rule and row cap apply. K is
 // the key's Go type, which E's type does not say, so the caller names it:
 //
-//	ids, err := velox.IDs[int64](ctx, db.Query[veloxgen.User]().Where(U.Active.EQ(true)).AllowUnbounded())
+//	ids, err := db.Query[veloxgen.User]().Where(U.Active.EQ(true)).AllowUnbounded().IDs[int64](ctx)
 //
 // The result is nil when no row matches. A K other than the key field's
 // type, and an entity whose primary key has more than one column, fail
 // with an error before anything is sent.
-func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error) {
+func (q Query[E]) IDs[K any](ctx context.Context) ([]K, error) {
 	if q.meta.Err != nil {
 		return nil, q.meta.Err
 	}
@@ -89,7 +102,7 @@ func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error) {
 	}
 	var e E
 	if p := q.meta.Addr(&e, col); !isPtrTo[K](p) {
-		return nil, fmt.Errorf("velox: %s: IDs[%v] of a key whose field is %v", q.meta.Info.Name, reflect.TypeFor[K](), reflect.TypeOf(p).Elem())
+		return nil, engine.KeyTypeError(q.meta.Info.Name, (*K)(nil), p)
 	}
 	return columnValues[E, K](ctx, q, col, "IDs")
 }

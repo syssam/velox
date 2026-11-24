@@ -204,21 +204,21 @@ func TestIDsOfNonIntegerKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ids, err := velox.IDs[bindtype.UUID](ctx, db.Query[testmodel.Paper]().OrderBy(P.Title.Asc()).Limit(5))
+		ids, err := db.Query[testmodel.Paper]().OrderBy(P.Title.Asc()).Limit(5).IDs[bindtype.UUID](ctx)
 		if err != nil || !slices.Equal(ids, []bindtype.UUID{a.ID, b.ID}) {
 			t.Errorf("paper IDs: %v, %v", ids, err)
 		}
 		if err := db.Insert(&testmodel.Topic{ID: "go", Name: "Go"}).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		tids, err := velox.IDs[string](ctx, db.Query[testmodel.Topic]().Limit(5))
+		tids, err := db.Query[testmodel.Topic]().Limit(5).IDs[string](ctx)
 		if err != nil || !slices.Equal(tids, []string{"go"}) {
 			t.Errorf("topic IDs: %v, %v", tids, err)
 		}
-		if _, err := velox.IDs[int64](ctx, db.Query[testmodel.Paper]().Limit(5)); err == nil {
+		if _, err := db.Query[testmodel.Paper]().Limit(5).IDs[int64](ctx); err == nil {
 			t.Error("IDs[int64] of a UUID key: no error")
 		}
-		none, err := velox.IDs[bindtype.UUID](ctx, db.Query[testmodel.Paper]().Where(P.Title.EQ("none")).Limit(5))
+		none, err := db.Query[testmodel.Paper]().Where(P.Title.EQ("none")).Limit(5).IDs[bindtype.UUID](ctx)
 		if err != nil || none != nil {
 			t.Errorf("no rows: %v, %v", none, err)
 		}

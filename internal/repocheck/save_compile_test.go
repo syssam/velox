@@ -151,6 +151,79 @@ func group(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[f
 	}
 }
 
+// TestValuesAtCompileTime: Query.Values infers V from the handle of every
+// readable kind, a pointer for a nullable column, and refuses, when it
+// compiles, a JSON column, another entity's column, a handle's pointer, a
+// Key and a result of another type.
+func TestValuesAtCompileTime(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("type-checks the module from source; run without -short")
+	}
+	const head = `package snippet
+
+import (
+	"context"
+	"time"
+
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/internal/testmodel/kind"
+)
+
+var (
+	_ fixture.JDoc
+	_ kind.Status
+	_ time.Time
+)
+
+func values(ctx context.Context, q velox.Query[testmodel.Sample], j velox.Query[fixture.JDoc]) {
+	S, I := testmodel.Samples, testmodel.Invoices
+	_, _ = S, I
+`
+	good := head + `
+	var (
+		a, _ = q.Values(ctx, S.ID)
+		b, _ = q.Values(ctx, S.Status)
+		c, _ = q.Values(ctx, S.Prev)
+		d, _ = q.Values(ctx, S.Flag)
+		e, _ = q.Values(ctx, S.MaybeFlag)
+		f, _ = q.Values(ctx, S.When)
+		g, _ = q.Values(ctx, S.MaybeWhen)
+		h, _ = q.Values(ctx, S.Name)
+		i, _ = q.Values(ctx, S.Price)
+		k, _ = q.IDs[int64](ctx)
+	)
+	var _ []int64 = a
+	var _ []kind.Status = b
+	var _ []*kind.Status = c
+	var _ []bool = d
+	var _ []*bool = e
+	var _ []time.Time = f
+	var _ []*time.Time = g
+	var _ []string = h
+	var _ []kind.Cents = i
+	var _ []int64 = k
+}
+`
+	if errs := typeCheck(t, good); len(errs) != 0 {
+		t.Fatalf("the control does not compile: %q", errs)
+	}
+	for name, bad := range map[string]string{
+		"a JSON column":            `j.Values(ctx, fixture.JDocs.Tags)`,
+		"a nullable JSON column":   `j.Values(ctx, fixture.JDocs.Maybe)`,
+		"another entity's column":  `q.Values(ctx, I.OrgID)`,
+		"a handle's pointer":       `q.Values(ctx, &S.Status)`,
+		"a Key":                    `q.Values(ctx, S.Status.Key())`,
+		"a result of another type": `func() (_ []string, err error) { return q.Values(ctx, S.ID) }()`,
+	} {
+		if errs := typeCheck(t, head+"\t_, _ = "+bad+"\n}\n"); len(errs) == 0 {
+			t.Errorf("%s compiles: %s", name, bad)
+		}
+	}
+}
+
 // TestTypedHookAccessorsAtCompileTime: a hook's typed accessors take and
 // return the column's type, so a value of another type does not compile.
 func TestTypedHookAccessorsAtCompileTime(t *testing.T) {

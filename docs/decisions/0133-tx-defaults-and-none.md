@@ -1,6 +1,8 @@
 # 133. Transaction defaults, None, and no IDs method
 
-- Status: accepted, 2026-11-23.
+- Status: accepted, 2026-11-23. Its "no `Query.IDs` method" is superseded by
+  [0158](0158-values-and-ids-are-query-methods.md): `q.IDs[K](ctx)` is a
+  method, measured at its cost there.
 
 ## Context
 

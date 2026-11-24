@@ -5,7 +5,10 @@ package velox
 import "github.com/syssam/velox/internal/engine"
 
 // Col is the handle of a column of entity E whose values, of type V, are neither numbers, times nor free text: bool, an enum, []byte and other types. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type Col[E, V any] struct{ I int32 }
+type Col[E, V any] struct {
+	_ *V
+	I int32
+}
 
 func (c Col[E, V]) column(*E) int32 { return c.I }
 
@@ -94,7 +97,10 @@ func (c Col[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
 func (c Col[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // TimeCol is the handle of a time column: a time field, of time.Time or a type defined on it. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type TimeCol[E, V any] struct{ I int32 }
+type TimeCol[E, V any] struct {
+	_ *V
+	I int32
+}
 
 func (c TimeCol[E, V]) column(*E) int32 { return c.I }
 
@@ -220,7 +226,10 @@ func (c TimeCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) }
 func (c TimeCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // OtherCol is the handle of an Other field's column that holds no decimal: its SQL type, such as a range or a point, compares and orders in the database. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type OtherCol[E, V any] struct{ I int32 }
+type OtherCol[E, V any] struct {
+	_ *V
+	I int32
+}
 
 func (c OtherCol[E, V]) column(*E) int32 { return c.I }
 
@@ -348,7 +357,10 @@ func (c OtherCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I) 
 func (c OtherCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // NumberCol is the handle of a numeric column: a Go number, or an Other field whose SQL type is a decimal (numeric or decimal) on every dialect it names, such as a decimal.Decimal. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type NumberCol[E, V any] struct{ I int32 }
+type NumberCol[E, V any] struct {
+	_ *V
+	I int32
+}
 
 func (c NumberCol[E, V]) column(*E) int32 { return c.I }
 
@@ -496,7 +508,10 @@ func (c NumberCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I)
 func (c NumberCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // StringCol is the handle of a text column. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type StringCol[E any, V ~string] struct{ I int32 }
+type StringCol[E any, V ~string] struct {
+	_ *V
+	I int32
+}
 
 func (c StringCol[E, V]) column(*E) int32 { return c.I }
 
@@ -654,7 +669,10 @@ func (c StringCol[E, V]) Get[_ Lazy[V]](r Row) V { return rowValue[E, V](r, c.I)
 func (c StringCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put", r, c.I, v) }
 
 // NullCol is Col for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type NullCol[E, V any] struct{ I int32 }
+type NullCol[E, V any] struct {
+	_ **V
+	I int32
+}
 
 func (c NullCol[E, V]) column(*E) int32 { return c.I }
 
@@ -780,7 +798,10 @@ func (c NullCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("Put"
 func (c NullCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }
 
 // NullTimeCol is TimeCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type NullTimeCol[E, V any] struct{ I int32 }
+type NullTimeCol[E, V any] struct {
+	_ **V
+	I int32
+}
 
 func (c NullTimeCol[E, V]) column(*E) int32 { return c.I }
 
@@ -951,7 +972,10 @@ func (c NullTimeCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E]("
 func (c NullTimeCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }
 
 // NullOtherCol is OtherCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type NullOtherCol[E, V any] struct{ I int32 }
+type NullOtherCol[E, V any] struct {
+	_ **V
+	I int32
+}
 
 func (c NullOtherCol[E, V]) column(*E) int32 { return c.I }
 
@@ -1126,7 +1150,10 @@ func (c NullOtherCol[E, V]) Put[_ Lazy[V]](r Row, v V) error { return rowSet[E](
 func (c NullOtherCol[E, V]) PutNull[_ Lazy[V]](r Row) error { return rowSet[E]("PutNull", r, c.I, nil) }
 
 // NullNumberCol is NumberCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type NullNumberCol[E, V any] struct{ I int32 }
+type NullNumberCol[E, V any] struct {
+	_ **V
+	I int32
+}
 
 func (c NullNumberCol[E, V]) column(*E) int32 { return c.I }
 
@@ -1323,7 +1350,10 @@ func (c NullNumberCol[E, V]) PutNull[_ Lazy[V]](r Row) error {
 }
 
 // NullStringCol is StringCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
-type NullStringCol[E any, V ~string] struct{ I int32 }
+type NullStringCol[E any, V ~string] struct {
+	_ **V
+	I int32
+}
 
 func (c NullStringCol[E, V]) column(*E) int32 { return c.I }
 

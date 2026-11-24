@@ -1,6 +1,7 @@
 # 100. AfterCommit, Values and IDs, and WithLog
 
-Status: accepted, 2026-11-21.
+Status: accepted, 2026-11-21. The section "Values and IDs" is superseded by
+[0158](0158-values-and-ids-are-query-methods.md).
 
 ## Context
 

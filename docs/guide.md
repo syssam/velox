@@ -630,15 +630,16 @@ cap every read with `velox.WithMaxLimit` and `velox.WithMaxRows`.
 
 ### Reading one column: Values and IDs
 
-`velox.Values` reads one column of the rows a query reads, and `velox.IDs`
-reads their primary keys. They are functions, as `velox.Sum` is. The column
-is a handle's `Key()`, as for `CountBy`, so the result's type is the
-column's: a pointer for a nullable column, nil for NULL. `IDs` takes the
-key's type, which `E` does not say:
+`Values` reads one column of the rows a query reads, and `IDs` reads their
+primary keys. Both end the query's chain, as `All` does. `Values` takes the
+column's handle, and the result's type is the column's: a pointer for a
+nullable column, nil for NULL. A JSON column cannot be read this way, and
+`Values` refuses its handle when the program compiles. `IDs` takes the key's
+type, which `E` does not say:
 
 ```go
-numbers, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100), I.Number.Key())
-ids, err := velox.IDs[int64](ctx, db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).AllowUnbounded())
+numbers, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).Limit(100).Values(ctx, I.Number)
+ids, err := db.Query[veloxgen.Invoice]().Where(I.Paid.EQ(true)).AllowUnbounded().IDs[int64](ctx)
 ```
 
 They read as `All` does: the policies, the scope, the filters, `Limit`,
@@ -1233,10 +1234,10 @@ own columns, built from the memberships read first under their own policy
 ### Distinct
 
 `Distinct()` reads each distinct row once, `SELECT DISTINCT`, for a
-projection and for `velox.Values`:
+projection and for `Values`:
 
 ```go
-orgs, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Distinct().Limit(100), I.OrgID.Key())
+orgs, err := db.Query[veloxgen.Invoice]().Distinct().Limit(100).Values(ctx, I.OrgID)
 ```
 
 A read of entities is by key, so its rows are distinct already: `All`,

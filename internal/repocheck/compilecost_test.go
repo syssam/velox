@@ -225,16 +225,21 @@ var genericObjects = []struct {
 	// the measurement beside it. One ordinary method adds about 20 KiB to a handle,
 	// which exceeds that margin; a velox type reaching reflect.Type adds about 134
 	// KiB, which the cap keeps above the margin of the largest rows.
-	{"Col", "velox.Col[E, bool]", "", 18432},                       // measured 14208
-	{"TimeCol", "velox.TimeCol[E, int64]", "", 19456},              // measured 14578 (OrderedCol was 14824)
-	{"OtherCol", "velox.OtherCol[E, int64]", "", 19456},            // measured 14674 (OrderedCol was 14824)
-	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},          // measured 14756
-	{"StringCol", "velox.StringCol[E, string]", "", 19456},         // measured 14796
-	{"NullCol", "velox.NullCol[E, bool]", "", 19456},               // measured 14554
-	{"NullTimeCol", "velox.NullTimeCol[E, int64]", "", 19456},      // measured 14920 (NullOrderedCol was 15166)
-	{"NullOtherCol", "velox.NullOtherCol[E, int64]", "", 19456},    // measured 15002 (NullOrderedCol was 15166)
-	{"NullNumberCol", "velox.NullNumberCol[E, int64]", "", 19456},  // measured 15084
-	{"NullStringCol", "velox.NullStringCol[E, string]", "", 19456}, // measured 15124
+	//
+	// Each handle kind but the JSON ones names the type Query.Values reads in
+	// a field of its struct, _ *V or _ **V (ADR 0158): about 2.8 KB more in
+	// each of these rows, the type descriptors of a struct with two fields.
+	// A field _ [0]*V cost 3.4 KB and _ [0]GroupKey[E, V] 5.5 KB.
+	{"Col", "velox.Col[E, bool]", "", 18432},                       // measured 16706
+	{"TimeCol", "velox.TimeCol[E, int64]", "", 19456},              // measured 16998
+	{"OtherCol", "velox.OtherCol[E, int64]", "", 19456},            // measured 17094
+	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},          // measured 17176
+	{"StringCol", "velox.StringCol[E, string]", "", 19456},         // measured 17302
+	{"NullCol", "velox.NullCol[E, bool]", "", 19456},               // measured 17644
+	{"NullTimeCol", "velox.NullTimeCol[E, int64]", "", 19456},      // measured 17938
+	{"NullOtherCol", "velox.NullOtherCol[E, int64]", "", 19456},    // measured 18020
+	{"NullNumberCol", "velox.NullNumberCol[E, int64]", "", 19456},  // measured 18102
+	{"NullStringCol", "velox.NullStringCol[E, string]", "", 19456}, // measured 18234
 	{"JSONCol", "velox.JSONCol[E, []string]", "", 19456},           // measured 14710
 	{"NullJSONCol", "velox.NullJSONCol[E, []string]", "", 19456},   // measured 15038
 	{"Pred", "velox.Pred[E]", "", 5120},                            // measured 1136
@@ -411,11 +416,18 @@ var genericObjects = []struct {
 	// (engine.Insert, engine.InsertSQL): a branch of its own cost Exec 1.5
 	// KB and SQL 0.8 KB. A method of the engine's table cost 0.75 KB, so
 	// the bulk's helpers are functions.
-	{"entityDescUse", "", entityDescUseSrc, 788480}, // measured 787420
+	//
+	// Query.Values and Query.IDs (ADR 0158), methods in place of the
+	// functions, and the field in each handle from which Values infers its
+	// type took entityDescUse from 787574 to 794992 bytes, entityDescHooks from
+	// 873496 to 881008 and entityDescMixin from 918978 to 926488. The two methods'
+	// declarations are about 4.7 KB of it, and the handles' field the rest.
+	// The functions cost a package nothing until it called them.
+	{"entityDescUse", "", entityDescUseSrc, 796672}, // measured 794992
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.
-	{"entityDescHooks", "", entityDescHooksBound, 874496}, // measured 873342
+	{"entityDescHooks", "", entityDescHooksBound, 882688}, // measured 881008
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -423,7 +435,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 920576}, // measured 918822
+	{"entityDescMixin", "", entityDescMixinSrc, 927744}, // measured 926488
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

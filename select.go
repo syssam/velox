@@ -76,7 +76,7 @@ func (q Query[E]) SelectRaw[_ Lazy[E]](text string, args ...any) Query[E] {
 // DISTINCT. It applies to a projection, read with Rows (Select, Calc,
 // SelectRaw), and to Values, which read terms or one column:
 //
-//	orgs, err := velox.Values(ctx, db.Query[veloxgen.Invoice]().Distinct().Limit(100), I.OrgID.Key())
+//	orgs, err := db.Query[veloxgen.Invoice]().Distinct().Limit(100).Values(ctx, I.OrgID)
 //
 // A read of entities, by All, One, First, Iter, Count, Exists or an
 // aggregate, fails with an error before anything is sent: entities are

@@ -252,7 +252,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `sql.UpdateWhere(p)`, `sql.ConflictWhere(p)`, `sql.ConflictConstraint(name)` | `.UpdateWhere(p)`, `.OnConflictWhere(p)`, `.OnConstraint(name)` (PostgreSQL; `OnConflict`'s columns stay required) (decision 0111) |
 | `client.User.Query().Select(user.FieldName, user.FieldAge).All(ctx)` | `db.Query[veloxgen.User]().Columns(U.Name, U.Age).Limit(n).All(ctx)`: the other fields stay zero. velox's `Select` is a projection: terms read by position with `Rows`, or into a struct with `velox.Scan`, not entities |
 | `client.User.Query().GroupBy(user.FieldAge).Aggregate(ent.Count()).Scan(ctx, &v)`, `Select(...).Scan` | `velox.Scan[T](ctx, db.Query[veloxgen.User]().Select(U.Age, velox.CountAll[veloxgen.User]().As("count")).GroupBy(U.Age).Limit(n))`: fields by a `velox:"name"` tag or their name, JSON decoded; `velox.ScanOne` for one row (decision 0116) |
-| `client.User.Query().Unique(true).Select(user.FieldAge)` | `velox.Values(ctx, db.Query[veloxgen.User]().Distinct().Limit(n), U.Age.Key())` |
+| `client.User.Query().Unique(true).Select(user.FieldAge)` | `db.Query[veloxgen.User]().Distinct().Limit(n).Values(ctx, U.Age)` |
 | none: `EXPLAIN` by hand on what `client.Debug()` logs | `q.SQL(ctx)`, then `EXPLAIN` through `db.Rows` |
 | `client.User.Update().SetNillableNickname(p)` | `Set(U.Nickname.SetPtr(p))`: a nil `p` sets nothing (decision 0099) |
 | an update that must not fire `UpdateDefault` on `updated_at` | `db.Update[veloxgen.User]().KeepDefaults(U.UpdatedAt)` |
@@ -260,7 +260,7 @@ condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
 | `client.User.Query().Order(user.ByPosts(sql.OrderBySum(post.FieldViews)))` | `OrderBy(U.Posts.Sum(P.Views).Asc(), U.ID.Asc())`; `Avg`, `Min` and `Max` too, NULL for a user with no posts |
 | `user.HasPostsWith(...)` with a count, `sql.P` by hand | `velox.Expr[veloxgen.User]("? >= ?", U.Posts.Count(), 3)` in a `Where` |
 | a predicate `func(s *sql.Selector)` whose subquery `HasWith` and `InSelect` cannot say (a cast key, a table no entity maps, a table read without its policy) | `velox.ExprRaw[veloxgen.User](reason, "? IN (SELECT CAST(b.id AS TEXT) FROM bill b WHERE b.org_id = ?)", U.EntityID, org)`: no policy inside the text, the outer statement's kept; a handle is the qualified outer column, for a correlated subquery; `Statement.RawReasons()` shows the reason to hooks (decision 0155); in a schema's Policy, by name and with no policy of the other entity inside, `velox.FieldInSelectRaw(reason, "entity_id", "Bill", "id", velox.FieldEQ("org_id", org))`, a text column against an integer key cast (decision 0157) |
-| `client.User.Query().IDs(ctx)` | `velox.IDs[int64](ctx, db.Query[veloxgen.User]().Limit(n))` |
+| `client.User.Query().IDs(ctx)` | `db.Query[veloxgen.User]().Limit(n).IDs[int64](ctx)` |
 | `tx.OnCommit(...)` | `velox.AfterCommit(tx, fn)`: `fn` runs once the outermost transaction has committed (decision 0100) |
 | a commit hook (`tx.OnCommit` returning a `Committer` that runs before `next.Commit`) | `velox.BeforeCommit(tx, fn)`: its error rolls back (decision 0111) |
 | `tx.OnRollback(...)` | `velox.AfterRollback(tx, fn)`: also runs when the nested `Tx` it was queued in rolls back (decision 0111) |
@@ -446,7 +446,7 @@ a table rebuild on SQLite.
 | a failed COMMIT, told apart by its message | `errors.Is(err, velox.ErrCommitUnknown)`: the outcome is unknown, so retry nothing. A COMMIT that says it rolled back does not match, such as PostgreSQL's answer to an aborted transaction, `pgx.ErrTxCommitRollback` ([ADR 0134](decisions/0134-commit-unknown.md)) |
 | a helper returning a `nil` predicate for "no condition", checked with `p == nil` | the zero `velox.Predicate{}` or `Pred[E]{}`, checked with `velox.IsZero(p)`: a `Pred` holds a slice, so it has no `nil` and no `==`. A zero `Pred` that reaches a query fails the statement |
 | a retry and a timeout in a helper around every transaction | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
-| `Select(f).Strings(ctx)`, `Ints(ctx)` | `velox.Values(ctx, q, T.F.Key())` |
+| `Select(f).Strings(ctx)`, `Ints(ctx)` | `q.Values(ctx, T.F)` |
 | `e.Unwrap()` | none: an entity is a plain struct, with no client in it |
 | a `softdelete` mixin of your own, with `deleted_by_*` | `softdelete.Mixin{Assign: …}`, and `Reads: softdelete.Unfiltered` for unfiltered reads ([guide](guide.md#soft-delete)) |
 | `entgql.Cursor` | `veloxgql.Cursor{Type, Terms, Key}`, bound to a type and an order |

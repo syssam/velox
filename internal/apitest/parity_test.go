@@ -31,10 +31,10 @@ func TestDistinct(t *testing.T) {
 		e := &fakeconn.Exec{Rows: [][]any{{"a"}}}
 		db := openPolicied(c.d, e)
 		q := db.Query[testmodel.Ticket]().Limit(10)
-		if _, err := velox.Values(asUser("ann"), q, Tk.Title.Key()); err != nil || strings.Contains(e.SQL, "DISTINCT") {
+		if _, err := q.Values(asUser("ann"), Tk.Title); err != nil || strings.Contains(e.SQL, "DISTINCT") {
 			t.Fatalf("%v: without Distinct: %s, %v", c.d, e.SQL, err)
 		}
-		if _, err := velox.Values(asUser("ann"), q.Distinct(), Tk.Title.Key()); err != nil || e.SQL != c.values {
+		if _, err := q.Distinct().Values(asUser("ann"), Tk.Title); err != nil || e.SQL != c.values {
 			t.Errorf("%v: Values\n got %s, %v\nwant %s", c.d, e.SQL, err, c.values)
 		}
 		got, _, err := q.Distinct().Select(Tk.Title, Tk.Done).SQL(asUser("ann"))
@@ -92,7 +92,7 @@ func TestDistinctOrder(t *testing.T) {
 				t.Errorf("%v: %s: %v", d, what, err)
 			}
 		}
-		_, err := velox.Values(ctx, q.OrderBy(I.Number.Asc()), I.OrgID.Key())
+		_, err := q.OrderBy(I.Number.Asc()).Values(ctx, I.OrgID)
 		refused("Values by another column", err)
 		_, _, err = q.Select(I.OrgID).OrderBy(I.Total.Asc()).SQL(ctx)
 		refused("projection by a column it does not read", err)
@@ -101,7 +101,7 @@ func TestDistinctOrder(t *testing.T) {
 		if e.Calls != 0 {
 			t.Errorf("%v: %d statements sent", d, e.Calls)
 		}
-		if _, err := velox.Values(ctx, q.OrderBy(I.OrgID.Desc()), I.OrgID.Key()); err != nil {
+		if _, err := q.OrderBy(I.OrgID.Desc()).Values(ctx, I.OrgID); err != nil {
 			t.Errorf("%v: Values by its column: %v", d, err)
 		}
 		if _, _, err := q.Select(I.OrgID, I.Total.Sum()).GroupBy(I.OrgID).OrderBy(I.Total.Sum().Desc(), I.OrgID.Asc()).SQL(ctx); err != nil {
@@ -120,7 +120,7 @@ func TestDistinctRewriteRefused(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "changed the statement's Distinct") {
 		t.Errorf("set: %v", err)
 	}
-	if _, err := velox.Values(ctx, db.Query[testmodel.Invoice]().Distinct().Limit(1), I.Number.Key()); err == nil || !strings.Contains(err.Error(), "changed the statement's Distinct") {
+	if _, err := db.Query[testmodel.Invoice]().Distinct().Limit(1).Values(ctx, I.Number); err == nil || !strings.Contains(err.Error(), "changed the statement's Distinct") {
 		t.Errorf("cleared: %v", err)
 	}
 }

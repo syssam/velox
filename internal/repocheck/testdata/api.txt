@@ -632,6 +632,7 @@ func (q Query[E]) ForShare[_ Lazy[E]]() Query[E]
 func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E]
 func (q Query[E]) GroupBy[_ Lazy[E]](ts ...Selectable[E]) Query[E]
 func (q Query[E]) Having[_ Lazy[E]](ps ...Pred[E]) Query[E]
+func (q Query[E]) IDs[K any](ctx context.Context) ([]K, error)
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
 func (q Query[E]) Join[T any](r Rel[E, T]) Query[E]
 func (q Query[E]) LeftJoin[T any](r Rel[E, T]) Query[E]
@@ -650,6 +651,7 @@ func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (q Query[E]) SelectRaw[_ Lazy[E]](text string, args ...any) Query[E]
 func (q Query[E]) Select[_ Lazy[E]](ts ...Selectable[E]) Query[E]
 func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E]
+func (q Query[E]) Values[H valueColumn[E, V], V any](ctx context.Context, h H) ([]V, error)
 func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E]
 func (q Query[E]) With[T any](r Rel[E, T]) Query[E]
 func (q Query[E]) Writable[_ Lazy[E]]() Query[E]
@@ -775,7 +777,6 @@ func HasColumns(names ...string) Condition
 func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
 func HasOp(ops ...Op) Condition
-func IDs[K, E any](ctx context.Context, q Query[E]) ([]K, error)
 func If(h Hook, cond Condition) Hook
 func InZone(name string) DateOption
 func IsConstraintError(err error) bool
@@ -833,7 +834,6 @@ func Unless(h Hook, cond Condition) Hook
 func UseTx(db *DB, tx *sql.Tx) (*DB, error)
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
-func Values[E, V any](ctx context.Context, q Query[E], key GroupKey[E, V]) ([]V, error)
 func WithAround(a Around) Option
 func WithCallerSkip(pkgPath ...string) Option
 func WithCallers() Option

@@ -22,7 +22,8 @@ var (
 	itTable  = untyped.TableOf[testmodel.Item]()
 )
 
-func col[C interface{ ~struct{ I int32 } }](c C) int { return int(struct{ I int32 }(c).I) }
+// col is a column handle's index.
+func col(c any) int { return int(reflect.ValueOf(c).FieldByName("I").Int()) }
 
 // TestTableQueryParity: an untyped query sends the statement, and the
 // arguments, the typed query it stands for sends, through the same pipeline:
