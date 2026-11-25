@@ -746,7 +746,8 @@ replacement.
   context. As with entgql, the server needs no setup to page and batch
   edges (ADRs 0173, 0175). velox adds opt-in limits entgql has not, each one
   feature: `gqlgenx.RequestLimit`, `CostLimit`, `ResponseLimit`,
-  `MaxBodyBytes`, and `gqlgenx.ErrorPresenter`; page limits are the DB's,
+  `MaxBodyBytes`, and `gqlgenx.ErrorPresenter`, all but `MaxBodyBytes` in
+  one call with `gqlgenx.Harden(srv, db)`; page limits are the DB's,
   `veloxgql.WithLimits`. A test fakes a connection with `gqlgraph.ConnectionFromRows`,
   where entgql's connection struct is built by hand. The filter
   option takes the where input itself. `Paginate` is generic and calls

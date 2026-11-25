@@ -2903,8 +2903,16 @@ walks through each step.
 A bare `handler.New` server bounds each page (`MaxPage`, `MaxList`) and
 each filter, but not a request: nested connections multiply their pages,
 and nothing bounds its cost, response or time. A server open to clients
-adds `RequestLimit`, `CostLimit`, `ResponseLimit` and `MaxBodyBytes` at
-least; examples/graphql composes every knob below.
+calls `gqlgenx.Harden(srv, db)`, which applies every knob below but
+`MaxBodyBytes` and `SetParserTokenLimit` under the DB's `Limits`, and
+wraps its handler in `MaxBodyBytes`, as examples/graphql does:
+
+```go
+srv := handler.New(es)
+srv.AddTransport(transport.POST{})
+gqlgenx.Harden(srv, db)
+http.Handle("/query", gqlgenx.MaxBodyBytes(1<<20)(srv))
+```
 
 Each knob is opt-in and does one thing; none changes a statement. velox's
 pieces bound what gqlgen cannot, and gqlgen's own options the rest:

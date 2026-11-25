@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `gqlgenx.Harden(srv, db)` applies RequestLimit, CostLimit, ResponseLimit,
+  ErrorPresenter, SetDisableSuggestion and QuietValidation in one opt-in
+  call; examples/graphql uses it.
 - veloxgql logs one warning per process (slog.Warn) when a GraphQL field
   reads with no adapter linked, which batches nothing: each edge read a
   row at a time with nothing to say so.

@@ -110,10 +110,9 @@ func minimalServer(db *velox.DB) http.Handler {
 	return srv
 }
 
-// server is the GraphQL endpoint: minimalServer hardened for clients, by the
-// application's own composition of gqlgenx's opt-in pieces. Each is one
-// feature; a server takes the ones it needs. The limits they apply are the
-// DB's, which velox.Open took from veloxgql.WithLimits, or the defaults.
+// server is the GraphQL endpoint: minimalServer hardened for clients. The
+// limits it applies are the DB's, which velox.Open took from
+// veloxgql.WithLimits, or the defaults.
 func server(db *velox.DB) http.Handler {
 	srv := gqlgenServer(db)
 	srv.AddTransport(transport.POST{})
@@ -121,23 +120,12 @@ func server(db *velox.DB) http.Handler {
 	// Each mutation runs in one transaction, which the resolvers' statements
 	// on db join, and rolls back when the response has an error.
 	srv.Use(gqlgenx.Transactioner{DB: db})
-	// A request over the limits of its query's or variables' size and shape
-	// is refused before it is parsed.
-	srv.Use(gqlgenx.RequestLimit(db))
-	// A request that would cost more than MaxCost is refused before it runs.
-	srv.Use(gqlgenx.CostLimit(db))
-	// A response over MaxResponseBytes or MaxErrors, or a request over the
-	// Timeout, is stopped.
-	srv.Use(gqlgenx.ResponseLimit(db))
-	// A client sees only what is safe, with a code: gqlgen's default
-	// presenter would show every error's text, the driver's and velox's,
-	// which name tables, entities and constraints. The rest is logged with
-	// slog and shown as "internal error".
-	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
-	// An error names no field, argument, type or value the client did not,
-	// and validation returns at most MaxErrors.
-	srv.SetDisableSuggestion(true)
-	srv.SetValidationRulesFn(gqlgenx.QuietValidation(db))
+	// Harden refuses a request over the limits of its size and shape before
+	// it is parsed, and one that would cost more than MaxCost before it
+	// runs; it stops a response over MaxResponseBytes, MaxErrors or the
+	// Timeout. A client sees only safe errors, with a code, and no
+	// suggestion that names the schema's fields.
+	gqlgenx.Harden(srv, db)
 	// A body, and a websocket message, over 1 MiB is refused.
 	return gqlgenx.MaxBodyBytes(1 << 20)(srv)
 }

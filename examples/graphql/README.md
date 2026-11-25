@@ -155,11 +155,11 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    batches each edge of a level in one statement (`minimalServer`; decision
    0173). The served one (`server`) adds gqlgenx's opt-in pieces, which
    change no statement: `Transactioner`, one transaction per mutation;
-   `RequestLimit`, `CostLimit` and `ResponseLimit`, the limits on a
-   request's size and cost and on its response; `ErrorPresenter`; gqlgen's
-   `SetDisableSuggestion` and `QuietValidation`, no suggestions in
-   validation and at most `MaxErrors` of its errors;
-   and `MaxBodyBytes`. Then come middlewares that
+   `gqlgenx.Harden`, which applies `RequestLimit`, `CostLimit` and
+   `ResponseLimit`, the limits on a request's size and cost and on its
+   response, `ErrorPresenter`, and gqlgen's `SetDisableSuggestion` with
+   `QuietValidation`, no suggestions in validation and at most `MaxErrors`
+   of its errors; and `MaxBodyBytes`. Then come middlewares that
    put the organization, the role and the viewer in the context, and the
    directive `@admin`. `nosetup_test.go` runs the read tests on
    `minimalServer`'s shape, with the same statements.

@@ -88,8 +88,9 @@ Each rule names the test that backs it.
   batches edges, on gqlgen and graphql-go (`TestNestedNoSetup`,
   `TestMinimalServer`); a service's `Paginate` reads outside any request
   (`TestPaginateInAService`). There is no setup call: `gqlgenx.Transactioner`
-  is entgql's mutation transaction, `gqlgenx.RequestLimit`, `CostLimit`,
-  `ResponseLimit` and `MaxBodyBytes` harden a public server, page limits are
+  is entgql's mutation transaction, `gqlgenx.Harden(srv, db)` (or its
+  pieces `RequestLimit`, `CostLimit`, `ResponseLimit`) and `MaxBodyBytes`
+  harden a public server (`TestHarden`), page limits are
   the DB's (`veloxgql.WithLimits`), and resolvers use `r.DB`, never the
   context (ADR 0175).
   Fake a connection with `gqlgraph.ConnectionFromRows`.

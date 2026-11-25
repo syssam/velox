@@ -17,6 +17,7 @@ var publicAPI = []string{
 	"Cost",
 	"CostLimit",
 	"ErrorPresenter",
+	"Harden",
 	"MarshalBytes",
 	"MarshalFloat32",
 	"MarshalInt64ID",

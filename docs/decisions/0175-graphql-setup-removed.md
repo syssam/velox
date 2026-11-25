@@ -186,4 +186,9 @@ composition made 517.
   a shape change, and the cost extension would need each type's.
 - A `graphqlgo.MutationSession()` option: the fork's interceptor does it in
   a few lines of the application's.
-- One `gqlgenx.Hardening` bundle: it would be `Setup` again.
+- One `gqlgenx.Hardening` bundle: it would be `Setup` again. Reversed
+  2026-11-25, after review: a bare server has no bound on a request's
+  cost, response or time, and composing six calls is what an application
+  forgets. `gqlgenx.Harden(srv, db)` is a shorthand for those six calls.
+  It is opt-in, and nothing reads or pages through it, so it is not
+  `Setup`: a server that skips it works the same, only unbounded.

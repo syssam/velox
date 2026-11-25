@@ -1833,6 +1833,7 @@ func (t Transactioner) Validate(graphql.ExecutableSchema) error
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l veloxgql.Limits) int
 func CostLimit(db *velox.DB) graphql.HandlerExtension
 func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
+func Harden(srv *handler.Server, db *velox.DB)
 func MarshalBytes(b []byte) graphql.Marshaler
 func MarshalFloat32(f float32) graphql.Marshaler
 func MarshalInt64ID(id int64) graphql.Marshaler
