@@ -38,9 +38,6 @@ type Source struct {
 	// up is, for a transaction's Source, the Source of the DB the
 	// transaction (or savepoint) was begun on, which it falls back to.
 	up *Source
-	// kept is, for a transaction begun WithoutPolicy, the copy of its handle
-	// without the reason (bypassSource), cleared when it ends.
-	kept *DB
 }
 
 // DB returns the DB s reads on: nil for a nil s, or when the DB it falls
@@ -61,14 +58,9 @@ func (s *Source) DB() *DB {
 func (s *Source) liveTx() *DB { return (*DB)(atomic.LoadPointer(&s.tx)) }
 
 // end ends a transaction's Source: from now on it resolves to up, and it
-// keeps nothing of the transaction.
-func (s *Source) end() {
-	atomic.StorePointer(&s.tx, nil)
-	if s.kept != nil {
-		*s.kept = DB{}
-		s.kept = nil
-	}
-}
+// keeps nothing of the transaction. A handle DB returned before is left
+// whole, an ended transaction's, for a reader that still holds it.
+func (s *Source) end() { atomic.StorePointer(&s.tx, nil) }
 
 // OwnSource gives db, a DB outside a transaction at its final address, a
 // Source of its own. velox's constructors call it on the DB they return.
@@ -90,30 +82,20 @@ func (db *DB) SourceIn(ctx context.Context) *Source { return db.In(ctx).src }
 // txSource gives h, a transaction's (or savepoint's) handle, its Source:
 // one that resolves to h, or to a copy of h without its WithoutPolicy
 // reason, while the transaction is live, and to up after. The caller ends
-// it (Source.end) when the transaction ends. The copy is in the Source's
-// own allocation, so a transaction makes one either way.
+// it (Source.end) when the transaction ends. The copy is in the frame's
+// allocation (bypassFrame), which the end only stops pointing at.
 func txSource(h *DB, up *Source) *Source {
+	s := &Source{up: up}
+	h.src = s
 	if h.bypass == "" {
-		s := &Source{up: up}
-		h.src = s
 		atomic.StorePointer(&s.tx, unsafe.Pointer(h))
 		return s
 	}
-	b := &bypassSource{}
-	b.up = up
-	h.src = &b.Source
-	b.kept = *h
-	b.kept.owned, b.kept.bypass = false, ""
-	atomic.StorePointer(&b.tx, unsafe.Pointer(&b.kept))
-	b.Source.kept = &b.kept
-	return &b.Source
-}
-
-// bypassSource is the Source of a transaction begun WithoutPolicy, with the
-// copy of its handle without the reason that it resolves to.
-type bypassSource struct {
-	Source
-	kept DB
+	c := h.txSelf.plainCopy()
+	*c = *h
+	c.owned, c.bypass = false, ""
+	atomic.StorePointer(&s.tx, unsafe.Pointer(c))
+	return s
 }
 
 // adoptedSource gives h, the handle of a transaction the caller began

@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/syssam/velox/internal/conn"
 )
@@ -867,7 +868,15 @@ func (f *txFrame) uncommittable() error {
 // root is the transaction's frame, for a savepoint; nil for the transaction
 // itself, whose frame is its own root.
 func newTxFrame(ctx context.Context, db DB, root *txFrame) *txFrame {
-	f := &txFrame{db: db}
+	var f *txFrame
+	if db.bypass == "" {
+		f = &txFrame{db: db}
+	} else {
+		// The copy of the handle without the reason, which the Source
+		// resolves to (txSource), is in the frame's allocation.
+		b := &bypassFrame{db: db}
+		f = &b.txFrame
+	}
 	if root == nil {
 		root = f
 	}
@@ -891,7 +900,7 @@ func (db *DB) In(ctx context.Context) *DB {
 // joined is the handle In returns in a transaction db began; nil when ctx
 // has no live transaction's mark, or db is in a transaction, or db did not
 // begin the transaction: its Source, WithoutPolicy reason and recording are
-// not the beginner's.
+// not the beginner's, or are not those of the savepoint whose fn got ctx.
 func (db *DB) joined(ctx context.Context) *DB {
 	if db.txRoot != nil || db.src == nil {
 		return nil
@@ -901,9 +910,34 @@ func (db *DB) joined(ctx context.Context) *DB {
 		return nil
 	}
 	if self, _ := ctx.Value(txSelfKey{}).(*txFrame); self != nil && self.db.txRoot == root && !self.ended.Load() {
+		// A savepoint begun on a WithoutPolicy or Record copy of the
+		// transaction has that copy's reason or recording: db would
+		// skip its policies, or write to the copy's sink. It does not
+		// join; the root's handle would run in the savepoint too.
+		if self.db.bypass != db.bypass || self.db.rec != db.rec {
+			return nil
+		}
 		return &self.db
 	}
 	return &root.db
+}
+
+// bypassFrame is the frame of a transaction or savepoint begun with a
+// WithoutPolicy reason, and the copy of its handle without the reason that
+// its Source resolves to while it is live (txSource). The copy is not
+// cleared when the transaction ends: a reader that loaded it from the
+// Source just before keeps a whole DB, whose statements fail as an ended
+// transaction's do.
+type bypassFrame struct {
+	txFrame
+	plain DB
+}
+
+// plainCopy is the copy of f's handle without its WithoutPolicy reason, in
+// f's allocation; f.db.bypass is not empty, so newTxFrame made f as the
+// first field of a bypassFrame.
+func (f *txFrame) plainCopy() *DB {
+	return &(*bypassFrame)(unsafe.Pointer(f)).plain
 }
 
 // Foreign reports whether ctx carries the mark of a transaction that has not

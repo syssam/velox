@@ -93,7 +93,9 @@ the HundredRows benchmark.
   transaction, a statement on the DB that began it (same Source, same
   WithoutPolicy reason, same recording) runs on the transaction's handle,
   or on the savepoint's whose fn got the context, and its `Tx` makes a
-  savepoint. Any other DB still fails with `ErrOutsideTx`, as before
+  savepoint. Under a savepoint begun on a WithoutPolicy or Record copy of
+  the transaction, it does not join: it would skip its policies or write
+  to the copy's sink. Any other DB still fails with `ErrOutsideTx`, as before
   (amends the rule 0132, 0135 and 0137 rely on: a filter or policy that
   captured the DB now reads in the transaction too). The engine redirects
   at its entry points (`Plain`, `Run`, `DryRun`, `Tx`, the write and load

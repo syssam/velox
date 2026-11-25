@@ -76,3 +76,35 @@ func TestSourceNoneFails(t *testing.T) {
 		t.Errorf("a statement on it: %v", err)
 	}
 }
+
+// TestBypassSourceHeldAfterEnd: the handle a WithoutPolicy transaction's
+// Source gave, held past the transaction's end, is still a whole DB, as a
+// plain transaction's is: a statement on it fails as one on an ended
+// transaction, without a nil dereference, and the end does not write to it
+// while another goroutine reads it.
+func TestBypassSourceHeldAfterEnd(t *testing.T) {
+	db := newDB(SQLite, &fakeconn.Exec{}, nil)
+	OwnSource(&db)
+	var held *DB
+	done := make(chan struct{})
+	err := db.WithoutPolicy("test").Tx(context.Background(), func(_ context.Context, tx *DB) error {
+		held = tx.Source().DB()
+		go func() {
+			defer close(done)
+			for range 1000 {
+				_ = held.Cfg != nil && held.Ex != nil && held.txRoot != nil
+			}
+		}()
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if held.Cfg == nil || held.Ex == nil || held.txRoot == nil {
+		t.Fatalf("the held handle was cleared: Cfg=%v Ex=%v txRoot=%v", held.Cfg, held.Ex, held.txRoot)
+	}
+	if !held.txRoot.ended.Load() {
+		t.Error("the held handle's transaction has not ended")
+	}
+}

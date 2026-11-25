@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/internal/testmodel"
 )
 
@@ -88,5 +89,41 @@ func TestBeginnerJoinsItsTx(t *testing.T) {
 	}
 	if _, err := read.QueryLines().AllowUnbounded().All(ctx); err != nil {
 		t.Errorf("an entity read in the ended transaction: QueryLines on db: %v", err)
+	}
+}
+
+// TestNoJoinIntoABypassSavepoint: under the context of a savepoint begun
+// on a WithoutPolicy or Record copy of a transaction, the DB that began the
+// transaction does not join it: its reads and writes would skip its
+// policies, or reach the copy's sink. It fails with ErrOutsideTx, and joins
+// again under the transaction's own context.
+func TestNoJoinIntoABypassSavepoint(t *testing.T) {
+	fixture.PNoteRead = func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.None(), nil }
+	t.Cleanup(func() { fixture.PNoteRead = nil })
+	db := interceptorDB(t)
+	err := db.Tx(context.Background(), func(ctx context.Context, tx *velox.DB) error {
+		if n, err := db.Query[fixture.PNote]().Count(ctx); err != nil || n != 0 {
+			t.Errorf("db joined into its transaction: %d rows, %v; want 0 under None()", n, err)
+		}
+		for name, copy := range map[string]*velox.DB{
+			"WithoutPolicy": tx.WithoutPolicy("admin job"),
+			"Record":        tx.Record(velox.RecordFunc(func(context.Context, *velox.DB, []velox.Change) error { return nil })),
+		} {
+			if err := copy.Tx(ctx, func(sctx context.Context, _ *velox.DB) error {
+				if n, err := db.Query[fixture.PNote]().Count(sctx); !errors.Is(err, velox.ErrOutsideTx) {
+					t.Errorf("%s savepoint: db read %d rows, %v; want ErrOutsideTx", name, n, err)
+				}
+				if err := db.Tx(sctx, func(context.Context, *velox.DB) error { return nil }); !errors.Is(err, velox.ErrOutsideTx) {
+					t.Errorf("%s savepoint: db.Tx %v; want ErrOutsideTx", name, err)
+				}
+				return nil
+			}); err != nil {
+				t.Errorf("%s savepoint: %v", name, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
