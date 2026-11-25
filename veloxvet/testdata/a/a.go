@@ -224,3 +224,18 @@ var _ = func() error {
 	_, err := unpaid(nil).All(context.Background()) // want `All reads a query`
 	return err
 }
+
+// A method value is not followed: its receiver is bound in a closure.
+func methodValues(ctx context.Context, db *velox.DB) {
+	q := db.Query[tm.Invoice]()
+	w := q.Writable[*tm.Invoice]
+	w().All(ctx)
+	allow := q.AllowUnbounded[*tm.Invoice]
+	allow().All(ctx)
+	limit := q.Limit[*tm.Invoice]
+	limit(5).All(ctx)
+	f := q.All[*tm.Invoice]
+	f(ctx)
+	scan := velox.Scan[struct{ Number string }, tm.Invoice]
+	scan(ctx, q) // want `velox.Scan reads a query`
+}

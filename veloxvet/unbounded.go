@@ -289,10 +289,13 @@ func buildSSA(pass *analysis.Pass) (*ssa.Package, []*ssa.Function) {
 }
 
 // callee returns the function a call calls, its generic origin for an
-// instance, and the function's object, nil for a function literal.
+// instance, and the function's object, nil for a function literal. A
+// method value's wrapper (go/ssa's $bound) holds its receiver among its
+// free variables, not the call's arguments, so it is not followed: its
+// call is a call the check cannot see.
 func callee(c *ssa.CallCommon) (*ssa.Function, *types.Func) {
 	fn := c.StaticCallee()
-	if fn == nil {
+	if fn == nil || len(fn.FreeVars) > 0 {
 		return nil, nil
 	}
 	if o := fn.Origin(); o != nil {
@@ -338,6 +341,14 @@ func (c *checker) states(fn *ssa.Function) map[ssa.Value]state {
 	return st
 }
 
+// arg is a call's i-th argument, nil when it has fewer.
+func arg(c *ssa.CallCommon, i int) ssa.Value {
+	if i < len(c.Args) {
+		return c.Args[i]
+	}
+	return nil
+}
+
 // get is v's state: a parameter, a free variable or a constant is unknown.
 func get(v ssa.Value, st map[ssa.Value]state) state {
 	if s, ok := st[v]; ok {
@@ -357,16 +368,16 @@ func (c *checker) transfer(v ssa.Value, st map[ssa.Value]state) state {
 		return s
 	case *ssa.Call:
 		r, fn, obj := roleOf(v.Common())
-		args := v.Common().Args
+		q := arg(v.Common(), r.arg)
 		switch r.role {
 		case roleNew:
 			return sFresh
 		case roleKeep, roleFrom:
-			return get(args[0], st)
+			return get(q, st)
 		case roleLimit:
-			return limited(get(args[0], st))
+			return limited(get(q, st))
 		case roleAllow:
-			return allowed(get(args[0], st))
+			return allowed(get(q, st))
 		case roleNone:
 			if c.fresh(fn, obj) {
 				return sFresh
@@ -436,7 +447,7 @@ func (c *checker) report(fn *ssa.Function) {
 			if st == nil {
 				st = c.states(fn)
 			}
-			c.check(call, r, obj, get(call.Common().Args[r.arg], st))
+			c.check(call, r, obj, get(arg(call.Common(), r.arg), st))
 		}
 	}
 }
