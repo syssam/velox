@@ -1865,3 +1865,10 @@ func Options(cfg Config) []velox.Option
 type Config struct { TracerProvider trace.TracerProvider MeterProvider metric.MeterProvider App string CommentTags []string OmitCallers bool OmitQueryText bool RecordScope bool RecordMetricFingerprint bool RecordReturnedRows bool Target Target TargetFor func(r velox.Route) Target }
 type Target struct { Namespace string Address string Port int }
 
+package veloxvet
+func (*FreshQuery) AFact()
+func (*FreshQuery) String() string
+type FreshQuery struct { }
+var Analyzers
+var Unbounded
+

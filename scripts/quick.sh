@@ -32,7 +32,7 @@ unset VELOX_TEST_POSTGRES VELOX_TEST_MYSQL VELOX_TEST_MYSQL_ADMIN VELOX_ITEST_RE
 
 # The modules, the root last: a file belongs to the first whose directory
 # holds it. bench/compare/veloxe only pins a tool.
-modules=(examples contrib/veloxotel contrib/graphql bench/compare .)
+modules=(examples contrib/veloxotel contrib/graphql bench/compare veloxvet .)
 selected=()
 if [ -n "$all" ]; then
   selected=("${modules[@]}")
