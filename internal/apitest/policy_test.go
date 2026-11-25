@@ -865,7 +865,7 @@ func TestEqualFoldIsASCIIOnSQLite(t *testing.T) {
 	}
 	for _, c := range []struct {
 		s    string
-		want int64
+		want int
 	}{
 		{"ÉcOLE", 1}, // the É is the same; c and O differ in case only
 		{"école", 0}, // SQLite leaves É as it is, so it is not é

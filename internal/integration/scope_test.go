@@ -148,7 +148,7 @@ func TestScopeReads(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantIDs(t, ticketIDs(all), visible[c.name])
-		if n, err := c.on(tg).Query[testmodel.Ticket]().Count(c.ctx); err != nil || n != int64(len(visible[c.name])) {
+		if n, err := c.on(tg).Query[testmodel.Ticket]().Count(c.ctx); err != nil || n != len(visible[c.name]) {
 			t.Errorf("Count: %d, %v", n, err)
 		}
 		var iter []int64

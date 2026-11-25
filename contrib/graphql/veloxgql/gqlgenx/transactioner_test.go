@@ -175,7 +175,7 @@ func TestMutationGetsTheTxContext(t *testing.T) {
 // the mutation's transaction, and its write rolls back with the mutation.
 func TestMutationWritesOnItsDB(t *testing.T) {
 	db, _ := handlerDB(t)
-	var seen int64
+	var seen int
 	srv := serve(map[string]resolver{
 		"fail": func(ctx context.Context, args map[string]any) (any, error) {
 			if err := db.Insert(&person{ID: args["id"].(int64), Name: "p", Age: 1}).Exec(ctx); err != nil {

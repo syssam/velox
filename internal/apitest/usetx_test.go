@@ -23,7 +23,7 @@ func useTxDB(t *testing.T) *velox.DB {
 	return db
 }
 
-func invoiceCount(t *testing.T, db *velox.DB) int64 {
+func invoiceCount(t *testing.T, db *velox.DB) int {
 	t.Helper()
 	n, err := db.Query[testmodel.Invoice]().Count(ctx)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestUseTxRunsOnTheCallersTransaction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("commit=%v: ending tx: %v", commit, err)
 		}
-		want := int64(0)
+		want := 0
 		if commit {
 			want = 2
 		}

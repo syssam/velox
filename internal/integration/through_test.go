@@ -107,7 +107,7 @@ func TestThroughWith(t *testing.T) {
 func TestThroughHas(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		throughSetup(t, tg)
-		count := func(c velox.Pred[book], org ...int64) int64 {
+		count := func(c velox.Pred[book], org ...int64) int {
 			t.Helper()
 			qctx := ctx
 			if len(org) > 0 {
@@ -123,7 +123,7 @@ func TestThroughHas(t *testing.T) {
 			name string
 			p    velox.Pred[book]
 			org  []int64
-			want int64
+			want int
 		}{
 			{"has", Books.Tags.Has(), nil, 3},
 			{"has, org 1", Books.Tags.Has(), []int64{1}, 2},
@@ -339,7 +339,7 @@ func TestBidiOnRealDatabases(t *testing.T) {
 			}
 			wantIDs(t, got, []int64{want})
 		}
-		count := func() int64 {
+		count := func() int {
 			t.Helper()
 			n, err := tg.db.Query[personFriend]().Count(ctx)
 			if err != nil {

@@ -50,7 +50,7 @@ func TestJoinReadsTheTargetThroughItsPolicy(t *testing.T) {
 			}
 		}
 		n, err := c.on(tg).Query[testmodel.Ticket]().Join(Tk.Parent).Count(c.ctx)
-		if err != nil || n != int64(len(hasParent[c.name])) {
+		if err != nil || n != len(hasParent[c.name]) {
 			t.Errorf("Count of Join(Parent): %d, %v", n, err)
 		}
 	})

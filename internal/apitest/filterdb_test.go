@@ -48,7 +48,7 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 	var errs []error
 	db := interceptorDB(t, velox.WithFilter(ownerScope(func(stmt *velox.DB) *velox.DB { return stmt }, &errs)))
 	o2 := context.WithValue(context.Background(), filterOwnerKey{}, "o2")
-	count := func(ctx context.Context, db *velox.DB) int64 {
+	count := func(ctx context.Context, db *velox.DB) int {
 		t.Helper()
 		n, err := db.Query[fixture.INote]().Count(ctx)
 		if err != nil {
@@ -57,7 +57,7 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 		return n
 	}
 	outside := count(o2, db)
-	var inside int64
+	var inside int
 	if err := db.Tx(o2, func(ctx context.Context, tx *velox.DB) error {
 		inside = count(ctx, tx)
 		return nil
@@ -80,7 +80,7 @@ func TestFilterReadsThroughTheStatementsDB(t *testing.T) {
 		}
 		db = interceptorDB(t, velox.WithFilter(f))
 		outside := count(o2, db)
-		var inside int64
+		var inside int
 		if err := db.Tx(o2, func(ctx context.Context, tx *velox.DB) error {
 			inside = count(ctx, tx)
 			return nil

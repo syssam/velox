@@ -82,7 +82,7 @@ func TestPolicyReadsThroughItsDB(t *testing.T) {
 					}
 				}
 				db = interceptorDB(t)
-				count := func(ctx context.Context, db *velox.DB) int64 {
+				count := func(ctx context.Context, db *velox.DB) int {
 					t.Helper()
 					n, err := db.Query[fixture.PNote]().Count(ctx)
 					if err != nil {
@@ -91,7 +91,7 @@ func TestPolicyReadsThroughItsDB(t *testing.T) {
 					return n
 				}
 				outside := count(o2, db)
-				var inside int64
+				var inside int
 				if err := db.Tx(o2, func(ctx context.Context, tx *velox.DB) error {
 					inside = count(ctx, tx)
 					return nil

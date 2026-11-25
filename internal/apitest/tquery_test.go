@@ -172,7 +172,7 @@ func TestTableQueryRows(t *testing.T) {
 	}
 	// Growing past the first rows allocated keeps every row.
 	many, err := untyped.Query(db, itTable).AllowUnbounded().All(ctx)
-	if n, _ := db.Query[testmodel.Item]().Count(ctx); err != nil || int64(many.Len()) != n {
+	if n, _ := db.Query[testmodel.Item]().Count(ctx); err != nil || many.Len() != n {
 		t.Errorf("Unbounded: %d rows of %d, %v", many.Len(), n, err)
 	}
 	// A join fills the relation.

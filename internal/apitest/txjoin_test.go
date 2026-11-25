@@ -11,7 +11,7 @@ import (
 )
 
 // countSamples is the number of samples db reads under ctx.
-func countSamples(t *testing.T, ctx context.Context, db *velox.DB) int64 {
+func countSamples(t *testing.T, ctx context.Context, db *velox.DB) int {
 	t.Helper()
 	n, err := db.Query[testmodel.Sample]().Count(ctx)
 	if err != nil {

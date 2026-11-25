@@ -76,7 +76,7 @@ func TestSQLiteDefaultTimePagesWithAfter(t *testing.T) {
 	// before it.
 	for _, c := range []struct {
 		at   time.Time
-		want int64
+		want int
 	}{{time.Now().Add(time.Hour), rows}, {time.Now().Add(-time.Hour), 0}} {
 		n, err := db.Query[testmodel.Invoice]().Where(I.CreatedAt.LT(c.at)).Count(ctx)
 		if err != nil || n != c.want {

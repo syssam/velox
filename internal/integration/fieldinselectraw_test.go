@@ -133,12 +133,12 @@ func TestFieldInSelectTextColumnForms(t *testing.T) {
 				}
 			}
 			n, err := tg.db.Update[fixture.IOwner]().Set(O.PinnedID.Set(1)).Where(O.ID.GTE(100), velox.Pred[fixture.IOwner](p)).Exec(bg)
-			if err != nil || n != int64(len(want)) {
+			if err != nil || n != len(want) {
 				t.Errorf("update: %d, %v; want %d", n, err, len(want))
 			}
 		}
 		n, err := tg.db.Delete[fixture.IOwner]().Where(O.ID.GTE(100), velox.Pred[fixture.IOwner](velox.Not(velox.FieldInSelect("name", "INote", "id")))).Exec(bg)
-		if err != nil || n != int64(len(names)-len(want)) {
+		if err != nil || n != len(names)-len(want) {
 			t.Errorf("delete: %d, %v; want %d", n, err, len(names)-len(want))
 		}
 	})

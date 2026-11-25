@@ -187,23 +187,23 @@ func TestTableWriteRows(t *testing.T) {
 		name  string
 		ctx   context.Context
 		want  int64
-		typed func(ctx context.Context) (int64, error)
+		typed func(ctx context.Context) (int, error)
 		untyp func(ctx context.Context) (int64, error)
 	}{
 		{"update, hidden", in8, 0,
-			func(ctx context.Context) (int64, error) {
+			func(ctx context.Context) (int, error) {
 				return db.Update[testmodel.Invoice]().Set(I.Note.Set("x")).Where(I.ID.EQ(x.ID)).Exec(ctx)
 			},
 			func(ctx context.Context) (int64, error) {
 				return untyped.Update(db, invTable).Set(col(I.Note), "x").Where(id).Exec(ctx)
 			}},
 		{"delete, hidden", in8, 0,
-			func(ctx context.Context) (int64, error) {
+			func(ctx context.Context) (int, error) {
 				return db.Delete[testmodel.Invoice]().Where(I.ID.EQ(x.ID)).Exec(ctx)
 			},
 			func(ctx context.Context) (int64, error) { return untyped.Delete(db, invTable).Where(id).Exec(ctx) }},
 		{"update, seen", in7, 1,
-			func(ctx context.Context) (int64, error) {
+			func(ctx context.Context) (int, error) {
 				return db.Update[testmodel.Invoice]().Set(I.Note.Set("x")).Where(I.ID.EQ(x.ID)).Exec(ctx)
 			},
 			func(ctx context.Context) (int64, error) {
@@ -212,7 +212,7 @@ func TestTableWriteRows(t *testing.T) {
 	} {
 		tn, terr := c.typed(c.ctx)
 		un, uerr := c.untyp(c.ctx)
-		if terr != nil || uerr != nil || tn != c.want || un != c.want {
+		if terr != nil || uerr != nil || int64(tn) != c.want || un != c.want {
 			t.Errorf("%s: typed %d %v, untyped %d %v, want %d", c.name, tn, terr, un, uerr, c.want)
 		}
 	}

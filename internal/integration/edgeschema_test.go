@@ -129,7 +129,7 @@ func TestEdgeSchemaThrough(t *testing.T) {
 		if len(teams) != 3 || teams[0].Name != "a" || teams[2].Name != "c" || len(links) != 3 {
 			t.Errorf("with: teams %+v, links %+v", teams, links)
 		}
-		for name, want := range map[string]int64{"b": 1, "d": 0} {
+		for name, want := range map[string]int{"b": 1, "d": 0} {
 			n, err := tg.db.Query[tm.Player]().Where(tm.Players.Teams.HasWith(tm.Teams.Name.EQ(name))).Count(ctx)
 			if err != nil || n != want {
 				t.Errorf("HasWith %s: %d, %v", name, n, err)

@@ -568,7 +568,7 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 // Count returns the number of rows matching the query's conditions, After's
 // among them (so After's rules for the ordering apply, though the ordering is
 // then ignored); the query's ordering, limit, offset and columns are ignored.
-func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
+func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int, error) {
 	if q.meta.Err != nil {
 		return 0, q.meta.Err
 	}
@@ -580,7 +580,8 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return engine.CountStmt(ctx, q.s.DB, st)
+	n, err := engine.CountStmt(ctx, q.s.DB, st)
+	return int(n), err
 }
 
 // Exists reports whether a row matches the query's conditions, After's

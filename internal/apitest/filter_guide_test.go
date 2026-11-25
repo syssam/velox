@@ -32,7 +32,7 @@ func TestGuideFilterExample(t *testing.T) {
 		return velox.FieldIn("owner_id", ids...), nil
 	}))
 	ctx := context.WithValue(context.Background(), filterOwnerKey{}, "o1")
-	count := func(ctx context.Context, db *velox.DB) int64 {
+	count := func(ctx context.Context, db *velox.DB) int {
 		t.Helper()
 		n, err := db.Query[fixture.INote]().Count(ctx)
 		if err != nil {
@@ -41,7 +41,7 @@ func TestGuideFilterExample(t *testing.T) {
 		return n
 	}
 	outside := count(ctx, db)
-	var inside int64
+	var inside int
 	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		inside = count(ctx, tx)
 		return nil

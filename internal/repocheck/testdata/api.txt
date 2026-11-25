@@ -547,7 +547,7 @@ func (c TimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c TimeCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
-func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
+func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int, error)
 func (d DeleteQuery[E]) One[_ Lazy[E]](ctx context.Context) error
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E]
@@ -635,7 +635,7 @@ func (q Query[E]) After[_ Lazy[E]](x *E) Query[E]
 func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
 func (q Query[E]) AllowUnbounded[_ Lazy[E]]() Query[E]
 func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E]
-func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error)
+func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int, error)
 func (q Query[E]) Distinct[_ Lazy[E]]() Query[E]
 func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error)
 func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error)
@@ -727,7 +727,7 @@ func (t Term[E]) Max[_ Lazy[E]]() Term[E]
 func (t Term[E]) Min[_ Lazy[E]]() Term[E]
 func (t Term[E]) Sum[_ Lazy[E]]() Term[E]
 func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
-func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
+func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int, error)
 func (u UpdateQuery[E]) KeepDefaults[_ Lazy[E]](cols ...Column[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)

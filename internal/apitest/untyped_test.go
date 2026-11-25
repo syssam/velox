@@ -244,7 +244,7 @@ func ubDB(t *testing.T, opts ...velox.Option) *velox.DB {
 
 // ubCount returns E's rows, read past every policy. ubDoc's interceptor
 // still applies: a test that sets ubFilter does not count with it.
-func ubCount[E any, PE velox.Entity[E]](t *testing.T, db *velox.DB) int64 {
+func ubCount[E any, PE velox.Entity[E]](t *testing.T, db *velox.DB) int {
 	t.Helper()
 	n, err := db.WithoutPolicy("count").Query[E, PE]().Count(context.Background())
 	if err != nil {

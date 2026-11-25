@@ -141,12 +141,13 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 // every column with an UpdateDefault that the statement does not assign,
 // refuses an Immutable column (ErrImmutable), and runs the validators,
 // before the statement goes through the pipeline.
-func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
+func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int, error) {
 	st, err := u.statement()
 	if err != nil {
 		return 0, err
 	}
-	return engine.Update(ctx, &u.db.e, &st, u.edges)
+	n, err := engine.Update(ctx, &u.db.e, &st, u.edges)
+	return int(n), err
 }
 
 // One runs the update on the one row it matches and returns that row as
@@ -249,7 +250,7 @@ func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E] {
 
 // Exec runs the delete and returns the number of rows it removed, or -1 when
 // the driver could not report its count.
-func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
+func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int, error) {
 	if d.meta.Err != nil {
 		return 0, d.meta.Err
 	}
@@ -258,7 +259,7 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	}
 	st := engine.CloneStatement(&d.st)
 	n, _, _, err := engine.Write(ctx, &d.db.e, &st, false, false)
-	return n, err
+	return int(n), err
 }
 
 // One runs the delete on the one row it matches, as ent's DeleteOne does.
