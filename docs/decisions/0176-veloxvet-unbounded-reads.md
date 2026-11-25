@@ -50,7 +50,10 @@ alone.
   `if` or a `for`, a `switch`'s tag, a `range`'s expression or a `case`'s
   list, only the header's lines count; outside a function, the
   declaration's spec is the statement. A chain spread over lines is waived
-  by one directive, wherever its read call sits. It is for a test or a demo that expects
+  by one directive, wherever its read call sits. The lines inside a
+  function literal's body belong to the literal's statements: a directive
+  there does not waive a read elsewhere in the outer statement, and the
+  outer statement's does not waive a read in the literal. It is for a test or a demo that expects
   `ErrUnbounded`; `AllowUnbounded` cannot say that, as it removes the
   failure.
 - The module requires only `golang.org/x/tools`. The root module does not

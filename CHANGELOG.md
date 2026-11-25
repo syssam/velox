@@ -31,8 +31,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   waives a report (decision 0177).
 - veloxvet: `//velox:unbounded-ok` waives the statement that holds the
   read, on any of its lines or alone on the line before it, so it covers a
-  chain spread over lines; a method value's call no longer panics the
-  analyzer.
+  chain spread over lines, but not a read in or around a function literal
+  of the statement; a method value's call no longer panics the analyzer.
 - veloxvet, a module of its own (`github.com/syssam/velox/veloxvet`), reports
   at build time a read that fails with `ErrUnbounded`: `All`, `Iter`,
   `Values`, `IDs`, `Rows`, `SQL` or `velox.Scan` with no `Limit` or

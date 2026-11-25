@@ -40,7 +40,8 @@ A comment //velox:unbounded-ok on any line of the statement that holds
 the read, or alone on the line before the statement, waives the report:
 for a test or a demo that expects the read to fail. For a read in the
 header of an if, for or switch statement, or of a case, only the
-header counts.`
+header counts. The lines inside a function literal's body belong to the
+literal's statements, not to the statement around it.`
 
 // FreshQuery is the fact of a function each of whose returns is a query
 // that velox started on that path, with no Limit and no AllowUnbounded.

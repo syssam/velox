@@ -66,25 +66,57 @@ func alone(src []byte, offset int) bool {
 // statement. Of an if, for or switch statement, or a case, whose header
 // holds pos, only the header counts: a statement in a header, such as an
 // if's init, is a statement of its own. Outside a function, the
-// declaration's spec stands for the statement.
+// declaration's spec stands for the statement. The lines inside the body
+// of a function literal in the statement, which does not hold pos, belong
+// to the literal's statements, not to this one.
 func (d directives) waives(pass *analysis.Pass, pos token.Pos) bool {
 	if len(d.on) == 0 {
 		return false
 	}
 	from, to := pos, pos
+	var stmt ast.Node
 	if f := fileOf(pass, pos); f != nil {
-		from, to = enclosing(f, pos)
+		stmt, from, to = enclosing(f, pos)
 	}
 	start, end := pass.Fset.Position(from), pass.Fset.Position(to)
 	if d.alone[line{start.Filename, start.Line - 1}] {
 		return true
 	}
+	inner := literalLines(pass.Fset, stmt, pos)
 	for n := start.Line; n <= end.Line; n++ {
-		if d.on[line{start.Filename, n}] {
+		if d.on[line{start.Filename, n}] && !inner[n] {
 			return true
 		}
 	}
 	return false
+}
+
+// literalLines are the lines of n that lie wholly inside the body of a
+// function literal that does not hold pos: those after its opening brace's
+// line and before its closing brace's.
+func literalLines(fset *token.FileSet, n ast.Node, pos token.Pos) map[int]bool {
+	if n == nil {
+		return nil
+	}
+	var out map[int]bool
+	ast.Inspect(n, func(n ast.Node) bool {
+		lit, ok := n.(*ast.FuncLit)
+		if !ok {
+			return true
+		}
+		if lit.Body.Pos() <= pos && pos < lit.Body.End() {
+			return true
+		}
+		from, to := fset.Position(lit.Body.Lbrace).Line, fset.Position(lit.Body.Rbrace).Line
+		for l := from + 1; l < to; l++ {
+			if out == nil {
+				out = map[int]bool{}
+			}
+			out[l] = true
+		}
+		return false
+	})
+	return out
 }
 
 // fileOf is the package's file that holds pos.
@@ -97,20 +129,21 @@ func fileOf(pass *analysis.Pass, pos token.Pos) *ast.File {
 	return nil
 }
 
-// enclosing returns the start and end of the innermost statement of f that
-// holds pos, as waives describes it, or pos when there is none.
-func enclosing(f *ast.File, pos token.Pos) (token.Pos, token.Pos) {
+// enclosing returns the innermost statement of f that holds pos, and its
+// start and end as waives describes them, or nil and pos when there is
+// none.
+func enclosing(f *ast.File, pos token.Pos) (ast.Node, token.Pos, token.Pos) {
 	path, _ := astutil.PathEnclosingInterval(f, pos, pos)
 	for _, n := range path {
 		switch n := n.(type) {
 		case *ast.BlockStmt:
 		case ast.Stmt:
-			return n.Pos(), header(n, pos)
+			return n, n.Pos(), header(n, pos)
 		case ast.Spec:
-			return n.Pos(), n.End()
+			return n, n.Pos(), n.End()
 		}
 	}
-	return pos, pos
+	return nil, pos, pos
 }
 
 // header is the end of s, or of its header when pos is in the header.

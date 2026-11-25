@@ -4,6 +4,7 @@ package a
 
 import (
 	"context"
+	"errors"
 
 	"github.com/syssam/velox"
 	tm "github.com/syssam/velox/internal/testmodel"
@@ -260,6 +261,22 @@ func waivedSpanning(ctx context.Context, db *velox.DB, c bool) {
 }
 
 func first[T any](v T, _ error) T { return v }
+
+// A function literal's directive waives the literal's own statement, not
+// the statement outside it, and the outer statement's directive does not
+// waive a read in the literal.
+func waivedClosure(ctx context.Context, db *velox.DB) error {
+	err := errors.Join(second(db.Query[tm.Invoice]().All(ctx)), func() error { // want `All reads a query`
+		_, err := db.Query[tm.Invoice]().All(ctx) //velox:unbounded-ok
+		return err
+	}())
+	return errors.Join(err, second(db.Query[tm.Invoice]().All(ctx)), func() error { //velox:unbounded-ok
+		_, err := db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+		return err
+	}())
+}
+
+func second[T any](_ T, err error) error { return err }
 
 //velox:unbounded-ok
 var _, _ = unpaid(nil).
