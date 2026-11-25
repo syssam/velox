@@ -705,7 +705,8 @@ It also follows a function that returns a new query on every path, such
 as an entity's `QueryX` method, into the package that calls it. A query
 from a parameter, a field or a closure is not reported, so it finds most
 unbounded reads, not all. A test that expects the error waives the report
-with `//velox:unbounded-ok` at the end of the read's line.
+with `//velox:unbounded-ok` on any line of the statement that holds the
+read, or alone on the line before the statement.
 `veloxvet.Analyzers` are go/analysis analyzers, for golangci-lint's plugins
 and other drivers.
 

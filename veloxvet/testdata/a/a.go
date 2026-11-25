@@ -212,6 +212,43 @@ func waived(ctx context.Context, db *velox.DB) {
 	q.All(ctx)                      // want `All reads a query`
 }
 
+// The directive waives the statement that holds the read: on any of its
+// lines, or alone on the line before its first.
+func waivedSpanning(ctx context.Context, db *velox.DB, c bool) {
+	//velox:unbounded-ok
+	db.Query[tm.Invoice]().
+		Where(I.Paid.EQ(true)).
+		All(ctx)
+	_, _ = db.Query[tm.Invoice]().All(
+		ctx,
+	) //velox:unbounded-ok
+	db.Query[tm.Invoice]().
+		//velox:unbounded-ok
+		All(ctx)
+	defer db.Query[tm.Invoice]().
+		All(ctx) //velox:unbounded-ok
+
+	//velox:unbounded-ok
+	q := db.Query[tm.Invoice]()
+	q.
+		All(ctx) // want `All reads a query`
+
+	// A header's directive waives the header, not the body.
+	if _, err := db.Query[tm.Invoice]().All(ctx); err != nil { //velox:unbounded-ok
+		db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+	}
+	if c {
+		db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+	} //velox:unbounded-ok
+	switch _, err := db.Query[tm.Invoice]().All(ctx); err { // want `All reads a query`
+	case nil: //velox:unbounded-ok
+	}
+}
+
+//velox:unbounded-ok
+var _, _ = unpaid(nil).
+	All(context.Background())
+
 // A function literal is checked as a function of its own.
 func literal(db *velox.DB) func(context.Context) {
 	return func(ctx context.Context) {

@@ -3,7 +3,6 @@ package veloxvet
 import (
 	"go/ast"
 	"go/types"
-	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/ssa"
@@ -37,9 +36,11 @@ a new query with no bound on every path, such as velox-gen's QueryX
 methods, carries a FreshQuery fact, so a read of its result is checked
 in the packages that call it.
 
-A comment //velox:unbounded-ok at the end of the read's line, or alone on
-the line before it, waives the report: for a test or a demo that expects
-the read to fail.`
+A comment //velox:unbounded-ok on any line of the statement that holds
+the read, or alone on the line before the statement, waives the report:
+for a test or a demo that expects the read to fail. For a read in the
+header of an if, for, switch or select statement, or of a case, only the
+header counts.`
 
 // FreshQuery is the fact of a function each of whose returns is a query
 // that velox started on that path, with no Limit and no AllowUnbounded.
@@ -195,18 +196,12 @@ type checker struct {
 	pass *analysis.Pass
 	pkg  *ssa.Package
 	sums map[*ssa.Function]summary
-	ok   map[line]bool // the lines a directive waives
+	ok   directives
 }
 
-// line is a line of a file.
-type line struct {
-	file string
-	n    int
-}
-
-// directive is the comment that waives the report of a read: at the end
-// of its line, or alone on the line before it. It is for a test or a demo
-// that expects the read to fail.
+// directive is the comment that waives the report of a read: on any line
+// of the statement that holds the read, or alone on the line before the
+// statement. It is for a test or a demo that expects the read to fail.
 const directive = "//velox:unbounded-ok"
 
 func runUnbounded(pass *analysis.Pass) (any, error) {
@@ -214,7 +209,7 @@ func runUnbounded(pass *analysis.Pass) (any, error) {
 		return nil, nil
 	}
 	pkg, funcs := buildSSA(pass)
-	c := &checker{pass: pass, pkg: pkg, sums: map[*ssa.Function]summary{}, ok: waived(pass)}
+	c := &checker{pass: pass, pkg: pkg, sums: map[*ssa.Function]summary{}, ok: findDirectives(pass, directive)}
 	for _, fn := range funcs {
 		if obj, ok := fn.Object().(*types.Func); ok && obj.Pkg() == pass.Pkg && c.summary(fn) == sumFresh {
 			pass.ExportObjectFact(obj, &FreshQuery{})
@@ -459,8 +454,7 @@ func (c *checker) check(call ssa.CallInstruction, r funcRole, obj *types.Func, s
 	if obj.Signature().Recv() == nil {
 		name = "velox." + name
 	}
-	posn := c.pass.Fset.Position(call.Pos())
-	if s == 0 || c.ok[line{posn.Filename, posn.Line}] {
+	if s == 0 || c.ok.waives(c.pass, call.Pos()) {
 		return
 	}
 	switch {
@@ -469,43 +463,4 @@ func (c *checker) check(call ssa.CallInstruction, r funcRole, obj *types.Func, s
 	case r.role == roleGroup && s&^(sFresh|sLimit) == 0:
 		c.pass.Reportf(call.Pos(), "%s groups a query with no AllowUnbounded, which a Limit does not replace: it fails with velox.ErrUnbounded", name)
 	}
-}
-
-// waived returns the lines the package's directives waive: a directive's
-// own line, or the next one when the directive is alone on its line.
-func waived(pass *analysis.Pass) map[line]bool {
-	out := map[line]bool{}
-	for _, f := range pass.Files {
-		var src []byte
-		for _, g := range f.Comments {
-			for _, cm := range g.List {
-				if cm.Text != directive && !strings.HasPrefix(cm.Text, directive+" ") {
-					continue
-				}
-				posn := pass.Fset.Position(cm.Slash)
-				if src == nil {
-					src, _ = pass.ReadFile(posn.Filename)
-				}
-				n := posn.Line
-				if alone(src, posn.Offset) {
-					n++
-				}
-				out[line{posn.Filename, n}] = true
-			}
-		}
-	}
-	return out
-}
-
-// alone reports whether only blanks precede offset on its line of src.
-func alone(src []byte, offset int) bool {
-	if offset > len(src) {
-		return false
-	}
-	for i := offset - 1; i >= 0 && src[i] != '\n'; i-- {
-		if src[i] != ' ' && src[i] != '\t' {
-			return false
-		}
-	}
-	return true
 }
