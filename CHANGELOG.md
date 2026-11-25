@@ -902,6 +902,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- On PostgreSQL, a JSON path's `Text`, `Number` and `Bool` `EQ`, `Text`'s
+  `In` and `ValueIsNull` are written as `col @> $1::jsonb` in a filter
+  under an even number of `Not`s, so a GIN index on the jsonb column
+  serves them (ADR 0174). The rows are the same; a negated condition, a
+  projection, an ordering and a path with an integer key keep the typed
+  form. MySQL and SQLite are unchanged.
+
 - GraphQL needs no setup (ADR 0173): a gqlgen or graphql-go server with
   only the resolver's DB pages and batches nested edges as with
   `gqlgenx.Setup`, in as many statements, and a service's `Paginate`

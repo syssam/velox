@@ -900,6 +900,25 @@ PostgreSQL, MySQL and SQLite: velox writes each dialect's JSON functions and
 passes the keys as arguments. A key can't be empty or contain `"`, `\` or a
 control character. See [ADR 0058](decisions/0058-json-paths.md).
 
+On PostgreSQL a GIN index on the jsonb column, `jsonb_path_ops` or the
+default class, serves `Text`'s, `Number`'s and `Bool`'s `EQ`, `Text`'s
+`In` and `ValueIsNull`. In a filter (a `Where`, a join's `On`, a `Having`,
+a policy's or a relation's conditions) velox writes them as containment,
+`"attrs" @> $1::jsonb` with `{"plan":{"tier":"pro"}}` bound, and an `In`
+as an `Or` of one per value. Under an odd number of `Not`s, in a
+`Select`, an ordering, or where a key is an integer such as `"0"`, they
+keep the typed form, which no index serves. The rows are the same either
+way: `Not(EQ("pro"))` still matches only a string other than `"pro"`, not
+a missing key. So the same handles serve every dialect, with no switch on
+PostgreSQL. See [ADR 0174](decisions/0174-json-path-containment.md).
+
+```go
+db.Query[veloxgen.Account]().Where(velox.Or(
+	A.Attrs.Array("tags").Has("vip"), // {"tags": ["vip"]}
+	A.Attrs.Text("tags").EQ("vip"),   // {"tags": "vip"}; one GIN index serves both
+)).Limit(20)
+```
+
 A string at a path also has `Contains`, `HasPrefix` and `HasSuffix`, which
 take the string literally and keep case on every dialect. A number or a
 string at a path orders a query with `Asc` and `Desc`, and its `Term()` is a

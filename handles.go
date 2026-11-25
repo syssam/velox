@@ -1552,17 +1552,17 @@ func (c JSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignAppend, Value: v}}
 }
 
-// Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.
+// Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character. On PostgreSQL a GIN index on the jsonb column serves its EQ and In in a filter (ADR 0174).
 func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
 	return JSONText[E]{c.I, jsonPath(engine.JSONKindText, keys)}
 }
 
-// Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.
+// Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number. On PostgreSQL a GIN index on the jsonb column serves its EQ in a filter (ADR 0174).
 func (c JSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E] {
 	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}
 }
 
-// Bool is the boolean at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no boolean.
+// Bool is the boolean at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no boolean. On PostgreSQL a GIN index on the jsonb column serves its EQ in a filter (ADR 0174).
 func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 	return JSONBool[E]{c.I, jsonPath(engine.JSONKindBool, keys)}
 }
@@ -1570,7 +1570,7 @@ func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
 func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
 
-// ValueIsNull is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect.
+// ValueIsNull is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect. On PostgreSQL a GIN index on the jsonb column serves it in a filter (ADR 0174).
 func (c JSONCol[E, V]) ValueIsNull[_ Lazy[V]](keys ...string) Pred[E] {
 	return valueIsNull[E](c.I, keys)
 }
@@ -1644,17 +1644,17 @@ func (c NullJSONCol[E, V]) Append[_ Lazy[V]](v V) Setter[E] {
 	return Setter[E]{Assignment{Column: int(c.I), Op: AssignAppend, Value: v}}
 }
 
-// Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character.
+// Text is the string at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no string. A key may not be empty or hold a double quote, a backslash or a control character. On PostgreSQL a GIN index on the jsonb column serves its EQ and In in a filter (ADR 0174).
 func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E] {
 	return JSONText[E]{c.I, jsonPath(engine.JSONKindText, keys)}
 }
 
-// Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number.
+// Number is the number at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no number. On PostgreSQL a GIN index on the jsonb column serves its EQ in a filter (ADR 0174).
 func (c NullJSONCol[E, V]) Number[_ Lazy[V]](keys ...string) JSONNumber[E] {
 	return JSONNumber[E]{c.I, jsonPath(engine.JSONKindNumber, keys)}
 }
 
-// Bool is the boolean at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no boolean.
+// Bool is the boolean at the path of object keys in the column, for its conditions: NULL where the path is missing or holds no boolean. On PostgreSQL a GIN index on the jsonb column serves its EQ in a filter (ADR 0174).
 func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 	return JSONBool[E]{c.I, jsonPath(engine.JSONKindBool, keys)}
 }
@@ -1662,7 +1662,7 @@ func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
 func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
 
-// ValueIsNull is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect.
+// ValueIsNull is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect. On PostgreSQL a GIN index on the jsonb column serves it in a filter (ADR 0174).
 func (c NullJSONCol[E, V]) ValueIsNull[_ Lazy[V]](keys ...string) Pred[E] {
 	return valueIsNull[E](c.I, keys)
 }

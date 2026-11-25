@@ -11,7 +11,9 @@ import (
 // E, made by a JSON handle's Text. It is NULL where the path is missing or
 // holds a value that is not a string, so a number 5 is not the string "5".
 // Its conditions read alike on PostgreSQL (jsonb), MySQL and SQLite, and
-// compare strings as written, with case, on all three.
+// compare strings as written, with case, on all three. On PostgreSQL a GIN
+// index on the column serves EQ and In in a filter: there they are
+// containment of the column, under an even number of Nots.
 type JSONText[E any] struct {
 	col  int32
 	path engine.JSONPath
@@ -22,7 +24,8 @@ type JSONText[E any] struct {
 // the path is missing or holds a value that is not a number. A JSON handle's
 // Len is one too: the length of an array, and JSONText's Number, which also
 // reads a string that spells a number. Its conditions read alike on
-// PostgreSQL (jsonb), MySQL and SQLite.
+// PostgreSQL (jsonb), MySQL and SQLite. On PostgreSQL a GIN index on the
+// column serves the EQ of a handle's Number in a filter, as JSONText's EQ.
 type JSONNumber[E any] struct {
 	col  int32
 	path engine.JSONPath
@@ -32,7 +35,8 @@ type JSONNumber[E any] struct {
 // entity E, made by a JSON handle's Bool. It is NULL where the path is
 // missing or holds a value that is not true or false, so neither the string
 // "true" nor the number 1 is true. Its conditions read alike on PostgreSQL
-// (jsonb), MySQL and SQLite.
+// (jsonb), MySQL and SQLite. On PostgreSQL a GIN index on the column serves
+// EQ in a filter, as JSONText's EQ.
 type JSONBool[E any] struct {
 	col  int32
 	path engine.JSONPath
