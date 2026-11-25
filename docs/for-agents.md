@@ -62,7 +62,8 @@ Each rule names the test that backs it.
   stores `true` for a struct's `false`; store `false` with a setter,
   `db.Insert(&x).Set(Xs.Active.Set(false))`, or a hook's `Mutation.Set`. The
   insert fills defaults before setters and hooks, as ent does
-  (`TestDefaultUnderExplicitZero`).
+  (`TestDefaultUnderExplicitZero`). veloxvet reports a struct that spells
+  out such a zero for an insert with no setter (`TestZeroDefault`).
 - **IDs are `int64`** (`TestBuildBlog`). A foreign-key field has its target's
   ID type (`TestTablesForeignKeyCopiesType`).
 - **A Write policy filters.** An update aimed at rows the caller may not change
@@ -105,5 +106,5 @@ Run `go build ./...`, `go vet ./...` and `go test ./...`, and in CI
 `go tool velox-gen -check ./veloxschema`. Run veloxvet too
 (`go install github.com/syssam/velox/veloxvet/cmd/veloxvet@latest`, then
 `go vet -vettool=$(which veloxvet) ./...`): it finds the reads that would
-fail with `ErrUnbounded`. PostgreSQL and MySQL tests need their
+fail with `ErrUnbounded`, and the zeros an insert's default would replace. PostgreSQL and MySQL tests need their
 own DSNs; say so when you only ran SQLite.

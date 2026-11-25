@@ -165,7 +165,8 @@ group.
   root. In `ci.yml` the checks and the run are a step of the `lint` job, and
   the tests a step of the `test` job, whose coverage floors read their
   profile. A read a test or a demo means to fail carries
-  `//velox:unbounded-ok`.
+  `//velox:unbounded-ok`, and a zero it means the default to replace
+  `//velox:zero-ok`.
 - `bench_compare` (bench): the tidy check, `go vet`, golangci-lint and
   `go test -race -short` in `bench/compare`, then the velox case of
   `TestGenerateCompiles`, which `-short` skips. The measurements never run

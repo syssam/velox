@@ -143,6 +143,10 @@ db.Insert(&g).Set(veloxgen.Groups.Open.Set(false)).Exec(ctx) // open = false
 | `field.String("plan").Default("free")` | `"free"` | a setter: `Set(Xs.Plan.Set(""))` |
 | `field.String("plan").Optional().Nillable()` | `NULL` | the struct |
 
+veloxvet's `zerodefault` check reports a struct that spells out such a zero,
+`veloxgen.Group{Open: false}`, when the function inserts it with no setter
+([Catch unbounded reads and replaced zeros at build time](#catch-unbounded-reads-and-replaced-zeros-at-build-time)).
+
 A nil pointer field is unset, as in ent, where a create builder fills a
 default unless `SetX` was called; so is a field whose only setter is a nil
 `SetPtr`, ent's `SetNillableX(nil)`. `SetNull()` in the insert is an
@@ -677,10 +681,11 @@ for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).AllowUnboun
 `Count` and `Exists` need no `Limit`, as they return one value. A DB can also
 cap every read with `velox.WithMaxLimit` and `velox.WithMaxRows`.
 
-### Catch unbounded reads at build time
+### Catch unbounded reads and replaced zeros at build time
 
-veloxvet reports a read that would fail with `ErrUnbounded`, before the
-program runs. Run it as go vet's tool:
+veloxvet reports a read that would fail with `ErrUnbounded`, and a zero
+value that an insert's default would replace, before the program runs.
+Run it as go vet's tool:
 
 ```sh
 go install github.com/syssam/velox/veloxvet/cmd/veloxvet@latest
@@ -707,6 +712,23 @@ from a parameter, a field or a closure is not reported, so it finds most
 unbounded reads, not all. A test that expects the error waives the report
 with `//velox:unbounded-ok` on any line of the statement that holds the
 read, or alone on the line before the statement.
+
+Its `zerodefault` check reports a constant zero, `false`, `0` or `""`,
+written to a field whose `Default` is not zero, or that has a
+`DefaultFunc`, when the same function inserts the struct with
+`db.Insert` or `db.InsertAll` and no `Set` or `SetInput`. The insert
+fills the default into the zero, so the zero is never stored:
+
+```go
+g := veloxgen.Group{Name: "a", Open: false} // reported: Default(true) replaces it
+db.Insert(&g).Exec(ctx)
+db.Insert(&g).Set(veloxgen.Groups.Open.Set(false)).Exec(ctx) // stores false
+```
+
+It follows a local variable of the entity, or of a pointer to it, only
+when the function does nothing else with it than read or set its fields
+and insert it. `//velox:zero-ok` waives a report, by the rule
+`//velox:unbounded-ok` follows.
 `veloxvet.Analyzers` are go/analysis analyzers, for golangci-lint's plugins
 and other drivers.
 

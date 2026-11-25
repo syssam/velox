@@ -21,6 +21,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- veloxvet's `ZeroDefault` analyzer reports a constant zero (`false`, `0`,
+  `""`) written to a field whose `Default` is not zero, or that has a
+  `DefaultFunc`, in a struct that the same function inserts with no `Set`
+  or `SetInput`: the insert stores the default instead. `//velox:zero-ok`
+  waives a report (decision 0177).
+- veloxvet: `//velox:unbounded-ok` waives the statement that holds the
+  read, on any of its lines or alone on the line before it, so it covers a
+  chain spread over lines; a method value's call no longer panics the
+  analyzer.
 - veloxvet, a module of its own (`github.com/syssam/velox/veloxvet`), reports
   at build time a read that fails with `ErrUnbounded`: `All`, `Iter`,
   `Values`, `IDs`, `Rows`, `SQL` or `velox.Scan` with no `Limit` or
