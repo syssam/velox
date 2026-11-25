@@ -243,7 +243,23 @@ func waivedSpanning(ctx context.Context, db *velox.DB, c bool) {
 	switch _, err := db.Query[tm.Invoice]().All(ctx); err { // want `All reads a query`
 	case nil: //velox:unbounded-ok
 	}
+	for first(db.Query[tm.Invoice]().All(ctx)) == nil { //velox:unbounded-ok
+		db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+	}
+	for range db.Query[tm.Invoice]().Iter(ctx) { //velox:unbounded-ok
+		db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+	}
+	switch len(first(db.Query[tm.Invoice]().All(ctx))) { //velox:unbounded-ok
+	case 0:
+		db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+	}
+	switch {
+	case first(db.Query[tm.Invoice]().All(ctx)) == nil: //velox:unbounded-ok
+		db.Query[tm.Invoice]().All(ctx) // want `All reads a query`
+	}
 }
+
+func first[T any](v T, _ error) T { return v }
 
 //velox:unbounded-ok
 var _, _ = unpaid(nil).

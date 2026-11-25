@@ -45,11 +45,12 @@ alone.
   query, so a new method cannot make it report a bounded read.
 - `//velox:unbounded-ok` waives a report when it is on any line of the
   statement that holds the read, or alone on the line before the
-  statement's first line. For a read in the header of an `if`, `for`,
-  `switch` or `select` statement, or in a `case`, only the header's lines
-  count; outside a function, the declaration's spec is the statement. A
-  chain spread over lines is waived by one directive, wherever its read
-  call sits. It is for a test or a demo that expects
+  statement's first line. The statement is the innermost one: an `if`'s
+  or a `switch`'s init is its own. For a read in the condition of an
+  `if` or a `for`, a `switch`'s tag, a `range`'s expression or a `case`'s
+  list, only the header's lines count; outside a function, the
+  declaration's spec is the statement. A chain spread over lines is waived
+  by one directive, wherever its read call sits. It is for a test or a demo that expects
   `ErrUnbounded`; `AllowUnbounded` cannot say that, as it removes the
   failure.
 - The module requires only `golang.org/x/tools`. The root module does not

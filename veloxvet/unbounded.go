@@ -39,7 +39,7 @@ in the packages that call it.
 A comment //velox:unbounded-ok on any line of the statement that holds
 the read, or alone on the line before the statement, waives the report:
 for a test or a demo that expects the read to fail. For a read in the
-header of an if, for, switch or select statement, or of a case, only the
+header of an if, for or switch statement, or of a case, only the
 header counts.`
 
 // FreshQuery is the fact of a function each of whose returns is a query

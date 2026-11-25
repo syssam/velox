@@ -63,8 +63,9 @@ func alone(src []byte, offset int) bool {
 
 // waives reports whether a directive waives the report at pos: one on a
 // line of the statement that holds pos, or alone on the line before the
-// statement. Of an if, for, switch or select statement, or a case, whose
-// header holds pos, only the header counts. Outside a function, the
+// statement. Of an if, for or switch statement, or a case, whose header
+// holds pos, only the header counts: a statement in a header, such as an
+// if's init, is a statement of its own. Outside a function, the
 // declaration's spec stands for the statement.
 func (d directives) waives(pass *analysis.Pass, pos token.Pos) bool {
 	if len(d.on) == 0 {
@@ -124,13 +125,7 @@ func header(s ast.Stmt, pos token.Pos) token.Pos {
 		open = s.Body.Lbrace
 	case *ast.SwitchStmt:
 		open = s.Body.Lbrace
-	case *ast.TypeSwitchStmt:
-		open = s.Body.Lbrace
-	case *ast.SelectStmt:
-		open = s.Body.Lbrace
 	case *ast.CaseClause:
-		open = s.Colon
-	case *ast.CommClause:
 		open = s.Colon
 	}
 	if open.IsValid() && pos < open {
