@@ -14,6 +14,8 @@ type User struct { // want User:"Defaults"
 	Note   string
 	Nick   *string
 	Name   string
+	Rate   float64
+	Big    float64
 }
 
 // Label is a method of the value, which cannot change it.
@@ -44,6 +46,8 @@ func userDescriptor() velox.Descriptor[User] {
 			{Field: "Note", Name: "note", Default: ""},
 			{Field: "Nick", Name: "nick", Default: "anon"},
 			{Field: "Name", Name: "name"},
+			{Field: "Rate", Name: "rate", Default: 1.5},
+			{Field: "Big", Name: "big", Default: 2e30},
 		},
 		PrimaryKey: []int{0},
 	}

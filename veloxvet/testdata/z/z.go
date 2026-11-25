@@ -22,6 +22,8 @@ func literals(ctx context.Context, db *velox.DB) {
 		Seats:  int(0), // want `Seats is 0`
 	}).OnConflict().DoNothing().Exec(ctx)
 	db.Insert[gen.User](&gen.User{Active: false}).Exec(ctx) // want `Active is false`
+	db.Insert(&gen.User{Rate: 0.0}).Exec(ctx)               // want `Rate is 0, its zero value, which the field's default replaces: the insert stores 1.5; Users.Rate.Set\(0\) in the insert stores 0`
+	db.Insert(&gen.User{Big: 0}).Exec(ctx)                  // want `the insert stores 2e\+30;`
 
 	// A real generated entity: Roster's role defaults to "member".
 	db.Insert(&tm.Roster{Role: ""}).Exec(ctx) // want `Role is "", its zero value, which the field's default replaces: the insert stores "member"; Rosters.Role.Set\(""\) in the insert stores ""`

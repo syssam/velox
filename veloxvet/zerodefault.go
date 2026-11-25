@@ -5,6 +5,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"strconv"
 
 	"golang.org/x/tools/go/analysis"
 )
@@ -178,7 +179,7 @@ func columnDefault(info *types.Info, col *ast.CompositeLit) (string, string, boo
 			}
 		case "Default":
 			if v != nil && !isZero(v) {
-				def, has = v.ExactString(), true
+				def, has = source(v), true
 			}
 		case "DefaultFunc":
 			if !isIdent(kv.Value, "nil") {
@@ -205,6 +206,16 @@ func handlesVar(pkg *types.Package, e *types.Named) string {
 func isIdent(e ast.Expr, name string) bool {
 	id, ok := e.(*ast.Ident)
 	return ok && id.Name == name
+}
+
+// source is v as Go source: a float as its shortest decimal, which
+// ExactString prints as a fraction (3/2 for 1.5), a string quoted.
+func source(v constant.Value) string {
+	if v.Kind() == constant.Float {
+		f, _ := constant.Float64Val(v)
+		return strconv.FormatFloat(f, 'g', -1, 64)
+	}
+	return v.ExactString()
 }
 
 // isZero reports whether v is its kind's zero value.
@@ -627,7 +638,7 @@ func (z *zeroChecker) report(zr zero) {
 		return
 	}
 	z.seen[zr.expr.Pos()] = true
-	val := z.pass.TypesInfo.Types[zr.expr].Value.ExactString()
+	val := source(z.pass.TypesInfo.Types[zr.expr].Value)
 	f, _ := zr.defs.field(zr.field)
 	def := f.Default
 	stores := "the insert stores " + def
