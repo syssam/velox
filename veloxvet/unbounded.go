@@ -98,14 +98,19 @@ var roles = func() map[string]funcRole {
 	}
 	// The chaining methods that leave Limit and AllowUnbounded as they
 	// were. A method not named here returns a query the check does not
-	// know.
+	// know. TestTablesMatchAPI checks these lists against velox.
 	for _, name := range []string{
-		"Where", "With", "OrderBy", "Offset", "Writable", "ForUpdate",
-		"ForShare", "SkipLocked", "NoWait", "MaxRows", "Columns", "Omit",
-		"After", "Select", "SelectRaw", "Distinct", "GroupBy", "Having",
-		"Join", "LeftJoin", "Unordered", "OrderValues", "AfterValues",
+		"Where", "OrderBy", "Offset", "Writable", "ForUpdate", "ForShare",
+		"MaxRows", "Columns", "After", "Select", "GroupBy", "Having",
+		"Join", "LeftJoin",
 	} {
 		m[veloxPath+".Query."+name] = funcRole{roleKeep, 0}
+		m[enginePath+".TableQuery."+name] = funcRole{roleKeep, 0}
+	}
+	for _, name := range []string{"With", "SkipLocked", "NoWait", "Omit", "SelectRaw", "Distinct"} {
+		m[veloxPath+".Query."+name] = funcRole{roleKeep, 0}
+	}
+	for _, name := range []string{"Unordered", "OrderValues", "AfterValues"} {
 		m[enginePath+".TableQuery."+name] = funcRole{roleKeep, 0}
 	}
 	for _, name := range []string{"All", "Iter", "Values", "IDs", "Rows", "SQL"} {
