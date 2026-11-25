@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"slices"
 	"sync"
 )
 
@@ -358,9 +359,12 @@ func nodeKey(k []byte, d Dialect, n Node) []byte {
 		k = inKey(k, d, n.V.([]any))
 	case OpJSON:
 		// The keys are arguments; the kind and their number shape the text.
+		// Whether a key reads as an array index decides PostgreSQL's
+		// containment (containable), so it is keyed too.
 		p := n.V.(JSONPath)
 		k = append(k, byte(p.Kind))
 		k = binary.AppendUvarint(k, uint64(len(p.Keys)))
+		k = append(k, bit(slices.ContainsFunc(p.Keys, indexKey)))
 	case OpJSONHas:
 		// The element is an argument; its kind shapes SQLite's text, and
 		// the number of the path's keys the others'. A member's name is an

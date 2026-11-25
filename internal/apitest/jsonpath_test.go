@@ -21,10 +21,11 @@ func TestJSONPathSQL(t *testing.T) {
 		args []any
 	}{
 		{velox.Postgres,
-			`SELECT "id" FROM "j_docs" WHERE (CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $1, $2)) = 'string' THEN jsonb_extract_path_text("attrs", $3, $4) END = $5 AND ` +
-				`CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $6)) = 'number' THEN (jsonb_extract_path_text("attrs", $7))::numeric END > $8 AND ` +
-				`jsonb_extract_path("attrs", $9) IS NOT NULL) LIMIT 1`,
-			[]any{"plan", "tier", "plan", "tier", "pro", "seats", "seats", 3.0, "x"}},
+			// Text's EQ in a WHERE is containment (TestJSONContainSQL).
+			`SELECT "id" FROM "j_docs" WHERE ("attrs" @> $1::jsonb AND ` +
+				`CASE WHEN jsonb_typeof(jsonb_extract_path("attrs", $2)) = 'number' THEN (jsonb_extract_path_text("attrs", $3))::numeric END > $4 AND ` +
+				`jsonb_extract_path("attrs", $5) IS NOT NULL) LIMIT 1`,
+			[]any{`{"plan":{"tier":"pro"}}`, "seats", "seats", 3.0, "x"}},
 		{velox.MySQL,
 			"SELECT `id` FROM `j_docs` WHERE (CASE WHEN JSON_TYPE(JSON_EXTRACT(`attrs`, ?)) = 'STRING' THEN JSON_UNQUOTE(JSON_EXTRACT(`attrs`, ?)) END = ? AND " +
 				"CASE WHEN JSON_TYPE(JSON_EXTRACT(`attrs`, ?)) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL') THEN CAST(JSON_EXTRACT(`attrs`, ?) AS DOUBLE) END > ? AND " +
@@ -123,7 +124,8 @@ func TestJSONBoolSQL(t *testing.T) {
 		velox.MySQL:    "CASE WHEN JSON_TYPE(JSON_EXTRACT(`attrs`, ?)) = 'BOOLEAN' THEN JSON_EXTRACT(`attrs`, ?) = CAST('true' AS JSON) END = ?",
 		velox.SQLite:   `CASE WHEN json_type("attrs", ?) IN ('true', 'false') THEN json_extract("attrs", ?) END = ?`,
 	} {
-		text, args, err := openFake(d, &fakeconn.Exec{}).Query[fixture.JDoc]().Where(J.Attrs.Bool("trial").EQ(true)).Limit(1).SQL(ctx)
+		// Under a NOT, PostgreSQL keeps the typed form (TestJSONContainSQL).
+		text, args, err := openFake(d, &fakeconn.Exec{}).Query[fixture.JDoc]().Where(velox.Not(J.Attrs.Bool("trial").EQ(true))).Limit(1).SQL(ctx)
 		// The arguments are the path twice and the value.
 		if err != nil || !strings.Contains(text, want) || len(args) != 3 || args[2] != true {
 			t.Errorf("%v:\n got %s %v %v\nwant %s", d, text, args, err, want)

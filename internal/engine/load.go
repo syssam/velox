@@ -178,7 +178,7 @@ func keysPer(db *DB, t *EntityInfo, ps []Predicate) int {
 	fixed := 0 // the parameters of the filter
 	for _, p := range ps {
 		w := writer{d: db.D, in: t, argsOnly: true}
-		w.pred(p.n)
+		w.filterPred(p.n)
 		fixed += len(w.args)
 	}
 	return max(1, db.maxParams()-fixed-64)

@@ -40,6 +40,13 @@ type writer struct {
 	// path is the JSON path of the OpJSON whose kid is being written: its
 	// column is then the value at the path. nil outside one.
 	path *JSONPath
+	// filter is set while a condition is written whose value only keeps
+	// or drops a row (filterPred): there SQL NULL and false are alike.
+	// neg is set under an odd number of NOTs within it. Where filter is
+	// set and neg is not, PostgreSQL writes a typed JSON path condition
+	// as containment (jsonContain), which is false where the typed form
+	// is NULL.
+	filter, neg bool
 	// err is the first error writing found: a JSON value that does not
 	// encode, or a condition comparing a JSON column. The text and
 	// arguments are then not used.
@@ -353,7 +360,7 @@ func (w *writer) joinClauses() {
 		w.in, w.joinAlias, w.alias = j.Link.Target, alias, alias
 		for _, p := range j.On {
 			w.str(" AND ")
-			w.pred(p.n)
+			w.filterPred(p.n)
 		}
 		w.in, w.joinAlias, w.alias = owner, "", ""
 	}
@@ -740,7 +747,7 @@ func (w *writer) eachFrom(st *Statement) {
 	w.qualify = c.Join != nil || len(w.joins) > 0
 	for _, p := range st.Where {
 		w.str(sep)
-		w.pred(p.n)
+		w.filterPred(p.n)
 		sep = " AND "
 	}
 	w.qualify = false
@@ -974,7 +981,9 @@ func (w *writer) pred(n Node) {
 		w.str(")")
 	case OpNot:
 		w.str("NOT (")
+		w.neg = !w.neg
 		w.pred(n.Kids[0])
+		w.neg = !w.neg
 		w.str(")")
 	case OpExists:
 		w.exists(n)
@@ -1095,7 +1104,7 @@ func (w *writer) through(n Node) {
 	w.subquery(join, n.W.(int), in, int(n.Col), castNone)
 	for _, k := range n.Kids {
 		w.str(" AND ")
-		w.pred(k)
+		w.filterPred(k)
 	}
 	w.str(")")
 	w.in, w.alias, w.depth = in, outer, depth
@@ -1121,7 +1130,7 @@ func (w *writer) exists(n Node) {
 	}
 	for _, k := range n.Kids {
 		w.str(" AND ")
-		w.pred(k)
+		w.filterPred(k)
 	}
 	if l.Join != nil {
 		w.str(")")
@@ -1344,8 +1353,18 @@ func (w *writer) where(ps []Predicate) {
 		} else {
 			w.str(" AND ")
 		}
-		w.pred(p.n)
+		w.filterPred(p.n)
 	}
+}
+
+// filterPred writes the condition n where its value only keeps or drops a
+// row: a WHERE, a join's ON, a HAVING, or a subquery's conditions. No NOT
+// is around it there, whatever is around the subquery.
+func (w *writer) filterPred(n Node) {
+	filter, neg := w.filter, w.neg
+	w.filter, w.neg = true, false
+	w.pred(n)
+	w.filter, w.neg = filter, neg
 }
 
 func (w *writer) columns(cs []int) {
@@ -1523,7 +1542,20 @@ func (w *writer) conflict(cf *ConflictClause) {
 		w.str(" ON CONFLICT (")
 		w.columns(cf.Columns)
 		w.str(")")
-		w.where(cf.TargetWhere)
+		// The conflict target's WHERE names a partial unique index, which
+		// PostgreSQL infers by the form of its predicate: written as it
+		// is, never as containment.
+		filter := w.filter
+		w.filter = false
+		for i, p := range cf.TargetWhere {
+			if i == 0 {
+				w.str(" WHERE ")
+			} else {
+				w.str(" AND ")
+			}
+			w.pred(p.n)
+		}
+		w.filter = filter
 	}
 	if keep {
 		w.str(" DO NOTHING")

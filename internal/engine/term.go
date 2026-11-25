@@ -465,7 +465,7 @@ func (w *writer) relTerm(t Term) {
 	w.alias = alias
 	for _, k := range t.r.n.Kids {
 		w.str(" AND ")
-		w.pred(k)
+		w.filterPred(k)
 	}
 	w.str(")")
 	w.in, w.alias, w.depth = owner, outer, depth
@@ -533,7 +533,7 @@ func (w *writer) projectStmt(st *Statement) {
 			w.str(" AND ")
 		}
 		w.having = true
-		w.pred(h.n)
+		w.filterPred(h.n)
 		w.having = false
 	}
 	w.grouped = len(p.GroupBy) > 0
