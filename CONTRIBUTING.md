@@ -5,7 +5,7 @@ a change has to keep true. Go 1.27 is required. The database tests need Docker.
 
 ## Layout
 
-There are five Go modules, and one more that only pins a tool. A change
+There are six Go modules, and one more that only pins a tool. A change
 that touches more than one is checked in each.
 
 - The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
@@ -33,6 +33,11 @@ that touches more than one is checked in each.
   in `internal/gqlplugin`, and in the process as `graphqlgen`) and the
   `veloxgql` runtime.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
+- `veloxvet`: the static checks of code that uses velox, as go/analysis
+  analyzers, and the `veloxvet` command that runs them as go vet's tool. It
+  requires only `golang.org/x/tools`, which the root does not
+  (decision 0176). Its tests copy `testdata/a` into a temporary module that
+  reaches the root through a replace.
 - `examples`: the runnable examples. Each has its schema, its generated code and
   its migrations.
 - `bench/compare`: the harness that compares velox's build and runtime cost
@@ -80,9 +85,10 @@ The merge gate is about the ORM. It always runs the root module's gofmt,
 tidiness, vet, govulncheck and golangci-lint, the root's tests with `-race`
 on PostgreSQL and MySQL, `velox-gen -check` and `verify` on the test models
 and the examples, the examples' lint, tests and migrations, the root's fuzz
-targets, and `scripts/scale-check.sh`, velox's own build cost. The examples'
-lint covers `examples/graphql` and `examples/otel`; their tests run with their
-groups.
+targets, `scripts/scale-check.sh`, velox's own build cost, and veloxvet's
+checks, tests and run over the examples and the root, which must report
+nothing. The examples' lint covers `examples/graphql` and `examples/otel`;
+their tests run with their groups.
 
 The rest is in three groups, which the merge gate runs only when the change
 touches them. The change is every file that differs from the merge base with
@@ -153,6 +159,13 @@ group.
 - `veloxotel` (otel): the tidy check, `go vet`, govulncheck, golangci-lint and
   the tests with a coverage profile, in `contrib/veloxotel`.
 - `examples_otel` (otel): `examples/otel`'s tests.
+- `veloxvet` (gate): the tidy check, `go vet`, govulncheck, golangci-lint
+  and the tests with a coverage profile, in `veloxvet`, then
+  `go vet -vettool` with the built `veloxvet` over the examples and the
+  root. In `ci.yml` the checks and the run are a step of the `lint` job, and
+  the tests a step of the `test` job, whose coverage floors read their
+  profile. A read a test or a demo means to fail carries
+  `//velox:unbounded-ok`.
 - `bench_compare` (bench): the tidy check, `go vet`, golangci-lint and
   `go test -race -short` in `bench/compare`, then the velox case of
   `TestGenerateCompiles`, which `-short` skips. The measurements never run
@@ -305,11 +318,11 @@ new version.
 
 `scripts/coverage-floors.txt` holds a floor for each package, in percent. A
 floor is the coverage measured at its commit minus 1.0. `scripts/covfloor`
-checks the merged profiles of the four modules against them, in
+checks the merged profiles of the five modules with tests against them, in
 `scripts/ci-local.sh --full` and on a push to `main`:
 
 ```sh
-go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out cover-veloxvet.out
 ```
 
 The profiles are the `-coverprofile` files of the test runs above. The

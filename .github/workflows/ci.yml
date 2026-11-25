@@ -105,6 +105,19 @@ jobs:
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
           go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/veloxgen
+      # veloxvet's module, then the veloxvet command on the examples and the
+      # root, which must report nothing. Its tests run in the test job, whose
+      # coverage floors read their profile.
+      - name: veloxvet
+        working-directory: veloxvet
+        run: |
+          go mod tidy -diff
+          go vet ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+          go build -o "$GITHUB_WORKSPACE/bin/veloxvet" ./cmd/veloxvet
+          go -C ../examples vet -vettool="$GITHUB_WORKSPACE/bin/veloxvet" ./...
+          go -C .. vet -vettool="$GITHUB_WORKSPACE/bin/veloxvet" ./...
   # The tests, on each PostgreSQL version: the ORM's always, and the groups'
   # when they run. A push measures coverage and checks it against the
   # per-package floors at the end (scripts/coverage-floors.txt).
@@ -181,6 +194,11 @@ jobs:
       - name: examples
         working-directory: examples
         run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-examples.out" $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)')
+      # Its tests load the root's packages offline, from the module cache
+      # that the root's go mod download all filled.
+      - name: veloxvet
+        working-directory: veloxvet
+        run: go test -race -count=1 -coverprofile="$GITHUB_WORKSPACE/cover-veloxvet.out" ./...
       - name: contrib/veloxotel
         if: needs.changes.outputs.otel == 'true'
         working-directory: contrib/veloxotel
@@ -207,7 +225,7 @@ jobs:
         run: go test -race -count=1 -timeout 20m -coverprofile="$GITHUB_WORKSPACE/cover-examples-graphql.out" ./graphql/...
       - name: coverage floors
         if: github.event_name != 'pull_request'
-        run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+        run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out cover-veloxvet.out
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 30

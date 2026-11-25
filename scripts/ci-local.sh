@@ -307,6 +307,21 @@ lane_veloxotel() (
   go test -race -count=1 -coverprofile="$root/cover-veloxotel.out" ./...
 )
 
+# veloxvet is its own module: the static checks of code that uses velox. Its
+# own vet, lint and tests, then the veloxvet command on the examples and the
+# root, which must report nothing.
+lane_veloxvet() (
+  cd veloxvet
+  go mod tidy -diff
+  go vet ./...
+  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
+  go test -race -count=1 -coverprofile="$root/cover-veloxvet.out" ./...
+  go build -o "$root/bin/veloxvet" ./cmd/veloxvet
+  go -C ../examples vet -vettool="$root/bin/veloxvet" ./...
+  go -C .. vet -vettool="$root/bin/veloxvet" ./...
+)
+
 # examples/otel's tests.
 lane_examples_otel() (
   cd examples
@@ -334,7 +349,7 @@ lane_bench_compare() (
 
 # No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
 final_covfloor() {
-  go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+  go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out cover-veloxvet.out
 }
 
 # Benchmarks against the committed baselines (bench/baseline). Report-only: the
@@ -347,7 +362,7 @@ final_bench() {
 # longest; the lanes in niced run at a lower priority, so that they take the
 # cores the others leave: fuzzing runs for its fixed time, and the scale
 # checks measure CPU time.
-lanes=(root_test:merge root_cover:full scale_graphql:graphql root_graphql:graphql examples:gate gqlgen_latest:graphql fuzz:gate scale:gate graphql:graphql examples_generated:gate examples_graphql:graphql root_lint:gate generated:gate veloxotel:otel examples_otel:otel bench_compare:bench)
+lanes=(root_test:merge root_cover:full scale_graphql:graphql root_graphql:graphql examples:gate gqlgen_latest:graphql fuzz:gate scale:gate graphql:graphql examples_generated:gate examples_graphql:graphql root_lint:gate generated:gate veloxotel:otel veloxvet:gate examples_otel:otel bench_compare:bench)
 niced=" scale_graphql scale gqlgen_latest fuzz "
 finals=(covfloor:full bench:bench)
 
@@ -413,6 +428,7 @@ if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   # One module at a time, all on velox, as CI's 14 leg runs them.
   go test -race -count=1 -timeout 40m -skip '^(TestGraphQLServiceLinksOnlyItsEntities|TestScaleHarnessSmallGraphQL)$' ./...
   (cd examples && go test -race -count=1 $(go list ./... | grep -vE '/examples/(graphql|otel)(/|$)'))
+  (cd veloxvet && go test -race -count=1 ./...)
   if selected otel; then
     (cd contrib/veloxotel && go test -race -count=1 ./...)
     (cd examples && go test -race -count=1 ./otel/...)

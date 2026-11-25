@@ -324,12 +324,12 @@ func TestCILocalMirrorsCI(t *testing.T) {
 		has := func(dir, prefix string) int {
 			return slices.IndexFunc(lines, func(l scriptLine) bool { return l.dir == dir && strings.HasPrefix(l.text, prefix) })
 		}
-		for _, dir := range []string{".", "contrib/graphql", "contrib/veloxotel", "examples"} {
+		for _, dir := range []string{".", "contrib/graphql", "contrib/veloxotel", "examples", "veloxvet"} {
 			if has(dir, "go run golang.org/x/vuln/cmd/govulncheck@") < 0 {
 				t.Errorf("%s runs no govulncheck in %s", script, dir)
 			}
 		}
-		for _, dir := range []string{".", "contrib/graphql", "contrib/veloxotel", "examples", "bench/compare"} {
+		for _, dir := range []string{".", "contrib/graphql", "contrib/veloxotel", "examples", "bench/compare", "veloxvet"} {
 			if has(dir, "go mod tidy -diff") < 0 {
 				t.Errorf("%s runs no go mod tidy -diff in %s", script, dir)
 			}

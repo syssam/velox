@@ -1,12 +1,12 @@
 # Per-package statement-coverage floors, checked by scripts/covfloor on a push to
 # main and in scripts/ci-local.sh --full:
 #
-#   go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out
+#   go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-root-graphql.out cover-examples.out cover-examples-graphql.out cover-examples-otel.out cover-veloxotel.out cover-graphql.out cover-veloxvet.out
 #
 # One "<import path> <percent>" per line. A floor is the coverage measured at its
 # commit minus 1.0 (at least 0.0), so that a small change does not trip it but a
 # real loss of tests does. The profiles are `go test -race -count=1 -coverprofile`,
-# per module (root, examples, contrib/veloxotel, contrib/graphql; the examples in
+# per module (root, examples, contrib/veloxotel, contrib/graphql, veloxvet; the examples in
 # three runs: its ORM examples, examples/graphql and examples/otel), merged by block.
 # The root module's run adds -coverpkg=./..., as most of the root package's tests are
 # in internal/apitest, internal/engine and internal/integration. The figures depend on the
@@ -77,6 +77,11 @@ github.com/syssam/velox/scripts/covfloor 77.8
 
 # contrib/veloxotel
 github.com/syssam/velox/contrib/veloxotel 95.8
+
+# veloxvet
+github.com/syssam/velox/veloxvet 95.9
+# cmd/veloxvet: main is one call into multichecker with the package's analyzers.
+github.com/syssam/velox/veloxvet/cmd/veloxvet 0.0
 
 # contrib/graphql
 github.com/syssam/velox/contrib/graphql 99.0
