@@ -7,7 +7,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-// TestJSONPaths: Text, Number, Bool and HasKey read a value inside a JSON column
+// TestJSONPaths: Text, Number, Bool, HasKey and ValueIsNull read a value inside a JSON column
 // alike on every dialect: a value of another type is NULL, a string is
 // compared with case, a JSON null is a key that is there, and a key may hold
 // spaces and dots.
@@ -67,6 +67,12 @@ func TestJSONPaths(t *testing.T) {
 		wantIDs(t, ids(velox.Not(JR.Attrs.HasKey("plan", "tier"))), []int64{5, 6})
 		wantIDs(t, ids(JR.Attrs.Text("a b", "c.d").EQ("y")), []int64{6})
 		wantIDs(t, ids(JR.Nums.HasKey("x")), nil) // an array has no keys
+		// ValueIsNull is a JSON null alone: not a missing key, a string or a
+		// number. With Not(HasKey) it is "missing or null", on every dialect.
+		wantIDs(t, ids(JR.Attrs.ValueIsNull("plan", "tier")), []int64{4})
+		wantIDs(t, ids(velox.Not(JR.Attrs.ValueIsNull("plan", "tier"))), []int64{1, 2, 3, 5, 6})
+		wantIDs(t, ids(velox.Or(velox.Not(JR.Attrs.HasKey("plan", "tier")), JR.Attrs.ValueIsNull("plan", "tier"))), []int64{4, 5, 6})
+		wantIDs(t, ids(JR.Attrs.ValueIsNull("plan")), nil) // an object is not null
 
 		n, err := tg.db.Update[jrec]().Set(JR.Tags.Set([]string{"paid"})).Where(tier.EQ("pro")).Exec(ctx)
 		if err != nil || n != 1 {

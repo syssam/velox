@@ -101,6 +101,11 @@ func hasKey[E any](col int32, keys []string) Pred[E] {
 	return jsonPred[E](col, jsonPath(engine.JSONKindAny, keys), engine.Node{Op: engine.OpNotNull})
 }
 
+// valueIsNull is true where the path holds a JSON null.
+func valueIsNull[E any](col int32, keys []string) Pred[E] {
+	return jsonPred[E](col, jsonPath(engine.JSONKindNull, keys), engine.Node{Op: engine.OpNotNull})
+}
+
 func jsonHas[E any](col int32, v any) Pred[E] {
 	return Pred[E](engine.NewPredicate(engine.JSONHasNode(col, v)))
 }

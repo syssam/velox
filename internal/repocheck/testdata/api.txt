@@ -212,6 +212,7 @@ func (c JSONCol[E, V]) Put[_ Lazy[V]](r Row, v V) error
 func (c JSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c JSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
+func (c JSONCol[E, V]) ValueIsNull[_ Lazy[V]](keys ...string) Pred[E]
 func (c JSONCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
 func (c NullCol[E, V]) AssignNull[_ Lazy[V]](m *Mutation) error
@@ -270,6 +271,7 @@ func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
 func (c NullJSONCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c NullJSONCol[E, V]) Text[_ Lazy[V]](keys ...string) JSONText[E]
+func (c NullJSONCol[E, V]) ValueIsNull[_ Lazy[V]](keys ...string) Pred[E]
 func (c NullJSONCol[E, V]) ValuePtr[_ Lazy[V]](m *Mutation) (*V, bool)
 func (c NullJSONCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
 func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]

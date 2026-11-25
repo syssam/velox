@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `JSONCol.ValueIsNull(keys...)` and `NullJSONCol.ValueIsNull`, ent's
+  `sqljson.ValueIsNull`: true where the path holds a JSON null, on every
+  dialect. `Or(Not(c.HasKey(k)), c.ValueIsNull(k))` is "missing or null",
+  which `Contains` could not say on SQLite.
+
 - `velox.Text`, `Integer`, `Time` and `Bool` mark a Calc's kind, as
   `Decimal` marks a number: `AfterValues` and a GraphQL connection then
   refuse a forged cursor value of another kind (`untyped.ErrOrderValue`,

@@ -35,6 +35,9 @@ const (
 	// (jsonTimeText) as its instant: SQL NULL for any other value and
 	// where the path is missing.
 	JSONKindTextTime
+	// JSONKindNull reads 1 where the path holds a JSON null: SQL NULL where
+	// it is missing or holds any other value (ValueIsNull).
+	JSONKindNull
 )
 
 // JSONPath is a path of object keys into a JSON column, and what a
@@ -142,6 +145,10 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str(") = 'boolean' THEN (")
 			call("jsonb_extract_path_text")
 			w.str(")::boolean END")
+		case JSONKindNull:
+			w.str("CASE WHEN jsonb_typeof(")
+			call("jsonb_extract_path")
+			w.str(") = 'null' THEN 1 END")
 		}
 	case MySQL:
 		extract := func() {
@@ -172,6 +179,10 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str(") = 'BOOLEAN' THEN ")
 			extract()
 			w.str(" = CAST('true' AS JSON) END")
+		case JSONKindNull:
+			w.str("CASE WHEN JSON_TYPE(")
+			extract()
+			w.str(") = 'NULL' THEN 1 END")
 		}
 	default: // SQLite
 		call := func(fn string) {
@@ -202,6 +213,10 @@ func (w *writer) jsonValue(i int32, p JSONPath) {
 			w.str(" IN ('true', 'false') THEN ")
 			call("json_extract")
 			w.str(" END")
+		case JSONKindNull:
+			w.str("CASE WHEN ")
+			call("json_type")
+			w.str(" = 'null' THEN 1 END")
 		}
 	}
 }

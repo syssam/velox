@@ -1529,7 +1529,7 @@ func (c NullStringCol[E, V]) PutNull[_ Lazy[V]](r Row) error {
 	return rowSet[E]("PutNull", r, c.I, nil)
 }
 
-// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool, HasKey and ValueIsNull test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it. I is for generated code and extensions; outside the 1.0 compatibility promise.
 type JSONCol[E, V any] struct{ I int32 }
 
 func (c JSONCol[E, V]) column(*E) int32 { return c.I }
@@ -1569,6 +1569,11 @@ func (c JSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
 func (c JSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
+
+// ValueIsNull is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect.
+func (c JSONCol[E, V]) ValueIsNull[_ Lazy[V]](keys ...string) Pred[E] {
+	return valueIsNull[E](c.I, keys)
+}
 
 // Has is true where the column's JSON array holds the element v, a string, a number or a bool: false where the column holds no array, NULL where it is NULL. Any other v fails the statement.
 func (c JSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E] { return jsonHas[E](c.I, v) }
@@ -1656,6 +1661,11 @@ func (c NullJSONCol[E, V]) Bool[_ Lazy[V]](keys ...string) JSONBool[E] {
 
 // HasKey is true where the path of object keys is in the column's document, whatever its value, a JSON null included.
 func (c NullJSONCol[E, V]) HasKey[_ Lazy[V]](keys ...string) Pred[E] { return hasKey[E](c.I, keys) }
+
+// ValueIsNull is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect.
+func (c NullJSONCol[E, V]) ValueIsNull[_ Lazy[V]](keys ...string) Pred[E] {
+	return valueIsNull[E](c.I, keys)
+}
 
 // Has is true where the column's JSON array holds the element v, a string, a number or a bool: false where the column holds no array, NULL where it is NULL. Any other v fails the statement.
 func (c NullJSONCol[E, V]) Has[_ Lazy[V]](v any) Pred[E] { return jsonHas[E](c.I, v) }

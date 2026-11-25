@@ -118,6 +118,8 @@ var (
 			"return JSONBool[E]{c.I, jsonPath(engine.JSONKindBool, keys)}"},
 		{"HasKey", "is true where the path of object keys is in the column's document, whatever its value, a JSON null included.", "(keys ...string) Pred[E]",
 			"return hasKey[E](c.I, keys)"},
+		{"ValueIsNull", "is true where the path of object keys in the column holds a JSON null, as ent's sqljson.ValueIsNull: false where the path is missing or holds any other value. A missing key or a JSON null is Or(Not(c.HasKey(k)), c.ValueIsNull(k)), on every dialect.", "(keys ...string) Pred[E]",
+			"return valueIsNull[E](c.I, keys)"},
 		{"Has", "is true where the column's JSON array holds the element v, a string, a number or a bool: false where the column holds no array, NULL where it is NULL. Any other v fails the statement.", "(v any) Pred[E]",
 			"return jsonHas[E](c.I, v)"},
 		{"HasSome", "is true where the column's JSON array holds at least one of vs. With no values it is false.", "(vs ...any) Pred[E]",
@@ -214,7 +216,7 @@ var kinds = []kind{
 	{"NullOtherCol", "[E, V any]", "is OtherCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, nullSet, null, nullValues, ptrs, nullHook}},
 	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, sums, nullSet, arith, null, nullValues, ptrs, nullHook}},
 	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", "*V", [][]method{base, ordered, count, extremes, text, nullSet, null, nullValues, ptrs, nullHook}},
-	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool and HasKey test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", "", [][]method{set, appendJSON, jsonPaths, values, hook}},
+	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and Appends to its array, its Text, Number, Bool, HasKey and ValueIsNull test a value inside it, and its Has, HasSome, HasEvery, IsEmpty and Len test the elements of an array, and Array those of an array at a path; it neither compares nor orders by the whole document, as equality and order of JSON differ by dialect.", "", [][]method{set, appendJSON, jsonPaths, values, hook}},
 	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", "", [][]method{nullSet, appendJSON, jsonPaths, null, nullValues, ptrs, nullHook}},
 }
 
