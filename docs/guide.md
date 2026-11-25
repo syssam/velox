@@ -572,7 +572,8 @@ and `"sqlite3"`. A few things to know:
   `Connect` returns an error otherwise.
 - **SQLite** gets a pool of one connection, and `Connect` turns on foreign
   keys. Inside a `Tx` or an `Iter` loop, use the transaction's DB or finish
-  the loop first: the one connection is busy.
+  the loop first: the one connection is busy. A statement that waits 5
+  seconds for it logs a slog warning; under fn's own ctx it fails at once.
 - **Your own pool:** open a `*sql.DB` yourself and wrap it with
   `velox.Open(velox.Postgres, sqlDB)`. Closing it stays your job.
 - **PostgreSQL with pgx:** `veloxpgx.Open(pool)` takes a `*pgxpool.Pool` and

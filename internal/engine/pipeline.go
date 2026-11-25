@@ -305,6 +305,7 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 	if err := db.held(ctx, st); err != nil {
 		return err
 	}
+	defer watchStatement(db, st)()
 	if err := ResolveStatement(st); err != nil {
 		return err
 	}
@@ -384,6 +385,7 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 	if err := db.held(ctx, st); err != nil {
 		return err
 	}
+	defer watchStatement(db, st)()
 	t, err := db.route(ctx, st)
 	if err != nil {
 		return err

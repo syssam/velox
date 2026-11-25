@@ -498,7 +498,9 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			txShard = sh
 		}
 	}
+	stop := watchHeld(db, "transaction", nil)
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
+	stop()
 	if err != nil {
 		endTx(info, TxError)
 		return false, endedErr(ctx, "transaction", fmt.Errorf("velox: begin: %w", err))

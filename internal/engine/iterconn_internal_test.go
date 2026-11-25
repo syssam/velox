@@ -1,11 +1,16 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox/internal/fakeconn"
 )
@@ -143,4 +148,77 @@ func TestBumpOnce(t *testing.T) {
 	if bumpOnce(plain); len(plain.Set) != 0 {
 		t.Errorf("an entity without a version: %+v", plain.Set)
 	}
+}
+
+// TestWatchHeldWarns: a statement on a pool of one, under a context its Tx
+// was not given (one derived from it, here), waits for the connection the
+// Tx holds; after heldWarnAfter velox logs one warning that says so, and
+// the statement fails at its deadline with errHeld. A BEGIN under such a
+// context is watched too. With nothing held, nothing is logged.
+func TestWatchHeldWarns(t *testing.T) {
+	old := heldWarnAfter
+	heldWarnAfter = 20 * time.Millisecond
+	t.Cleanup(func() { heldWarnAfter = old })
+	var buf syncBuffer
+	oldLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(oldLog) })
+
+	db, err := Connect("sqlite", "file:watchheld?mode=memory", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := t.Context()
+	if _, err := db.RawExec(ctx, "test", "SELECT 1", nil); err != nil || buf.Len() != 0 {
+		t.Fatalf("nothing held: %v, logged %q", err, buf.String())
+	}
+	type key struct{}
+	err = db.Tx(ctx, func(context.Context, *DB) error {
+		derived, cancel := context.WithTimeout(context.WithValue(ctx, key{}, 1), 200*time.Millisecond)
+		defer cancel()
+		_, err := db.RawExec(derived, "test", "SELECT 1", nil)
+		if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, errHeld) {
+			t.Errorf("the statement that waited: %v", err)
+		}
+		begin, cancelBegin := context.WithTimeout(context.WithValue(ctx, key{}, 2), 200*time.Millisecond)
+		defer cancelBegin()
+		if err := db.Tx(begin, func(context.Context, *DB) error { return nil }); err == nil {
+			t.Error("a BEGIN that waited: nil error")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(buf.String(), "waited for the pool's one connection"); n != 2 {
+		t.Errorf("warnings = %d, want 2: %s", n, buf.String())
+	}
+	if !strings.Contains(buf.String(), "holder=Tx") || !strings.Contains(buf.String(), "entity=transaction") {
+		t.Errorf("the warnings name no Tx holder or BEGIN: %s", buf.String())
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for a timer's goroutine and the test's.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func (s *syncBuffer) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Len()
 }

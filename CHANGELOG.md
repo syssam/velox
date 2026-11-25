@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- A statement or BEGIN that waits 5 seconds for a pool's one connection,
+  held by its DB's Tx or Iter loop, logs a slog warning naming the holder.
+  Before, one under a context derived from the Tx's hung with nothing said.
 - `gqlgenx.Harden(srv, db)` applies RequestLimit, CostLimit, ResponseLimit,
   ErrorPresenter, SetDisableSuggestion and QuietValidation in one opt-in
   call; examples/graphql uses it.

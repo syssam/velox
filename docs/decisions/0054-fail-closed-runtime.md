@@ -46,6 +46,11 @@ context its Iter or Tx was given. A statement under that context, or under
 `WithoutTx` of fn's, is refused from any goroutine. Any other context waits,
 as database/sql's does. If the loop or fn waits for it, it ends at its
 deadline, and its error says the connection was held. `goid` is gone.
+A statement or BEGIN that has waited 5 seconds for a connection its DB's
+Iter or Tx holds logs one slog warning, which names the holder, so a wait
+without a deadline does not hang silently. It is a warning, not a refusal:
+another goroutine's wait under a derived context is legitimate, and
+velox cannot tell the two apart (amended 2026-11-25).
 
 ## Consequences
 

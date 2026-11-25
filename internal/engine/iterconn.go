@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
+	"time"
 )
 
 // This file refuses the statement that would wait forever for a pool's one
@@ -19,7 +21,9 @@ import (
 // waits, as database/sql's does: a statement of another goroutine waits for
 // the loop or the Tx to end. A statement of the holder's own goroutine under
 // an unrelated context waits too, until its deadline: then its error says
-// that the connection was held (heldHint).
+// that the connection was held (heldHint). After heldWarnAfter of such a
+// wait velox logs a warning (watchHeld), as one without a deadline would
+// otherwise hang with nothing said.
 //
 // The holder is the DB's: another DB on the same *sql.DB (a second Open, or
 // OpenConn with SQLConn) sees none, and waits. Finding the pool would cost
@@ -37,6 +41,61 @@ var (
 	errHeld = errors.New("the pool's one connection was held by a loop over Iter or by a Tx while the statement waited; " +
 		"a statement inside the loop or fn under another context waits until its deadline")
 )
+
+// heldWarnAfter is how long a statement waits for a pool's one connection,
+// held by an Iter or a Tx of its DB, before watchHeld logs a warning.
+var heldWarnAfter = 5 * time.Second
+
+// heldWarning is what watchHeld logs.
+const heldWarning = "velox: a statement has waited for the pool's one connection, which a Tx or a loop over Iter of its DB holds; " +
+	"inside that Tx's fn or that loop it waits forever: run it on fn's tx, under fn's ctx, or after the loop"
+
+// watchHeld watches a statement or BEGIN on db, of the entity named what,
+// that may wait for the pool's one connection, which an Iter or a Tx of db
+// holds under a context the statement's is not (waitsForConn refuses one
+// under that context). When the connection is still held, after
+// heldWarnAfter, and not by the statement's own loop (own reports that of
+// a holder; nil for a statement with no loop), it logs heldWarning with
+// slog.Warn: the statement may wait forever, and nothing else would say so.
+// The returned stop ends the watch. It costs one atomic load while nothing
+// holds the connection.
+func watchHeld(db *DB, what string, own func(*connHold) bool) (stop func()) {
+	if db.InTx || holder(db) == nil || !onePool(db) {
+		return noStop
+	}
+	t := time.AfterFunc(heldWarnAfter, func() {
+		h := holder(db)
+		if h == nil || (own != nil && own(h)) {
+			return
+		}
+		holder := "loop over Iter"
+		if h.tx != nil {
+			holder = "Tx"
+		}
+		slog.Warn(heldWarning, "entity", what, "waited", heldWarnAfter, "holder", holder)
+	})
+	return func() { t.Stop() }
+}
+
+// watchStatement is watchHeld of st. It keeps no pointer to st, which Plain
+// keeps on the stack.
+func watchStatement(db *DB, st *Statement) (stop func()) {
+	if db.InTx || holder(db) == nil {
+		return noStop
+	}
+	what := ""
+	if st.Entity != nil {
+		what = st.Entity.Name
+	}
+	iter := st.iterCtx
+	if iter == nil {
+		return watchHeld(db, what, nil)
+	}
+	return watchHeld(db, what, func(h *connHold) bool { return sameCtx(h.caller, iter) })
+}
+
+// noStop is watchHeld's stop when there is nothing to watch.
+func noStop() {}
 
 // connHold is the holder of a pool's one connection: the context its Iter or
 // Tx was given and, for a Tx, its frame.
