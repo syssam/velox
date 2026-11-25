@@ -67,22 +67,26 @@ func alone(src []byte, offset int) bool {
 // holds pos, only the header counts: a statement in a header, such as an
 // if's init, is a statement of its own. Outside a function, the
 // declaration's spec stands for the statement. The lines inside the body
-// of a function literal in the statement, which does not hold pos, belong
-// to the literal's statements, not to this one.
+// of a function literal in the statement belong to the literal's
+// statements, not to this one: pos, in the innermost statement, is not in
+// such a literal.
 func (d directives) waives(pass *analysis.Pass, pos token.Pos) bool {
 	if len(d.on) == 0 {
 		return false
 	}
 	from, to := pos, pos
-	var stmt ast.Node
+	var inner map[int]bool
 	if f := fileOf(pass, pos); f != nil {
+		var stmt ast.Node
 		stmt, from, to = enclosing(f, pos)
+		if stmt != nil {
+			inner = literalLines(pass.Fset, stmt)
+		}
 	}
 	start, end := pass.Fset.Position(from), pass.Fset.Position(to)
 	if d.alone[line{start.Filename, start.Line - 1}] {
 		return true
 	}
-	inner := literalLines(pass.Fset, stmt, pos)
 	for n := start.Line; n <= end.Line; n++ {
 		if d.on[line{start.Filename, n}] && !inner[n] {
 			return true
@@ -92,19 +96,13 @@ func (d directives) waives(pass *analysis.Pass, pos token.Pos) bool {
 }
 
 // literalLines are the lines of n that lie wholly inside the body of a
-// function literal that does not hold pos: those after its opening brace's
-// line and before its closing brace's.
-func literalLines(fset *token.FileSet, n ast.Node, pos token.Pos) map[int]bool {
-	if n == nil {
-		return nil
-	}
+// function literal: those after its opening brace's line and before its
+// closing brace's.
+func literalLines(fset *token.FileSet, n ast.Node) map[int]bool {
 	var out map[int]bool
 	ast.Inspect(n, func(n ast.Node) bool {
 		lit, ok := n.(*ast.FuncLit)
 		if !ok {
-			return true
-		}
-		if lit.Body.Pos() <= pos && pos < lit.Body.End() {
 			return true
 		}
 		from, to := fset.Position(lit.Body.Lbrace).Line, fset.Position(lit.Body.Rbrace).Line
