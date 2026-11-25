@@ -32,6 +32,8 @@ type keeper struct {
 	ID   int64
 	Name string
 	Pets velox.Many[pet]
+
+	source velox.Source // the DB that read the keeper, for its edges
 }
 
 var keepers = struct {
@@ -51,6 +53,7 @@ func keeperDescriptor() velox.Descriptor[keeper] {
 		PrimaryKey: []int{0},
 		Edges:      []velox.EdgeDescriptor{velox.EdgeTo[pet]("pets", 0, 1)},
 		FieldPtr:   func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
+		SourcePtr:  func(x *keeper) *velox.Source { return &x.source },
 		EdgeFieldPtr: func(x *keeper, i int) any {
 			if i == 0 {
 				return &x.Pets
@@ -187,22 +190,13 @@ func batchDB(t *testing.T) (*velox.DB, *txLog) {
 // veloxgql.Batch, and loose does not; a keeper's pets is
 // gqlgraph.EdgeConnection, as the generated code's edges are, and orgPets
 // too under an org of its own, as a directive could set, and viewerPets
-// under a viewer of its own. The keepers subscription's events each read
+// under a viewer of its own. The server runs mutations in a transaction of
+// db (gqlgenx.Transactioner). The keepers subscription's events each read
 // the keepers, and call seen, if set, with the event's context and its rows.
 func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
-	return batchServerWith(db, nil, seen...)
-}
-
-// batchServerWith is batchServer with the extension's options opts, after
-// its limits.
-func batchServerWith(db *velox.DB, opts []gqlgenx.Option, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
 	parent := func(ctx context.Context) any { return graphql.GetFieldContext(ctx).Parent.Result }
 	read := func(batch bool) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
-			db, err := veloxgql.DBFromContext(ctx)
-			if err != nil {
-				return nil, err
-			}
 			rows, err := db.Query[keeper]().OrderBy(keepers.ID.Asc()).AllowUnbounded().All(ctx)
 			if err != nil {
 				return nil, err
@@ -234,10 +228,6 @@ func batchServerWith(db *velox.DB, opts []gqlgenx.Option, seen ...func(ctx conte
 		"keepers": read(true),
 		"loose":   read(false),
 		"addPet": func(ctx context.Context, args map[string]any) (any, error) {
-			db, err := veloxgql.DBFromContext(ctx)
-			if err != nil {
-				return nil, err
-			}
 			p := &pet{ID: args["id"].(int64), KeeperID: args["keeper"].(int64), OrgID: 1, Name: "new"}
 			if err := db.Insert(p).Exec(ctx); err != nil {
 				return nil, err
@@ -267,7 +257,7 @@ func batchServerWith(db *velox.DB, opts []gqlgenx.Option, seen ...func(ctx conte
 			return out, nil
 		},
 		"Pet.name": func(ctx context.Context, _ map[string]any) (any, error) { return parent(ctx).(*pet).Name, nil },
-	}), db, append([]gqlgenx.Option{gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10})}, opts...)...) // lists cost MaxList each
+	}), gqlgenx.Transactioner{DB: db})
 }
 
 // petsOf is the response to field { name pets { totalCount nodes { name } } }
@@ -307,7 +297,7 @@ func TestBatchPublic(t *testing.T) {
 	}
 }
 
-// TestBatchInMutation: in a mutation, whose resolvers the extension runs one
+// TestBatchInMutation: in a mutation, whose resolvers Transactioner runs one
 // at a time on its transaction, a batch still reads the edge of every row in
 // one statement, the transaction's own writes among them, and waits on no
 // other resolver.
@@ -373,40 +363,22 @@ func TestBatchScopes(t *testing.T) {
 	}
 }
 
-// TestBatchScopeOption: keepers whose edge resolvers give their contexts
-// different viewers, which the pets' Read policy reads but velox's row scope
-// does not hold, read in a batch per viewer without WithBatchScope: the
-// batch is keyed by the read each context makes, so the policy's conditions
-// tell them apart (fail closed). WithBatchScope returning the viewer gives
-// the same batches, and each keeper sees its viewer's pets.
-func TestBatchScopeOption(t *testing.T) {
+// TestBatchViewerPolicyScopes: keepers whose edge resolvers give their
+// contexts different viewers, which the pets' Read policy reads but velox's
+// row scope does not hold, read in a batch per viewer: the batch is keyed by
+// the read each context makes, so the policy's conditions tell them apart
+// (fail closed), and each keeper sees its viewer's pets.
+func TestBatchViewerPolicyScopes(t *testing.T) {
 	db, log := batchDB(t)
 	const query = `{ keepers { name viewerPets { totalCount nodes { name } } } }`
 	ctx := petOrg.With(context.Background(), int64(1))
 	want := strings.ReplaceAll(petsOf("keepers", "ann:rex", "bob:fifi", "cy:"), `"pets"`, `"viewerPets"`)
 	if got := post(t, ctx, batchServer(db), query); got != want {
-		t.Errorf("without WithBatchScope:\n got %s\nwant %s", got, want)
-	}
-	// The keepers, then a load and a count for each of the two viewers.
-	if stmts, _ := log.take(); len(stmts) != 5 {
-		t.Errorf("without WithBatchScope: %d statements, want 5: %q", len(stmts), stmts)
-	}
-	srv := batchServerWith(db, []gqlgenx.Option{gqlgenx.WithBatchScope(func(ctx context.Context) any { return ctx.Value(viewerKey{}) })})
-	if got := post(t, ctx, srv, query); got != want {
 		t.Errorf("\n got %s\nwant %s", got, want)
 	}
 	// The keepers, then a load and a count for each of the two viewers.
 	if stmts, _ := log.take(); len(stmts) != 5 {
-		t.Errorf("with WithBatchScope: %d statements, want 5: %q", len(stmts), stmts)
-	}
-	// A value that cannot be compared reads alone: a load and a count for
-	// each keeper.
-	srv = batchServerWith(db, []gqlgenx.Option{gqlgenx.WithBatchScope(func(ctx context.Context) any { return []any{ctx.Value(viewerKey{})} })})
-	if got := post(t, ctx, srv, query); got != want {
-		t.Errorf("an incomparable scope:\n got %s\nwant %s", got, want)
-	}
-	if stmts, _ := log.take(); len(stmts) != 7 {
-		t.Errorf("an incomparable scope: %d statements, want 7: %q", len(stmts), stmts)
+		t.Errorf("%d statements, want 5: %q", len(stmts), stmts)
 	}
 }
 
@@ -435,10 +407,11 @@ func TestSubscriptionEventsLetGo(t *testing.T) {
 	var events [][]*keeper
 	var found []bool // per event: whether its own rows, then the event before's, are in its table
 	srv := batchServer(db, func(ctx context.Context, rows []*keeper) {
-		_, _, _, own := gqlcore.Find(gqlcore.TableFromContext(ctx), any(rows[0]))
+		field, _ := gqlcore.FieldOf(ctx)
+		_, _, _, own := gqlcore.Find(field.Table, any(rows[0]))
 		found = append(found, own)
 		if len(events) > 0 {
-			_, _, _, old := gqlcore.Find(gqlcore.TableFromContext(ctx), any(events[len(events)-1][0]))
+			_, _, _, old := gqlcore.Find(field.Table, any(events[len(events)-1][0]))
 			found = append(found, old)
 		}
 		events = append(events, rows)

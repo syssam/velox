@@ -1,13 +1,22 @@
 package gqlgenx_test
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
@@ -52,4 +61,51 @@ func ExampleCost() {
 	fmt.Println(gqlgenx.Cost(schema, doc.Operations[0], nil, l))
 	// Output:
 	// 342
+}
+
+// Transactioner runs each mutation in one transaction of the DB its
+// resolvers hold, which commits when the response has no errors.
+func ExampleTransactioner() {
+	var (
+		db *velox.DB
+		es graphql.ExecutableSchema
+	)
+	srv := handler.New(es)
+	srv.AddTransport(transport.POST{})
+	srv.Use(gqlgenx.Transactioner{DB: db, Options: []velox.TxOption{velox.TxIsolation(sql.LevelSerializable)}})
+}
+
+// A server open to clients opts in to each limit it wants. The limits are the
+// DB's, which veloxgql.WithLimits gives.
+func Example_hardenedServer() {
+	var (
+		sqlDB *sql.DB
+		es    graphql.ExecutableSchema
+	)
+	db := velox.Open(velox.Postgres, sqlDB, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 50000}))
+	srv := handler.New(es)
+	srv.AddTransport(transport.POST{})
+	srv.SetDisableSuggestion(true)
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(ctx context.Context, err error) {
+		slog.ErrorContext(ctx, "graphql", "err", err)
+	}))
+	srv.Use(gqlgenx.Transactioner{DB: db})
+	srv.Use(gqlgenx.RequestLimit(db))
+	srv.Use(gqlgenx.CostLimit(db))
+	srv.Use(gqlgenx.ResponseLimit(db))
+	http.Handle("/graphql", gqlgenx.MaxBodyBytes(1<<20)(srv))
+}
+
+// MaxBodyBytes refuses a request body over its limit with 413.
+func ExampleMaxBodyBytes() {
+	ok := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+	h := gqlgenx.MaxBodyBytes(8)(ok)
+	for _, body := range []string{`{}`, `{"query":"{ id }"}`} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body)))
+		fmt.Println(w.Code)
+	}
+	// Output:
+	// 200
+	// 413
 }

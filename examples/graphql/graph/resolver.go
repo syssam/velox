@@ -19,7 +19,7 @@ import (
 // Resolver is the root resolver. Its DB is the one the server serves, which
 // every resolver reads and writes on: the rows they return carry it, and
 // their edges read on it. It is all a server needs (ADR 0173). In a
-// mutation, which gqlgenx.NewExtension, when the server uses it, runs in a
+// mutation, which gqlgenx.Transactioner, when the server uses it, runs in a
 // transaction it begins on that DB, a statement on it under the resolver's
 // ctx runs in that transaction (ADR 0171).
 type Resolver struct {

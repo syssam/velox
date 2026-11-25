@@ -86,11 +86,7 @@ import (
 
 // Alerts is the resolver for the alerts field.
 func (r *queryResolver) Alerts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.AlertConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Alert]().Paginate(ctx, after, first, before, last)
+	return r.DB.Query[gen.Alert]().Paginate(ctx, after, first, before, last)
 }
 
 // Query returns QueryResolver implementation.
@@ -119,7 +115,6 @@ import (
 	"example.com/app/gen"
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // TestTagIDGT: a string key's idGT compiles, to Tags.ID.GT, and compares
@@ -173,8 +168,7 @@ func TestAlertLevel(t *testing.T) {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: velox.Open(velox.SQLite, db)}}))
 	srv.AddTransport(transport.POST{})
 	req := httptest.NewRequest("POST", "/", strings.NewReader(` + "`" + `{"query":"{ alerts { edges { node { id level } } } }"}` + "`" + `))
 	req.Header.Set("Content-Type", "application/json")
@@ -204,6 +198,7 @@ func TestAppEnumRenamed(t *testing.T) {
 		"levels/levels.go":          e2eLevelsGQL,
 		"gqlgen.yml":                e2eStringIDGqlgen,
 		"graph/schema.resolvers.go": e2eEnumResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"enum_test.go":              e2eEnumRun,
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {

@@ -19,8 +19,8 @@ import (
 // Args are a connection's paging arguments, as the client gave them.
 //
 // first (with or without after) pages forward and last (with or without before)
-// backward; with neither, the page is the MaxPage of
-// veloxgql.LimitsFromContext(ctx) rows forward, or backward from before when
+// backward; with neither, the page is the MaxPage of the limits of the
+// query's DB (veloxgql.LimitsOf) rows forward, or backward from before when
 // before is given. first and last together, after and before together, first
 // with before and last with after all fail with ErrBadPagination: keyset paging
 // bounds a page on one side only.
@@ -525,7 +525,7 @@ type Connection struct {
 // field c does not know; with ErrBadPagination for first and last together,
 // either below 0, another combination Args refuses, or an order of more
 // than MaxOrderTerms terms; with ErrPageTooLarge for either over MaxPage
-// (both the limits of veloxgql.LimitsFromContext(ctx)); and with
+// (both the limits of the query's DB, veloxgql.LimitsOf); and with
 // ErrBadCursor for a cursor of another type, taken under another order, or
 // whose values are not of the order's types.
 //
@@ -548,7 +548,7 @@ func Paginate(ctx context.Context, from Source, c *Type, args Args) (*Connection
 // paginate is Paginate of a query q.
 func paginate(ctx context.Context, q untyped.TableQuery, c *Type, args Args, order []Order) (*Connection, error) {
 	if args.Where.pred != nil {
-		p, err := args.Where.pred(ctx)
+		p, err := args.Where.pred(withFilterLimits(ctx, veloxgql.LimitsOf(untyped.QueryDB(q))))
 		if err != nil {
 			return nil, err
 		}
@@ -611,7 +611,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 		}
 		terms = append(terms, t)
 	}
-	lim := veloxgql.LimitsFromContext(ctx)
+	lim := veloxgql.LimitsOf(untyped.QueryDB(q))
 	n, back, err := pageSize(args, lim.MaxPage)
 	if err != nil {
 		return nil, gqlcore.Within(typ+" connection", err)
@@ -676,7 +676,7 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 //     tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap: the
-// MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
+// MaxPage of the limits of the query's DB bounds it. The base query's With
 // loads share that cap of n+1 rows, unless they have Rel.MaxRows or
 // Rel.LimitEach. The page's rows become a group of the operation, whose edges
 // batch (see Edge); in the connection of an edge (Type.Edge) the

@@ -12,16 +12,15 @@ import (
 )
 
 // The package registers gqlgen's selection source with the core when it is
-// linked (decision 0173), so that generated code served by gqlgen with no
-// Extension finds the field it resolves and batches its edges. A server
+// linked (decision 0173), so that generated code served by gqlgen with
+// nothing installed finds the field it resolves and batches its edges. A server
 // links the package through what it binds, gqlgen.yml's gqlgenx models
 // such as Int64ID, or through a blank import; velox-graphql refuses a
 // gqlgen.yml that binds none (gqlgenx=blank lifts that).
 func init() { gqlcore.Register(reader{}) }
 
 // reader is gqlgen's registered selection source. The field of a context is
-// gqlgen's field context, as the Extension's source reads it, but with no
-// schema: a type's interfaces are those the validator's definition of the
+// gqlgen's field context, read with no schema: a type's interfaces are those the validator's definition of the
 // type lists (collect). Its table and its interned field occurrences are
 // those of the field's root, the field context at the top of its Parent
 // chain: a field of an operation's root type for a query or a mutation, so

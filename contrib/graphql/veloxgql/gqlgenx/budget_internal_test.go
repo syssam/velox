@@ -53,7 +53,7 @@ type (
 // alone, and with HasNext set it left the timer and its callback to the
 // deadline, on a websocket as long as the connection.
 func TestDeferEndsTimeout(t *testing.T) {
-	e := &Extension{limits: veloxgql.Limits{Timeout: time.Hour}}
+	e := &responseLimit{limits: veloxgql.Limits{Timeout: time.Hour}}
 	ctx := context.WithValue(context.Background(), operationKey{}, new(operation))
 	more, last := true, false
 	fctx, r, done := e.operationResponse(ctx)

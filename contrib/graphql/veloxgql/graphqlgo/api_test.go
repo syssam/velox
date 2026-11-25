@@ -17,7 +17,6 @@ var publicAPI = []string{
 	"ErrorPresenter",
 	"Scalars",
 	"ScalarsOnly",
-	"With",
 }
 
 // exportedNames are the exported names of the package in dir, as "Name" and

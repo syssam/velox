@@ -8,6 +8,9 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
+// The package registers its selection source when it is linked.
+func init() { gqlcore.Register(source{}) }
+
 // source is graphql-go's selection source, which the package registers with
 // the core when it is linked (decision 0173): an executor needs no option
 // for generated code to find the field it resolves and batch its edges. A

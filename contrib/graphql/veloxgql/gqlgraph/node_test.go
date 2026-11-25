@@ -8,7 +8,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -31,7 +30,7 @@ func (l *edgeLog) counts() map[string]int {
 // edge of theirs is one statement too.
 func TestResolveNodesBatched(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, `{ children { edges { node { owner { name } } } } }`)
+	ctx := operation(t, `{ children { edges { node { owner { name } } } } }`)
 	key := []gqlgraph.Column{{Name: "id", Index: 0}}
 	types := []*gqlgraph.Type{
 		{Name: "Child", Table: untyped.TableOf[child], Key: key},
@@ -84,14 +83,14 @@ func TestResolveNodesBatched(t *testing.T) {
 	}
 }
 
-// TestResolveNodesCap: more IDs than the MaxPage of the context's limits is
+// TestResolveNodesCap: more IDs than the MaxPage of the DB's limits is
 // ErrPageTooLarge, BAD_USER_INPUT, before any statement.
 func TestResolveNodesCap(t *testing.T) {
-	vdb, _, log := edgeDB(t)
+	vdb, _, log := edgeDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2}))
 	key := []gqlgraph.Column{{Name: "id", Index: 0}}
 	types := []*gqlgraph.Type{{Name: "Owner", Table: untyped.TableOf[owner], Key: key}}
 
-	ctx := gqlgenx.NewExtension(vdb, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
+	ctx := context.Background()
 	if ns, err := gqlgraph.ResolveNodes(ctx, vdb, types, []int64{1, 2}); err != nil || len(ns) != 2 {
 		t.Errorf("2 IDs under MaxPage 2: %v, %v", ns, err)
 	}
@@ -104,8 +103,9 @@ func TestResolveNodesCap(t *testing.T) {
 		t.Errorf("3 IDs under MaxPage 2 ran %v", got)
 	}
 
+	plain, _, _ := edgeDB(t)
 	many := make([]int64, veloxgql.DefaultLimits().MaxPage+1)
-	if _, err := gqlgraph.ResolveNodes(context.Background(), vdb, types, many); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlgraph.ResolveNodes(ctx, plain, types, many); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("%d IDs by default: %v; want ErrPageTooLarge", len(many), err)
 	}
 }

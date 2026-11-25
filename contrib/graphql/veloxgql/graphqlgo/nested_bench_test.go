@@ -15,8 +15,8 @@ import (
 )
 
 // resolverDBKey is the context key of the DB a test's root resolver reads
-// on, as an application's Resolver holds it: a server with no setup puts no
-// DB in the context.
+// on, as an application's Resolver holds it: a resolver reads on the DB it
+// holds, never one from the context.
 type resolverDBKey struct{}
 
 // withResolverDB is ctx with db for the root resolvers.
@@ -24,12 +24,10 @@ func withResolverDB(ctx context.Context, db *velox.DB) context.Context {
 	return context.WithValue(ctx, resolverDBKey{}, db)
 }
 
-// resolverDB is the DB withResolverDB put in ctx, else veloxgql.DB(ctx).
+// resolverDB is the DB withResolverDB put in ctx.
 func resolverDB(ctx context.Context) *velox.DB {
-	if db, ok := ctx.Value(resolverDBKey{}).(*velox.DB); ok {
-		return db
-	}
-	return veloxgql.DB(ctx)
+	db, _ := ctx.Value(resolverDBKey{}).(*velox.DB)
+	return db
 }
 
 // nestedQuery reads three levels: authors, a page of each one's posts with
@@ -68,8 +66,10 @@ func seedNested(t testing.TB, db *velox.DB) {
 }
 
 // nestedServers are the servers the nested query is measured on: each
-// engine with its setup (graphqlgo.With, gqlgenx.NewExtension) and with none
-// (decision 0173), whose root resolver reads on the DB it is given.
+// engine with no setup (decision 0173), whose root resolver reads on the DB
+// it is given, and gqlgen hardened with the opt-in extensions, which
+// graphql-go has no counterpart of. The DB has the cost limit lifted: the
+// query costs more than the default admits.
 func nestedServers(t testing.TB, db *velox.DB) []struct {
 	name string
 	srv  server
@@ -78,17 +78,18 @@ func nestedServers(t testing.TB, db *velox.DB) []struct {
 		name string
 		srv  server
 	}{
-		{"graphqlgo/setup", graphqlgoServer(t, db)},
 		{"graphqlgo/nosetup", executorServer(newExecutor(graphqlgoSchema(t), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))))},
-		{"gqlgen/setup", gqlgenServer(t, db, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 1 << 30}))},
 		{"gqlgen/nosetup", gqlgenPlainServer()},
+		{"gqlgen/hardened", gqlgenServer(db,
+			gqlgenx.Transactioner{DB: db}, gqlgenx.RequestLimit(db), gqlgenx.CostLimit(db), gqlgenx.ResponseLimit(db))},
 	}
 }
 
 // TestNestedNoSetup: the nested query answers the same, with as many
-// statements, through each engine with no setup as with it.
+// statements, through each engine with no setup as through gqlgen with the
+// opt-in extensions.
 func TestNestedNoSetup(t *testing.T) {
-	db, log := modelDB(t)
+	db, log := modelDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 1 << 30}))
 	seedNested(t, db)
 	ctx := withResolverDB(context.Background(), db)
 	var want string
@@ -112,7 +113,7 @@ func TestNestedNoSetup(t *testing.T) {
 
 // BenchmarkNested serves nestedQuery through each of nestedServers.
 func BenchmarkNested(b *testing.B) {
-	db, log := modelDB(b)
+	db, log := modelDB(b, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 1 << 30}))
 	seedNested(b, db)
 	ctx := withResolverDB(context.Background(), db)
 	for _, s := range nestedServers(b, db) {

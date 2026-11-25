@@ -76,7 +76,7 @@ import (
 // CreateShelf is the resolver for the createShelf field.
 func (r *mutationResolver) CreateShelf(ctx context.Context, input gen.CreateShelfInput) (*gen.Shelf, error) {
 	x := &gen.Shelf{}
-	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+	if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -85,7 +85,7 @@ func (r *mutationResolver) CreateShelf(ctx context.Context, input gen.CreateShel
 // CreateVolume is the resolver for the createVolume field.
 func (r *mutationResolver) CreateVolume(ctx context.Context, input gen.CreateVolumeInput) (*gen.Volume, error) {
 	x := &gen.Volume{}
-	if err := veloxgql.DB(ctx).Insert(x).SetInput(input).Exec(ctx); err != nil {
+	if err := r.DB.Insert(x).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -93,12 +93,12 @@ func (r *mutationResolver) CreateVolume(ctx context.Context, input gen.CreateVol
 
 // UpdateVolume is the resolver for the updateVolume field.
 func (r *mutationResolver) UpdateVolume(ctx context.Context, id uuid.UUID, input gen.UpdateVolumeInput) (*gen.Volume, error) {
-	return veloxgql.DB(ctx).Update[gen.Volume]().Where(gen.Volumes.ID.EQ(id)).SetInput(input).One(ctx)
+	return r.DB.Update[gen.Volume]().Where(gen.Volumes.ID.EQ(id)).SetInput(input).One(ctx)
 }
 
 // Volumes is the resolver for the volumes field.
 func (r *queryResolver) Volumes(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.VolumeWhereInput) (*gen.VolumeConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Volume]().Paginate(ctx, after, first, before, last, gen.WithVolumeFilter(where))
+	return r.DB.Query[gen.Volume]().Paginate(ctx, after, first, before, last, gen.WithVolumeFilter(where))
 }
 
 // Mutation returns MutationResolver implementation.
@@ -158,8 +158,9 @@ func TestUUIDIDs(t *testing.T) {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db).WithoutPolicy("test")))
+	vdb := velox.Open(velox.SQLite, db).WithoutPolicy("test")
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: vdb}}))
+	srv.Use(gqlgenx.Transactioner{DB: vdb})
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) reply {
@@ -231,6 +232,7 @@ func TestAppUUIDKeys(t *testing.T) {
 		"gqlgen.yml":                e2eUUIDGqlgen,
 		"graph/mutation.graphql":    e2eUUIDMutations,
 		"graph/schema.resolvers.go": e2eUUIDResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"uuid_test.go":              e2eUUIDRun,
 	}, true)
 	for _, args := range [][]string{

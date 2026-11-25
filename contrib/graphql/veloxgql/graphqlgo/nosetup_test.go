@@ -36,8 +36,8 @@ func TestNoSetupLimits(t *testing.T) {
 
 // TestNoSetupMutation: with no setup, a mutation runs in no transaction, on
 // either engine: a resolver that fails after its insert keeps the row.
-// gqlgenx.NewExtension is what runs a gqlgen mutation in one (TestMutation…
-// in gqlgenx).
+// gqlgenx.Transactioner is what runs a gqlgen mutation in one (its tests in
+// gqlgenx).
 func TestNoSetupMutation(t *testing.T) {
 	for name, srv := range plainServers(t) {
 		db, log := modelDB(t)

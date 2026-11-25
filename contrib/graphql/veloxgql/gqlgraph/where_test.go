@@ -10,7 +10,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -428,9 +427,8 @@ func TestWhereErrorsNameTheField(t *testing.T) {
 
 // TestFilterBudgetError: a where argument over its MaxFilterNodes fails
 // with ErrFilterTooLarge, "filter is too large", and a list over
-// MaxFilterWidth still with ErrFilterTooWide. The limits are the
-// extension's, read at the top of the argument, and its nested inputs have
-// the same.
+// MaxFilterWidth still with ErrFilterTooWide. The limits are the DB's,
+// read at the top of the argument, and its nested inputs have the same.
 func TestFilterBudgetError(t *testing.T) {
 	ctx := context.Background()
 	names := func(n int) []string { return make([]string, n) }
@@ -450,8 +448,8 @@ func TestFilterBudgetError(t *testing.T) {
 		t.Errorf("a list over MaxFilterWidth: %v, want ErrFilterTooWide alone", err)
 	}
 
-	// Under an extension's limits, at the top and in a nested input.
-	small := gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxFilterWidth: 2, MaxFilterDepth: 1, MaxFilterNodes: 5})).NewContext(ctx)
+	// Under a DB's limits, at the top and in a nested input.
+	small := gqlgraph.WithFilterLimits(ctx, veloxgql.Limits{MaxFilterWidth: 2, MaxFilterDepth: 1, MaxFilterNodes: 5})
 	if _, err := (&personWhere{NameIn: names(3)}).Pred(small); !errors.Is(err, veloxgql.ErrFilterTooWide) {
 		t.Errorf("3 values under MaxFilterWidth 2: %v, want ErrFilterTooWide", err)
 	}
@@ -469,6 +467,40 @@ func TestFilterBudgetError(t *testing.T) {
 	}
 	if _, err := (&personWhere{NameIn: names(3)}).Pred(spy.ctx); !errors.Is(err, veloxgql.ErrFilterTooWide) {
 		t.Errorf("a nested input's 3 values under MaxFilterWidth 2: %v, want ErrFilterTooWide", err)
+	}
+}
+
+// TestWhereHoldsToTheQueryDB: a where argument of a connection holds to
+// the filter limits of the query's DB, and a Pred called outside a
+// connection to DefaultLimits(), whatever DB the application has.
+func TestWhereHoldsToTheQueryDB(t *testing.T) {
+	ctx := context.Background()
+	narrow, _ := peopleDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxFilterWidth: 2, MaxFilterDepth: 1}))
+	plain, _ := peopleDB(t)
+	three := []string{"a", "b", "c"}
+	deep := nest(&personWhere{}, 2, "not")
+	conn := func(db *velox.DB, w *personWhere) error {
+		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.FromQuery(db.Query[person]())), &gqlgraph.Type{Name: "Person", Key: personConn.Key, Order: personConn.Order}, gqlgraph.Args{Where: gqlgraph.WhereOf(w, (*personWhere).Predicate)})
+		return err
+	}
+	if err := conn(narrow, &personWhere{NameIn: three}); !errors.Is(err, veloxgql.ErrFilterTooWide) || codeOf(err) != veloxgql.CodeBadUserInput {
+		t.Errorf("3 values under the DB's MaxFilterWidth 2: %v, want BAD_USER_INPUT ErrFilterTooWide", err)
+	}
+	if err := conn(narrow, deep); !errors.Is(err, veloxgql.ErrFilterTooDeep) {
+		t.Errorf("depth 2 under the DB's MaxFilterDepth 1: %v, want ErrFilterTooDeep", err)
+	}
+	if err := conn(plain, &personWhere{NameIn: three}); err != nil {
+		t.Errorf("3 values under the default limits: %v", err)
+	}
+	if err := conn(plain, deep); err != nil {
+		t.Errorf("depth 2 under the default limits: %v", err)
+	}
+	// The same inputs, called directly, hold to the defaults.
+	if _, err := (&personWhere{NameIn: three}).Pred(ctx); err != nil {
+		t.Errorf("3 values outside a connection: %v", err)
+	}
+	if _, err := (&personWhere{NameIn: make([]string, veloxgql.DefaultLimits().MaxFilterWidth+1)}).Pred(ctx); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+		t.Errorf("101 values outside a connection: %v, want ErrFilterTooWide", err)
 	}
 }
 
@@ -492,7 +524,7 @@ func TestPredDepthFromContext(t *testing.T) {
 // the context gives, so a second call that spent the first's would fail.
 func TestPredTwiceOnOneContext(t *testing.T) {
 	limits := func(nodes int) context.Context {
-		return gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxFilterNodes: nodes})).NewContext(context.Background())
+		return gqlgraph.WithFilterLimits(context.Background(), veloxgql.Limits{MaxFilterNodes: nodes})
 	}
 	in := func(n int) []int64 { return make([]int64, n) }
 	w := &personWhere{AgeIn: in(100), AgeNotIn: in(100), Or: []*personWhere{{AgeIn: in(100)}, {AgeIn: in(100)}, {AgeIn: in(100)}}}

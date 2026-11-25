@@ -256,7 +256,7 @@
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the edge methods, named after the edges: a connection, a list or the
 //     one node, each read for every row of its batch in one statement, on
-//     the DB veloxgql.DBFromContext reads; a connection is the target's
+//     the DB that read the row; a connection is the target's
 //     new<Type>Connection of the edge, the function PaginateQuery calls
 //     with its query;
 //   - the entity's PaginateQuery, which a query's Paginate calls, as ent's
@@ -289,14 +289,14 @@
 // velox.ErrTooManyRows beyond them, whatever the DB's cap; graphql.MaxList(n), which an
 // edge may set under the limit, lowers that and what the edge costs, and a request
 // refused for a list edge's cost names the edge and these two ways out: it or a connection. The limits are
-// veloxgql.LimitsFromContext(ctx): the ones given to gqlgenx.NewExtension with
-// gqlgenx.WithLimits, or veloxgql.DefaultLimits(), which graphqlgo always uses;
-// under graphqlgo velox's cost is not applied, and the server bounds a
-// request with graphql.WithQueryCost and graphql-go's other limits.
+// the DB's: veloxgql.WithLimits gives them when the DB is opened, and
+// veloxgql.DefaultLimits() holds otherwise. Under graphqlgo velox's cost is
+// not applied, and the server bounds a request with graphql.WithQueryCost
+// and graphql-go's other limits.
 //
 // Every one of these limits bounds one argument or one edge, not a request;
 // see "The cost limit" below. A mutation's transaction does not cover @defer
-// (see gqlgenx.Extension): do not defer fields of a mutation.
+// (see gqlgenx.Transactioner): do not defer fields of a mutation.
 //
 // The application writes the root query's resolvers: for each QueryField a
 // query's Paginate on the DB it serves, which its Resolver holds as entgql's
@@ -308,10 +308,9 @@
 //
 // Each node carries the DB that read it, and its edges read on that DB:
 // batched with the page's other nodes in a request, alone outside one. A
-// mutation's resolver writes on the same DB: gqlgenx runs a mutation in a
-// transaction it begins on that DB, and a statement on it under the
-// resolver's ctx runs in that transaction. veloxgql.DB(ctx) is for code
-// outside a resolver that has only the context.
+// mutation's resolver writes on the same DB: under gqlgenx.Transactioner a
+// mutation runs in a transaction begun on that DB, and a statement on it
+// under the resolver's ctx runs in that transaction.
 //
 // The query may hold the application's own filters and With loads. It must
 // not be ordered, and must select the key and the order columns. The example
@@ -505,10 +504,11 @@
 // only link a child whose key is NULL, stay.
 //
 // A write with edge setters is atomic: velox runs the insert or update and
-// its edges in a db.Tx, a savepoint inside the transaction gqlgenx.Extension
-// opened for the operation, so an edge's error undoes the row at once. One
-// with column setters alone is one statement. A resolver that returns the
-// error fails the operation, and the Extension rolls all of it back; a
+// its edges in a db.Tx, a savepoint inside the transaction
+// gqlgenx.Transactioner opened for the operation, so an edge's error undoes
+// the row at once. One with column setters alone is one statement. A
+// resolver that returns the error fails the operation, and Transactioner
+// rolls all of it back; a
 // resolver that swallows it keeps the operation's other writes, and the
 // operation commits.
 //
@@ -588,17 +588,15 @@
 // DB and a list edge's MaxList, so callers that differ in them never share a
 // read. Any other context value a Read policy or a Rewrite or Around hook
 // reads, such as the viewer or a role, must be the same for every row of a
-// field, or be returned by gqlgenx.WithBatchScope, whose value joins the key:
-// a directive or a field middleware that gives an edge field's resolver another
-// context for some parent rows needs it. Batches belong to one response
-// under gqlgenx's Extension, and to one root field without it: a
+// field: a directive or a field middleware that gives an edge field's
+// resolver another context for some parent rows makes it read under the
+// first caller's. Under gqlgen batches belong to one root field: a
 // subscription's event starts new ones, and outside a gqlgen field there is no
 // batch, so a row read alone resolves its edges one row at a time.
 //
 // Outside any request, in a service's own list methods, calls between
 // services, jobs and tests, generated code reads with no setup: every
-// column, and each edge one row at a time. veloxgql.Service(ctx, db) still
-// works there, and adds the DB that veloxgql.DB reads.
+// column, and each edge one row at a time.
 //
 // A generated many-to-many edge reads the join table inside the target's
 // statement, so the join entity's hooks and policy do not see the edge's
@@ -647,7 +645,7 @@
 // The limits above each bound one argument. Connections nested in
 // connections multiply, and aliases repeat a field, so a server also limits
 // the cost of the whole request: veloxgql.Limits.MaxCost, 150000 by default.
-// gqlgenx.Cost computes it, and gqlgenx.Extension refuses a request over it,
+// gqlgenx.Cost computes it, and gqlgenx.CostLimit refuses a request over it,
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement. Under
 // graphqlgo velox's cost is not applied: the server sets graphql-go's own,
@@ -703,28 +701,38 @@
 //
 // # What a public server adds
 //
-// A server needs no call of velox's to page and batch (decision 0173). One
-// open to clients calls gqlgenx.Setup first, and serves what it returns:
+// A server needs no call of velox's to page and batch (decisions 0173 and
+// 0175). One open to clients adds opt-in pieces, each one feature, and
+// gqlgen's own knobs:
 //
+//	db, err := velox.Connect("sqlite", dsn, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 200}))
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
-//	h := gqlgenx.Setup(srv, db)
 //	srv.AddTransport(transport.POST{})
-//	http.Handle("/graphql", h)
+//	srv.Use(gqlgenx.Transactioner{DB: db})      // a mutation in one transaction
+//	srv.Use(gqlgenx.RequestLimit(db))           // the document and variables
+//	srv.Use(gqlgenx.CostLimit(db))              // the request's cost
+//	srv.Use(gqlgenx.ResponseLimit(db))          // the response's bytes, errors and time
+//	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+//	srv.SetDisableSuggestion(true)              // gqlgen's: no schema in its errors
+//	srv.SetValidationRulesFn(gqlgenx.QuietValidation(db)) // nor in the other rules'
+//	http.Handle("/graphql", gqlgenx.MaxBodyBytes(1<<20)(srv))
 //
-// Without it, nothing below bounds a request but gqlgen's own options and
-// a page's veloxgql.DefaultLimits(), a mutation runs in no transaction,
-// and gqlgen's presenter shows an error's text. Setup uses the Extension and ErrorPresenter on srv, and refuses a body over
-// Limits.MaxBodyBytes, 1 MiB by default, which nothing else in a request bounds. It holds
-// a websocket's messages to the same: a connection whose message goes over is closed
-// before the message is read, and no message is compressed. So a public websocket is
-// bounded in the size of a message, under Setup; a server that calls only the Extension
-// has no such limit. How many connections and messages a client sends is outside the
-// bound at either: a rate limit in front has that.
+// Without them, nothing below bounds a request but gqlgen's own options and
+// the DB's limits on a page, a mutation runs in no transaction, and gqlgen's
+// presenter shows an error's text. gqlgenx.MaxBodyBytes refuses a body over
+// its limit, which nothing else in a request bounds. It holds a websocket's
+// messages to the same: a connection whose message goes over is closed before
+// the message is read, and no message is compressed. How many connections and
+// messages a client sends is outside the bound: a rate limit in front has
+// that. Validation's suggestions name the schema's fields, and take 25 KB for
+// each unknown one: gqlgen's SetDisableSuggestion turns them off for fields,
+// and gqlgenx.QuietValidation(db), given to SetValidationRulesFn, for
+// arguments, types and values, and holds validation to MaxErrors errors.
 //
 // gqlgen validates a request before any resolver, and before the extension's cost,
 // and validation is quadratic in the fields that share a response name: 12 KB of
 // a: id a: name took 3.49 GB and returned 250 MB of errors. So before gqlgen parses
-// a request, on every transport, the Extension parses it, a second parse that a
+// a request, on every transport, gqlgenx.RequestLimit parses it, a second parse that a
 // query cache of gqlgen's does not spare, and checks all of it and its variables that a
 // later stage grows with, refusing one over any limit with BAD_USER_INPUT:
 // Limits.MaxTokens, 15000 by default; MaxFields, 5000, of fields, spreads and inline
@@ -734,17 +742,16 @@
 // also bounds the pairs of fields under one response name, the fragments spread where they
 // are, at 2 times it for pairs that differ and 200 times for pairs that agree, so that 340
 // colocated fragments of 14 common fields pass. In TestRequestBounded's shapes, validation
-// allocates under 40 MB through gqlgenx.Setup, which also stops at MaxErrors errors and
-// shows no suggestions, and what runs after it answers to the cost. GraphiQL's query is
+// allocates under 40 MB, and what runs after it answers to the cost. GraphiQL's query is
 // far under each limit.
 //
 // Cost does not see a value's size: one string of 900 KB under 300 aliases took 3.7 GB.
-// So the Extension counts a response as its fields resolve, its strings as they are
+// So gqlgenx.ResponseLimit counts a response as its fields resolve, its strings as they are
 // escaped, its bytes and its JSON, and stops at Limits.MaxResponseBytes, 32 MiB; it stops
 // at MaxErrors of the errors its fields make, where 97000 of them took 516 MB; and it
 // stops a query or a mutation at Limits.Timeout, 30 s, cancelling the statements' context.
 // Each answers one clean error and data null, COST_LIMIT_EXCEEDED or TIMEOUT, and a
-// mutation rolls back. What remains, plainly: 844 MB is the most a request was measured
+// mutation under Transactioner rolls back. What remains, plainly: 844 MB is the most a request was measured
 // to allocate at the defaults, with introspection on, as MaxCost and MaxIntrospectionCost
 // are separate budgets and one request spends both: long aliases of titles at MaxCost and
 // aliased introspection at its own limit, a 59 MB response, as aliases and numbers are not
@@ -893,8 +900,8 @@
 //
 // Without inputListPointers a multi-order edge's method no longer fits its
 // arguments, and gqlc puts the field on a Resolver. The server adds
-// graphqlgo.Scalars() to the schema, and graphql-go's own limits to the executor
-// (graphqlgo.With, opt-in, puts the DB in the context and pins a mutation):
+// graphqlgo.Scalars() to the schema, and graphql-go's own limits to the
+// executor; nothing of velox's is installed:
 //
 //	s, err := graph.NewSchema(velox.Bindings(root), app.Bindings(root), graphqlgo.Scalars())
 //	exec := graphql.NewExecutor(s, graphql.WithMaxDepth(12))

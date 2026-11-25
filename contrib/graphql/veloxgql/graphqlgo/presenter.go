@@ -40,8 +40,8 @@ import (
 // One exception: the error a subscription's source function returns
 // (graphql.Subscribe's fn) reaches a client as its text. graphql-go makes it
 // a *graphql.Error of the text alone, dropping the error itself, before any
-// presenter or interceptor sees it, so neither this presenter nor With can
-// tell it from graphql-go's own, and a *graphql.Error loses its code too.
+// presenter or interceptor sees it, so this presenter cannot tell it from
+// graphql-go's own, and a *graphql.Error loses its code too.
 // A source function returns only errors whose text a client may read.
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter {
 	if log == nil {

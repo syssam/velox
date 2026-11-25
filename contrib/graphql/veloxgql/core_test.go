@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -33,8 +34,6 @@ func TestPresent(t *testing.T) {
 		{"validation", &velox.ValidationError{Entity: "gen.User", Field: "Email", Err: errors.New("must hold an @")}, veloxgql.CodeBadUserInput, "invalid value: must hold an @"},
 		{"validation of no error", &velox.ValidationError{Entity: "gen.User", Field: "Email"}, veloxgql.CodeBadUserInput, "invalid value"},
 		{"constraint", &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Constraint: "users_email_key"}, veloxgql.CodeBadUserInput, "unique constraint violated"},
-		{"no DB", veloxgql.ErrNoDB, veloxgql.CodeInternal, "internal error"},
-		{"no source", veloxgql.ErrNoSelectionSource, veloxgql.CodeInternal, "internal error"},
 	} {
 		if code, msg := veloxgql.Present(c.err); code != c.code || msg != c.msg {
 			t.Errorf("%s: %s %q, want %s %q", c.name, code, msg, c.code, c.msg)
@@ -64,29 +63,38 @@ func TestCursorPlainMarshalers(t *testing.T) {
 	}
 }
 
-// inField marks a context fieldSource finds a field in.
-type inField struct{}
+// fieldKey marks a context fieldReader finds a field in; its value is the
+// field's table.
+type fieldKey struct{}
 
-// fieldSource finds a field in a context marked inField.
-type fieldSource struct{}
+// fieldReader is a gqlcore.Reader of a fake engine: it finds a field, with
+// the table the context holds, in a context marked fieldKey.
+type fieldReader struct{}
 
-func (fieldSource) Field(ctx context.Context) (gqlcore.Field, bool) {
-	return gqlcore.Field{Object: "Q", Name: "rows"}, ctx.Value(inField{}) != nil
+func (fieldReader) In(ctx context.Context) bool { return ctx.Value(fieldKey{}) != nil }
+
+func (r fieldReader) Field(ctx context.Context) (gqlcore.Field, bool) {
+	t, _ := ctx.Value(fieldKey{}).(*gqlcore.Table)
+	return gqlcore.Field{Object: "Q", Name: "rows", Table: t}, r.In(ctx)
 }
-func (fieldSource) Wait(context.Context) func() { return func() {} }
+
+func (fieldReader) Wait(context.Context) func() { return func() {} }
+
+var registerFieldReader sync.Once
 
 // TestBatch: Batch makes rows one group of the response's table inside a
 // field, and does nothing outside one.
 func TestBatch(t *testing.T) {
-	ctx := gqlcore.WithTable(gqlcore.Install(context.Background(), &velox.DB{}, nil, fieldSource{}), nil)
+	registerFieldReader.Do(func() { gqlcore.Register(fieldReader{}) })
+	table := gqlcore.NewTable()
 	a, b := new(int), new(int)
-	veloxgql.Batch(ctx, []*int{a})
-	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), any(a)); ok {
+	veloxgql.Batch(context.Background(), []*int{a})
+	if _, _, _, ok := gqlcore.Find(table, any(a)); ok {
 		t.Error("Batch outside a field grouped a row")
 	}
-	in := context.WithValue(ctx, inField{}, true)
+	in := context.WithValue(context.Background(), fieldKey{}, table)
 	veloxgql.Batch(in, []*int{a, b})
-	if _, rows, i, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), any(b)); !ok || len(rows) != 2 || i != 1 {
+	if _, rows, i, ok := gqlcore.Find(table, any(b)); !ok || len(rows) != 2 || i != 1 {
 		t.Errorf("Batch in a field: %v %d %v", rows, i, ok)
 	}
 }

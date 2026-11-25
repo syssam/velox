@@ -9,7 +9,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -78,7 +77,7 @@ func itemDB(t *testing.T) (*velox.DB, context.Context) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	if err := db.Insert(&item{ID: 1, Name: "a", Age: 1, Code: "c"}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}

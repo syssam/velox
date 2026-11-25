@@ -207,8 +207,8 @@ type SLADefinitionWhereInput struct {
 }
 
 // Pred is the condition w stands for on SLADefinition nodes, true for a nil or
-// empty w. It fails on a filter over the limits of
-// veloxgql.LimitsFromContext(ctx).
+// empty w. It fails on a filter over the limits of the DB of the connection it
+// filters, or veloxgql.DefaultLimits() outside one.
 func (w *SLADefinitionWhereInput) Pred(ctx context.Context) (velox.Pred[SLADefinition], error) {
 	p, err := w.Predicate(ctx)
 	return velox.Pred[SLADefinition](p), err

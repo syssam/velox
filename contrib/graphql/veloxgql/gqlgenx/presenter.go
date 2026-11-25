@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/errcode"
+	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox"
@@ -53,6 +55,9 @@ import (
 //     validator's text.
 //   - A *velox.ConstraintError: BAD_USER_INPUT, "<kind> constraint
 //     violated", such as "unique constraint violated".
+//   - gqlgen's error for __schema or __type on a server with introspection
+//     off (no extension.Introspection): GRAPHQL_VALIDATION_FAILED,
+//     "introspection is disabled", not logged.
 //   - gqlgen's error for an integer the argument's Go type cannot hold (a
 //     *graphql.IntegerError, which *graphql.NumberOverflowError and
 //     *graphql.UintSignError wrap), as Int8…Uint32 return for 300 or -1:
@@ -73,7 +78,7 @@ import (
 // *gqlerror.Error that wraps an error is presented as its error is, with its
 // path and locations kept; every other error gets the field's path,
 // graphql.GetPath(ctx), as gqlgen's default presenter gives it. The error
-// the Extension adds when a mutation's transaction does not commit is
+// Transactioner adds when a mutation's transaction does not commit is
 // presented like any other.
 //
 // An error that is only the cancellation of the request, as when the client
@@ -101,8 +106,8 @@ import (
 //
 // gqlgen's default presenter shows every error's text, and no codes.
 //
-// It is what holds a response to veloxgql.Limits.MaxErrors as its errors are made: under the
-// Extension it returns nil, which gqlgen drops, once a response has MaxErrors or has
+// It is what holds a response to veloxgql.Limits.MaxErrors as its errors are made: under
+// ResponseLimit it returns nil, which gqlgen drops, once a response has MaxErrors or has
 // stopped. A presenter of the application's that does not call it keeps the limit on
 // what a resolver returns, as the request stops there, and its errors are made and
 // dropped at the end.
@@ -123,6 +128,9 @@ func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterO
 		}
 		if r, _ := ctx.Value(responseKey{}).(*response); r != nil && !r.admit() {
 			return nil
+		}
+		if off := introspectionOff(ctx, err); off != nil {
+			return off
 		}
 		leaves := internalLeaves(err, nil)
 		log := p.log
@@ -150,6 +158,25 @@ func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterO
 	}
 }
 
+// introspectionOff is the error a client sees for gqlgen's answer to __schema
+// or __type under a server with introspection off, err; nil for any other
+// error. gqlgen's generated code returns errors.New("introspection
+// disabled"), which would otherwise be "internal error".
+func introspectionOff(ctx context.Context, err error) *gqlerror.Error {
+	gqlErr, ok := err.(*gqlerror.Error) //nolint:errorlint // gqlgen's own wrapping of the resolver's error
+	if !ok || gqlErr.Err == nil || gqlErr.Err.Error() != "introspection disabled" || len(gqlErr.Path) == 0 {
+		return nil
+	}
+	if name, _ := gqlErr.Path[len(gqlErr.Path)-1].(ast.PathName); name != "__schema" && name != "__type" {
+		return nil
+	}
+	if !graphql.HasOperationContext(ctx) || !graphql.GetOperationContext(ctx).DisableIntrospection {
+		return nil
+	}
+	return &gqlerror.Error{Path: gqlErr.Path, Locations: gqlErr.Locations, Message: "introspection is disabled",
+		Extensions: map[string]any{"code": errcode.ValidationFailed}}
+}
+
 // presenter is what ErrorPresenter's options set: where an internal error
 // goes, and where an error that is only the cancellation of the request goes.
 type presenter struct {
@@ -157,8 +184,7 @@ type presenter struct {
 }
 
 // PresenterOption configures ErrorPresenter. OnCanceled makes one. Its
-// options are named for what they set, not With…: the With functions make an
-// Extension's Option. The zero PresenterOption is not valid: ErrorPresenter
+// options are named for what they set. The zero PresenterOption is not valid: ErrorPresenter
 // panics on it.
 type PresenterOption struct{ apply func(*presenter) }
 

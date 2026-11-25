@@ -3,8 +3,6 @@ package gqlcore
 import (
 	"context"
 	"testing"
-
-	"github.com/syssam/velox"
 )
 
 // ctxKey marks a context as one of a fake engine.
@@ -34,10 +32,9 @@ func withRegistered(t *testing.T) {
 	t.Cleanup(func() { registered.Store(old) })
 }
 
-// TestRegister: a registered reader finds the field of a context with no
-// state, or a state with no source (InstallDB), the first reader that knows
-// the context wins, a context of no engine has no field and no source, and a
-// source in the state replaces the readers. Register refuses a nil reader.
+// TestRegister: the first registered reader that knows a context finds its
+// field, a context of no engine has no field and no source, and Register
+// refuses a nil reader.
 func TestRegister(t *testing.T) {
 	withRegistered(t)
 	func() {
@@ -65,19 +62,6 @@ func TestRegister(t *testing.T) {
 	if _, ok := FieldOf(bg); ok || SourceOf(bg) != nil {
 		t.Error("a field or a source in a context of no engine")
 	}
-
-	db, limits := &velox.DB{}, new(int)
-	inA := InstallDB(context.WithValue(bg, ctxKey("engine"), "a"), db, limits)
-	if DB(inA) != db || LimitsOf(inA) != limits || Source(inA) != nil {
-		t.Error("InstallDB's state")
-	}
-	if f, ok := FieldOf(inA); !ok || f.Name != "a" || SourceOf(inA) != a {
-		t.Errorf("FieldOf under InstallDB = %+v, %v; want a's", f, ok)
-	}
-	own := fieldSource{Field{Name: "own"}}
-	if f, ok := FieldOf(Install(inB, db, limits, own)); !ok || f.Name != "own" {
-		t.Errorf("FieldOf with the state's source = %+v, %v; want its own", f, ok)
-	}
 }
 
 // TestWait: the Wait of a field is its source's, and does nothing outside a
@@ -89,14 +73,10 @@ func TestWait(t *testing.T) {
 	wait(context.WithValue(context.Background(), ctxKey("engine"), "a"))()
 }
 
-// TestTableEdges: a nil table has no scope, an empty Add does nothing, and a
-// Selected whose compute stores the same key leaves the stored result.
+// TestTableEdges: an empty Add does nothing, and a Selected whose compute
+// stores the same key leaves the stored result.
 func TestTableEdges(t *testing.T) {
 	ctx := context.Background()
-	var nilTable *Table
-	if nilTable.Scope(ctx) != nil || NewTable().Scope(ctx) != nil {
-		t.Error("a table with no scope has one")
-	}
 	Add(ctx, nil)
 
 	tab := NewTable()

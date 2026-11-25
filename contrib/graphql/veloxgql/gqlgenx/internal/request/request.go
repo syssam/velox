@@ -4,7 +4,6 @@
 package request
 
 import (
-	"cmp"
 	"fmt"
 	"strings"
 
@@ -566,51 +565,6 @@ func CostLimits(l veloxgql.Limits) cost.Limits {
 	return cost.Limits{MaxPage: l.MaxPage, MaxList: l.MaxList, MaxIntrospectionCost: l.MaxIntrospectionCost}
 }
 
-// CheckLimits refuses a negative limit of l, naming who was given it and
-// the limit: "gqlgenx.NewExtension: Limits.MaxCost is -1, and a limit must
-// not be negative (zero is the default)".
-func CheckLimits(who string, l veloxgql.Limits) error {
-	for _, f := range fields(l) {
-		if f.n < 0 {
-			return fmt.Errorf("%s: Limits.%s is %d, and a limit must not be negative (zero is the default)", who, f.name, f.n)
-		}
-	}
-	if l.Timeout < 0 {
-		return fmt.Errorf("%s: Limits.Timeout is %v, and a limit must not be negative (zero is the default)", who, l.Timeout)
-	}
-	return nil
-}
-
-// fields are l's fields by name, in declaration order.
-func fields(l veloxgql.Limits) []struct {
-	name string
-	n    int
-} {
-	return []struct {
-		name string
-		n    int
-	}{
-		{"MaxPage", l.MaxPage},
-		{"MaxList", l.MaxList},
-		{"MaxFilterDepth", l.MaxFilterDepth},
-		{"MaxFilterWidth", l.MaxFilterWidth},
-		{"MaxFilterNodes", l.MaxFilterNodes},
-		{"MaxOrderTerms", l.MaxOrderTerms},
-		{"MaxCost", l.MaxCost},
-		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
-		{"MaxTokens", l.MaxTokens},
-		{"MaxFields", l.MaxFields},
-		{"MaxFragments", l.MaxFragments},
-		{"MaxDepth", l.MaxDepth},
-		{"MaxNameBytes", l.MaxNameBytes},
-		{"MaxLiteralBytes", l.MaxLiteralBytes},
-		{"MaxVariableNodes", l.MaxVariableNodes},
-		{"MaxErrors", l.MaxErrors},
-		{"MaxBodyBytes", l.MaxBodyBytes},
-		{"MaxResponseBytes", l.MaxResponseBytes},
-	}
-}
-
 // CostError is the error of a request that costs too much under l: one whose
 // introspection costs over l.MaxIntrospectionCost, or the rest over
 // l.MaxCost, by cost.Of of schema, op and vars. It is a coded error of
@@ -635,31 +589,4 @@ func CostError(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]
 		return nil
 	}
 	return &gqlcore.Error{Code: veloxgql.CodeTooCostly, Msg: msg, Err: veloxgql.ErrTooCostly}
-}
-
-// OrDefault is l with each zero field taken from veloxgql.DefaultLimits().
-func OrDefault(l veloxgql.Limits) veloxgql.Limits {
-	d := veloxgql.DefaultLimits()
-	return veloxgql.Limits{
-		MaxPage:        cmp.Or(l.MaxPage, d.MaxPage),
-		MaxList:        cmp.Or(l.MaxList, d.MaxList),
-		MaxFilterDepth: cmp.Or(l.MaxFilterDepth, d.MaxFilterDepth),
-		MaxFilterWidth: cmp.Or(l.MaxFilterWidth, d.MaxFilterWidth),
-		MaxFilterNodes: cmp.Or(l.MaxFilterNodes, d.MaxFilterNodes),
-		MaxOrderTerms:  cmp.Or(l.MaxOrderTerms, d.MaxOrderTerms),
-		MaxCost:        cmp.Or(l.MaxCost, d.MaxCost),
-
-		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
-		MaxTokens:            cmp.Or(l.MaxTokens, d.MaxTokens),
-		MaxFields:            cmp.Or(l.MaxFields, d.MaxFields),
-		MaxFragments:         cmp.Or(l.MaxFragments, d.MaxFragments),
-		MaxDepth:             cmp.Or(l.MaxDepth, d.MaxDepth),
-		MaxNameBytes:         cmp.Or(l.MaxNameBytes, d.MaxNameBytes),
-		MaxLiteralBytes:      cmp.Or(l.MaxLiteralBytes, d.MaxLiteralBytes),
-		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
-		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
-		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
-		MaxResponseBytes:     cmp.Or(l.MaxResponseBytes, d.MaxResponseBytes),
-		Timeout:              cmp.Or(l.Timeout, d.Timeout),
-	}
 }

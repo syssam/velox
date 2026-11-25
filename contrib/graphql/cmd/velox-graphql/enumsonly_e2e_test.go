@@ -49,16 +49,11 @@ import (
 	"context"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Tasks is the resolver for the tasks field.
 func (r *queryResolver) Tasks(ctx context.Context, status *gen.TaskStatus) ([]*gen.Task, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	q := db.Query[gen.Task]().AllowUnbounded()
+	q := r.DB.Query[gen.Task]().AllowUnbounded()
 	if status != nil {
 		q = q.Where(gen.Tasks.Status.EQ(*status))
 	}
@@ -95,7 +90,6 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func TestTaskStatus(t *testing.T) {
@@ -113,8 +107,7 @@ func TestTaskStatus(t *testing.T) {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: velox.Open(velox.SQLite, db)}}))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -150,6 +143,7 @@ func TestAppOwnSDLEnums(t *testing.T) {
 		"graph/schema.graphql":      e2eOwnSDL,
 		"gqlgen.yml":                gqlgen,
 		"graph/schema.resolvers.go": e2eOwnSDLResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"enum_test.go":              e2eOwnSDLRun,
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:only=enums", "./schema"); err != nil {

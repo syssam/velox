@@ -2,6 +2,7 @@ package gqlgraph
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"time"
 
@@ -197,4 +198,18 @@ var (
 
 func (c *Type) Columns(fields []string, order ...Order) []int {
 	return c.columns(fields, order)
+}
+
+// WithFilterLimits is ctx with the limits a where input's Pred holds to, as
+// a connection gives its where argument those of its query's DB: l, each
+// zero field of which is the default, as veloxgql.WithLimits has it.
+func WithFilterLimits(ctx context.Context, l veloxgql.Limits) context.Context {
+	v := reflect.ValueOf(&l).Elem()
+	d := reflect.ValueOf(veloxgql.DefaultLimits())
+	for i := range v.NumField() {
+		if v.Field(i).IsZero() {
+			v.Field(i).Set(d.Field(i))
+		}
+	}
+	return withFilterLimits(ctx, l)
 }

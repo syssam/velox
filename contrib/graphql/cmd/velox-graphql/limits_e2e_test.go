@@ -341,149 +341,113 @@ import (
 
 // Types is the resolver for the types field.
 func (r *queryResolver) Types(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.TypeConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Type]().Paginate(ctx, after, first, before, last)
+	return r.DB.Query[gen.Type]().Paginate(ctx, after, first, before, last)
 }
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Post]().Paginate(ctx, after, first, before, last, gen.WithPostFilter(where))
+	return r.DB.Query[gen.Post]().Paginate(ctx, after, first, before, last, gen.WithPostFilter(where))
 }
 
 // CreatePost is the resolver for the createPost field.
 func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
-	return create(ctx, new(gen.Post), input.Setters)
+	return create(ctx, r.DB, new(gen.Post), input.Setters)
 }
 
 // UpdatePost is the resolver for the updatePost field.
 func (r *mutationResolver) UpdatePost(ctx context.Context, id int64, input gen.UpdatePostInput) (*gen.Post, error) {
-	return update(ctx, id, "Post", gen.Posts.ID, input.Setters)
+	return update(ctx, r.DB, id, "Post", gen.Posts.ID, input.Setters)
 }
 
 // Things is the resolver for the things field.
 func (r *queryResolver) Things(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ThingConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Thing]().Paginate(ctx, after, first, before, last)
+	return r.DB.Query[gen.Thing]().Paginate(ctx, after, first, before, last)
 }
 
 // CreateThing is the resolver for the createThing field.
 func (r *mutationResolver) CreateThing(ctx context.Context, input gen.CreateThingInput) (*gen.Thing, error) {
-	return create(ctx, new(gen.Thing), input.Setters)
+	return create(ctx, r.DB, new(gen.Thing), input.Setters)
 }
 
 // UpdateThing is the resolver for the updateThing field.
 func (r *mutationResolver) UpdateThing(ctx context.Context, id int64, input gen.UpdateThingInput) (*gen.Thing, error) {
-	return update(ctx, id, "Thing", gen.Things.ID, input.Setters)
+	return update(ctx, r.DB, id, "Thing", gen.Things.ID, input.Setters)
 }
 
 // CreateAcct is the resolver for the createAcct field.
 func (r *mutationResolver) CreateAcct(ctx context.Context, input gen.CreateAcctInput) (*gen.Acct, error) {
-	return create(ctx, new(gen.Acct), input.Setters)
+	return create(ctx, r.DB, new(gen.Acct), input.Setters)
 }
 
 // UpdateAcct is the resolver for the updateAcct field.
 func (r *mutationResolver) UpdateAcct(ctx context.Context, id int64, input gen.UpdateAcctInput) (*gen.Acct, error) {
-	return update(ctx, id, "Acct", gen.Accts.ID, input.Setters)
+	return update(ctx, r.DB, id, "Acct", gen.Accts.ID, input.Setters)
 }
 
 // Docs is the resolver for the docs field.
 func (r *queryResolver) Docs(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.DocWhereInput) (*gen.DocConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Doc]().Paginate(ctx, after, first, before, last, gen.WithDocFilter(where))
+	return r.DB.Query[gen.Doc]().Paginate(ctx, after, first, before, last, gen.WithDocFilter(where))
 }
 
 // UpdateDoc is the resolver for the updateDoc field.
 func (r *mutationResolver) UpdateDoc(ctx context.Context, id int64, input gen.UpdateDocInput) (*gen.Doc, error) {
-	return update(ctx, id, "Doc", gen.Docs.ID, input.Setters)
+	return update(ctx, r.DB, id, "Doc", gen.Docs.ID, input.Setters)
 }
 
 // Members is the resolver for the members field.
 func (r *queryResolver) Members(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.MemberConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Member]().Paginate(ctx, after, first, before, last)
+	return r.DB.Query[gen.Member]().Paginate(ctx, after, first, before, last)
 }
 
 // Remarks is the resolver for the remarks field.
 func (r *queryResolver) Remarks(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.RemarkWhereInput) (*gen.RemarkConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Remark]().Paginate(ctx, after, first, before, last, gen.WithRemarkFilter(where))
+	return r.DB.Query[gen.Remark]().Paginate(ctx, after, first, before, last, gen.WithRemarkFilter(where))
 }
 
 // Items is the resolver for the items field.
 func (r *queryResolver) Items(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ItemConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Item]().Paginate(ctx, after, first, before, last)
+	return r.DB.Query[gen.Item]().Paginate(ctx, after, first, before, last)
 }
 
 // CreateItem is the resolver for the createItem field.
 func (r *mutationResolver) CreateItem(ctx context.Context, input gen.CreateItemInput) (*gen.Item, error) {
-	return create(ctx, new(gen.Item), input.Setters)
+	return create(ctx, r.DB, new(gen.Item), input.Setters)
 }
 
 // UpdateItem is the resolver for the updateItem field.
 func (r *mutationResolver) UpdateItem(ctx context.Context, id int64, input gen.UpdateItemInput) (*gen.Item, error) {
-	return update(ctx, id, "Item", gen.Items.ID, input.Setters)
+	return update(ctx, r.DB, id, "Item", gen.Items.ID, input.Setters)
 }
 
 // Flags is the resolver for the flags field.
 func (r *queryResolver) Flags(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.FlagOrder) (*gen.FlagConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Flag]().Paginate(ctx, after, first, before, last, gen.WithFlagOrder(orderBy))
+	return r.DB.Query[gen.Flag]().Paginate(ctx, after, first, before, last, gen.WithFlagOrder(orderBy))
 }
 
 // Pins is the resolver for the pins field.
 func (r *queryResolver) Pins(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.PinOrder) (*gen.PinConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Pin]().Paginate(ctx, after, first, before, last, gen.WithPinOrder(orderBy))
+	return r.DB.Query[gen.Pin]().Paginate(ctx, after, first, before, last, gen.WithPinOrder(orderBy))
 }
 
 // CreateFlag is the resolver for the createFlag field.
 func (r *mutationResolver) CreateFlag(ctx context.Context, input gen.CreateFlagInput) (*gen.Flag, error) {
-	return create(ctx, new(gen.Flag), input.Setters)
+	return create(ctx, r.DB, new(gen.Flag), input.Setters)
 }
 
 // UpdateFlag is the resolver for the updateFlag field.
 func (r *mutationResolver) UpdateFlag(ctx context.Context, id int64, input gen.UpdateFlagInput) (*gen.Flag, error) {
-	return update(ctx, id, "Flag", gen.Flags.ID, input.Setters)
+	return update(ctx, r.DB, id, "Flag", gen.Flags.ID, input.Setters)
 }
 
 // CreatePage is the resolver for the createPage field: it sets the slug the
 // input leaves out.
 func (r *mutationResolver) CreatePage(ctx context.Context, input gen.CreatePageInput) (*gen.Page, error) {
-	return create(ctx, &gen.Page{Slug: strings.ToLower(input.Title)}, input.Setters)
+	return create(ctx, r.DB, &gen.Page{Slug: strings.ToLower(input.Title)}, input.Setters)
 }
 
 // UpdatePage is the resolver for the updatePage field.
 func (r *mutationResolver) UpdatePage(ctx context.Context, id int64, input gen.UpdatePageInput) (*gen.Page, error) {
-	return update(ctx, id, "Page", gen.Pages.ID, input.Setters)
+	return update(ctx, r.DB, id, "Page", gen.Pages.ID, input.Setters)
 }
 
 // Mutation returns MutationResolver implementation.
@@ -510,14 +474,10 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// create inserts x with the setters an input gives, on the DB in ctx, in
-// the mutation's transaction, and returns it as inserted.
-func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func() ([]velox.Setter[E], error)) (PE, error) {
+// create inserts x with the setters an input gives, on db, and returns it
+// as inserted.
+func create[E any, PE velox.Entity[E]](ctx context.Context, db *velox.DB, x PE, setters func() ([]velox.Setter[E], error)) (PE, error) {
 	set, err := setters()
-	if err != nil {
-		return nil, err
-	}
-	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -528,15 +488,12 @@ func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func()
 }
 
 // update writes the setters an input gives to the row of E whose key is id,
-// the ID gqlgen decoded, of the GraphQL type typ, and returns the row as
-// written, read without the Read policy. The UPDATE is under E's policies: a row it does not change
-// is NOT_FOUND. With nothing to set, the row is read under the Read policy.
-func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error)) (*E, error) {
+// the ID gqlgen decoded, of the GraphQL type typ, on db, and returns the row
+// as written, read without the Read policy. The UPDATE is under E's
+// policies: a row it does not change is NOT_FOUND. With nothing to set, the
+// row is read under the Read policy.
+func update[E any, PE velox.Entity[E]](ctx context.Context, db *velox.DB, k int64, typ string, key velox.NumberCol[E, int64], setters func() ([]velox.Setter[E], error)) (*E, error) {
 	set, err := setters()
-	if err != nil {
-		return nil, err
-	}
-	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -653,8 +610,8 @@ func serve(t *testing.T) served {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	vdb := velox.Open(velox.SQLite, db)
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: vdb}}))
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
@@ -1273,6 +1230,7 @@ func TestLimitsServed(t *testing.T) {
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/app.graphql":         e2eLimitsSDL,
 		"graph/schema.resolvers.go": e2eLimitsResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"graph/write.go":            e2eLimitsWrite,
 		"limits_test.go":            strings.NewReplacer("'", "`", "~", "'", "_ context,", "_ context.Context,", `"database/sql"`, "\"context\"\n\t\"database/sql\"").Replace(e2eLimitsRun),
 	}, true)

@@ -110,10 +110,10 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    own fields, foreign keys included, so `Author` checks first that the
    viewer is a user. Every resolver reads and writes on `r.DB`, the DB
    `main.go` puts in `graph.Resolver` and serves; the rows it returns carry
-   it, and their edges read on it. A mutation runs in a transaction the
-   extension begins on that DB, and a statement on `r.DB` under the
-   resolver's `ctx` runs in it: one DB everywhere. `veloxgql.DB(ctx)` is
-   for code outside a resolver that has only the context. The update's
+   it, and their edges read on it. A mutation runs in a transaction
+   `gqlgenx.Transactioner` begins on that DB, and a statement on `r.DB` under
+   the resolver's `ctx` runs in it: one DB everywhere. A resolver uses the DB
+   its `Resolver` holds, never the context. The update's
    `One` writes the one row and returns it as written, `velox.ErrNotFound`
    when it names none the request may change, which the resolver shows as
    `NOT_FOUND`; `updateUser` appends a setter of its own, the password's hash, to the
@@ -153,9 +153,13 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' -H 'X-User: 2' \
    `COUNT`, and no page query).
 6. `main.go`: gqlgen's server on `Resolver{DB: db}`. That alone pages and
    batches each edge of a level in one statement (`minimalServer`; decision
-   0173). The served one adds `gqlgenx.Setup`, which is opt-in and changes
-   no statement: the limits on a request's size and cost, one transaction
-   per mutation, and `gqlgenx.ErrorPresenter`. Then come middlewares that
+   0173). The served one (`server`) adds gqlgenx's opt-in pieces, which
+   change no statement: `Transactioner`, one transaction per mutation;
+   `RequestLimit`, `CostLimit` and `ResponseLimit`, the limits on a
+   request's size and cost and on its response; `ErrorPresenter`; gqlgen's
+   `SetDisableSuggestion` and `QuietValidation`, no suggestions in
+   validation and at most `MaxErrors` of its errors;
+   and `MaxBodyBytes`. Then come middlewares that
    put the organization, the role and the viewer in the context, and the
    directive `@admin`. `nosetup_test.go` runs the read tests on
    `minimalServer`'s shape, with the same statements.
@@ -189,20 +193,20 @@ its `Setters`, before any statement: `createPost` with an empty title is
 row the caller may read fails the write with a `*velox.EdgeError`, which
 `gqlgenx.ErrorPresenter` shows as `NOT_FOUND` naming the edge.
 
-**One transaction per operation.** `gqlgenx.NewExtension`, which
-`gqlgenx.Setup` uses, runs a mutation operation in one transaction, and
-rolls it back when the response has any error. It is opt-in: a server
-without it runs each write on its own, as entgql's does without its
-`Transactioner`. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
+**One transaction per operation.** `gqlgenx.Transactioner{DB: db}` runs a
+mutation operation in one transaction, and rolls it back when the response
+has any error. It is opt-in, with `srv.Use(gqlgenx.Transactioner{DB: db})`:
+a server without it runs each write on its own, as entgql's does without
+its `Transactioner`. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
 (its name is taken), `a`'s row is rolled back too, and `data` is `null`.
 Inside that transaction an insert or an update with edge setters runs in a
 savepoint, so an edge's error rolls back its row at once; one of columns
 alone is one statement. A resolver that returns the error, as this
 example's do, fails the operation, and the transaction rolls back all of
 it; a resolver that swallows the error keeps the operation's other writes,
-and the operation commits. Outside a server, or in an operation
-`WithTxFilter` leaves out, a write with edge setters runs in a transaction
-of its own, so it is never half-written either.
+and the operation commits. Outside a server, or on one without the
+`Transactioner`, a write with edge setters runs in a transaction of its
+own, so it is never half-written either.
 
 **The row returned.** `createX` returns the row as written.
 `UpdateQuery.One` reads its row back by its key without the policies, the
@@ -279,17 +283,19 @@ not get it. Anything else that fails at the same moment is logged.
 
 Every `veloxgql.Limits` field (`MaxPage`, `MaxList`, `MaxFilterDepth`,
 `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`) bounds one argument or
-one edge. The server takes the defaults; `gqlgenx.WithLimits` sets others:
+one edge. They live on the DB. `open` takes the defaults; `veloxgql.WithLimits`
+sets others when the DB is opened, and what reads through the DB, a
+connection, an edge or the servers' limit extensions, holds to them:
 
 ```go
-gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 50}))
+velox.Open(velox.SQLite, sqlDB, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
 ```
 
-A zero field is the default; a negative one is refused. They do not bound a
+A zero field is the default; a negative one panics. They do not bound a
 request: connections nested in connections multiply (each level reads up to
 `MaxPage` rows for each parent), and aliases repeat a field
 as often as the client writes it. So `Limits.MaxCost` (150000 by default)
-bounds the whole request. The extension computes the request's cost before
+bounds the whole request. `gqlgenx.CostLimit(db)` computes the request's cost before
 any resolver runs: a field costs 1 plus its children's cost times its
 multiplier, which is `first` or `last` for a connection's `edges` (`MaxPage`
 when neither is given), and `MaxList` for another list of objects. On top of that, with no multiplier, a field that runs a
@@ -309,20 +315,24 @@ of full connection pages (about 20000) pass; three do not (about two million).
 is a list, not a connection) costs `MaxList`, 1000, for each parent, so one
 full page with two list edges, `posts(first: 100) { edges { node { a: likes { id }
 b: likes { id } } } }`, costs 200602 and is refused by default: raise `MaxCost`, or lower
-`MaxList`, with `WithLimits`. gqlgen's `extension.FixedComplexityLimit` counted
+`MaxList`, with `veloxgql.WithLimits`. gqlgen's `extension.FixedComplexityLimit` counted
 fields, not rows, and is not used. Choose the limit for your schema and
 clients.
 
 gqlgen validates a request before any of this, and validation is quadratic in the
 fields that share a response name, and other stages grow with spreads, names, depth
-and variables. So the extension parses a request first, and refuses one over
+and variables. So `gqlgenx.RequestLimit(db)` parses a request first, and refuses one over
 `Limits.MaxTokens` (15000), `MaxFields` (2000), `MaxFragments` (500), `MaxDepth` (64),
 `MaxNameBytes` (128), `MaxLiteralBytes` (64 KiB) or `MaxVariableNodes` (25000), or with
 more than 5 times `MaxFields` pairs that differ under one response name, with
-`BAD_USER_INPUT`. `main.go` calls `gqlgenx.Setup`, which does what a public server needs: it
-uses the extension and `ErrorPresenter`, stops validation at `MaxErrors` (100) errors,
-shows no suggestions, and the handler it returns refuses a body over
-`Limits.MaxBodyBytes` (1 MiB). `bounded_test.go` asserts what each shape allocates, and
+`BAD_USER_INPUT`. `gqlgenx.ResponseLimit(db)` stops a response over
+`MaxResponseBytes` or `MaxErrors`, and a request over `Timeout`;
+`srv.SetDisableSuggestion(true)` and
+`srv.SetValidationRulesFn(gqlgenx.QuietValidation(db))` show no suggestions
+and at most `MaxErrors` validation errors; and
+`gqlgenx.MaxBodyBytes(1 << 20)` wraps the handler to refuse a body over 1 MiB.
+`main.go`'s `server` uses them all, with `ErrorPresenter`, and
+`minimalServer` none. `bounded_test.go` asserts what each shape allocates, and
 the most a request can, about 290 MB at `MaxCost`, is real work charged to the cost.
 
 ### A nested request

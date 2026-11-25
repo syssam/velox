@@ -237,7 +237,8 @@ type PostWhereInput struct {
 }
 
 // Pred is the condition w stands for on Post nodes, true for a nil or empty w.
-// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
+// It fails on a filter over the limits of the DB of the connection it filters,
+// or veloxgql.DefaultLimits() outside one.
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	p, err := w.Predicate(ctx)
 	return velox.Pred[Post](p), err

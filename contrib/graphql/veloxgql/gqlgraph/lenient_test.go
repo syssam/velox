@@ -10,7 +10,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/internal/apitest/fixture"
 	"github.com/syssam/velox/untyped"
@@ -146,7 +145,7 @@ func TestLenientWhere(t *testing.T) {
 // the input's Predicate and through Paginate's where argument alike.
 func TestErrEmptyWhereInput(t *testing.T) {
 	db, _ := peopleDB(t)
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	for name, w := range map[string]*vWhere{
 		"or [{}]":           {Or: []*vWhere{{}}},
 		"not {}":            {Not: &vWhere{}},
@@ -171,19 +170,21 @@ func TestErrEmptyWhereInput(t *testing.T) {
 // statement would otherwise fail with the driver's limit, an internal
 // error.
 func TestLenientBindLimit(t *testing.T) {
-	db, _ := peopleDB(t)
-	ctx := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxFilterNodes: 10000})).NewContext(context.Background())
-	w := &vWhere{IDIn: span(1, 40000)}
-	_, err := w.predicate(ctx)
+	db, _ := peopleDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: 10000}))
+	ctx := context.Background()
+	typ := &gqlgraph.Type{Name: "Person", Key: personConn.Key, Order: personConn.Order, LenientFilters: true}
+	paginate := func(w *vWhere) (*gqlgraph.Connection, error) {
+		return gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.FromQuery(db.Query[person]())), typ, gqlgraph.Args{Where: gqlgraph.WhereOf(w, (*vWhere).predicate)})
+	}
+	_, err := paginate(&vWhere{IDIn: span(1, 40000)})
 	if !errors.Is(err, veloxgql.ErrFilterTooLarge) || codeOf(err) != veloxgql.CodeBadUserInput {
 		t.Fatalf("idIn of 40000: %v; want BAD_USER_INPUT ErrFilterTooLarge", err)
 	}
-	w = &vWhere{IDIn: span(1, 20000)}
-	p, err := w.predicate(ctx)
+	c, err := paginate(&vWhere{IDIn: span(1, 20000)})
 	if err != nil {
 		t.Fatalf("idIn of 20000 under MaxFilterNodes 10000: %v", err)
 	}
-	if n, err := db.Query[person]().Where(velox.Pred[person](p)).Count(ctx); err != nil || n != int64(len(all)) {
+	if n, err := c.TotalCount(ctx); err != nil || n != len(all) {
 		t.Errorf("idIn of 20000: %d, %v", n, err)
 	}
 }

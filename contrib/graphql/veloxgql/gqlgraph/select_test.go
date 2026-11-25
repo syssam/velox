@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/vektah/gqlparser/v2/ast"
-
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -15,8 +13,7 @@ import (
 // nodes, with named fragments and every alias of edges, without
 // __typename; computed once per field.
 func TestSelectedConnection(t *testing.T) {
-	db, _, _ := edgeDB(t)
-	ctx := operation(t, db, `{ owners {
+	ctx := operation(t, `{ owners {
 		totalCount
 		edges { cursor node { name ...F } }
 		more: edges { node { id __typename ... on Keyed { id } } }
@@ -36,8 +33,7 @@ func TestSelectedConnection(t *testing.T) {
 // TestSelectedObject: a field of the type itself gives its own selection,
 // with the fragments on the type.
 func TestSelectedObject(t *testing.T) {
-	db, _, _ := edgeDB(t)
-	ctx := operation(t, db, `{
+	ctx := operation(t, `{
 		owner { name ... on Owner { age } __typename tags { name } children { totalCount } }
 	}`)
 	for _, c := range []struct {
@@ -56,8 +52,7 @@ func TestSelectedObject(t *testing.T) {
 // TestSelectedNotOurs: a field that returns another type, or a connection
 // to one, and a context outside a field, give ok false.
 func TestSelectedNotOurs(t *testing.T) {
-	db, _, _ := edgeDB(t)
-	ctx := operation(t, db, `{ other { name } owner { name } children { totalCount } }`)
+	ctx := operation(t, `{ other { name } owner { name } children { totalCount } }`)
 	for _, c := range []struct {
 		name string
 		ctx  context.Context
@@ -79,7 +74,6 @@ func TestSelectedNotOurs(t *testing.T) {
 // velox-graphql does not write, which an application's resolver may read
 // the nodes for, gives ok false.
 func TestSelectedAppFields(t *testing.T) {
-	db, _, _ := edgeDB(t)
 	for _, c := range []struct {
 		query string
 		want  []string // nil: not ok
@@ -88,40 +82,30 @@ func TestSelectedAppFields(t *testing.T) {
 		{`{ owners { nodes { name } } }`, nil},
 		{`{ owners { edges { extra node { name } } } }`, nil},
 	} {
-		got, ok := gqlgraph.Selected(field(t, operation(t, db, c.query), "owners"), "Owner")
+		got, ok := gqlgraph.Selected(field(t, operation(t, c.query), "owners"), "Owner")
 		if ok != (c.want != nil) || (ok && !reflect.DeepEqual(got, c.want)) {
 			t.Errorf("%s: %q, %v; want %q", c.query, got, ok, c.want)
 		}
 	}
 }
 
-// TestSelectedInterfaces: fragments on every interface and union of the
-// type count, read from the server's schema; without the schema (the
-// registered source's), the interfaces are those the validator's
-// definition of the type lists, found on a field selected on it, and a
+// TestSelectedInterfaces: fragments on the interfaces the validator's
+// definition of the type lists count, found on a field selected on it; a
 // fragment on any other interface or a union gives ok false.
 func TestSelectedInterfaces(t *testing.T) {
-	db, _, _ := edgeDB(t)
 	for _, c := range []struct {
 		query, field string
-		withSchema   []string // nil: not ok
-		without      []string
+		want         []string // nil: not ok
 	}{
-		{`{ owner { ... on Named { name } } }`, "owner", []string{"name"}, nil},
-		{`{ owners { edges { node { ... on Named { name } } } } }`, "owners", []string{"name"}, nil},
-		{`{ owner { ...T } } fragment T on Thing { ... on Owner { age } }`, "owner", []string{"age"}, nil},
-		{`{ owner { id ... on Keyed { id } } }`, "owner", []string{"id"}, []string{"id"}},
-		{`{ owner { ... on Owner { name } } }`, "owner", []string{"name"}, []string{"name"}},
+		{`{ owner { ... on Named { name } } }`, "owner", nil},
+		{`{ owners { edges { node { ... on Named { name } } } } }`, "owners", nil},
+		{`{ owner { ...T } } fragment T on Thing { ... on Owner { age } }`, "owner", nil},
+		{`{ owner { id ... on Keyed { id } } }`, "owner", []string{"id"}},
+		{`{ owner { ... on Owner { name } } }`, "owner", []string{"name"}},
 	} {
-		for _, s := range []struct {
-			name   string
-			schema *ast.Schema
-			want   []string
-		}{{"with the schema", edgeSchema, c.withSchema}, {"without", nil, c.without}} {
-			got, ok := gqlgraph.Selected(field(t, operationIn(t, db, c.query, s.schema), c.field), "Owner")
-			if ok != (s.want != nil) || (ok && !reflect.DeepEqual(got, s.want)) {
-				t.Errorf("%s %s: %q, %v; want %q", c.query, s.name, got, ok, s.want)
-			}
+		got, ok := gqlgraph.Selected(field(t, operation(t, c.query), c.field), "Owner")
+		if ok != (c.want != nil) || (ok && !reflect.DeepEqual(got, c.want)) {
+			t.Errorf("%s: %q, %v; want %q", c.query, got, ok, c.want)
 		}
 	}
 }

@@ -3,12 +3,9 @@ package gqlgraph_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
@@ -33,34 +30,43 @@ func TestRowsAreChecked(t *testing.T) {
 	}
 }
 
-// TestEdgeErrors: an edge reads nothing without a DB in the context, and
-// returns the error of the owner's statement as it is.
+// TestEdgeErrors: an edge of a row no statement made reads nothing, and an
+// edge returns the error of the owner's statement as it is.
 func TestEdgeErrors(t *testing.T) {
 	db, _, _ := edgeDB(t)
 	x := &child{ID: 1}
 	noDB := context.Background()
-	if _, err := gqlgraph.EdgeOneOf(noDB, x, children.Owner, "Child.owner"); !errors.Is(err, veloxgql.ErrNoDB) {
-		t.Errorf("EdgeOne with no DB: %v", err)
+	if _, err := gqlgraph.EdgeOneOf(noDB, x, children.Owner, "Child.owner"); !errors.Is(err, velox.ErrNoSource) {
+		t.Errorf("EdgeOne of a row with no source: %v", err)
 	}
-	if _, err := gqlgraph.EdgeListOf(noDB, &owner{ID: 1}, owners.Tags, "Owner.tags", 0); !errors.Is(err, veloxgql.ErrNoDB) {
-		t.Errorf("EdgeList with no DB: %v", err)
+	if _, err := gqlgraph.EdgeListOf(noDB, &owner{ID: 1}, owners.Tags, "Owner.tags", 0); !errors.Is(err, velox.ErrNoSource) {
+		t.Errorf("EdgeList of a row with no source: %v", err)
 	}
 	kids := gqlgraph.EdgeOf(&owner{ID: 1}, owners.Children, "Owner.children")
-	if c, err := gqlgraph.Paginate(noDB, kids, gqlgraph.TableType[child]("Child"), gqlgraph.Args{}); c != nil || !errors.Is(err, veloxgql.ErrNoDB) {
-		t.Errorf("Paginate of an edge with no DB = %v, %v", c, err)
+	if c, err := gqlgraph.Paginate(noDB, kids, gqlgraph.TableType[child]("Child"), gqlgraph.Args{}); c != nil || !errors.Is(err, velox.ErrNoSource) {
+		t.Errorf("Paginate of an edge of a row with no source = %v, %v", c, err)
 	}
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
+	// Rows a statement read have a DB, so the edge reaches its checks.
+	o, err := db.Query[owner]().Where(owners.ID.EQ(1)).First(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := db.Query[child]().Where(children.ID.EQ(5)).First(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// A row of another entity than the owner's fails the edge's read, with
-	// an error and no panic.
-	wrong := gqlgraph.TableType[child]("Child").Edge(&owner{ID: 1}, int(children.Owner.I))
-	if v, err := gqlgraph.EdgeOne(ctx, gqlgraph.TableType[owner]("Owner"), wrong); v != nil || err == nil || !strings.Contains(err.Error(), "a row is a non-nil") {
+	// an error and no panic: the row has no source of the owner's entity.
+	wrong := gqlgraph.TableType[child]("Child").Edge(o, int(children.Owner.I))
+	if v, err := gqlgraph.EdgeOne(ctx, gqlgraph.TableType[owner]("Owner"), wrong); v != nil || !errors.Is(err, velox.ErrNoSource) {
 		t.Errorf("EdgeOne of a row of another entity = %v, %v", v, err)
 	}
 	none := &gqlgraph.Type{Name: "None"} // an owner with no Table
-	if v, err := gqlgraph.EdgeOne(ctx, gqlgraph.TableType[owner]("Owner"), none.Edge(x, int(children.Owner.I))); v != nil || err == nil {
+	if v, err := gqlgraph.EdgeOne(ctx, gqlgraph.TableType[owner]("Owner"), none.Edge(c, int(children.Owner.I))); v != nil || err == nil {
 		t.Errorf("EdgeOne of an owner with no Table = %v, %v", v, err)
 	}
-	if v, err := gqlgraph.EdgeList(ctx, gqlgraph.TableType[tag]("Tag"), none.Edge(&owner{ID: 1}, int(owners.Tags.I)), 0); v != nil || err == nil {
+	if v, err := gqlgraph.EdgeList(ctx, gqlgraph.TableType[tag]("Tag"), none.Edge(o, int(owners.Tags.I)), 0); v != nil || err == nil {
 		t.Errorf("EdgeList of an owner with no Table = %v, %v", v, err)
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"slices"
 	"testing"
-
-	"github.com/syssam/velox"
 )
 
 // sel is a Selection of fixed fields per type; a type it lacks it cannot
@@ -19,42 +17,6 @@ func (s sel) On(typ string) ([]SelectedField, bool) {
 
 // leaf is a selected field with no sub-selection.
 func leaf(name string) SelectedField { return SelectedField{Name: name} }
-
-// fieldSource gives every context the one field f.
-type fieldSource struct{ f Field }
-
-func (s fieldSource) Field(context.Context) (Field, bool) { return s.f, true }
-func (fieldSource) Wait(context.Context) func()           { return func() {} }
-
-// TestState: Install puts the DB, the limits and the source in a context,
-// WithDB replaces the DB alone, a context without a state has none of them,
-// and Install refuses a nil source.
-func TestState(t *testing.T) {
-	db, tx, limits, src := &velox.DB{}, &velox.DB{}, new(int), &fakeSource{}
-	ctx := Install(context.Background(), db, limits, src)
-	if DB(ctx) != db || LimitsOf(ctx) != limits || Source(ctx) != src {
-		t.Error("Install's state")
-	}
-	txCtx := WithDB(ctx, tx)
-	if DB(txCtx) != tx || LimitsOf(txCtx) != limits || Source(txCtx) != src || DB(ctx) != db {
-		t.Error("WithDB's state")
-	}
-	bg := context.Background()
-	if DB(bg) != nil || LimitsOf(bg) != nil || Source(bg) != nil {
-		t.Error("a context without a state")
-	}
-	if _, ok := FieldOf(bg); ok {
-		t.Error("FieldOf without a source")
-	}
-	func() {
-		defer func() {
-			if recover() == nil {
-				t.Error("Install with a nil source did not panic")
-			}
-		}()
-		Install(bg, db, limits, nil)
-	}()
-}
 
 // TestSelected walks a connection's edges and nodes, and a field of the type
 // itself, and is false where it cannot see what the objects read.
@@ -82,7 +44,8 @@ func TestSelectedFields(t *testing.T) {
 		{"no selection", Field{Type: "Post", Key: 11}, nil, false},
 	}
 	for _, c := range cases {
-		ctx := WithTable(Install(context.Background(), nil, nil, fieldSource{c.f}), nil)
+		c.f.Table = NewTable()
+		ctx, _ := inField(context.Background(), c.f)
 		for range 2 { // the second from the table
 			got, ok := Selected(ctx, "Post")
 			if ok != c.ok || !slices.Equal(got, c.want) {

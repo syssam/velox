@@ -7,9 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
-	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // parityCase is a request both servers answer.
@@ -97,7 +94,7 @@ func TestParity(t *testing.T) {
 		srv  server
 		log  *stmtLog
 	}{
-		{"gqlgenx", gqlgenServer(t, gdb), glog},
+		{"gqlgenx", gqlgenServer(gdb), glog},
 		{"graphqlgo", graphqlgoServer(t, qdb), qlog},
 	}
 	// The first after-a-cursor run finds the cursor the second pages from.
@@ -126,21 +123,20 @@ func TestParity(t *testing.T) {
 	}
 }
 
-// TestParityMutation: a mutation outside a transaction, gqlgenx's with
-// gqlgenx.WithTxFilter leaving it out and graphqlgo's, sends the same
-// statements; one whose resolver fails after its insert keeps the row on
-// both, with the same data and error.
+// TestParityMutation: a mutation outside a transaction, on gqlgen with no
+// gqlgenx.Transactioner and on graphqlgo, sends the same statements; one
+// whose resolver fails after its insert keeps the row on both, with the
+// same data and error.
 func TestParityMutation(t *testing.T) {
 	ctx := context.Background()
 	gdb, glog := modelDB(t)
 	qdb, qlog := modelDB(t)
-	noTx := gqlgenx.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false })
 	servers := []struct {
 		name string
 		srv  server
 		log  *stmtLog
 	}{
-		{"gqlgenx", gqlgenServer(t, gdb, noTx), glog},
+		{"gqlgenx", gqlgenServer(gdb), glog},
 		{"graphqlgo", graphqlgoServer(t, qdb), qlog},
 	}
 	for _, c := range []struct {

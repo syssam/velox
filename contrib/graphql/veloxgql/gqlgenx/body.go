@@ -8,128 +8,33 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"net/http"
-	"slices"
 	"sync"
 
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/vektah/gqlparser/v2/validator/core"
-	"github.com/vektah/gqlparser/v2/validator/rules"
-
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
-// Server is what Setup needs of gqlgen's *handler.Server.
-type Server interface {
-	http.Handler
-	Use(graphql.HandlerExtension)
-	SetErrorPresenter(graphql.ErrorPresenterFunc)
-	SetParserTokenLimit(int)
-	SetDisableSuggestion(bool)
-	SetValidationRulesFn(func() *rules.Rules)
-}
-
-// Setup makes srv a server of db fit for clients: call it first on a new
-// server, and serve what it returns, not srv. A server pages and batches
-// without it (decision 0173); Setup adds the limits, the mutation
-// transaction and the presenter below, and changes no statement:
+// MaxBodyBytes returns the HTTP middleware that holds a request's body, its
+// variables and any upload included, to n bytes, as nothing in gqlgen does.
+// It is opt-in, for a server open to clients:
 //
-//	srv := handler.New(graph.NewExecutableSchema(cfg))
-//	h := gqlgenx.Setup(srv, db)
-//	srv.AddTransport(transport.POST{})
+//	http.Handle("/graphql", gqlgenx.MaxBodyBytes(1<<20)(srv))
 //
-// It uses NewExtension(db, opts...), first of the server's extensions, and
-// ErrorPresenter(nil). It sets the parser's token limit to the limits' MaxTokens,
-// and gives validation's rules without their suggestions, of a field, an argument, an
-// input field, an enum value or a type, whether or not the server has
-// extension.Introspection: they take 25 KB for each unknown field, and show a client
-// the schema, where a directive may hide part of it. Those rules return the limits'
-// MaxErrors errors, and one that says there are more. The handler it returns refuses a
-// body over the limits' MaxBodyBytes with 413, and BAD_USER_INPUT wrapping
-// veloxgql.ErrRequestTooLarge; nothing else in a request bounds one. It holds the whole of
-// a body of unknown length, up to that. A websocket's messages are held to the same: the
-// connection of one over closes before it is read, whichever transport or gqlgen. It
-// takes the extensions off the upgrade, so no message is compressed: what a client sends
-// is what is counted.
+// A body over n is refused with 413, and BAD_USER_INPUT wrapping
+// veloxgql.ErrRequestTooLarge. It holds the whole of a body of unknown
+// length, up to n. A websocket's messages are held to n too: the connection
+// of one over closes, with the code 1009, before it is read, whichever
+// transport or gqlgen. It takes the extensions off the upgrade, so no
+// message is compressed: what a client sends is what is counted.
 //
-// How many messages or connections a client opens is not bounded here: a rate limit in
-// front is.
-//
-// Call SetErrorPresenter again, after it, to give another presenter. Without
-// Setup, the Extension still enforces the limits of the document, the variables and the
-// response, and no body or websocket limit holds, nor one of validation's errors.
-func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler {
-	e := NewExtension(db, opts...)
-	srv.Use(e)
-	srv.SetErrorPresenter(ErrorPresenter(nil))
-	srv.SetParserTokenLimit(e.limits.MaxTokens)
-	srv.SetDisableSuggestion(true)
-	srv.SetValidationRulesFn(func() *rules.Rules { return validationRules(e.limits.MaxErrors) })
-	return bodyLimit(srv, int64(e.limits.MaxBodyBytes))
-}
-
-var (
-	quietOnce sync.Once
-	quiet     []core.RuleFunc
-)
-
-// quietRules are gqlparser's rules with no suggestions, in the order of their names.
-func quietRules() []core.RuleFunc {
-	quietOnce.Do(func() { quiet = newQuietRules() })
-	return quiet
-}
-
-func newQuietRules() []core.RuleFunc {
-	d := rules.NewDefaultRules()
-	for _, r := range []struct {
-		name string
-		rule core.Rule
-	}{
-		{"FieldsOnCorrectType", rules.FieldsOnCorrectTypeRuleWithoutSuggestions},
-		{"KnownArgumentNames", rules.KnownArgumentNamesRuleWithoutSuggestions},
-		{"KnownTypeNames", rules.KnownTypeNamesRuleWithoutSuggestions},
-		{"ScalarLeafs", rules.ScalarLeafsRuleWithoutSuggestions},
-		{"ValuesOfCorrectType", rules.ValuesOfCorrectTypeRuleWithoutSuggestions},
-	} {
-		d.RemoveRule(r.name)
-		d.AddRule(r.rule.Name, r.rule.RuleFunc)
+// How many messages or connections a client opens is not bounded here: a
+// rate limit in front is. It panics on an n below 1.
+func MaxBodyBytes(n int64) func(http.Handler) http.Handler {
+	if n < 1 {
+		panic(fmt.Sprintf("gqlgenx.MaxBodyBytes(%d): the limit must be at least 1", n))
 	}
-	inner := d.GetInner()
-	out := make([]core.RuleFunc, 0, len(inner))
-	for _, name := range slices.Sorted(maps.Keys(inner)) {
-		out = append(out, inner[name])
-	}
-	return out
-}
-
-// validationRules is quietRules as one rule, that holds them to at most most errors,
-// for one validation: 28 rules each wrapped would be 80 allocations of each request
-// gqlgen has not cached. They have the names of the rules gqlgen adds, with no limit,
-// when they are absent under SetDisableSuggestion: one at v0.17.86, two at v0.17.98.
-func validationRules(most int) *rules.Rules {
-	return rules.NewRules(core.Rule{
-		Name:     rules.ScalarLeafsRuleWithoutSuggestions.Name,
-		RuleFunc: func(*core.Events, core.AddErrFunc) {},
-	}, core.Rule{
-		Name: rules.FieldsOnCorrectTypeRuleWithoutSuggestions.Name,
-		RuleFunc: func(obs *core.Events, addError core.AddErrFunc) {
-			n := 0
-			limited := func(opts ...core.ErrorOption) {
-				switch n++; {
-				case n <= most:
-					addError(opts...)
-				case n == most+1:
-					addError(core.Message("over %d validation errors: the rest are left out", most))
-				}
-			}
-			for _, rule := range quietRules() {
-				rule(obs, limited)
-			}
-		},
-	})
+	return func(next http.Handler) http.Handler { return bodyLimit(next, n) }
 }
 
 // bodyLimit refuses a body of more than most bytes.
@@ -194,7 +99,7 @@ func (w *wsLimitWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // Unwrap is for http.ResponseController.
 func (w *wsLimitWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-var errWebsocketTooLarge = errors.New("veloxgql: a websocket message over Limits.MaxBodyBytes")
+var errWebsocketTooLarge = errors.New("veloxgql: a websocket message over MaxBodyBytes")
 
 // wsLimitConn reads a client's websocket frames as they pass, and
 // closes the connection when a message's payload passes most.

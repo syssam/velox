@@ -25,6 +25,26 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `sqljson.ValueIsNull`: true where the path holds a JSON null, on every
   dialect. `Or(Not(c.HasKey(k)), c.ValueIsNull(k))` is "missing or null",
   which `Contains` could not say on SQLite.
+- `velox.WithValue(key, value)` attaches a package's setting to a DB, and
+  `velox.Value(db, key)` reads it; every DB derived from it (a
+  transaction's, a WithoutPolicy or Record copy, a row's source) has it.
+  It is for a package beside velox, such as veloxgql's limits, to keep a
+  setting on the DB rather than in a global or a context. `untyped.QueryDB(q)`
+  gives the DB a TableQuery runs on, as `untyped.SourceDB` gives a row's
+  (ADR 0175).
+- GraphQL's opt-in pieces, each one feature (ADR 0175):
+  `gqlgenx.Transactioner{DB: db}` runs each mutation in one transaction,
+  as entgql's `Transactioner`; `gqlgenx.RequestLimit(db)`,
+  `gqlgenx.CostLimit(db)` and `gqlgenx.ResponseLimit(db)` bound a request's
+  document, cost and response; `gqlgenx.MaxBodyBytes(n)` is HTTP middleware
+  bounding the body and websocket messages; `gqlgenx.QuietValidation(db)`,
+  for `SetValidationRulesFn` with `SetDisableSuggestion(true)`, validates
+  with no suggestions and at most `MaxErrors` errors.
+  `veloxgql.WithLimits(l)` gives a DB its GraphQL limits, which
+  `veloxgql.LimitsOf(db)` reads. `gqlgenx.ErrorPresenter` shows `__schema`
+  on a server without introspection as "introspection is disabled"; the
+  response is now `{"errors": [...], "data": {"__schema": null}}`, with the
+  error's path, where the extension's refusal gave `data: null`.
 
 - `velox.Text`, `Integer`, `Time` and `Bool` mark a Calc's kind, as
   `Decimal` marks a number: `AfterValues` and a GraphQL connection then
@@ -1771,6 +1791,23 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `Open` and `OpenShards` panic on an unknown dialect. `Connect` returns an error.
 
 ### Removed
+
+- GraphQL's setup calls (ADR 0175): `gqlgenx.Setup`, `gqlgenx.Server`,
+  `gqlgenx.NewExtension`, `gqlgenx.Extension` (and its `NewContext`),
+  `gqlgenx.Option` with `WithLimits`, `WithTxOptions`, `WithTxFilter` and
+  `WithBatchScope`; `graphqlgo.With`; `veloxgql.Service`,
+  `ServiceWithLimits`, `DB`, `DBFromContext`, `LimitsFromContext`,
+  `ErrNoDB` and `ErrNoSelectionSource`. A server needs none of them:
+  resolvers use `r.DB`, a mutation transaction is
+  `srv.Use(gqlgenx.Transactioner{DB: db})`, limits are the DB's
+  (`veloxgql.WithLimits`), and a public server adds `RequestLimit`,
+  `CostLimit`, `ResponseLimit`, `MaxBodyBytes`, `ErrorPresenter` and
+  gqlgen's `SetDisableSuggestion(true)`. A mutation's session on a routed
+  DB under graphql-go is an operation interceptor of the application's
+  calling `velox.WithSession` (the guide has it). `WithTxFilter` and
+  `WithBatchScope` have no replacement, nor the cap on gqlgen's validation
+  errors. Generated code keeps its shape: regenerating changes one doc
+  comment.
 
 - The functions `velox.Values` and `velox.IDs`: call `q.Values(ctx, h)`
   and `q.IDs(ctx)` (ADRs 0158, 0162).

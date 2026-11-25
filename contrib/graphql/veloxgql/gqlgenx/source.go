@@ -11,19 +11,14 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// source is gqlgen's selection source, which the Extension installs with
-// each operation's state. The field of a context is gqlgen's field context
+// source interns the field occurrences of one root field for the reader.
+// The field of a context is gqlgen's field context
 // (graphql.GetFieldContext); its key is the *ast.Field with the selections
 // gqlgen merged under its response key, so two aliases, or one field merged
 // with two different sets of fragments, are two keys; its selection on a
-// type is graphql.CollectFields with the type's interfaces, which the
-// server's schema gives. Wait does nothing: gqlgen runs every field in a
-// goroutine of its own, and a field that waits holds back no other.
+// type is graphql.CollectFields with the type's interfaces, as the
+// validator's definition of the type lists them (collect).
 type source struct {
-	// schema is the server's, nil when unknown: On reads the interfaces of a
-	// type from it.
-	schema *ast.Schema
-
 	mu sync.Mutex
 	// sels are the field occurrences met, per *ast.Field: each the key and
 	// the selection of its field.
@@ -38,21 +33,10 @@ type selection struct {
 	sels ast.SelectionSet
 }
 
-var _ gqlcore.SelectionSource = (*source)(nil)
-
-// Field is the field of gqlgen's field context in ctx. Its Key is nil when
-// gqlgen gives the field no *ast.Field, and its Sel nil without an
+// field is the field of fc, gqlgen's field context in ctx. Its Key is nil
+// when gqlgen gives the field no *ast.Field, and its Sel nil without an
 // operation context or a definition of the field: the caller then reads
 // alone, and every column.
-func (s *source) Field(ctx context.Context) (gqlcore.Field, bool) {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil {
-		return gqlcore.Field{}, false
-	}
-	return s.field(ctx, fc), true
-}
-
-// field is Field of fc, gqlgen's field context in ctx.
 func (s *source) field(ctx context.Context, fc *graphql.FieldContext) gqlcore.Field {
 	f := gqlcore.Field{Object: fc.Object}
 	if fc.Field.Field == nil {
@@ -71,10 +55,7 @@ func (s *source) field(ctx context.Context, fc *graphql.FieldContext) gqlcore.Fi
 	return f
 }
 
-// Wait does nothing.
-func (*source) Wait(context.Context) func() { return noWait }
-
-// noWait is Wait's done function.
+// noWait is the reader's Wait's done function.
 func noWait() {}
 
 // occurrence is the one *selection of the field f with the selections sels
@@ -98,11 +79,10 @@ func (s *source) occurrence(f *ast.Field, sels ast.SelectionSet, oc *graphql.Ope
 }
 
 // On is the fields sel selects on an object of the type typ, through its
-// fragments on typ and on each interface and union typ is a member of, as
-// the schema says. Without a schema, that is typ alone, and a fragment on an
-// interface or a union fails it.
+// fragments on typ and on each interface the validator's definition of typ
+// lists (collect).
 func (sel *selection) On(typ string) ([]gqlcore.SelectedField, bool) {
-	cs, ok := collect(sel.oc, sel.src.schema, sel.sels, typ)
+	cs, ok := collect(sel.oc, sel.sels, typ)
 	if !ok {
 		return nil, false
 	}
@@ -117,26 +97,17 @@ func (sel *selection) On(typ string) ([]gqlcore.SelectedField, bool) {
 }
 
 // collect is the fields sels selects on an object of the type typ, through
-// its fragments on typ and on each interface and union typ is a member of,
-// as schema says. Without a schema, that is typ alone, and a fragment on an
-// interface or a union fails it.
-func collect(oc *graphql.OperationContext, schema *ast.Schema, sels ast.SelectionSet, typ string) ([]graphql.CollectedField, bool) {
+// its fragments on typ and on each interface of typ: those the validator's
+// definition of typ lists, found on a field selected on it. A union is not
+// among them, and a fragment on one fails it, as one on an interface the
+// definition does not name.
+func collect(oc *graphql.OperationContext, sels ast.SelectionSet, typ string) ([]graphql.CollectedField, bool) {
 	sat := []string{typ}
-	if d := schemaType(schema, typ); d != nil {
-		for _, i := range schema.GetImplements(d) {
-			sat = append(sat, i.Name)
-		}
-	} else {
-		// No schema (the registered source): the interfaces of typ are
-		// those the validator's definition of typ lists, found on a field
-		// selected on it. A union is not among them, and a fragment on one
-		// fails, as one on an interface the definition does not name.
-		if d := objectDef(oc, sels, typ, map[string]bool{}); d != nil {
-			sat = append(sat, d.Interfaces...)
-		}
-		if abstractFragment(oc, sels, sat, map[string]bool{}) {
-			return nil, false
-		}
+	if d := objectDef(oc, sels, typ, map[string]bool{}); d != nil {
+		sat = append(sat, d.Interfaces...)
+	}
+	if abstractFragment(oc, sels, sat, map[string]bool{}) {
+		return nil, false
 	}
 	return graphql.CollectFields(oc, sels, sat), true
 }
@@ -171,15 +142,6 @@ func objectDef(oc *graphql.OperationContext, sels ast.SelectionSet, typ string, 
 		}
 	}
 	return nil
-}
-
-// schemaType is typ's definition in schema; nil when schema is nil or has
-// none.
-func schemaType(schema *ast.Schema, typ string) *ast.Definition {
-	if schema == nil {
-		return nil
-	}
-	return schema.Types[typ]
 }
 
 // abstractFragment reports whether sels holds, at any depth of fragments, a

@@ -82,7 +82,7 @@ func (r *renderer) writePred(f *file, t *sdl.Type) {
 	in := n + "WhereInput"
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlgraph()
 	f.p("")
-	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).", n))
+	f.doc("", fmt.Sprintf("Pred is the condition w stands for on %s nodes, true for a nil or empty w. It fails on a filter over the limits of the DB of the connection it filters, or veloxgql.DefaultLimits() outside one.", n))
 	f.p("func (w *%s) Pred(ctx %s.Context) (%s.Pred[%s], error) {", in, ctx, velox, e.Name)
 	f.p("	p, err := w.%s(ctx)", predMethod)
 	f.p("	return %s.Pred[%s](p), err", velox, e.Name)

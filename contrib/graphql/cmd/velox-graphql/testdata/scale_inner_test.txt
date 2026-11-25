@@ -57,8 +57,8 @@ type served struct {
 }
 
 // serve is the schema on a seeded in-memory database, through gqlgen's handler
-// and the extension under these options.
-func serve(t *testing.T, opts ...gqlgenx.Option) served {
+// and the cost limit of a DB opened with these options.
+func serve(t *testing.T, opts ...velox.Option) served {
 	t.Helper()
 	db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(0)")
 	if err != nil {
@@ -78,8 +78,9 @@ func serve(t *testing.T, opts ...gqlgenx.Option) served {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db), opts...))
+	vdb := velox.Open(velox.SQLite, db, opts...)
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: vdb}}))
+	srv.Use(gqlgenx.CostLimit(vdb))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
 	do := func(query string, vars map[string]any) string {
@@ -173,12 +174,12 @@ func TestLargeSchemaIntrospection(t *testing.T) {
 	}
 
 	// The limit is exact: one under the cost refuses the query, and no data comes back.
-	tight := serve(t, gqlgenx.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost - 1})).do(graphiQL, nil)
+	tight := serve(t, veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost - 1})).do(graphiQL, nil)
 	if !strings.Contains(tight, "COST_LIMIT_EXCEEDED") || strings.Contains(tight, `"types"`) {
 		t.Errorf("a limit of %d under a cost of %d: %.300s", cost-1, cost, tight)
 	}
 
-	s := serve(t, gqlgenx.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost}))
+	s := serve(t, veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: cost}))
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)

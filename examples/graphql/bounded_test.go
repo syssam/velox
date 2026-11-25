@@ -8,18 +8,16 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 
-	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
-	"github.com/syssam/velox/examples/graphql/graph"
 )
 
 // postVars posts a query with its variables, and returns the response.
@@ -96,7 +94,7 @@ func longName(i int) string {
 func TestRequestBounded(t *testing.T) {
 	s := newServer(t)
 	s.seedRows(t, 100)
-	e := gqlgenx.NewExtension(&velox.DB{})
+	requestLimit := gqlgenx.RequestLimit(nil).(graphql.OperationParameterMutator)
 	frags := func(n int, f func(i int) string) string { return repeat(n, f) }
 	spreads := func(n int) string { return repeat(n, func(i int) string { return fmt.Sprintf("...F%d", i) }) }
 	field := `id name role joinedAt`
@@ -162,7 +160,7 @@ func TestRequestBounded(t *testing.T) {
 			if c.vars != nil {
 				vars = c.vars
 			}
-			if err := e.MutateOperationParameters(context.Background(), &graphql.RawParams{Query: c.query, Variables: vars}); err == nil {
+			if err := requestLimit.MutateOperationParameters(context.Background(), &graphql.RawParams{Query: c.query, Variables: vars}); err == nil {
 				t.Errorf("%s: not refused", c.name)
 				continue
 			}
@@ -268,7 +266,7 @@ func TestFieldErrorsBounded(t *testing.T) {
 // 22500. Each now costs a scan, so the default MaxCost refuses them (TestScanFloodRefused):
 // it is raised here, as what is tested is a statement the Timeout stops.
 func TestTimeoutCancelsStatements(t *testing.T) {
-	s := newServer(t, gqlgenx.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond, MaxCost: 10_000_000}))
+	s := newServer(t, veloxgql.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond, MaxCost: 10_000_000}))
 	s.seedRows(t, 150)
 	query := `{ ` + repeat(600, func(i int) string {
 		return fmt.Sprintf(`a%d: posts(where: {titleContains: "nothing%d"}) { totalCount }`, i, i)
@@ -313,9 +311,9 @@ func TestScanFloodRefused(t *testing.T) {
 }
 
 // TestIntrospectionOffShowsNothing: with introspection off, as decision 0027 says a
-// server open to strangers should be, validation names nothing of the schema a client
-// did not, in a field, an argument, an input field, an enum value or a type, and
-// __schema is a client's error.
+// server open to strangers should be, and gqlgenx.QuietValidation on, validation
+// names nothing of the schema a client did not, in a field, an argument, an input
+// field, an enum value or a type, and __schema is a client's error with a null value.
 func TestIntrospectionOffShowsNothing(t *testing.T) {
 	db, err := open(t.Context(), mustSQLite(t))
 	if err != nil {
@@ -324,10 +322,16 @@ func TestIntrospectionOffShowsNothing(t *testing.T) {
 	if err := seed(t.Context(), db); err != nil {
 		t.Fatal(err)
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}, Directives: graph.DirectiveRoot{Admin: admin}}))
-	h := gqlgenx.Setup(srv, db)
+	// server's composition without extension.Introspection.
+	srv := gqlgenServer(db)
 	srv.AddTransport(transport.POST{})
-	ts := httptest.NewServer(orgFromHeader(roleFromHeader(h)))
+	srv.Use(gqlgenx.RequestLimit(db))
+	srv.Use(gqlgenx.CostLimit(db))
+	srv.Use(gqlgenx.ResponseLimit(db))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+	srv.SetDisableSuggestion(true)
+	srv.SetValidationRulesFn(gqlgenx.QuietValidation(db))
+	ts := httptest.NewServer(orgFromHeader(roleFromHeader(srv)))
 	t.Cleanup(ts.Close)
 	s := &testServer{url: ts.URL}
 	for name, q := range map[string]string{
@@ -344,9 +348,28 @@ func TestIntrospectionOffShowsNothing(t *testing.T) {
 			t.Errorf("%s: %s", name, got)
 		}
 	}
-	for _, q := range []string{`{ __schema { queryType { name } } }`, `{ __type(name: "User") { name } }`} {
-		const want = `{"errors":[{"message":"introspection is disabled","extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":null}`
-		if got := s.postQuery(t, q); got != want {
+	for field, q := range map[string]string{
+		"__schema": `{ __schema { queryType { name } } }`,
+		"__type":   `{ __type(name: "User") { name } }`,
+	} {
+		// gqlgen releases differ in the rest: a "locations", and data null
+		// (__schema is non-null) or the field null.
+		got := s.postQuery(t, q)
+		var r struct {
+			Errors []struct {
+				Message    string         `json:"message"`
+				Path       []string       `json:"path"`
+				Extensions map[string]any `json:"extensions"`
+			} `json:"errors"`
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(got), &r); err != nil {
+			t.Fatalf("%s: %s: %v", q, got, err)
+		}
+		v, has := r.Data[field]
+		if len(r.Errors) != 1 || r.Errors[0].Message != "introspection is disabled" ||
+			!slices.Equal(r.Errors[0].Path, []string{field}) || r.Errors[0].Extensions["code"] != "GRAPHQL_VALIDATION_FAILED" ||
+			len(r.Data) > 1 || (has && v != nil) || strings.Contains(got, "queryType") || strings.Contains(got, "User") {
 			t.Errorf("%s: %s", q, got)
 		}
 	}

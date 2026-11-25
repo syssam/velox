@@ -158,30 +158,18 @@ import (
 // Customers is the resolver for the customers field, which queryfields=all
 // gives every type.
 func (r *queryResolver) Customers(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.CustomerOrder, where *gen.CustomerWhereInput) (*gen.CustomerConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Customer]().Paginate(ctx, after, first, before, last, gen.WithCustomerOrder(orderBy), gen.WithCustomerFilter(where))
+	return r.DB.Query[gen.Customer]().Paginate(ctx, after, first, before, last, gen.WithCustomerOrder(orderBy), gen.WithCustomerFilter(where))
 }
 
 // SalesOrders is the resolver for the salesOrders field.
 func (r *queryResolver) SalesOrders(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.SalesOrderOrder, where *gen.SalesOrderWhereInput) (*gen.SalesOrderConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderOrder(orderBy), gen.WithSalesOrderFilter(where))
+	return r.DB.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderOrder(orderBy), gen.WithSalesOrderFilter(where))
 }
 
 // Workspaces is the resolver for the workspaces field: a list, as a type
 // with a QueryField and no RelayConnection has, bounded as every read is.
 func (r *queryResolver) Workspaces(ctx context.Context) ([]*gen.Workspace, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := db.Query[gen.Workspace]().Limit(100).All(ctx)
+	rows, err := r.DB.Query[gen.Workspace]().Limit(100).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -194,20 +182,12 @@ func (r *queryResolver) Workspaces(ctx context.Context) ([]*gen.Workspace, error
 
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id int64) (gen.Noder, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.ResolveNode(ctx, db, id)
+	return gen.ResolveNode(ctx, r.DB, id)
 }
 
 // Nodes is the resolver for the nodes field.
 func (r *queryResolver) Nodes(ctx context.Context, ids []int64) ([]gen.Noder, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.ResolveNodes(ctx, db, ids)
+	return gen.ResolveNodes(ctx, r.DB, ids)
 }
 
 // Query returns QueryResolver implementation.
@@ -258,10 +238,11 @@ func TestOldNames(t *testing.T) {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	veloxDB := velox.Open(velox.SQLite, db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 10}))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: veloxDB}}))
 	// The cost charges a list of objects MaxList rows for each parent: the root
 	// list and the json list of Assignee are lists of objects.
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db), gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10})))
+	srv.Use(gqlgenx.CostLimit(veloxDB))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
 		req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -332,8 +313,9 @@ func TestOldNames(t *testing.T) {
 		}
 		return velox.FieldNEQ("id", 2), nil
 	}
-	hidden := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	hidden.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db, velox.WithFilter(hideBob)), gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10})))
+	hiddenDB := velox.Open(velox.SQLite, db, velox.WithFilter(hideBob), veloxgql.WithLimits(veloxgql.Limits{MaxList: 10}))
+	hidden := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: hiddenDB}}))
+	hidden.Use(gqlgenx.CostLimit(hiddenDB))
 	hidden.AddTransport(transport.POST{})
 	for q, want := range map[string]string{
 		"{\"query\":\"{ salesOrders(first: 5, where: {customerId: \\\"2\\\"}) { edges { node { id } } } }\"}":    "{\"data\":{\"salesOrders\":{\"edges\":[{\"node\":{\"id\":\"11\"}},{\"node\":{\"id\":\"12\"}}]}}}",
@@ -432,8 +414,7 @@ func TestOldNodeAndFilters(t *testing.T) {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: velox.Open(velox.SQLite, db)}}))
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
@@ -505,6 +486,7 @@ func TestOldVeloxAPI(t *testing.T) {
 		"gqlgen.yml":                e2eCollectGqlgen + "  Map:\n    model: github.com/99designs/gqlgen/graphql.Map\n  Amount:\n    model: example.com/app/schema.Amount\n",
 		"graph/app.graphql":         e2eOldApp,
 		"graph/schema.resolvers.go": e2eOldResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"oldvelox_test.go":          e2eOldRun,
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:"+oldVeloxOptions, "./schema"); err != nil {

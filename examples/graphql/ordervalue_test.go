@@ -29,7 +29,7 @@ func TestPaginateByAComputedKey(t *testing.T) {
 	if err := seed(t.Context(), db); err != nil {
 		t.Fatal(err)
 	}
-	ctx := veloxgql.Service(veloxschema.OrgKey.With(t.Context(), acme), db)
+	ctx := veloxschema.OrgKey.With(t.Context(), acme)
 	// LENGTH(title), NULL for a title of 4 letters (Beta).
 	key := velox.Calc[veloxgen.Post]("NULLIF(LENGTH(?), ?)", veloxgen.Posts.Title, int64(4))
 	q := db.Query[veloxgen.Post]().OrderBy(key.Desc().NullsLast())

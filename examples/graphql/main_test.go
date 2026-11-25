@@ -21,7 +21,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // The IDs of the seed's rows: an ID is the row's key, which the server
@@ -59,7 +58,9 @@ type testServer struct {
 	sql   *sql.DB
 }
 
-func newServer(t *testing.T, opts ...gqlgenx.Option) *testServer {
+// newServer opens the DB with opts after the recording hook, so that a test
+// may give it limits with veloxgql.WithLimits.
+func newServer(t *testing.T, opts ...velox.Option) *testServer {
 	t.Helper()
 	s := &testServer{}
 	sqlDB, err := sql.Open("sqlite", sqliteDSN(filepath.Join(t.TempDir(), "graphql.db")))
@@ -69,14 +70,14 @@ func newServer(t *testing.T, opts ...gqlgenx.Option) *testServer {
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	s.sql = sqlDB
 	recording := false
-	db, err := open(t.Context(), sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	db, err := open(t.Context(), sqlDB, append([]velox.Option{velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		s.mu.Lock()
 		if recording {
 			s.stmts = append(s.stmts, fmt.Sprintf("%s %v", st.SQL, st.Args))
 		}
 		s.mu.Unlock()
 		return next(ctx)
-	}))
+	})}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +85,7 @@ func newServer(t *testing.T, opts ...gqlgenx.Option) *testServer {
 		t.Fatal(err)
 	}
 	recording = true
-	srv := httptest.NewServer(orgFromHeader(roleFromHeader(userFromHeader(testServe(db, opts...)))))
+	srv := httptest.NewServer(orgFromHeader(roleFromHeader(userFromHeader(testServe(db)))))
 	t.Cleanup(srv.Close)
 	s.url = srv.URL
 	return s

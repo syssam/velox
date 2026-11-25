@@ -21,9 +21,9 @@ var testServe = server
 
 // plainServer is minimalServer with gqlgenx.ErrorPresenter and
 // introspection, as the tests' expected errors and their __type queries
-// need: no extension, no setup. (TestFieldDirective is not run on it: its
-// errors are without the suggestions gqlgenx.Setup leaves out.)
-func plainServer(db *velox.DB, _ ...gqlgenx.Option) http.Handler {
+// need: no extension. (TestFieldDirective is not run on it: its errors are
+// without the suggestions server turns off.)
+func plainServer(db *velox.DB) http.Handler {
 	srv := gqlgenServer(db)
 	srv.AddTransport(transport.POST{})
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
@@ -31,12 +31,12 @@ func plainServer(db *velox.DB, _ ...gqlgenx.Option) http.Handler {
 	return srv
 }
 
-// TestNoSetupServer (decision 0173) runs the tests of reads, scope and
-// batching against a server with no extension and no setup: the same
+// TestMinimalServer (decision 0173) runs the tests of reads, scope and
+// batching against a server with no extension: the same
 // responses, and the same statements, one for each edge of each level,
 // with the same columns and the same organization's condition.
-func TestNoSetupServer(t *testing.T) {
-	defer func(s func(*velox.DB, ...gqlgenx.Option) http.Handler) { testServe = s }(testServe)
+func TestMinimalServer(t *testing.T) {
+	defer func(s func(*velox.DB) http.Handler) { testServe = s }(testServe)
 	testServe = plainServer
 	tests := map[string]func(*testing.T){
 		"ByID": TestByID, "Paging": TestPaging, "OrderAndWhere": TestOrderAndWhere,

@@ -5,19 +5,15 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
-
-	"github.com/syssam/velox"
 )
 
 // A SelectionSource tells the runtime about the field resolving in ctx.
 // An adapter registers one for its engine (Register), which finds the field
-// from the engine's own context values, with no per-request setup. An
-// operation's state may carry another (Install), which then wins.
+// from the engine's own context values, with no per-request setup.
 type SelectionSource interface {
 	// Field is the field resolving in ctx; ok is false outside a field
 	// (an application's own code, a field the engine gives no context, a
-	// context of another engine). A registered source sets the field's
-	// Table; for an installed one FieldOf sets ctx's (WithTable).
+	// context of another engine). It sets the field's Table.
 	Field(ctx context.Context) (f Field, ok bool)
 	// Wait is called around a wait on another field's batch and returns
 	// the function that ends it.
@@ -59,18 +55,6 @@ type SelectedField struct {
 	Sel  Selection // nil for a leaf
 }
 
-// state is what an adapter or veloxgql.Service puts in a context: the DB,
-// the limits and the selection source, as one value. A mutation's
-// transaction replaces the DB and keeps the rest. A nil src leaves the
-// field to the registered sources.
-type state struct {
-	db *velox.DB
-	// limits is the adapter's *veloxgql.Limits, which this package cannot
-	// name: veloxgql reads it back.
-	limits any
-	src    SelectionSource
-}
-
 // A Reader is a SelectionSource an adapter registers for its engine.
 type Reader interface {
 	SelectionSource
@@ -86,8 +70,8 @@ var (
 	registered atomic.Pointer[[]Reader]
 )
 
-// Register adds r to the readers that find the field of a context whose
-// state has no source of its own: an adapter's package registers its
+// Register adds r to the readers that find the field of a context: an
+// adapter's package registers its
 // engine's reader in its init, so that a server needs no per-request setup.
 // A reader's Field must return ok false, and In false, for a context of
 // another engine. It panics on a nil r.
@@ -105,103 +89,23 @@ func Register(r Reader) {
 	registered.Store(&rs)
 }
 
-// stateKey is the context key of the *state.
-type stateKey struct{}
-
-// Install returns ctx with an operation's state: db, limits (a
-// *veloxgql.Limits, which LimitsOf returns) and src, a selection source that
-// replaces the registered ones. Only the adapters and veloxgql.Service call
-// it. It panics on a nil src: InstallDB is the state without one.
-func Install(ctx context.Context, db *velox.DB, limits any, src SelectionSource) context.Context {
-	if src == nil {
-		panic("veloxgql: Install needs a SelectionSource; InstallDB takes none")
-	}
-	return context.WithValue(ctx, stateKey{}, &state{db: db, limits: limits, src: src})
-}
-
-// InstallDB returns ctx with a state of db and limits (a *veloxgql.Limits)
-// and no selection source: the field of a context under it is the
-// registered sources'.
-func InstallDB(ctx context.Context, db *velox.DB, limits any) context.Context {
-	return context.WithValue(ctx, stateKey{}, &state{db: db, limits: limits})
-}
-
-// WithDB returns ctx with its state's DB replaced by db, the limits and the
-// source kept: a mutation's transaction. ctx must hold a state.
-func WithDB(ctx context.Context, db *velox.DB) context.Context {
-	s := *stateOf(ctx)
-	s.db = db
-	return context.WithValue(ctx, stateKey{}, &s)
-}
-
-// stateOf is ctx's state, or nil.
-func stateOf(ctx context.Context) *state {
-	s, _ := ctx.Value(stateKey{}).(*state)
-	return s
-}
-
-// DB returns the DB of ctx's state; nil without one.
-func DB(ctx context.Context) *velox.DB {
-	if s := stateOf(ctx); s != nil {
-		return s.db
-	}
-	return nil
-}
-
-// LimitsOf returns the limits of ctx's state, as Install was given them;
-// nil without one.
-func LimitsOf(ctx context.Context) any {
-	if s := stateOf(ctx); s != nil {
-		return s.limits
-	}
-	return nil
-}
-
-// Source returns the selection source of ctx's state; nil without one, and
-// for a state with none (InstallDB).
-func Source(ctx context.Context) SelectionSource {
-	if s := stateOf(ctx); s != nil {
-		return s.src
-	}
-	return nil
-}
-
-// FieldOf returns the field of ctx, with its Table: the field the source of
-// ctx's state tells, with ctx's table (WithTable), or, when ctx has no
-// state or one with no source, the first registered source's that knows a
-// field in ctx, with the table that source keeps. ok is false outside a
-// field.
+// FieldOf returns the field of ctx, with its Table: the first registered
+// source's that knows a field in ctx, with the table that source keeps. ok
+// is false outside a field.
 func FieldOf(ctx context.Context) (Field, bool) {
-	_, f, ok := lookup(ctx)
-	return f, ok
-}
-
-// lookup is FieldOf, with the source that told it.
-func lookup(ctx context.Context) (SelectionSource, Field, bool) {
-	if s := stateOf(ctx); s != nil && s.src != nil {
-		f, ok := s.src.Field(ctx)
-		if ok {
-			f.Table = TableFromContext(ctx)
-		}
-		return s.src, f, ok
-	}
 	if p := registered.Load(); p != nil {
 		for _, src := range *p {
 			if f, ok := src.Field(ctx); ok {
-				return src, f, true
+				return f, true
 			}
 		}
 	}
-	return nil, Field{}, false
+	return Field{}, false
 }
 
-// SourceOf returns the source that tells the field of ctx (FieldOf): its
-// state's, or the registered one whose engine ctx is in; nil when there is
-// none. It asks no source for the field, which may allocate.
+// SourceOf returns the registered source whose engine ctx is in; nil when
+// there is none. It asks no source for the field, which may allocate.
 func SourceOf(ctx context.Context) SelectionSource {
-	if s := stateOf(ctx); s != nil && s.src != nil {
-		return s.src
-	}
 	if p := registered.Load(); p != nil {
 		for _, r := range *p {
 			if r.In(ctx) {

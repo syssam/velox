@@ -66,25 +66,16 @@ import (
 	"context"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id int64) (gen.Noder, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.ResolveNode(ctx, db, id, nodeType)
+	return gen.ResolveNode(ctx, r.DB, id, nodeType)
 }
 
 // Nodes is the resolver for the nodes field.
 func (r *queryResolver) Nodes(ctx context.Context, ids []int64) ([]gen.Noder, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return gen.ResolveNodes(ctx, db, ids, nodeType)
+	return gen.ResolveNodes(ctx, r.DB, ids, nodeType)
 }
 
 // Query returns QueryResolver implementation.
@@ -149,8 +140,7 @@ func TestNode(t *testing.T) {
 		return out
 	}
 	db := velox.Open(velox.SQLite, raw, velox.WithAround(around))
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(db))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}}))
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
 	srv.AddTransport(transport.POST{})
 	query := func(q string) string {
@@ -221,6 +211,7 @@ func TestNodeOn(t *testing.T) {
 		"schema/schema.go":          e2eNodeSchema,
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/schema.resolvers.go": e2eNodeResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"graph/nodetype.go":         e2eNodeType,
 		"node_test.go":              e2eNodeRun,
 	}, true)

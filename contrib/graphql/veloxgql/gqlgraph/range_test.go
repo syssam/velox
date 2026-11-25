@@ -7,7 +7,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
@@ -76,7 +75,7 @@ func TestOutOfRangeIsUserInput(t *testing.T) {
 // range's error, and a foreign key's NotNil after a refused ID list adds
 // nothing.
 func TestFirstWhereErrorStays(t *testing.T) {
-	ctx := gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxFilterNodes: 1})).NewContext(context.Background())
+	ctx := gqlgraph.WithFilterLimits(context.Background(), veloxgql.Limits{MaxFilterNodes: 1})
 	f := gqlgraph.NewFilter(ctx, gqlgraph.TableType[dial]("Dial"))
 	gqlgraph.Field(f, "level", 1, gqlgraph.Ops[int64]{EQ: new(int64(300))})
 	if _, err := f.Pred(); err == nil || !strings.Contains(err.Error(), "out of the field's range") {

@@ -223,7 +223,8 @@ type LabelWhereInput struct {
 }
 
 // Pred is the condition w stands for on Label nodes, true for a nil or empty w.
-// It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
+// It fails on a filter over the limits of the DB of the connection it filters,
+// or veloxgql.DefaultLimits() outside one.
 func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	p, err := w.Predicate(ctx)
 	return velox.Pred[Tag](p), err

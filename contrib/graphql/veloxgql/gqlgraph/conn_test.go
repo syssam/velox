@@ -9,7 +9,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
@@ -26,7 +25,7 @@ var personConn = gqlgraph.Type{
 // order field the type does not have is refused as the client's.
 func TestPaginateBase(t *testing.T) {
 	db, st := peopleDB(t)
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	q := untyped.FromQuery(db.Query[person]())
 	age := []gqlgraph.Order{{Field: "AGE"}}
 	for _, c := range []struct {
@@ -124,7 +123,7 @@ func TestNamedTypeTerms(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	conn := &gqlgraph.Type{
 		Name:  "Gadget",
 		Key:   []gqlgraph.Column{{Name: "id", Index: int(gadgets.ID.I)}},

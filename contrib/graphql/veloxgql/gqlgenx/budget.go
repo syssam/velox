@@ -10,11 +10,103 @@ import (
 	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
+	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
+
+// ResponseLimit returns the gqlgen handler extension that holds a response to
+// the limits of db (veloxgql.LimitsOf; veloxgql.DefaultLimits() for a nil
+// db) that a request's cost cannot see: MaxResponseBytes, MaxErrors and
+// Timeout. It is opt-in, for a server open to clients:
+//
+//	srv.Use(gqlgenx.ResponseLimit(db))
+//
+// It holds a response's strings, bytes and JSON to MaxResponseBytes and its
+// errors to MaxErrors, and a query or a mutation to Timeout, and stops the
+// request there: what is not yet resolved does not run, and a statement
+// running is cancelled. The response is replaced with data null and one
+// error for what stopped it: veloxgql.ErrResponseTooLarge or
+// veloxgql.ErrTooManyErrors, of the code veloxgql.CodeTooCostly, or
+// veloxgql.ErrTimeout, of veloxgql.CodeTimeout. A mutation under
+// Transactioner rolls back, whichever extension the server uses first.
+//
+// A subscription has no Timeout, and each of its events has its own counts.
+// Only values of a string, bytes or JSON kind are counted, with a pointer to
+// one and a list of them, such as the []*string of a [String] field: a custom
+// scalar of a struct's is not. A deadline of the application's, the
+// request's or a transaction's, is not the Timeout, and its errors are the
+// fields' own. ErrorPresenter drops the errors past MaxErrors as they are
+// made; under another presenter they are made and dropped at the end.
+func ResponseLimit(db *velox.DB) graphql.HandlerExtension {
+	return &responseLimit{limits: veloxgql.LimitsOf(db)}
+}
+
+// responseLimit is ResponseLimit's extension.
+type responseLimit struct{ limits veloxgql.Limits }
+
+var (
+	_ graphql.OperationInterceptor = (*responseLimit)(nil)
+	_ graphql.ResponseInterceptor  = (*responseLimit)(nil)
+)
+
+// ExtensionName implements graphql.HandlerExtension.
+func (*responseLimit) ExtensionName() string { return "VeloxResponseLimit" }
+
+// Validate implements graphql.HandlerExtension.
+func (*responseLimit) Validate(graphql.ExecutableSchema) error { return nil }
+
+// InterceptOperation implements graphql.OperationInterceptor: a query's or
+// a mutation's responses share one count and one Timeout, and each field of
+// the operation is counted (countFields).
+func (*responseLimit) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+	oc := graphql.GetOperationContext(ctx)
+	if op := oc.Operation; op == nil || op.Operation != ast.Subscription {
+		ctx = context.WithValue(ctx, operationKey{}, new(operation))
+	}
+	oc.ResolverMiddleware = countFields(oc.ResolverMiddleware)
+	return next(ctx)
+}
+
+// InterceptResponse implements graphql.ResponseInterceptor: a query's or a
+// mutation's first response starts its Timeout, and every response holds to
+// MaxResponseBytes and MaxErrors: one over them is replaced, with one error
+// for what stopped it and data null. An error response gqlgen makes without
+// running the operation passes through.
+func (l *responseLimit) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+	given := ctx
+	ctx, r, done := l.operationResponse(ctx)
+	resp := next(ctx)
+	r.expired()
+	done(resp)
+	return l.finish(given, r, resp)
+}
+
+// countFields wraps an operation's field middleware, next: it counts what a
+// field gives its response, and a field of a response that has stopped does
+// nothing. It is the operation's middleware, not a graphql.FieldInterceptor,
+// whose chain makes a closure for each field it resolves.
+func countFields(next graphql.FieldMiddleware) graphql.FieldMiddleware {
+	return func(ctx context.Context, resolve graphql.Resolver) (any, error) {
+		r, _ := ctx.Value(responseKey{}).(*response)
+		if r == nil {
+			return next(ctx, resolve)
+		}
+		if r.why.Load() != 0 {
+			return nil, nil
+		}
+		v, err := next(ctx, resolve)
+		if err != nil {
+			r.failed(ctx)
+			return v, err
+		}
+		r.count(v)
+		return v, nil
+	}
+}
 
 // What stopped a response: a limit, in the order they are looked for.
 const (
@@ -41,8 +133,6 @@ type operation struct {
 // a subscription's event is one, and a query's or a mutation's responses share theirs.
 type response struct {
 	limits veloxgql.Limits
-	// mutation is the operation's, when its resolvers run one at a time.
-	mutation *mutation
 	// bytes, fieldErrs and presented count its values and its errors. fieldErrs holds
 	// under any presenter, and presented under ErrorPresenter sees the errors no resolver
 	// returned, and keeps those past the limit from being made.
@@ -231,11 +321,11 @@ func quotedLen(s string) int64 {
 // the response made, ends what the first response started when it is the last one out:
 // @defer's fragments run on the first one's context until then, and each of their
 // responses is one more.
-func (e *Extension) operationResponse(ctx context.Context) (context.Context, *response, func(*graphql.Response)) {
+func (l *responseLimit) operationResponse(ctx context.Context) (context.Context, *response, func(*graphql.Response)) {
 	op, _ := ctx.Value(operationKey{}).(*operation)
 	if op == nil {
 		// A subscription's event, each under the limits anew.
-		r := &response{limits: e.limits}
+		r := &response{limits: l.limits}
 		return context.WithValue(ctx, responseKey{}, r), r, func(*graphql.Response) {}
 	}
 	done := func(resp *graphql.Response) {
@@ -246,13 +336,10 @@ func (e *Extension) operationResponse(ctx context.Context) (context.Context, *re
 	if op.first != nil {
 		return context.WithValue(ctx, responseKey{}, op.first), op.first, done
 	}
-	r := &response{limits: e.limits, parent: ctx}
+	r := &response{limits: l.limits, parent: ctx}
 	op.first = r
-	ctx, cancel := context.WithTimeout(ctx, e.limits.Timeout)
+	ctx, cancel := context.WithTimeout(ctx, l.limits.Timeout)
 	r.cancel, r.timeout = cancel, ctx
-	if m, _ := ctx.Value(mutationKey{}).(*mutation); m != nil && !m.plain {
-		r.mutation = m
-	}
 	stop := context.AfterFunc(ctx, func() { r.expired() })
 	op.end = func() {
 		stop()
@@ -265,7 +352,7 @@ func (e *Extension) operationResponse(ctx context.Context) (context.Context, *re
 // response's context as gqlgen gave it, which presents an error.
 // No response is the end of a stream, and stays so: gqlgen's streaming transports ask
 // until they get none, and an error made for it would be sent without end.
-func (e *Extension) finish(ctx context.Context, r *response, resp *graphql.Response) *graphql.Response {
+func (*responseLimit) finish(ctx context.Context, r *response, resp *graphql.Response) *graphql.Response {
 	why := r.why.Load()
 	if why == 0 || resp == nil {
 		return resp

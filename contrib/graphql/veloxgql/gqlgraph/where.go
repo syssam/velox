@@ -60,6 +60,15 @@ type name struct{ base, op string }
 
 func (n name) String() string { return n.base + n.op }
 
+// filterLimitsKey is the context key of the limits a connection's where
+// argument holds to: those of the connection's DB.
+type filterLimitsKey struct{}
+
+// withFilterLimits is ctx with the limits a where argument's Pred holds to.
+func withFilterLimits(ctx context.Context, l veloxgql.Limits) context.Context {
+	return context.WithValue(ctx, filterLimitsKey{}, &l)
+}
+
 // NewFilter returns the Filter of a where input of c's type,
 // "<Type>WhereInput", on the entity of c's Table.
 //
@@ -67,7 +76,8 @@ func (n name) String() string { return n.base + n.op }
 // argument's node budget travel in ctx, under one unexported key. A context
 // without them starts a where argument: depth 0, a full budget of
 // MaxFilterNodes (10 times that under c's LenientFilters, and never over 30000), and
-// the limits of veloxgql.LimitsFromContext(ctx). So each
+// the limits of the DB of the connection that filters by it (veloxgql.LimitsOf),
+// or veloxgql.DefaultLimits() for a Pred called outside a connection. So each
 // call of a where input's Pred with a context of the application's has its own
 // budget, however often the context is used. A nested input's Pred is called
 // with a context of the helpers', one level deeper (inside each not, and, or
@@ -89,8 +99,12 @@ func (n name) String() string { return n.base + n.op }
 func NewFilter(ctx context.Context, c *Type) *Filter {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
-		lim := veloxgql.LimitsFromContext(ctx)
-		st = &state{budget: newBudget(lim, c.LenientFilters)}
+		lim, ok := ctx.Value(filterLimitsKey{}).(*veloxgql.Limits)
+		if !ok {
+			d := veloxgql.DefaultLimits()
+			lim = &d
+		}
+		st = &state{budget: newBudget(*lim, c.LenientFilters)}
 	}
 	f := &Filter{ctx: ctx, typ: c.Name, t: c.table(), depth: st.depth, budget: st.budget, lenient: c.LenientFilters}
 	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {

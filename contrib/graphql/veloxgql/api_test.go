@@ -32,8 +32,6 @@ var publicAPI = []string{
 	"Cursor.UnmarshalGQL",
 	"Cursor.UnmarshalGQLContext",
 	"CursorTerm",
-	"DB",
-	"DBFromContext",
 	"DecodeCursor",
 	"DecodeWhere",
 	"DefaultLimits",
@@ -44,8 +42,6 @@ var publicAPI = []string{
 	"ErrFilterTooDeep",
 	"ErrFilterTooLarge",
 	"ErrFilterTooWide",
-	"ErrNoDB",
-	"ErrNoSelectionSource",
 	"ErrPageTooLarge",
 	"ErrRequestTooLarge",
 	"ErrResponseTooLarge",
@@ -57,7 +53,7 @@ var publicAPI = []string{
 	"JSON.MarshalGQL",
 	"JSON.UnmarshalGQL",
 	"Limits",
-	"LimitsFromContext",
+	"LimitsOf",
 	"OrderDirection",
 	"OrderDirection.IsValid",
 	"OrderDirection.MarshalGQL",
@@ -67,8 +63,6 @@ var publicAPI = []string{
 	"OrderDirectionDesc",
 	"PageInfo",
 	"Present",
-	"Service",
-	"ServiceWithLimits",
 	"Time",
 	"Time.MarshalGQL",
 	"Time.UnmarshalGQL",
@@ -79,6 +73,7 @@ var publicAPI = []string{
 	"Uint64",
 	"Uint64.MarshalGQL",
 	"Uint64.UnmarshalGQL",
+	"WithLimits",
 }
 
 // parseDoc is the documentation of the non-test files of the package in dir.

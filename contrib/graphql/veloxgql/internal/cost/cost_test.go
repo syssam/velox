@@ -2,6 +2,7 @@ package cost_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -12,6 +13,7 @@ import (
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/validator"
+	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -669,12 +671,18 @@ func TestCostConnectionWithoutArguments(t *testing.T) {
 	}
 }
 
-// TestCostSelectsOperation: the Extension costs the operation gqlgen
+// TestCostSelectsOperation: CostLimit costs the operation gqlgen
 // selected, not the first of the document, and refuses a saturated one.
 func TestCostSelectsOperation(t *testing.T) {
-	ext := gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 300}))
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db := velox.Open(velox.SQLite, sqlDB, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 300}))
+	ext := gqlgenx.CostLimit(db).(graphql.OperationContextMutator)
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
-	if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
+	if err := ext.(graphql.HandlerExtension).Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
 		t.Fatal(err)
 	}
 	doc, errs := gqlparser.LoadQueryWithRules(schema, `query Cheap { users(first: 1) { totalCount } } query Dear { users(first: 100) { edges { node { name } } } } query Huge { a: `+saturating+` b: `+saturating+` }`, nil)

@@ -3,7 +3,6 @@ package gqlgraph
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/syssam/velox"
@@ -31,9 +30,8 @@ import (
 // reason and the WithShard shard, of the context each passes
 // to the edge function), the read of the target that velox would send under
 // that context (its SQL and arguments, after the Read policy, the
-// interceptors and the Rewrite hooks), and the value of
-// gqlgenx.WithBatchScope's function, if the extension has one. A row whose resolver's context a field middleware or a
-// directive scopes otherwise is in a batch of its own scope; a key that cannot
+// interceptors and the Rewrite hooks). A row whose resolver's context a
+// field middleware or a directive scopes otherwise is in a batch of its own scope; a key that cannot
 // be compared (reflect.Value.Comparable) reads alone. A connection's batch
 // keeps its first caller's arguments, those its paginate passed to Paginate,
 // and a caller whose arguments differ (reflect.DeepEqual: a resolver that
@@ -42,10 +40,10 @@ import (
 // The first caller reads for all, under the context it passed to the edge
 // function, on the DB of its query; the others wait on the batch's
 // sync.Once, inside their source's Wait, never for one another, so a
-// mutation's resolvers, which the gqlgen extension runs one at a time, batch
+// mutation's resolvers, which gqlgenx.Transactioner runs one at a time, batch
 // too. A context value that only an
 // Around hook reads is the first caller's for every row: it must be the
-// same for every row of the field, or be in WithBatchScope's value. A
+// same for every row of the field. A
 // caller whose read fails (a policy denies it) reads alone. A waiter does not watch its
 // own context's cancellation, only the load's: every resolver of a response
 // has the request's. A batch's error is every row's.
@@ -135,7 +133,7 @@ func EdgeOne(ctx context.Context, target *Type, e Edge) (any, error) {
 // batched, with at most MaxList + 1 per owner, whatever the DB's
 // WithMaxRows: an owner with more than MaxList fails with
 // velox.ErrTooManyRows, in an error naming the edge's field, and the others
-// do not. MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the
+// do not. MaxList is that of veloxgql.LimitsOf the edge's DB, or maxList, the
 // edge's graphql.MaxList, when that is lower and not 0. Read alone, the row's
 // nodes are one LoadEach of it, a group of their own.
 func EdgeList(ctx context.Context, target *Type, e Edge, maxList int) (any, error) {
@@ -152,16 +150,12 @@ func EdgeList(ctx context.Context, target *Type, e Edge, maxList int) (any, erro
 
 // db is the DB the edge e reads on: the one its row was read or written
 // through (untyped.SourceDB), which is never one WithoutPolicy, and, for a
-// row no statement made, the DB veloxgql.DBFromContext reads from ctx.
-func (e Edge) db(ctx context.Context) (*velox.DB, error) {
+// row no statement made, an error wrapping velox.ErrNoSource.
+func (e Edge) db(context.Context) (*velox.DB, error) {
 	if db := untyped.SourceDB(e.owner.table(), e.x); db != nil {
 		return db, nil
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("veloxgql: %s: %w, and %w", e.fieldName(), velox.ErrNoSource, err)
-	}
-	return db, nil
+	return nil, fmt.Errorf("veloxgql: %s: %w", e.fieldName(), velox.ErrNoSource)
 }
 
 // edgeQuery is the query of target's rows that the edge e reads, on its DB
@@ -253,11 +247,11 @@ func edgeOne(ctx context.Context, q untyped.TableQuery, e Edge) (any, error) {
 // velox.ErrTooManyRows, in an error naming the edge's field, and the others
 // do not.
 //
-// MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the edge's
+// MaxList is that of veloxgql.LimitsOf the edge's DB, or maxList, the edge's
 // graphql.MaxList, when that is lower and not 0. Read alone, the row's nodes
 // are one LoadEach of it, a group of their own.
 func edgeList(ctx context.Context, q untyped.TableQuery, e Edge, maxList int) ([]any, error) {
-	most := veloxgql.LimitsFromContext(ctx).MaxList
+	most := veloxgql.LimitsOf(untyped.QueryDB(q)).MaxList
 	if maxList > 0 {
 		most = min(most, maxList)
 	}
@@ -305,7 +299,6 @@ type batchKey struct {
 	db         *velox.DB         // the edge's (Edge.db): its row's
 	most       int               // EdgeList's MaxList; 0 for the others
 	scope      velox.RowScope
-	app        any // gqlgenx.WithBatchScope's value
 	// read is the SQL, with its arguments, of a read of target under the
 	// caller's context: two callers whose Read policies, interceptors,
 	// Rewrite hooks or policy bypass make different reads share no batch,
@@ -337,11 +330,7 @@ func batchOf(ctx context.Context, target untyped.Table, e Edge, most int, args a
 	if db == nil {
 		return nil, nil, 0
 	}
-	key := batchKey{typ: typ, field: name, rel: e.rel, target: target.Info(), db: db, most: most, scope: velox.RowScopeFromContext(ctx), app: t.Scope(ctx)}
-	if !canCompare(key.app) {
-		// A batch scope == would panic on: a read of its own.
-		return nil, nil, 0
-	}
+	key := batchKey{typ: typ, field: name, rel: e.rel, target: target.Info(), db: db, most: most, scope: velox.RowScopeFromContext(ctx)}
 	read, ok := readOf(ctx, db, target)
 	if !ok {
 		return nil, nil, 0
@@ -372,23 +361,6 @@ func readOf(ctx context.Context, db *velox.DB, target untyped.Table) (string, bo
 		fmt.Fprintf(&b, "\x00%T:%v", a, a)
 	}
 	return b.String(), true
-}
-
-// canCompare reports whether == on v cannot panic: what
-// reflect.ValueOf(v).Comparable() reports, which checks the dynamic value,
-// since a struct or an array of a comparable type may hold an interface
-// whose value is a slice or a map. It is checked per value, not on the whole
-// key, and through the type for any kind but a struct or an array, where
-// both say the same: Value.Comparable allocates.
-func canCompare(v any) bool {
-	t := reflect.TypeOf(v)
-	switch {
-	case t == nil:
-		return true
-	case t.Kind() == reflect.Struct || t.Kind() == reflect.Array:
-		return reflect.ValueOf(v).Comparable()
-	}
-	return t.Comparable()
 }
 
 // loadBatch returns b's rows: each owner's, rows of owner, read by

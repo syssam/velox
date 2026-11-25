@@ -10,7 +10,7 @@ import (
 )
 
 // benchInner is the application's benchmarks: queries through gqlgen's handler
-// on SQLite, with the generated code and the extension.
+// on SQLite, with the generated code and the request, cost and response limits.
 //
 //go:embed testdata/bench_inner_test.txt
 var benchInner string
@@ -39,6 +39,7 @@ func TestGeneratedBench(t *testing.T) {
 	}
 	for name, src := range map[string]string{
 		"graph/schema.resolvers.go": scaleResolvers(t, dir, n),
+		"graph/resolver.go":         e2eResolver,
 		"ddl_test.go":               scaleDDL(t, dir, n),
 		"scale_test.go":             strings.ReplaceAll(scaleInner, "__N__", strconv.Itoa(n)),
 		"bench_test.go":             benchInner,

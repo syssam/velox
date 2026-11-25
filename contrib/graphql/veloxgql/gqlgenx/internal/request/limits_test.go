@@ -3,7 +3,6 @@ package request_test
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -11,26 +10,6 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx/internal/request"
 )
-
-// TestCheckLimits names the first negative limit, the Timeout included, and
-// passes the defaults.
-func TestCheckLimits(t *testing.T) {
-	if err := request.CheckLimits("x", veloxgql.DefaultLimits()); err != nil {
-		t.Errorf("the defaults: %v", err)
-	}
-	for _, c := range []struct {
-		l    veloxgql.Limits
-		want string
-	}{
-		{veloxgql.Limits{MaxPage: -1}, "x: Limits.MaxPage is -1, and a limit must not be negative (zero is the default)"},
-		{veloxgql.Limits{MaxResponseBytes: -2}, "x: Limits.MaxResponseBytes is -2"},
-		{veloxgql.Limits{Timeout: -time.Second}, "x: Limits.Timeout is -1s"},
-	} {
-		if err := request.CheckLimits("x", c.l); err == nil || !strings.HasPrefix(err.Error(), c.want) {
-			t.Errorf("CheckLimits(%+v) = %v, want %q", c.l, err, c.want)
-		}
-	}
-}
 
 // TestCostLimits: the cost model reads MaxPage, MaxList and
 // MaxIntrospectionCost.

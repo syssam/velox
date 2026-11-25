@@ -123,11 +123,20 @@ func connBindings[E any](typ string) graphql.SchemaOption {
 	)
 }
 
-// graphqlgoServer serves paritySDL through graphql-go, with
-// graphqlgo.With(db), opts and graphqlgo.ErrorPresenter.
+// graphqlgoServer serves paritySDL through graphql-go, whose root
+// resolvers read on db, with opts and graphqlgo.ErrorPresenter.
 func graphqlgoServer(t testing.TB, db *velox.DB, opts ...graphql.ExecutorOption) server {
-	opts = append([]graphql.ExecutorOption{graphqlgo.With(db), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))}, opts...)
-	return executorServer(newExecutor(graphqlgoSchema(t), opts...))
+	opts = append([]graphql.ExecutorOption{graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(nil))}, opts...)
+	return bound(db, executorServer(newExecutor(graphqlgoSchema(t), opts...)))
+}
+
+// bound is s with the DB the root resolvers read on, as an application's
+// Resolver holds it.
+func bound(db *velox.DB, s server) server {
+	return func(t testing.TB, ctx context.Context, query string, vars map[string]any) string {
+		t.Helper()
+		return s(t, withResolverDB(ctx, db), query, vars)
+	}
 }
 
 // executorServer runs queries on e.
@@ -275,16 +284,18 @@ func cursorArg(v any) (*veloxgql.Cursor, error) {
 	return &c, nil
 }
 
-// gqlgenServer serves paritySDL through gqlgen, with
-// gqlgenx.NewExtension(db, opts...) and gqlgenx.ErrorPresenter, on an
+// gqlgenServer serves paritySDL through gqlgen, whose root resolvers read
+// on db, with the extensions exts and gqlgenx.ErrorPresenter, on an
 // executable schema that resolves as gqlgen's generated code does: a
 // mutation's root fields one after another, every other object's fields
 // concurrently, each through the field middleware, its children after it.
-func gqlgenServer(t testing.TB, db *velox.DB, opts ...gqlgenx.Option) server {
+func gqlgenServer(db *velox.DB, exts ...gqlgen.HandlerExtension) server {
 	srv := gqlgenHandler()
-	srv.Use(gqlgenx.NewExtension(db, opts...))
+	for _, e := range exts {
+		srv.Use(e)
+	}
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
-	return handlerServer(srv)
+	return bound(db, handlerServer(srv))
 }
 
 // gqlgenPlainServer serves paritySDL through gqlgen with no extension and

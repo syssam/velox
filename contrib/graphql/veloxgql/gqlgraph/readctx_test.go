@@ -180,7 +180,7 @@ func markedChildren(ctx context.Context, _ *velox.DB, e velox.FilterEntity, _ ve
 // honouring the marker under a reading context without it.
 func TestEdgeConnectionBatchOneContextEach(t *testing.T) {
 	db, _, log := edgeDB(t, velox.WithFilter(markedChildren))
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	log.take("")
 	want := map[int64][]int64{1: {2}, 2: {6}, 3: {}}

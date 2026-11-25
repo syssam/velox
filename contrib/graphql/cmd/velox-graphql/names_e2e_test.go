@@ -55,11 +55,7 @@ import (
 
 // SalesOrders is the resolver for the salesOrders field.
 func (r *queryResolver) SalesOrders(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.SalesOrderWhereInput) (*gen.SalesOrderConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderFilter(where))
+	return r.DB.Query[gen.SalesOrder]().Paginate(ctx, after, first, before, last, gen.WithSalesOrderFilter(where))
 }
 
 // Query returns QueryResolver implementation.
@@ -87,7 +83,6 @@ import (
 	"example.com/app/graph"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func TestSchemaNames(t *testing.T) {
@@ -108,8 +103,7 @@ func TestSchemaNames(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, raw)
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(db))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}}))
 	srv.AddTransport(transport.POST{})
 	q := ` + "`" + `{"query":"{ salesOrders(first: 5, where: {customerId: \"2\", imageUrlNEQ: \"c.png\", hasCustomer: true}) { edges { node { id imageUrl customer { name } } } } }"}` + "`" + `
 	req := httptest.NewRequest("POST", "/", strings.NewReader(q))
@@ -157,6 +151,7 @@ func TestNamesSchema(t *testing.T) {
 		"schema/schema.go":          e2eNamesSchema,
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/schema.resolvers.go": e2eNamesResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"names_test.go":             e2eNamesRun,
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql:names=schema", "./schema"); err != nil {

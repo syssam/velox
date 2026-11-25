@@ -99,31 +99,47 @@ func serve(ctx context.Context, ln net.Listener) error {
 
 // minimalServer is all that velox's generated code needs of a gqlgen server:
 // the executable schema, whose resolver holds db, and a transport. No
-// extension and no setup: a connection pages on the DB of its query, an edge
-// reads on its row's, and gqlgenx, which gqlgen.yml's models link, gives
-// each field's selection and batches the edges of a page (decision 0173).
-// It is what a server behind an authenticating gateway may serve; one open
-// to clients adds gqlgenx.Setup, as server does.
+// extension: a connection pages on the DB of its query, an edge reads on its
+// row's, and gqlgenx, which gqlgen.yml's models link, gives each field's
+// selection and batches the edges of a page (decision 0173). It is what a
+// server behind an authenticating gateway may serve; one open to clients
+// adds what server does.
 func minimalServer(db *velox.DB) http.Handler {
 	srv := gqlgenServer(db)
 	srv.AddTransport(transport.POST{})
 	return srv
 }
 
-// server is the GraphQL endpoint: minimalServer made safe by gqlgenx.Setup,
-// which is opt-in. A request has a limit on its body, its query's tokens and
-// fields, what it costs, its response and its time, before any of it is
-// validated or run; each mutation runs in one transaction; and
-// gqlgenx.ErrorPresenter shows a client only what is safe, with a code:
-// gqlgen's default presenter would show it every error's text, the driver's
-// and velox's, which name tables, entities and constraints. It logs the rest
-// with slog, and says "internal error".
-func server(db *velox.DB, opts ...gqlgenx.Option) http.Handler {
+// server is the GraphQL endpoint: minimalServer hardened for clients, by the
+// application's own composition of gqlgenx's opt-in pieces. Each is one
+// feature; a server takes the ones it needs. The limits they apply are the
+// DB's, which velox.Open took from veloxgql.WithLimits, or the defaults.
+func server(db *velox.DB) http.Handler {
 	srv := gqlgenServer(db)
-	h := gqlgenx.Setup(srv, db, opts...)
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
-	return h
+	// Each mutation runs in one transaction, which the resolvers' statements
+	// on db join, and rolls back when the response has an error.
+	srv.Use(gqlgenx.Transactioner{DB: db})
+	// A request over the limits of its query's or variables' size and shape
+	// is refused before it is parsed.
+	srv.Use(gqlgenx.RequestLimit(db))
+	// A request that would cost more than MaxCost is refused before it runs.
+	srv.Use(gqlgenx.CostLimit(db))
+	// A response over MaxResponseBytes or MaxErrors, or a request over the
+	// Timeout, is stopped.
+	srv.Use(gqlgenx.ResponseLimit(db))
+	// A client sees only what is safe, with a code: gqlgen's default
+	// presenter would show every error's text, the driver's and velox's,
+	// which name tables, entities and constraints. The rest is logged with
+	// slog and shown as "internal error".
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+	// An error names no field, argument, type or value the client did not,
+	// and validation returns at most MaxErrors.
+	srv.SetDisableSuggestion(true)
+	srv.SetValidationRulesFn(gqlgenx.QuietValidation(db))
+	// A body, and a websocket message, over 1 MiB is refused.
+	return gqlgenx.MaxBodyBytes(1 << 20)(srv)
 }
 
 // gqlgenServer is gqlgen's server on the generated schema, with no transport

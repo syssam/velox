@@ -497,7 +497,6 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 const ddl = ` + "`" + `
@@ -553,7 +552,7 @@ func TestConnectionOrderedByAnEdge(t *testing.T) {
 	}
 
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(context.Background(), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 	by := func(d veloxgql.OrderDirection) *gen.PostOrder {
 		return &gen.PostOrder{Direction: d, Field: gen.PostOrderFieldAuthorName}
@@ -626,7 +625,7 @@ func TestConnectionOrderedByCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(context.Background(), int64(7))
 	acct := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	by := func(d veloxgql.OrderDirection) *gen.AccountOrder {
 		return &gen.AccountOrder{Direction: d, Field: gen.AccountOrderFieldPostsCount}
@@ -715,7 +714,7 @@ func TestConnections(t *testing.T) {
 		ran.Add(1)
 		return next(ctx)
 	}))
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(context.Background(), int64(7))
 	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
@@ -808,9 +807,17 @@ func TestConnections(t *testing.T) {
 	}
 	// A list edge reads at most MaxList rows, the DB's cap being none: more
 	// fail with ErrTooManyRows, and the error names the edge.
-	one := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
-	_, err = ann.Groups(one)
-	if gs, err2 := bob.Groups(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
+	limited := velox.Open(velox.SQLite, sqlDB, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1}))
+	annOne, err := limited.Query[gen.User]().Where(gen.Users.ID.EQ(1)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobOne, err := limited.Query[gen.User]().Where(gen.Users.ID.EQ(2)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = annOne.Groups(ctx)
+	if gs, err2 := bobOne.Groups(ctx); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)
 	}
 	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "veloxgql: Account.groups: ") {
@@ -909,7 +916,7 @@ func TestPaginateQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(context.Background(), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	c, err := db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")).Paginate(ctx, nil, nil, nil, nil)
@@ -938,7 +945,7 @@ func TestPaginateLimitOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	ctx := schema.Org.With(context.Background(), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	var all []int64
@@ -993,7 +1000,6 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 const ddl = ` + "`" + `
@@ -1036,9 +1042,13 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 		return next(ctx)
 	}))
 	db := velox.Open(velox.SQLite, sqlDB, opts...)
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	appDB = db
+	ctx := schema.Org.With(context.Background(), int64(7))
 	return ctx, db
 }
+
+// appDB is the DB open made last, which the where helpers query.
+var appDB *velox.DB
 
 // The events' times and refs.
 var (
@@ -1086,49 +1096,29 @@ func page[C interface {
 }
 
 func events(ctx context.Context, w *gen.EventWhereInput) ([]int64, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := db.Query[gen.Event]().Paginate(ctx, nil, nil, nil, nil, gen.WithEventOrder(&gen.EventOrder{Field: gen.EventOrderFieldRank}), gen.WithEventFilter(w))
+	c, err := appDB.Query[gen.Event]().Paginate(ctx, nil, nil, nil, nil, gen.WithEventOrder(&gen.EventOrder{Field: gen.EventOrderFieldRank}), gen.WithEventFilter(w))
 	ks, err := page(ctx, c, err, func(e *gen.EventEdge) int64 { return e.Node.ID })
 	slices.Sort(ks)
 	return ks, err
 }
 
 func owners(ctx context.Context, w *gen.OwnerWhereInput) ([]int64, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := db.Query[gen.Owner]().Paginate(ctx, nil, nil, nil, nil, gen.WithOwnerFilter(w))
+	c, err := appDB.Query[gen.Owner]().Paginate(ctx, nil, nil, nil, nil, gen.WithOwnerFilter(w))
 	return page(ctx, c, err, func(e *gen.OwnerEdge) int64 { return int64(e.Node.ID) })
 }
 
 func accounts(ctx context.Context, w *gen.AccountWhereInput) ([]int64, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := db.Query[gen.Account]().Paginate(ctx, nil, nil, nil, nil, gen.WithAccountFilter(w))
+	c, err := appDB.Query[gen.Account]().Paginate(ctx, nil, nil, nil, nil, gen.WithAccountFilter(w))
 	return page(ctx, c, err, func(e *gen.AccountEdge) int64 { return e.Node.ID })
 }
 
 func posts(ctx context.Context, w *gen.PostWhereInput) ([]int64, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := db.Query[gen.Post]().Paginate(ctx, nil, nil, nil, nil, gen.WithPostFilter(w))
+	c, err := appDB.Query[gen.Post]().Paginate(ctx, nil, nil, nil, nil, gen.WithPostFilter(w))
 	return page(ctx, c, err, func(e *gen.PostEdge) int64 { return e.Node.ID })
 }
 
 func categories(ctx context.Context, w *gen.CategoryWhereInput) ([]int64, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	c, err := db.Query[gen.Category]().Paginate(ctx, nil, nil, nil, nil, gen.WithCategoryFilter(w))
+	c, err := appDB.Query[gen.Category]().Paginate(ctx, nil, nil, nil, nil, gen.WithCategoryFilter(w))
 	return page(ctx, c, err, func(e *gen.CategoryEdge) int64 { return e.Node.ID })
 }
 
@@ -1426,7 +1416,7 @@ func chain(n int, not bool) *gen.OwnerWhereInput {
 }
 
 // TestWhereDepthAndWidth is Review Focus 4: a where nested deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx), an and, or or has…With
+// MaxFilterDepth of the DB's limits, an and, or or has…With
 // list of more than its MaxFilterWidth inputs, and a where argument over its
 // MaxFilterNodes, fail before any statement runs.
 func TestWhereDepthAndWidth(t *testing.T) {

@@ -1795,16 +1795,13 @@ func (u UUID) MarshalGQL(w io.Writer)
 func (u UUID) String() string
 func (u Uint64) MarshalGQL(w io.Writer)
 func Batch[E any](ctx context.Context, rows []*E)
-func DB(ctx context.Context) *velox.DB
-func DBFromContext(ctx context.Context) (*velox.DB, error)
 func DecodeCursor(s string) (Cursor, error)
 func DecodeWhere(v any, dst any) error
 func DefaultLimits() Limits
 func EncodeCursor(c Cursor) (string, error)
-func LimitsFromContext(ctx context.Context) Limits
+func LimitsOf(db *velox.DB) Limits
 func Present(err error) (code, msg string)
-func Service(ctx context.Context, db *velox.DB) context.Context
-func ServiceWithLimits(ctx context.Context, db *velox.DB, l Limits) context.Context
+func WithLimits(l Limits) velox.Option
 type Bytes []byte
 type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
@@ -1821,8 +1818,6 @@ var ErrEmptyWhereInput
 var ErrFilterTooDeep
 var ErrFilterTooLarge
 var ErrFilterTooWide
-var ErrNoDB
-var ErrNoSelectionSource
 var ErrPageTooLarge
 var ErrRequestTooLarge
 var ErrResponseTooLarge
@@ -1831,15 +1826,12 @@ var ErrTooCostly
 var ErrTooManyErrors
 
 package contrib/graphql/veloxgql/gqlgenx
-func (*Extension) ExtensionName() string
-func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (any, error)
-func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler
-func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response
-func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error
-func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error
-func (e *Extension) NewContext(ctx context.Context) context.Context
-func (e *Extension) Validate(es graphql.ExecutableSchema) error
+func (Transactioner) ExtensionName() string
+func (Transactioner) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler
+func (t Transactioner) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response
+func (t Transactioner) Validate(graphql.ExecutableSchema) error
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l veloxgql.Limits) int
+func CostLimit(db *velox.DB) graphql.HandlerExtension
 func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
 func MarshalBytes(b []byte) graphql.Marshaler
 func MarshalFloat32(f float32) graphql.Marshaler
@@ -1848,9 +1840,11 @@ func MarshalTime(t time.Time) graphql.Marshaler
 func MarshalUUID(u uuid.UUID) graphql.Marshaler
 func MarshalUint(u uint) graphql.Marshaler
 func MarshalUint64(u uint64) graphql.Marshaler
-func NewExtension(db *velox.DB, opts ...Option) *Extension
+func MaxBodyBytes(n int64) func(http.Handler) http.Handler
 func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
-func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler
+func QuietValidation(db *velox.DB) func() *rules.Rules
+func RequestLimit(db *velox.DB) graphql.HandlerExtension
+func ResponseLimit(db *velox.DB) graphql.HandlerExtension
 func UnmarshalBytes(v any) ([]byte, error)
 func UnmarshalFloat32(v any) (float32, error)
 func UnmarshalInt64ID(v any) (int64, error)
@@ -1858,20 +1852,13 @@ func UnmarshalTime(v any) (time.Time, error)
 func UnmarshalUUID(v any) (uuid.UUID, error)
 func UnmarshalUint(v any) (uint, error)
 func UnmarshalUint64(v any) (uint64, error)
-func WithBatchScope(f func(context.Context) any) Option
-func WithLimits(l veloxgql.Limits) Option
-func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option
-func WithTxOptions(opts ...velox.TxOption) Option
-type Extension struct { }
-type Option struct { }
 type PresenterOption struct { }
-type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
+type Transactioner struct { DB *velox.DB Options []velox.TxOption }
 
 package contrib/graphql/veloxgql/graphqlgo
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenter
 func Scalars() graphql.SchemaOption
 func ScalarsOnly(names ...string) graphql.SchemaOption
-func With(db *velox.DB) graphql.ExecutorOption
 
 package contrib/veloxotel
 func Options(cfg Config) []velox.Option

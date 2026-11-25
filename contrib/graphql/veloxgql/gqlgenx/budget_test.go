@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -52,7 +52,7 @@ func aliases(n int, field string) string {
 // MaxResponseBytes the request fails with one clean error and data null, and at it, it
 // answers. Each leaf type counts what it writes: a string as it is escaped.
 func TestResponseBytesBounded(t *testing.T) {
-	db, _ := handlerDB(t)
+	db, _ := limitDB(t, veloxgql.Limits{MaxResponseBytes: 10000})
 	type name string
 	kb := strings.Repeat("x", 1000)
 	for _, c := range []struct {
@@ -75,7 +75,7 @@ func TestResponseBytesBounded(t *testing.T) {
 	} {
 		value := c.value
 		srv := serveSchema(testSchemaOf(budgetSDL, map[string]resolver{c.field: func(context.Context, map[string]any) (any, error) { return value, nil }}),
-			db, gqlgenx.WithLimits(veloxgql.Limits{MaxResponseBytes: 10000}))
+			gqlgenx.ResponseLimit(db))
 		if got := post(t, context.Background(), srv, aliases(c.n, c.field)); strings.Contains(got, "errors") {
 			t.Errorf("%T at the limit: %.200s", value, got)
 		}
@@ -86,33 +86,68 @@ func TestResponseBytesBounded(t *testing.T) {
 	}
 }
 
-// TestResponseBytesStop: past the limit no more resolvers run, and a mutation rolls back
-// though no field failed. The fields of a mutation run one after another.
+// TestResponseBytesStop: past the limit no more resolvers run, and a mutation
+// rolls back though no field failed, whichever of Transactioner and
+// ResponseLimit the server uses first. The fields of a mutation run one after
+// another.
 func TestResponseBytesStop(t *testing.T) {
-	db, l := handlerDB(t)
-	resolvers := handlerResolvers(db, nil)
-	var calls atomic.Int64
-	resolvers["add"] = func(ctx context.Context, args map[string]any) (any, error) {
-		calls.Add(1)
-		tx, err := veloxgql.DBFromContext(ctx)
-		if err != nil {
-			return nil, err
+	for _, c := range []struct {
+		name    string
+		txFirst bool
+	}{{"Transactioner first", true}, {"ResponseLimit first", false}} {
+		t.Run(c.name, func(t *testing.T) {
+			db, l := limitDB(t, veloxgql.Limits{MaxResponseBytes: 1500})
+			resolvers := handlerResolvers(db, nil)
+			var calls atomic.Int64
+			resolvers["add"] = func(ctx context.Context, args map[string]any) (any, error) {
+				calls.Add(1)
+				if err := db.Insert(&person{ID: args["id"].(int64), Name: "p", Age: 1}).Exec(ctx); err != nil {
+					return nil, err
+				}
+				return strings.Repeat("x", 1000), nil
+			}
+			exts := []graphql.HandlerExtension{gqlgenx.Transactioner{DB: db}, gqlgenx.ResponseLimit(db)}
+			if !c.txFirst {
+				exts[0], exts[1] = exts[1], exts[0]
+			}
+			srv := serve(resolvers, exts...)
+			got := post(t, context.Background(), srv, `mutation { a: add(id: 1) b: add(id: 2) c: add(id: 3) d: add(id: 4) }`)
+			if !strings.Contains(got, veloxgql.ErrResponseTooLarge.Error()) || !strings.Contains(got, `"data":null`) {
+				t.Errorf("over: %.300s", got)
+			}
+			if n := calls.Load(); n != 2 {
+				t.Errorf("%d resolvers ran, want 2", n)
+			}
+			// The stop cancels the context the fields run in. Under
+			// ResponseLimit the transaction's context is that one, so its end
+			// is reported as an error and not as a rollback; either way it
+			// does not commit.
+			if _, txs := l.take(); len(txs) != 1 || txs[0] == "commit" || (c.txFirst && txs[0] != "rollback") {
+				t.Errorf("transactions %q, want one that did not commit", txs)
+			}
+			if ids := peopleIDs(t, db, l); len(ids) != 0 {
+				t.Errorf("rows kept: %v", ids)
+			}
+		})
+	}
+}
+
+// TestResponseUnderLimitCommits: a mutation that stays under the limits
+// commits, under either order.
+func TestResponseUnderLimitCommits(t *testing.T) {
+	for _, txFirst := range []bool{true, false} {
+		db, l := limitDB(t, veloxgql.Limits{MaxResponseBytes: 1500})
+		exts := []graphql.HandlerExtension{gqlgenx.Transactioner{DB: db}, gqlgenx.ResponseLimit(db)}
+		if !txFirst {
+			exts[0], exts[1] = exts[1], exts[0]
 		}
-		if err := tx.Insert(&person{ID: args["id"].(int64), Name: "p", Age: 1}).Exec(ctx); err != nil {
-			return nil, err
+		srv := serve(handlerResolvers(db, nil), exts...)
+		if got, want := post(t, context.Background(), srv, `mutation { add(id: 1) }`), `{"data":{"add":1}}`; got != want {
+			t.Errorf("Transactioner first %v: %s, want %s", txFirst, got, want)
 		}
-		return strings.Repeat("x", 1000), nil
-	}
-	srv := serve(db, resolvers, gqlgenx.WithLimits(veloxgql.Limits{MaxResponseBytes: 1500}))
-	got := post(t, context.Background(), srv, `mutation { a: add(id: 1) b: add(id: 2) c: add(id: 3) d: add(id: 4) }`)
-	if !strings.Contains(got, veloxgql.ErrResponseTooLarge.Error()) || !strings.Contains(got, `"data":null`) {
-		t.Errorf("over: %.300s", got)
-	}
-	if n := calls.Load(); n != 2 {
-		t.Errorf("%d resolvers ran, want 2", n)
-	}
-	if ids := peopleIDs(t, db, l); len(ids) != 0 {
-		t.Errorf("rows kept: %v", ids)
+		if _, txs := l.take(); !slices.Equal(txs, []string{"commit"}) {
+			t.Errorf("Transactioner first %v: transactions %q, want one committed", txFirst, txs)
+		}
 	}
 }
 
@@ -120,7 +155,7 @@ func TestResponseBytesStop(t *testing.T) {
 // says there are more, then the request stops: 97k of them took 516 MB. A field that is
 // null for what stopped it adds none.
 func TestResolverErrorsBounded(t *testing.T) {
-	db, _ := handlerDB(t)
+	db, _ := limitDB(t, veloxgql.Limits{MaxErrors: 3})
 	boom := errors.New("secret")
 	for name, presented := range map[string]bool{"ErrorPresenter": true, "another presenter": false} {
 		var calls atomic.Int64
@@ -131,7 +166,7 @@ func TestResolverErrorsBounded(t *testing.T) {
 				graphql.AddError(ctx, boom)
 				return nil, nil
 			},
-		}), db, gqlgenx.WithLimits(veloxgql.Limits{MaxErrors: 3, MaxCost: 1 << 30}))
+		}), gqlgenx.ResponseLimit(db))
 		if presented {
 			srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) {}))
 		}
@@ -170,12 +205,19 @@ func TestResolverErrorsBounded(t *testing.T) {
 	}
 }
 
-// TestTimeout: a request past Limits.Timeout has its context cancelled, what it runs
-// ends, and the client gets one clean error. A mutation rolls back; a subscription, which
-// lives as long as it is listened to, has no such limit.
+// limited serves es under Transactioner, ResponseLimit and ErrorPresenter,
+// the way a hardened server does, with the POST transport.
+func limited(es graphql.ExecutableSchema, db *velox.DB) *handler.Server {
+	srv := serveSchema(es, gqlgenx.Transactioner{DB: db}, gqlgenx.ResponseLimit(db))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) {}))
+	return srv
+}
+
+// TestTimeout: a request past Limits.Timeout has its context cancelled, what
+// it runs ends, and the client gets one clean error. A mutation rolls back; a
+// subscription, which lives as long as it is listened to, has no such limit.
 func TestTimeout(t *testing.T) {
-	db, l := handlerDB(t)
-	resolvers := handlerResolvers(db, nil)
+	db, l := limitDB(t, veloxgql.Limits{Timeout: 200 * time.Millisecond})
 	slow := func(ctx context.Context, _ map[string]any) (any, error) {
 		select {
 		case <-ctx.Done():
@@ -184,21 +226,19 @@ func TestTimeout(t *testing.T) {
 			return 1, nil
 		}
 	}
-	resolvers["slow"] = slow
-	addSlow := func(ctx context.Context, args map[string]any) (any, error) {
-		tx, err := veloxgql.DBFromContext(ctx)
-		if err != nil {
-			return nil, err
+	slowResolvers := func(db *velox.DB) map[string]resolver {
+		resolvers := handlerResolvers(db, nil)
+		resolvers["slow"] = slow
+		resolvers["add"] = func(ctx context.Context, args map[string]any) (any, error) {
+			if err := db.Insert(&person{ID: args["id"].(int64), Name: "p", Age: 1}).Exec(ctx); err != nil {
+				return nil, err
+			}
+			return slow(ctx, nil)
 		}
-		if err := tx.Insert(&person{ID: args["id"].(int64), Name: "p", Age: 1}).Exec(ctx); err != nil {
-			return nil, err
-		}
-		return slow(ctx, nil)
+		return resolvers
 	}
-	resolvers["add"] = addSlow
-	srv := handler.New(testSchemaOf(budgetSDL, resolvers))
-	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{Timeout: 200 * time.Millisecond}))
-	srv.AddTransport(transport.POST{})
+	resolvers := slowResolvers(db)
+	h := limited(testSchemaOf(budgetSDL, resolvers), db)
 	const want = `{"errors":[{"message":"request timed out: it ran over 200ms","extensions":{"code":"TIMEOUT"}}],"data":null}`
 	start := time.Now()
 	if got := post(t, context.Background(), h, `{ slow }`); got != want {
@@ -221,21 +261,20 @@ func TestTimeout(t *testing.T) {
 	// A client that went away, or a deadline of the application's, is no Timeout.
 	short, cancelShort := context.WithTimeout(context.Background(), time.Millisecond)
 	defer cancelShort()
+	resolvers["slow"] = slow
 	if got := post(t, short, h, `{ slow }`); strings.Contains(got, "TIMEOUT") {
 		t.Errorf("the application's deadline: %s", got)
 	}
 	// A transaction's own deadline, velox.TxTimeout, is the mutation's error,
 	// and not the Timeout.
-	tx := handler.New(testSchemaOf(budgetSDL, resolvers))
-	txh := gqlgenx.Setup(tx, db, gqlgenx.WithLimits(veloxgql.Limits{Timeout: time.Hour}), gqlgenx.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
-	tx.AddTransport(transport.POST{})
-	resolvers["slow"] = slow
-	if got := post(t, context.Background(), txh, `mutation { add(id: 2) }`); strings.Contains(got, "TIMEOUT") || !strings.Contains(got, `"data":null`) {
+	txDB, _ := limitDB(t, veloxgql.Limits{Timeout: time.Hour})
+	tx := serveSchema(testSchemaOf(budgetSDL, slowResolvers(txDB)),
+		gqlgenx.Transactioner{DB: txDB, Options: []velox.TxOption{velox.TxTimeout(50 * time.Millisecond)}}, gqlgenx.ResponseLimit(txDB))
+	if got := post(t, context.Background(), tx, `mutation { add(id: 2) }`); strings.Contains(got, "TIMEOUT") || !strings.Contains(got, `"data":null`) {
 		t.Errorf("the transaction's deadline: %s", got)
 	}
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
-	resolvers["slow"] = slow
 	if got := post(t, gone, h, `{ slow }`); strings.Contains(got, "TIMEOUT") {
 		t.Errorf("a client gone: %s", got)
 	}
@@ -245,15 +284,13 @@ func TestTimeout(t *testing.T) {
 // is over MaxErrors; the client is told of the Timeout. Under -race on a real query it
 // answered 100 internal errors and ErrTooManyErrors.
 func TestTimeoutIsNotTooManyErrors(t *testing.T) {
-	db, _ := handlerDB(t)
+	db, _ := limitDB(t, veloxgql.Limits{Timeout: 50 * time.Millisecond, MaxErrors: 3})
 	logged := atomic.Int64{}
-	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"fail": func(ctx context.Context, _ map[string]any) (any, error) {
+	h := serveSchema(testSchemaOf(budgetSDL, map[string]resolver{"fail": func(ctx context.Context, _ map[string]any) (any, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
-	}}))
-	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond, MaxErrors: 3}))
-	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) { logged.Add(1) }))
-	srv.AddTransport(transport.POST{})
+	}}), gqlgenx.ResponseLimit(db))
+	h.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) { logged.Add(1) }))
 	const want = `{"errors":[{"message":"request timed out: it ran over 50ms","extensions":{"code":"TIMEOUT"}}],"data":null}`
 	for range 20 {
 		if got := post(t, context.Background(), h, aliases(200, "fail")); got != want {
@@ -267,13 +304,13 @@ func TestTimeoutIsNotTooManyErrors(t *testing.T) {
 
 // TestSubscriptionHasNoTimeout: Limits.Timeout leaves a subscription's context alone.
 func TestSubscriptionHasNoTimeout(t *testing.T) {
-	db, _ := handlerDB(t)
+	db, _ := limitDB(t, veloxgql.Limits{Timeout: time.Hour})
 	var deadline atomic.Bool
 	srv := serveSchema(testSchemaOf(budgetSDL, map[string]resolver{"slow": func(ctx context.Context, _ map[string]any) (any, error) {
 		_, has := ctx.Deadline()
 		deadline.Store(has)
 		return 1, nil
-	}}), db, gqlgenx.WithLimits(veloxgql.Limits{Timeout: time.Hour}))
+	}}), gqlgenx.ResponseLimit(db))
 	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"query":"subscription { slow }"}`))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "text/event-stream")
@@ -287,32 +324,19 @@ func TestSubscriptionHasNoTimeout(t *testing.T) {
 	}
 }
 
-// TestLimitsNegativeNewOnes: Validate refuses a negative Timeout or MaxResponseBytes.
-func TestLimitsNegativeNewOnes(t *testing.T) {
-	db, _ := handlerDB(t)
-	for name, l := range map[string]veloxgql.Limits{"Timeout": {Timeout: -1}, "MaxResponseBytes": {MaxResponseBytes: -1}} {
-		e := gqlgenx.NewExtension(db, gqlgenx.WithLimits(l))
-		if err := e.Validate(nil); err == nil || !strings.Contains(err.Error(), name) {
-			t.Errorf("%s: %v", name, err)
-		}
-	}
-}
-
 // TestStoppedStreamEnds: over a streaming transport gqlgen asks for responses until it
 // gets none. A query or mutation stopped by a limit sends its one error and ends: the
 // replacement is not made again for the end of the stream, which over SSE and websocket
 // sent error frames without end and held the handler.
 func TestStoppedStreamEnds(t *testing.T) {
-	db, _ := handlerDB(t)
+	db, _ := limitDB(t, veloxgql.Limits{Timeout: 50 * time.Millisecond})
 	resolvers := handlerResolvers(db, nil)
 	wait := func(ctx context.Context, _ map[string]any) (any, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
 	resolvers["slow"], resolvers["add"] = wait, wait
-	srv := handler.New(testSchemaOf(budgetSDL, resolvers))
-	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond}))
-	srv.AddTransport(transport.SSE{})
+	h := limited(testSchemaOf(budgetSDL, resolvers), db)
 	for _, q := range []string{`{ slow }`, `mutation { add(id: 1) }`} {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		body := strings.NewReader(`{"query":` + strconvQuote(q) + `}`)

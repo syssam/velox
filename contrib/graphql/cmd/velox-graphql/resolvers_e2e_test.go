@@ -60,11 +60,7 @@ import (
 
 // Assets is the resolver for the assets field.
 func (r *queryResolver) Assets(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.AssetConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Asset]().Paginate(ctx, after, first, before, last)
+	return r.DB.Query[gen.Asset]().Paginate(ctx, after, first, before, last)
 }
 
 // Organization is the resolver for the organization field. The selection did
@@ -111,7 +107,6 @@ import (
 
 	"example.com/app/graph"
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 func serve(t *testing.T, query string) string {
@@ -130,8 +125,7 @@ func serve(t *testing.T, query string) string {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: velox.Open(velox.SQLite, db)}}))
 	srv.AddTransport(transport.POST{})
 	req := httptest.NewRequest("POST", "/", strings.NewReader(` + "`" + `{"query":"` + "`" + ` + query + ` + "`" + `"}` + "`" + `))
 	req.Header.Set("Content-Type", "application/json")
@@ -174,6 +168,7 @@ func TestAppResolvers(t *testing.T) {
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/own.graphql":         e2eResolversOwn,
 		"graph/schema.resolvers.go": e2eResolversResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"resolvers_test.go":         e2eResolversRun,
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {

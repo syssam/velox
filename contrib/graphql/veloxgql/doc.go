@@ -20,20 +20,18 @@
 // generated code the field each resolver resolves, what it selects, and
 // the batch its edge joins, one for each root field under gqlgen and one
 // for each operation under graphql-go. So a server whose resolvers hold
-// the DB pages, projects and batches with nothing installed, under
-// DefaultLimits().
+// the DB pages, projects and batches with nothing installed, under the
+// DB's limits (WithLimits).
 //
-// The adapters' setup is opt-in, for what a server open to clients adds:
-// gqlgenx.Setup and gqlgenx.NewExtension bound a request's size, cost and
-// time, run a mutation in one transaction and take options of their own
-// (gqlgenx.WithLimits, gqlgenx.WithTxOptions, gqlgenx.WithTxFilter,
-// gqlgenx.WithBatchScope); graphqlgo.With pins a mutation's reads to the
-// primary. Either puts the DB in the context, for DB.
+// Nothing needs installing (decision 0175). gqlgenx has opt-in pieces for a
+// server open to clients, each one feature: gqlgenx.Transactioner runs a
+// mutation in one transaction, gqlgenx.RequestLimit, gqlgenx.CostLimit and
+// gqlgenx.ResponseLimit bound a request, gqlgenx.MaxBodyBytes its body, and
+// gqlgenx.ErrorPresenter shows a client only what is safe. graphqlgo needs
+// none: graphql-go's own options bound a request.
 //
-// Outside a request a service pages with no setup too, as a job or a test
-// does: generated code there reads every column, and each edge alone.
-// Service (or ServiceWithLimits) still puts the DB, the limits and a
-// source that selects nothing in a context, for DB and LimitsFromContext:
+// Outside a request a service pages the same way, as a job or a test does:
+// generated code there reads every column, and each edge alone.
 //
 //	conn, err := db.Query[veloxgen.Post]().Paginate(ctx, nil, &first, nil, nil)
 //
@@ -58,11 +56,9 @@
 //
 // Generated code runs a connection's queries on the DB of the query it was
 // given, and an edge's on the DB that read its row (decision 0171): it
-// reads no DB from the context. DBFromContext reads the DB an adapter's
-// setup or Service put there, for code that has only the context, and
-// LimitsFromContext the limits, or DefaultLimits() without them.
-// gqlgenx.Extension runs a mutation operation in one transaction; its
-// NewContext puts its DB and limits in a context outside a request.
+// reads no DB from the context. A resolver uses the DB its Resolver holds;
+// under gqlgenx.Transactioner a statement on it in a mutation runs in the
+// mutation's transaction.
 //
 // # Cursors
 //
@@ -99,7 +95,7 @@
 // keyed by the callers' velox.RowScope, DB and limits, so callers with
 // different scope values, bypasses or shards never share a read; any other
 // context value a policy or a hook reads must be the same for every row of a
-// field, or be returned by WithBatchScope. Nothing waits for other
+// field. Nothing waits for other
 // resolvers, which a mutation could not allow. Outside a field Batch does
 // nothing.
 //
@@ -126,8 +122,8 @@
 //   - gqlgraph.EdgeIDField is IDField of a foreign key, with its IsNil and
 //     NotNil: each the column's alone, as SQL and entgql have them.
 //
-// The limits are LimitsFromContext(ctx)'s, read at the top of the where
-// argument. A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A
+// The limits are those of the DB of the connection the where argument
+// filters (LimitsOf), or DefaultLimits() for a Pred called outside one. A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A
 // list of more than MaxFilterWidth entries, of inputs or of In or NotIn values,
 // fails with ErrFilterTooWide, and a where argument over its budget of
 // MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
@@ -186,7 +182,7 @@
 // a violated constraint (CodeBadUserInput); and "internal error"
 // (CodeInternal) for anything else, which the presenter logs: a driver's
 // error, a deadline of the application's, a list edge over MaxList, or
-// ErrNoDB. So no driver text, SQL, scope, entity or constraint
+// a row with no DB to read its edges on. So no driver text, SQL, scope, entity or constraint
 // name reaches a client.
 //
 // # Limits
@@ -194,19 +190,18 @@
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
 // MaxFilterWidth, MaxFilterNodes, MaxOrderTerms, MaxCost, MaxIntrospectionCost,
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes,
-// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. The
-// adapter puts them in each operation's context, gqlgenx's those
-// gqlgenx.WithLimits gives (a zero field is the default) and graphqlgo's
-// always DefaultLimits(), and generated code reads them with
-// LimitsFromContext, which gives DefaultLimits() in a context without them.
-// gqlgenx.Extension refuses a negative limit. MaxList is how many rows a list edge reads, and more fail
+// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. They
+// are the DB's: WithLimits gives them (a zero field is the default, a negative
+// one panics), and LimitsOf reads them, DefaultLimits() for a DB given none.
+// A connection reads those of its query's DB, and an edge those of the DB
+// that read its row, a transaction's included. MaxList is how many rows a list edge reads, and more fail
 // with velox.ErrTooManyRows; graphql.MaxList(n) lowers it for one edge, and its cost.
 //
 // Every one of them but MaxCost bounds one argument or one edge, not a whole
 // request: connections nested in connections multiply (MaxPage rows, and a
 // query for each, at every level), and aliases repeat a field as often as the
-// client writes it. MaxCost bounds the request under gqlgenx; under graphqlgo
-// it is not applied, and the server sets graphql.WithQueryCost.
+// client writes it. MaxCost bounds the request under gqlgenx.CostLimit; under
+// graphqlgo it is not applied, and the server sets graphql.WithQueryCost.
 // gqlgenx.Cost computes what an operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
 // its children's cost times its multiplier, which is first or last for a
 // connection's edges and MaxList for another list of objects. On top of that, with no multiplier, a field that runs a statement
@@ -219,7 +214,7 @@
 // variable's default, when it has one; a condition that is not a boolean
 // counts); the value above it is read all the same, and costs as if it selected
 // __typename. Introspection costs one for each field of its response, counted over
-// the schema, and answers to MaxIntrospectionCost. gqlgenx.Extension refuses a
+// the schema, and answers to MaxIntrospectionCost. gqlgenx.CostLimit refuses a
 // request over either with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
 // before any resolver, so before any statement. The default MaxCost, 150000,
 // lets two levels of full connection pages through (about 20000) and not
@@ -228,15 +223,15 @@
 // 200602 and are refused; raise MaxCost, or lower MaxList, to let them through.
 //
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes and
-// MaxVariableNodes bound the document and its variables, before gqlgen parses or validates
-// it, which gqlgenx.Extension does on its own. MaxBodyBytes bounds the request's body and a
-// websocket's message, in the handler gqlgenx.Setup returns, which a server open to clients uses.
+// MaxVariableNodes bound the document and its variables, and MaxBodyBytes their bytes,
+// before gqlgen parses or validates it, under gqlgenx.RequestLimit. gqlgenx.MaxBodyBytes,
+// with a limit of its own, bounds the HTTP body and a websocket's message.
 //
 // gqlgenx.Cost cannot see the size of a value, or how long a statement takes. MaxResponseBytes
 // holds a response's strings, bytes and JSON, counted as its fields resolve; MaxErrors its
-// errors; and Timeout a query or a mutation's time. Over any of them the request stops,
-// with one error (ErrResponseTooLarge, ErrTooManyErrors, ErrTimeout) and data null, and a
-// mutation rolls back.
+// errors; and Timeout a query or a mutation's time, under gqlgenx.ResponseLimit. Over any
+// of them the request stops, with one error (ErrResponseTooLarge, ErrTooManyErrors,
+// ErrTimeout) and data null, and a mutation under gqlgenx.Transactioner rolls back.
 //
 // Nothing in the package runs at program start.
 package veloxgql

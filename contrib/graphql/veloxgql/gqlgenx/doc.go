@@ -1,51 +1,52 @@
 // Package gqlgenx serves the GraphQL code velox-graphql generates through
-// gqlgen: the handler extension that puts velox's state in each operation's
-// context, the error presenter, the handler that bounds a request's body,
-// and the function marshalers gqlgen.yml names. The runtime generated code
-// calls is in package veloxgql and its package gqlgraph, which import no
-// engine; this package is gqlgen's adapter to them.
+// gqlgen: the reader of gqlgen's context that generated code needs, the
+// function marshalers gqlgen.yml names, and opt-in pieces for a server open
+// to clients: a mutation transaction, request, cost and response limits, a
+// body limit and an error presenter. The runtime generated code calls is in
+// package veloxgql and its package gqlgraph, which import no engine; this
+// package is gqlgen's adapter to them.
 //
 // # The server
 //
-// A server needs no setup (decision 0173). The package registers a reader
-// of gqlgen's context when it is linked, as gqlgen's generated code links
-// it through the models gqlgen.yml binds here (Int64ID, Time and the other
-// scalars); a server that binds none imports the package blank. The reader
-// tells generated code the field each resolver resolves, what it selects,
-// and the batch of its root field, so a server whose Resolver holds the DB
-// pages, projects and batches with nothing installed.
+// A server needs no setup (decisions 0173 and 0175). The package registers
+// a reader of gqlgen's context when it is linked, as gqlgen's generated code
+// links it through the models gqlgen.yml binds here (Int64ID, Time and the
+// other scalars); a server that binds none imports the package blank. The
+// reader tells generated code the field each resolver resolves, what it
+// selects, and the batch of its root field, so a server whose Resolver
+// holds the DB pages, projects and batches with nothing installed:
 //
-// Setup is opt-in, for a server open to clients:
-//
-//	srv := handler.New(graph.NewExecutableSchema(cfg))
-//	h := gqlgenx.Setup(srv, db)
+//	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}}))
 //	srv.AddTransport(transport.POST{})
 //
-// It changes no statement a request sends. It uses NewExtension(db, opts...), first of the server's extensions, and
-// ErrorPresenter(nil), and returns a handler that bounds a request's body and
-// a websocket's messages. The options are this package's: WithLimits,
-// WithTxOptions, WithTxFilter and WithBatchScope.
+// The limits generated code holds to are the DB's (veloxgql.WithLimits).
 //
-// # The Extension
+// # Opt-in pieces
 //
-// The Extension puts the DB, the limits and gqlgen's selection source in
-// each operation's context, where veloxgql.DBFromContext and
-// veloxgql.LimitsFromContext read them and generated code finds the field it
-// resolves. It runs a mutation operation in one transaction: it commits when
-// the response has no errors, and rolls back otherwise or on a panic.
-// WithTxOptions sets the transaction's options, and it refuses
-// velox.TxRetrySerializable, since gqlgen makes the response once.
-// WithTxFilter leaves a mutation out of a transaction: its
-// statements are not atomic and its field resolvers are not serialized, but
-// it keeps read-your-writes in a velox session. Extension.NewContext puts the
-// same state in a context for generated code called outside a gqlgen server,
-// in a job or a test: there no field is resolving, and generated code reads
-// alone.
+// Each piece does one thing, and none is needed to page, batch or read:
 //
-// Before gqlgen parses a request, the Extension refuses one whose document or
-// variables are over the limits, and before any resolver one whose
-// Cost is over MaxCost. It holds a response to MaxResponseBytes and
-// MaxErrors, and a query or a mutation to Timeout.
+//   - Transactioner{DB: db} runs each mutation in one transaction, as
+//     entgql's Transactioner does, and its field resolvers one at a time.
+//   - RequestLimit(db) refuses a document or variables over the DB's limits
+//     before gqlgen parses them.
+//   - CostLimit(db) refuses a request whose Cost is over MaxCost before any
+//     resolver runs.
+//   - ResponseLimit(db) holds a response to MaxResponseBytes, MaxErrors and
+//     Timeout.
+//   - MaxBodyBytes(n) is the HTTP middleware that bounds a request's body
+//     and a websocket's messages.
+//   - ErrorPresenter is the presenter to give the server.
+//
+// A server open to clients uses them with gqlgen's own knobs:
+//
+//	srv.Use(gqlgenx.Transactioner{DB: db})
+//	srv.Use(gqlgenx.RequestLimit(db))
+//	srv.Use(gqlgenx.CostLimit(db))
+//	srv.Use(gqlgenx.ResponseLimit(db))
+//	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))
+//	srv.SetDisableSuggestion(true)
+//	srv.SetValidationRulesFn(gqlgenx.QuietValidation(db))
+//	http.Handle("/graphql", gqlgenx.MaxBodyBytes(1<<20)(srv))
 //
 // # Selections
 //
@@ -60,8 +61,9 @@
 //
 // ErrorPresenter is the presenter to give the server
 // (srv.SetErrorPresenter(gqlgenx.ErrorPresenter(nil))). It shows a client
-// what veloxgql.Present gives, and gqlgen's text for an integer that an
-// Int8…Uint32 argument cannot hold (veloxgql.CodeBadUserInput); it logs
+// what veloxgql.Present gives, gqlgen's text for an integer that an
+// Int8…Uint32 argument cannot hold (veloxgql.CodeBadUserInput), and
+// "introspection is disabled" where it is; it logs
 // every internal error. An error that is only the cancellation of the
 // request, the client gone, is not logged as an internal error. gqlgen's
 // default presenter shows every error's text, and no code.

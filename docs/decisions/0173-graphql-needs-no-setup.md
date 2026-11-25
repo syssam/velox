@@ -2,7 +2,10 @@
 
 Status: accepted, 2026-11-25. Amends 0105 and 0121: a read with no
 adapter state no longer fails with `ErrNoSelectionSource`. Builds on 0171
-(an edge reads on its row's DB) and 0172.
+(an edge reads on its row's DB) and 0172. Its "The setup calls stay"
+part is superseded by 0175: `gqlgenx.Setup`, `NewExtension`,
+`graphqlgo.With` and `veloxgql.Service` are removed, and what they gave is
+re-homed in opt-in pieces.
 
 ## Context
 

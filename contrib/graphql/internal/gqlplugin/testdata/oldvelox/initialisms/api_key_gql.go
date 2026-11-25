@@ -206,7 +206,8 @@ type APIKeyWhereInput struct {
 }
 
 // Pred is the condition w stands for on APIKey nodes, true for a nil or empty
-// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
+// w. It fails on a filter over the limits of the DB of the connection it
+// filters, or veloxgql.DefaultLimits() outside one.
 func (w *APIKeyWhereInput) Pred(ctx context.Context) (velox.Pred[APIKey], error) {
 	p, err := w.Predicate(ctx)
 	return velox.Pred[APIKey](p), err

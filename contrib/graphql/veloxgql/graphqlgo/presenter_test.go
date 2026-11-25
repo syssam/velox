@@ -322,7 +322,6 @@ func decodeMoney(v any) (int64, error) {
 // veloxgql.Present, and this test changes with it.
 func TestSubscribeSourceError(t *testing.T) {
 	quiet(t)
-	db, _ := modelDB(t)
 	s, err := graphql.NewSchema(graphql.SDL(`type Query { n: Int } type Subscription { tick: Int }`),
 		graphql.Query(graphql.Field("n", func(graphql.Root) int { return 1 })),
 		graphql.Subscription(graphql.Subscribe("tick", func(context.Context) (<-chan int, error) {
@@ -332,7 +331,7 @@ func TestSubscribeSourceError(t *testing.T) {
 		t.Fatal(err)
 	}
 	var logged []error
-	e := newExecutor(s, graphqlgo.With(db), graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(func(_ context.Context, err error) { logged = append(logged, err) })))
+	e := newExecutor(s, graphql.WithErrorPresenter(graphqlgo.ErrorPresenter(func(_ context.Context, err error) { logged = append(logged, err) })))
 	_, err = e.Subscribe(context.Background(), &graphql.Request{Query: `subscription { tick }`})
 	var se *graphql.SubscribeError
 	if !errors.As(err, &se) || len(se.Response.Errors) != 1 {

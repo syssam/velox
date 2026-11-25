@@ -119,16 +119,15 @@ func TestObjectDefAndAbstractFragment(t *testing.T) {
 }
 
 // TestSourceFieldWithoutOperation: a field context with no operation
-// context has a key and no selection, and Wait of the source and of the
-// reader return a function that does nothing.
+// context has a key and no selection, and Wait of the
+// reader returns a function that does nothing.
 func TestSourceFieldWithoutOperation(t *testing.T) {
 	fc := &graphql.FieldContext{Object: "Query", Field: graphql.CollectedField{Field: &ast.Field{Name: "x"}}}
 	ctx := graphql.WithFieldContext(context.Background(), fc)
-	f, ok := (&source{}).Field(ctx)
-	if !ok || f.Key == nil || f.Sel != nil {
-		t.Errorf("no operation context: %+v, %v; want a key and no selection", f, ok)
+	f := (&source{}).field(ctx, fc)
+	if f.Key == nil || f.Sel != nil {
+		t.Errorf("no operation context: %+v; want a key and no selection", f)
 	}
-	(&source{}).Wait(ctx)()
 	reader{}.Wait(ctx)()
 }
 
@@ -137,8 +136,8 @@ func TestSourceFieldWithoutOperation(t *testing.T) {
 func TestSourceFieldWithoutASTField(t *testing.T) {
 	fc := &graphql.FieldContext{Object: "Query"}
 	ctx := graphql.WithFieldContext(context.Background(), fc)
-	f, ok := (&source{}).Field(ctx)
-	if !ok || f.Object != "Query" || f.Name != "" || f.Key != nil || f.Sel != nil {
-		t.Errorf("no *ast.Field: %+v, %v; want only the object", f, ok)
+	f := (&source{}).field(ctx, fc)
+	if f.Object != "Query" || f.Name != "" || f.Key != nil || f.Sel != nil {
+		t.Errorf("no *ast.Field: %+v; want only the object", f)
 	}
 }

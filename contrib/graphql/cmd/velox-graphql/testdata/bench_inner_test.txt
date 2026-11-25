@@ -22,7 +22,7 @@ import (
 const rows = 500
 
 // benchServe is the schema on a seeded in-memory database, through gqlgen's handler
-// and the extension, and a function that sends a query to it.
+// and the cost, request and response limits, and a function that sends a query to it.
 func benchServe(b *testing.B) func(q string, vars map[string]any) string {
 	b.Helper()
 	db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(0)")
@@ -51,8 +51,11 @@ func benchServe(b *testing.B) func(q string, vars map[string]any) string {
 	if err := tx.Commit(); err != nil {
 		b.Fatal(err)
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	vdb := velox.Open(velox.SQLite, db)
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: vdb}}))
+	srv.Use(gqlgenx.RequestLimit(vdb))
+	srv.Use(gqlgenx.CostLimit(vdb))
+	srv.Use(gqlgenx.ResponseLimit(vdb))
 	srv.AddTransport(transport.POST{})
 	return func(q string, vars map[string]any) string {
 		body, _ := json.Marshal(map[string]any{"query": q, "variables": vars})

@@ -261,7 +261,8 @@ type AccountWhereInput struct {
 }
 
 // Pred is the condition w stands for on Account nodes, true for a nil or empty
-// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
+// w. It fails on a filter over the limits of the DB of the connection it
+// filters, or veloxgql.DefaultLimits() outside one.
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	p, err := w.Predicate(ctx)
 	return velox.Pred[User](p), err

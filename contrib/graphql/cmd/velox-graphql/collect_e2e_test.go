@@ -198,6 +198,16 @@ models:
     model: github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo
 `
 
+// e2eResolver is graph/resolver.go: the Resolver holds the DB that its
+// resolvers query; gqlgen keeps the file when it generates.
+const e2eResolver = `package graph
+
+import "github.com/syssam/velox"
+
+// Resolver holds the DB the resolvers query.
+type Resolver struct{ DB *velox.DB }
+`
+
 // e2eCollectBooks is the application's own query of books by their IDs: an
 // ID is the book's key, and gqlgen binds it to an int64.
 const e2eCollectBooks = `extend type Query {
@@ -220,11 +230,7 @@ import (
 // decoded to their int64 keys, in their order, and null for one the reader
 // cannot see. Batch makes them one batch, whose edges each read once.
 func (r *queryResolver) Books(ctx context.Context, ids []int64) ([]*gen.Book, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	bs, err := db.Query[gen.Book]().Where(gen.Books.ID.In(ids...)).Limit(len(ids)).All(ctx)
+	bs, err := r.DB.Query[gen.Book]().Where(gen.Books.ID.In(ids...)).Limit(len(ids)).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -242,11 +248,7 @@ func (r *queryResolver) Books(ctx context.Context, ids []int64) ([]*gen.Book, er
 
 // Authors is the resolver for the authors field.
 func (r *queryResolver) Authors(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.AuthorOrder) (*gen.AuthorConnection, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Author]().Paginate(ctx, after, first, before, last, gen.WithAuthorOrder(orderBy))
+	return r.DB.Query[gen.Author]().Paginate(ctx, after, first, before, last, gen.WithAuthorOrder(orderBy))
 }
 
 // Query returns QueryResolver implementation.
@@ -493,15 +495,15 @@ func starsOfBook(b int64) []int64 {
 
 // newEnv opens the target, makes and seeds the tables, and serves the schema
 // on them, with opts.
-func newEnv(t *testing.T, tg target, opts ...gqlgenx.Option) *env {
+func newEnv(t *testing.T, tg target, opts ...velox.Option) *env {
 	t.Helper()
 	e := &env{target: tg}
-	raw, db := tg.open(t, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	raw, db := tg.open(t, append([]velox.Option{velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		e.mu.Lock()
 		e.sql = append(e.sql, st.SQL)
 		e.mu.Unlock()
 		return next(ctx)
-	}))
+	})}, opts...)...)
 	e.raw, e.db = raw, db
 	for _, s := range append(slices.Clone(drop), ddl(tg.dialect)...) {
 		if _, err := raw.Exec(s); err != nil {
@@ -526,8 +528,8 @@ func newEnv(t *testing.T, tg target, opts ...gqlgenx.Option) *env {
 		e.exec(t, "INSERT INTO genres (id, name) VALUES (?, ?)", i+1, n)
 	}
 
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(db, opts...))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: db}}))
+	srv.Use(gqlgenx.CostLimit(db))
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context.Context, err error) {
 		e.mu.Lock()
 		e.log = append(e.log, err.Error())
@@ -549,7 +551,7 @@ func newEnv(t *testing.T, tg target, opts ...gqlgenx.Option) *env {
 }
 
 // each runs fn on each target, with a fresh database and a server of opts.
-func each(t *testing.T, fn func(t *testing.T, e *env), opts ...gqlgenx.Option) {
+func each(t *testing.T, fn func(t *testing.T, e *env), opts ...velox.Option) {
 	for _, tg := range targets(t) {
 		t.Run(tg.name, func(t *testing.T) { fn(t, newEnv(t, tg, opts...)) })
 	}
@@ -957,7 +959,7 @@ func TestPolicyHidden(t *testing.T) {
 		if len(stmts) != 2 {
 			t.Errorf("%d statements, want 2 (the books, their reviews):\n%s", len(stmts), strings.Join(stmts, "\n"))
 		}
-	}, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 10}))
+	}, veloxgql.WithLimits(veloxgql.Limits{MaxList: 10}))
 }
 
 // TestCostRefused: three levels of full pages cost more than the default
@@ -1009,7 +1011,7 @@ func TestListEdgeCap(t *testing.T) {
 		if !strings.Contains(logged, "Book.reviews") || !strings.Contains(logged, "more than 2") {
 			t.Errorf("the error logged does not name Book.reviews and the cap:\n%s", logged)
 		}
-	}, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 2}))
+	}, veloxgql.WithLimits(veloxgql.Limits{MaxList: 2}))
 }
 `
 
@@ -1031,6 +1033,7 @@ func TestCollectRun(t *testing.T) {
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/books.graphql":       e2eCollectBooks,
 		"graph/schema.resolvers.go": e2eCollectResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"collect_test.go":           e2eCollectRun,
 	}, true)
 	// The schema declares behaviour, so gen imports the schema to bind it;

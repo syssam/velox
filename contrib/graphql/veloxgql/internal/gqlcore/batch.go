@@ -12,11 +12,11 @@ import (
 // Table is an operation's table of groups. A group is rows one statement
 // read (a page, a node lookup, a batch) or veloxgql.Batch was given: the
 // first edge field resolved on any of its rows reads that edge for all of
-// them, in one statement, and the others take their part of it. An adapter
-// puts a new Table in each response's context (a query's or a
-// mutation's one response, each event of a subscription), so that requests
-// never share one and a subscription's events let go of their rows. It is
-// safe for concurrent use.
+// them, in one statement, and the others take their part of it. An adapter's
+// reader keeps one for each root field (gqlgen) or operation (graphql-go),
+// and one for each event of a subscription, so that requests never share
+// one and a subscription's events let go of their rows. It is safe for
+// concurrent use.
 //
 // No lock is held while a batch loads: a resolver that waits on a batch
 // waits on its sync.Once alone, inside its source's Wait, and the batch's
@@ -26,9 +26,6 @@ import (
 // response shares the request's context, so the load ends when theirs
 // would.
 type Table struct {
-	// scope is gqlgenx.WithBatchScope's function, or nil.
-	scope func(context.Context) any
-
 	mu sync.Mutex
 	// rows maps a row, a *E in an any, to its group and its place in the
 	// group's rows. The key compares the pointer and its type, so rows of
@@ -104,33 +101,9 @@ func (l *load[T]) get(ctx context.Context, read func() (T, error)) (T, error) {
 // ran it gets the panic, and the others this.
 var errPanicked = errors.New("veloxgql: the batch of this edge panicked")
 
-// tableKey is the context key of an operation's *Table.
-type tableKey struct{}
-
-// WithTable returns ctx with a new, empty Table of gqlgenx.WithBatchScope's
-// function scope, which may be nil.
-func WithTable(ctx context.Context, scope func(context.Context) any) context.Context {
-	return context.WithValue(ctx, tableKey{}, &Table{scope: scope})
-}
-
-// NewTable returns a new, empty Table with no batch scope: a registered
-// source's, for an operation or a response.
+// NewTable returns a new, empty Table: a registered source's, for an
+// operation or a root field.
 func NewTable() *Table { return new(Table) }
-
-// Scope returns the value gqlgenx.WithBatchScope's function gives ctx; nil
-// when t is nil or has no function.
-func (t *Table) Scope(ctx context.Context) any {
-	if t == nil || t.scope == nil {
-		return nil
-	}
-	return t.scope(ctx)
-}
-
-// TableFromContext returns ctx's Table, or nil.
-func TableFromContext(ctx context.Context) *Table {
-	t, _ := ctx.Value(tableKey{}).(*Table)
-	return t
-}
 
 // Add makes rows, without its nil rows, one group of ctx's table. A row
 // already in a group moves to this one. Add does nothing when ctx has no

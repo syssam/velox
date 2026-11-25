@@ -14,7 +14,6 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 )
 
@@ -255,8 +254,7 @@ func TestPaginate(t *testing.T) {
 // MaxPage rows.
 func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
-	db, _ := peopleDB(t)
-	ctx = gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
+	db, _ := peopleDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4}))
 	p, err := gqlgraph.PageWith(ctx, db.Query[person](), "Person", gqlgraph.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)
@@ -478,7 +476,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 // the connection's: the page and the count start at the first row.
 func TestPaginateClearsOffset(t *testing.T) {
 	db, _ := peopleDB(t)
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	q := db.Query[person]().Limit(1).Offset(3)
 	c, err := gqlgraph.NewConnectionOf(ctx, q, "Person", gqlgraph.Args{First: new(2)}, nil, personKey())
 	if err != nil {
@@ -499,7 +497,7 @@ func TestPaginateClearsOffset(t *testing.T) {
 // error is internal (uncoded), and nothing is queried.
 func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	uncoded := func(err error) {
 		t.Helper()
 		if coded, ok := errors.AsType[interface {
@@ -713,7 +711,7 @@ func TestOrderViaKeepsRows(t *testing.T) {
 // joined column too: each parent's page is what its own query gives.
 func TestJoinedTermInABatchedEdgeConnection(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	log.take("owners")
 	ectx := field(t, ctx, "owners", "edges", "node", "children")

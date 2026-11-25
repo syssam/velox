@@ -726,13 +726,15 @@ replacement.
   calls `db.Query[veloxgen.Todo]().Paginate(ctx, after, first, before, last,
   veloxgen.WithTodoOrder(orderBy), veloxgen.WithTodoFilter(where))`, with `db`
   the resolver's `r.DB`, as entgql's `r.client`. A mutation's resolver
-  writes on `r.DB` too: under its `ctx` a statement on that DB runs in the
-  mutation's transaction, where entgql's resolver asks
-  `ent.FromContext(ctx)`. `veloxgql.DB(ctx)` is for code outside a
-  resolver. As with entgql, the server needs no setup to page and batch
-  edges (ADR 0173); `gqlgenx.Setup` is opt-in, as `entgql.Transactioner`
-  is, and adds the mutation transaction, request limits and an error
-  presenter. A test fakes a connection with `gqlgraph.ConnectionFromRows`,
+  writes on `r.DB` too: under `srv.Use(gqlgenx.Transactioner{DB: db})`,
+  entgql's `srv.Use(entgql.Transactioner{TxOpener: client})`, a statement
+  on that DB under its `ctx` runs in the mutation's transaction, where
+  entgql's resolver asks `ent.FromContext(ctx)`. No DB is read from the
+  context. As with entgql, the server needs no setup to page and batch
+  edges (ADRs 0173, 0175). velox adds opt-in limits entgql has not, each one
+  feature: `gqlgenx.RequestLimit`, `CostLimit`, `ResponseLimit`,
+  `MaxBodyBytes`, and `gqlgenx.ErrorPresenter`; page limits are the DB's,
+  `veloxgql.WithLimits`. A test fakes a connection with `gqlgraph.ConnectionFromRows`,
   where entgql's connection struct is built by hand. The filter
   option takes the where input itself. `Paginate` is generic and calls
   the entity's generated `PaginateQuery`, so it does not compile for an

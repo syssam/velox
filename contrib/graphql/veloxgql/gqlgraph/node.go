@@ -205,12 +205,12 @@ func ResolveNode(ctx context.Context, db *velox.DB, types []*Type, id any, opts 
 // given, no lookup runs. The options are asked for every ID before any
 // statement, so a name that is no type of Node fails the call first.
 //
-// More IDs than the MaxPage of veloxgql.LimitsFromContext(ctx) is
+// More IDs than the MaxPage of veloxgql.LimitsOf(db) is
 // veloxgql.ErrPageTooLarge, BAD_USER_INPUT, before any statement. An ID
 // that more than one type has fails the whole list with ErrAmbiguousNodeID,
 // as ResolveNode fails; so does any other error.
 func ResolveNodes[K any](ctx context.Context, db *velox.DB, types []*Type, ids []K, opts ...NodeOption) ([]any, error) {
-	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
+	if most := veloxgql.LimitsOf(db).MaxPage; len(ids) > most {
 		return nil, gqlcore.InputErrorf("%w: nodes(ids:) takes at most %d IDs", veloxgql.ErrPageTooLarge, most)
 	}
 	xs := make([]any, len(ids))

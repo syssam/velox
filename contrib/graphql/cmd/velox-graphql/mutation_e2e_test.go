@@ -259,7 +259,6 @@ import (
 	"example.com/app/schema"
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
 // countless is a driver whose results report no count.
@@ -320,7 +319,8 @@ func TestUnknownRowCount(t *testing.T) {
 		}
 	}
 	db := velox.Open(velox.SQLite, raw)
-	ctx := schema.Org.With(gqlgenx.NewExtension(db).NewContext(context.Background()), int64(7))
+	appDB = db
+	ctx := schema.Org.With(context.Background(), int64(7))
 	w := &gen.Writer{Name: "w", Password: "x"}
 	insert(t, ctx, db, w)
 	a := &gen.Article{Title: "a"}
@@ -556,9 +556,8 @@ var dropDDL = []string{
 	"DROP TABLE IF EXISTS writers",
 }
 
-// env is a test's database: ctx is under org 7, with the DB put there
-// by the extension's Context, as for a job outside a server; stmts are the
-// statements sent since the last reset.
+// env is a test's database: ctx is under org 7, as for a job outside a
+// server; stmts are the statements sent since the last reset.
 type env struct {
 	target string // the target's name
 	ctx    context.Context
@@ -606,13 +605,17 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 				}
 			}
 			e.raw, e.db = raw, db
-			e.ctx = schema.Org.With(gqlgenx.NewExtension(e.db).NewContext(context.Background()), int64(7))
+			appDB = db
+			e.ctx = schema.Org.With(context.Background(), int64(7))
 			fn(t, e)
 		})
 	}
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// appDB is the DB the test made last, which the resolvers' helpers use.
+var appDB *velox.DB
 
 // The resolvers of the mutations an application declares, as one writes
 // them: a create inserts its input's setters, an update writes them with
@@ -646,18 +649,14 @@ func updateFolder(ctx context.Context, id int64, in gen.UpdateFolderInput) (*gen
 	return update(ctx, id, "Folder", gen.Folders.ID, in.Setters)
 }
 
-// create inserts x with the setters an input gives, on the DB in ctx, and
-// returns it as inserted.
+// create inserts x with the setters an input gives, on appDB, and returns it
+// as inserted.
 func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func() ([]velox.Setter[E], error)) (PE, error) {
 	set, err := setters()
 	if err != nil {
 		return nil, err
 	}
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := db.Insert(x).Set(set...).Exec(ctx); err != nil {
+	if err := appDB.Insert(x).Set(set...).Exec(ctx); err != nil {
 		return nil, err
 	}
 	return x, nil
@@ -665,7 +664,7 @@ func create[E any, PE velox.Entity[E]](ctx context.Context, x PE, setters func()
 
 // update writes the setters an input gives, and app, the resolver's own,
 // to the row of E whose key is k, the ID gqlgen decoded, of the GraphQL type
-// typ, on the DB in ctx. A setter of app wins over the input's of the same column. The
+// typ, on appDB. A setter of app wins over the input's of the same column. The
 // UPDATE is under E's policies: a row it does not change is NOT_FOUND. The
 // row is read back without the Read policy, as written (ADR 0009). With
 // nothing to set, the row is read under the Read policy.
@@ -678,10 +677,7 @@ func update[E any, PE velox.Entity[E]](ctx context.Context, k int64, typ string,
 		set = slices.DeleteFunc(set, func(s velox.Setter[E]) bool { return s.Column() == a.Column() })
 	}
 	set = append(set, app...)
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
+	db := appDB
 	read := db
 	if len(set) > 0 {
 		n, err := db.Update[E, PE]().Where(key.EQ(k)).Set(set...).Exec(ctx)
@@ -1285,7 +1281,7 @@ func TestWriteHiddenProfile(t *testing.T) {
 
 // TestAtomic: a create that fails after its first write keeps nothing:
 // outside a server, where its edge setters run it in a transaction of its
-// own, and inside the transaction the Extension gives a mutation, where they
+// own, and inside the transaction gqlgenx.Transactioner gives a mutation, where they
 // run it in a savepoint: the failed create's row is rolled back, and the
 // transaction's other writes are kept.
 func TestAtomic(t *testing.T) {
@@ -1310,14 +1306,15 @@ func TestAtomic(t *testing.T) {
 			t.Errorf("%d join rows, want 0", n)
 		}
 
-		// In a mutation's transaction: the context holds the transaction's
-		// DB, as the Extension's does. The failed create and the failed
+		// In a mutation's transaction: the root DB's statements under the
+		// transaction's context join it, as Transactioner's do. The failed
+		// create and the failed
 		// update are rolled back to their savepoints; the circle inserted
 		// before them commits.
 		w := &gen.Writer{Name: "w", Password: "x"}
 		insert(t, e.ctx, e.db, w)
 		err = e.db.Tx(e.ctx, func(ctx context.Context, tx *velox.DB) error {
-			ctx = schema.Org.With(gqlgenx.NewExtension(tx).NewContext(ctx), int64(7))
+			ctx = schema.Org.With(ctx, int64(7))
 			if err := tx.Insert(&gen.Circle{Name: "kept"}).Exec(ctx); err != nil {
 				return err
 			}
@@ -2435,32 +2432,22 @@ import (
 	"context"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Folder is the resolver for the folder field: id is the folder's key,
 // which gqlgen decoded.
 func (r *queryResolver) Folder(ctx context.Context, id int64) (*gen.Folder, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return db.Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)
+	return r.DB.Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)
 }
 
 // UpdateFolder is the resolver for the updateFolder field: it writes the
 // input's setters to the folder whose key is id, and reads it back as
 // written.
 func (r *mutationResolver) UpdateFolder(ctx context.Context, id int64, input gen.UpdateFolderInput) (*gen.Folder, error) {
-	db, err := veloxgql.DBFromContext(ctx)
-	if err != nil {
+	if _, err := r.DB.Update[gen.Folder]().Where(gen.Folders.ID.EQ(id)).SetInput(input).Exec(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := db.Update[gen.Folder]().Where(gen.Folders.ID.EQ(id)).SetInput(input).Exec(ctx); err != nil {
-		return nil, err
-	}
-	return db.WithoutPolicy("the folder as written").Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)
+	return r.DB.WithoutPolicy("the folder as written").Query[gen.Folder]().Where(gen.Folders.ID.EQ(id)).One(ctx)
 }
 
 // Mutation returns MutationResolver implementation.
@@ -2514,8 +2501,7 @@ func TestFolderServed(t *testing.T) {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(gqlgenx.NewExtension(velox.Open(velox.SQLite, db)))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{DB: velox.Open(velox.SQLite, db)}}))
 	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(_ context.Context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	do := func(query string) string {
@@ -2582,6 +2568,7 @@ func TestMutationSchemaServes(t *testing.T) {
 		"gqlgen.yml":                e2eCollectGqlgen,
 		"graph/app.graphql":         e2eMutServeSDL,
 		"graph/schema.resolvers.go": e2eMutServeResolvers,
+		"graph/resolver.go":         e2eResolver,
 		"serve_test.go":             e2eMutServeRun,
 	}, true)
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {

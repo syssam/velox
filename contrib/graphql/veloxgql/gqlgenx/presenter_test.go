@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -90,8 +91,7 @@ func (w *leaky) predicate(ctx context.Context) (velox.Predicate, error) {
 // input is coded BAD_USER_INPUT, and errors.Is still finds its sentinel.
 func TestErrorsAreCoded(t *testing.T) {
 	db, _ := handlerDB(t)
-	// A context an adapter made: gqlgraph fails closed without one.
-	ctx := gqlgenx.NewExtension(db).NewContext(context.Background())
+	ctx := context.Background()
 	key := &gqlgraph.Type{Name: "Person", Key: []gqlgraph.Column{{Name: "id", Index: int(people.ID.I)}}}
 	conn := func(args gqlgraph.Args) error {
 		_, err := gqlgraph.Paginate(ctx, gqlgraph.Query(untyped.Query(db, untyped.TableOf[person]())), key, args)
@@ -152,11 +152,8 @@ func TestErrorsAreCoded(t *testing.T) {
 	if got := gqlgraph.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadCursor).Error(); got != "veloxgql: X must be Y: malformed cursor" {
 		t.Errorf("InputErrorf's text is %q", got)
 	}
-	if err := veloxgql.ErrNoDB; codeOf(err) != "" {
-		t.Errorf("ErrNoDB has the code %q", codeOf(err))
-	}
-	if _, err := veloxgql.DBFromContext(ctx); codeOf(err) != "" {
-		t.Errorf("DBFromContext's error has the code %q", codeOf(err))
+	if err := velox.ErrNoSource; codeOf(err) != "" {
+		t.Errorf("ErrNoSource has the code %q", codeOf(err))
 	}
 }
 
@@ -238,7 +235,7 @@ func TestErrorPresenter(t *testing.T) {
 		{"constraint with a SQLSTATE", &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Constraint: "users_email_key", Err: pgErr}, "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},
 		{"driver", driverErr, "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"driver with a SQLSTATE", pgErr, "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
-		{"no DB", fmt.Errorf("veloxgql: %w", veloxgql.ErrNoDB), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
+		{"no source", fmt.Errorf("veloxgql: %w", velox.ErrNoSource), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"too many rows", fmt.Errorf("veloxgql: Post.likes: %w", velox.ErrTooManyRows), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"gqlerror over a driver error", &gqlerror.Error{Message: driverErr.Error(), Path: path, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
 		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "ID must be a string of an integer, or an integer", `["posts",0,"author"]`, false},
@@ -354,12 +351,12 @@ func TestEdgeErrorPresented(t *testing.T) {
 	}
 }
 
-// TestTooCostlyPresented: the extension's cost error reaches the client with
-// its code COST_LIMIT_EXCEEDED and its text, wraps ErrTooCostly, and is not
-// logged.
+// TestTooCostlyPresented: CostLimit's error reaches the client with its code
+// COST_LIMIT_EXCEEDED and its text, wraps ErrTooCostly, and is not logged.
 func TestTooCostlyPresented(t *testing.T) {
 	l := &logged{}
-	ext := gqlgenx.NewExtension(&velox.DB{}, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	db, _ := handlerDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	ext := gqlgenx.CostLimit(db)
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
 type PageInfo { hasNextPage: Boolean! }
 type User { id: ID! }
@@ -374,7 +371,11 @@ type Query { users(first: Int): UserConnection! }
 	if len(errs) > 0 {
 		t.Fatal(errs)
 	}
-	gerr := ext.MutateOperationContext(context.Background(), &graphql.OperationContext{Operation: doc.Operations[0], Doc: doc})
+	mutator, ok := ext.(graphql.OperationContextMutator)
+	if !ok {
+		t.Fatal("CostLimit is no OperationContextMutator")
+	}
+	gerr := mutator.MutateOperationContext(context.Background(), &graphql.OperationContext{Operation: doc.Operations[0], Doc: doc})
 	if gerr == nil {
 		t.Fatal("no error for cost 202 over MaxCost 2")
 	}
@@ -390,7 +391,7 @@ type Query { users(first: Int): UserConnection! }
 	}
 }
 
-// TestCommitErrorIsInternal: the commit's error the extension adds goes
+// TestCommitErrorIsInternal: the commit's error Transactioner adds goes
 // through the server's presenter, which shows "internal error". The test's
 // commit fails because the request is canceled, which is not logged.
 func TestCommitErrorIsInternal(t *testing.T) {
@@ -629,6 +630,71 @@ func TestErrorPresenterSlog(t *testing.T) {
 		}
 		if _, ok := c.want["operation"]; !ok && rec["operation"] != nil {
 			t.Errorf("%s: logged operation=%v, want none", c.name, rec["operation"])
+		}
+	}
+}
+
+// TestIntrospectionOff: with no extension.Introspection, gqlgen answers
+// __schema and __type with null and an error, which ErrorPresenter presents as
+// GRAPHQL_VALIDATION_FAILED "introspection is disabled", not logged,
+// however the field is spelled. With the extension the fields run.
+func TestIntrospectionOff(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := serve(handlerResolvers(db, nil))
+	srv.SetErrorPresenter(gqlgenx.ErrorPresenter(func(ctx context.Context, err error) { t.Errorf("logged %v", err) }))
+	for _, c := range []struct{ query, want string }{
+		{`{ __schema { queryType { name } } }`,
+			`{"errors":[{"message":"introspection is disabled","path":["__schema"],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":{"__schema":null}}`},
+		{`{ __type(name: "Query") { name } }`,
+			`{"errors":[{"message":"introspection is disabled","path":["__type"],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":{"__type":null}}`},
+		{`{ ...F } fragment F on Query { ...G } fragment G on Query { __schema { queryType { name } } }`,
+			`{"errors":[{"message":"introspection is disabled","path":["__schema"],"extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":{"__schema":null}}`},
+	} {
+		if got := post(t, context.Background(), srv, c.query); got != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.query, got, c.want)
+		}
+	}
+	l.take()
+	if got := post(t, context.Background(), srv, `{ __typename count }`); strings.Contains(got, "introspection") {
+		t.Errorf("__typename: %s", got)
+	}
+	on := serve(handlerResolvers(db, nil), extension.Introspection{})
+	on.SetErrorPresenter(gqlgenx.ErrorPresenter(func(context.Context, error) {}))
+	if got := post(t, context.Background(), on, `{ count }`); !strings.Contains(got, `"count"`) {
+		t.Errorf("with it on: %s", got)
+	}
+}
+
+// TestIntrospectionOffIsOnlyGqlgens: ErrorPresenter makes "introspection is
+// disabled" only of gqlgen's own error for __schema or __type of an
+// operation with introspection off. The same text from a resolver, at
+// another path, or of an operation with it on, stays an internal error.
+func TestIntrospectionOffIsOnlyGqlgens(t *testing.T) {
+	off := graphql.WithOperationContext(context.Background(), &graphql.OperationContext{DisableIntrospection: true})
+	on := graphql.WithOperationContext(context.Background(), &graphql.OperationContext{})
+	disabled := errors.New("introspection disabled")
+	schema := ast.Path{ast.PathName("__schema")}
+	for _, c := range []struct {
+		name string
+		ctx  context.Context
+		err  error
+		want string
+	}{
+		{"gqlgen's", off, &gqlerror.Error{Err: disabled, Path: schema}, "introspection is disabled"},
+		{"__type", off, &gqlerror.Error{Err: disabled, Path: ast.Path{ast.PathName("__type")}}, "introspection is disabled"},
+		{"no operation context", context.Background(), &gqlerror.Error{Err: disabled, Path: schema}, "internal error"},
+		{"introspection on", on, &gqlerror.Error{Err: disabled, Path: schema}, "internal error"},
+		{"another field", off, &gqlerror.Error{Err: disabled, Path: ast.Path{ast.PathName("users")}}, "internal error"},
+		{"no path", off, &gqlerror.Error{Err: disabled}, "internal error"},
+		{"another text", off, &gqlerror.Error{Err: errors.New("boom"), Path: schema}, "internal error"},
+		{"not a gqlerror", off, disabled, "internal error"},
+	} {
+		l := &logged{}
+		if got := gqlgenx.ErrorPresenter(l.log)(c.ctx, c.err); got.Message != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got.Message, c.want)
+		}
+		if wasLogged := len(l.take()) > 0; wasLogged != (c.want == "internal error") {
+			t.Errorf("%s: logged %v", c.name, wasLogged)
 		}
 	}
 }

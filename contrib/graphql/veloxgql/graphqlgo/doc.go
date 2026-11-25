@@ -1,6 +1,7 @@
 // Package graphqlgo serves the GraphQL code velox-graphql generates through
-// github.com/syssam/graphql-go. Every function returns a graphql-go option
-// or presenter, to compose with graphql-go's own. The runtime generated code
+// github.com/syssam/graphql-go: the reader of graphql-go's context that
+// generated code needs, the scalars and an error presenter, to compose with
+// graphql-go's own options. The runtime generated code
 // calls is in package veloxgql and its package gqlgraph, which import no
 // engine; this package is graphql-go's adapter to them, as package gqlgenx
 // is gqlgen's. It imports no gqlgen.
@@ -18,10 +19,21 @@
 // The package registers graphql-go's selection source when it is linked,
 // as Scalars links it: it reads each field from graphql-go's
 // context, with a table of rows per operation and per event of a
-// subscription, and veloxgql.DefaultLimits(). With is opt-in: it puts the
-// DB in each operation's context, for veloxgql.DB, and pins a mutation's
-// reads to the primary of a routed DB. A mutation runs in no transaction:
-// a resolver that needs one opens it (db.Tx, velox.UseTx).
+// subscription, under the DB's limits (veloxgql.WithLimits). A mutation runs
+// in no transaction: a resolver that needs one opens it (db.Tx,
+// velox.UseTx).
+//
+// On a DB with replicas, a mutation's reads after its own writes may go to a
+// replica. graphql-go's operation interceptor runs a mutation in a velox
+// session, so they go to the primary (decision 0175):
+//
+//	graphql.WithOperationInterceptor(graphql.OperationInterceptorFunc(
+//		func(ctx context.Context, oc *graphql.OperationContext, next graphql.OperationHandler) *graphql.Response {
+//			if oc.Operation != nil && oc.Operation.Operation == ast.Mutation {
+//				ctx = velox.WithSession(ctx)
+//			}
+//			return next(ctx, oc)
+//		}))
 //
 // # Selections
 //
@@ -43,12 +55,10 @@
 // (graphql.WithMaxDepth, graphql.WithMaxComplexity, graphql.WithQueryCost,
 // graphql.WithMaxResponseBytes, graphql.WithOperationTimeout and the rest),
 // as ent and gqlgen leave them to the server. velox keeps only the bounds
-// its own rules need, fixed at veloxgql.DefaultLimits(): a connection's page
-// is at most MaxPage (100) rows, a list edge reads at most MaxList (1000),
-// and an orderBy or a where filter is held to MaxOrderTerms and the filter
-// limits. They are a backstop against unbounded reads, not configuration:
-// an application that wants a smaller page refuses a larger first or last
-// in an interceptor of its own.
+// its own rules need, the DB's (veloxgql.WithLimits, veloxgql.DefaultLimits()
+// unless given): a connection's page is at most MaxPage (100) rows, a list
+// edge reads at most MaxList (1000), and an orderBy or a where filter is held
+// to MaxOrderTerms and the filter limits.
 //
 // # Errors
 //

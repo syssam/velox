@@ -16,7 +16,6 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 )
 
@@ -83,16 +82,15 @@ func wsAck(c net.Conn) (string, bool) {
 	return string(p), true
 }
 
-// TestWebsocketMessageBounded: under Setup a websocket's message is held to MaxBodyBytes,
+// TestWebsocketMessageBounded: under MaxBodyBytes a websocket's message is held to MaxBodyBytes,
 // however it is split, before gqlgen reads it: 64 MB of connection_init took 512 MB, and
 // at v0.17.86 gqlgen's transport has no limit to set. Control frames, the payload's bytes
 // passing a read's end and a message under it pass; only what a client sends counts, as
 // the upgrade drops its compression.
 func TestWebsocketMessageBounded(t *testing.T) {
-	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
 	const most = 4096
-	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	h := gqlgenx.MaxBodyBytes(most)(srv)
 	srv.AddTransport(transport.Websocket{})
 	ts := httptest.NewServer(h)
 	defer ts.Close()
@@ -168,12 +166,11 @@ func TestWebsocketMessageBounded(t *testing.T) {
 	}
 }
 
-// TestSetupKeepsOtherTransports: the websocket's writer is only the upgrade's: a POST goes on
+// TestMaxBodyBytesKeepsOtherTransports: the websocket's writer is only the upgrade's: a POST goes on
 // as before.
-func TestSetupKeepsOtherTransports(t *testing.T) {
-	db, _ := handlerDB(t)
+func TestMaxBodyBytesKeepsOtherTransports(t *testing.T) {
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"slow": func(_ context.Context, _ map[string]any) (any, error) { return 1, nil }}))
-	h := gqlgenx.Setup(srv, db)
+	h := gqlgenx.MaxBodyBytes(1 << 20)(srv)
 	srv.AddTransport(transport.POST{})
 	if got := post(t, t.Context(), h, `{ slow }`); got != `{"data":{"slow":1}}` {
 		t.Errorf("a POST: %s", got)
@@ -201,10 +198,9 @@ func TestSetupKeepsOtherTransports(t *testing.T) {
 // coder/websocket, sends its 101 before it hijacks the connection, so a client that
 // answers it at once has its first frame read with the request.
 func TestWebsocketFramesWithTheUpgrade(t *testing.T) {
-	db, _ := handlerDB(t)
 	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"text": nil}))
 	const most = 4096
-	h := gqlgenx.Setup(srv, db, gqlgenx.WithLimits(veloxgql.Limits{MaxBodyBytes: most}))
+	h := gqlgenx.MaxBodyBytes(most)(srv)
 	srv.AddTransport(transport.Websocket{})
 	ts := httptest.NewServer(h)
 	defer ts.Close()

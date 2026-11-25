@@ -3,24 +3,20 @@ package gqlgraph_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	"github.com/syssam/velox/untyped"
 )
 
 // TestNoSetup (decision 0173): in a context nothing was put in, outside any
 // GraphQL field, a connection of a query reads on the query's DB, every
-// column, in one statement, as under veloxgql.Service; the edges (a
-// connection of an edge, a to-one edge and a list edge) of a row built by
-// hand, which has no DB of its own, fail with velox.ErrNoSource and ErrNoDB
-// and send no statement. A context an adapter made reads, and so does one
-// veloxgql.Service made. (An edge of a row a statement read reads on its
-// DB: TestEdgeReadsOnItsRowsDB.)
+// column, in one statement; the edges (a connection of an edge, a to-one
+// edge and a list edge) of a row built by hand, which has no DB of its own,
+// fail with velox.ErrNoSource and send no statement. (An edge of a row a
+// statement read reads on its DB: TestEdgeReadsOnItsRowsDB.)
 func TestNoSetup(t *testing.T) {
 	db, _, log := edgeDB(t)
 	bare := context.Background()
@@ -52,8 +48,6 @@ func TestNoSetup(t *testing.T) {
 			return err
 		},
 	}
-	adapted := gqlgenx.NewExtension(db).NewContext(bare)
-	service := veloxgql.Service(bare, db)
 	for name, read := range reads {
 		log.take("")
 		err := read(bare)
@@ -62,16 +56,10 @@ func TestNoSetup(t *testing.T) {
 			if sent := log.sent(); err != nil || len(sent) != 1 || sent[0] != want {
 				t.Errorf("%s with no setup: %v, sent %q; want one statement, %s", name, err, sent, want)
 			}
-		} else if !errors.Is(err, velox.ErrNoSource) || !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "veloxgql.Service, gqlgenx.NewExtension or graphqlgo.With") {
-			t.Errorf("%s of a row built by hand: %v, want ErrNoSource and ErrNoDB, naming Service and both adapters", name, err)
+		} else if !errors.Is(err, velox.ErrNoSource) {
+			t.Errorf("%s of a row built by hand: %v, want ErrNoSource", name, err)
 		} else if sent := log.sent(); len(sent) != 0 {
 			t.Errorf("%s of a row built by hand sent %q", name, sent)
-		}
-		if err := read(adapted); err != nil {
-			t.Errorf("%s in an adapter's context: %v", name, err)
-		}
-		if err := read(service); err != nil {
-			t.Errorf("%s in veloxgql.Service's context: %v", name, err)
 		}
 	}
 }
@@ -104,14 +92,10 @@ func TestNilConnection(t *testing.T) {
 }
 
 // TestEdgeReadsOnItsRowsDB: an edge of a row a statement read reads on the
-// DB that read it: with no adapter, one statement for the row, every
-// column; in an adapter's context whose DB is another, still on the row's.
+// DB that read it, never on another DB, a context's or a connection's: with
+// no field, one statement for the row, every column.
 func TestEdgeReadsOnItsRowsDB(t *testing.T) {
 	db, _, log := edgeDB(t)
-	other, _, _ := edgeDB(t)
-	if _, err := other.Exec(context.Background(), "test", "DELETE FROM children"); err != nil {
-		t.Fatal(err)
-	}
 	bare := context.Background()
 	o, err := db.Query[owner]().Where(owners.ID.EQ(1)).First(bare)
 	if err != nil {
@@ -124,7 +108,7 @@ func TestEdgeReadsOnItsRowsDB(t *testing.T) {
 	childType := gqlgraph.TableType[child]("Child")
 	keyed, _ := gqlgraph.TypeOf("Child", nil, childKey())
 	childType.Key = keyed.Key
-	for name, ctx := range map[string]context.Context{"no adapter": bare, "another DB's adapter": gqlgenx.NewExtension(other).NewContext(bare)} {
+	for name, ctx := range map[string]context.Context{"no field": bare, "a gqlgen field": field(t, operation(t, childrenQuery), "owners")} {
 		log.take("")
 		tags, err := gqlgraph.EdgeListOf(ctx, o, owners.Tags, "Owner.tags", 0)
 		if err != nil || len(tags) != 2 {

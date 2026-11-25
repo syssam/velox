@@ -186,7 +186,7 @@ func countNodes(tb testing.TB, resp []byte) int {
 }
 
 // benchServers are the two servers the nested request is measured on: the
-// example's, behind gqlgenx.Setup, and minimalServer, with no setup
+// example's, hardened, and minimalServer, with no extension
 // (decision 0173), which must send the same statements.
 var benchServers = []struct {
 	name  string
@@ -273,8 +273,9 @@ const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {ran
 // mutationStmts is the number of statements budgetMutation sends, as
 // velox.WithAround counts them, which does not see SAVEPOINT or RELEASE.
 // mutationAllocsBudget is the most allocations it may make under gqlgen
-// v0.17.86, through testing.AllocsPerRun: the measured figure plus 10%,
-// rounded up to a multiple of 10.
+// v0.17.86, through testing.AllocsPerRun: until 2026-11-25 the measured
+// figure plus 10%, rounded up to a multiple of 10; since, the highest
+// measured figure.
 // Measured on 2026-10-28 on darwin/arm64 (Apple M3 Max), go test -run
 // TestMutationBudget -v, three runs each: before the savepoint per mutation
 // (G45), at 5392eb6, 2 statements (the UPDATE and the read of the result),
@@ -293,10 +294,17 @@ const budgetMutation = `mutation { updateLabel(id: "` + label1 + `", input: {ran
 // savepoint statements and 484 allocations. On 2026-11-20 One by key sent
 // no key read (ADR 0092): 2 statements, 0 savepoint statements and 446
 // allocations in each of three runs; the budget is 446 plus 10%, 491,
-// rounded up to 500.
+// rounded up to 500. On 2026-11-25 the server became the application's own
+// composition of gqlgenx's pieces (Transactioner, RequestLimit, CostLimit,
+// ResponseLimit, QuietValidation), whose field hooks wrap the operation's
+// middleware instead of adding a closure per field, and whose validation
+// runs as one rule: 2 statements, 0 savepoint statements and 444
+// allocations in each of three runs, and 450, 451 and 452 under -race, as
+// CI runs it. The budget is the highest measurement plus 1%, rounded up to
+// 456: -race varies by a few allocations from run to run.
 const (
 	mutationStmts        = 2
-	mutationAllocsBudget = 500
+	mutationAllocsBudget = 456
 )
 
 // TestMutationBudget pins what one mutation costs: the statements it sends,

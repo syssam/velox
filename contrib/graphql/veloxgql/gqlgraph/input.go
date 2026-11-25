@@ -15,7 +15,7 @@ import (
 )
 
 // MaxIDs is the most IDs one list field of an input may give: IDs refuses
-// more. gqlgenx.Extension's document limits bound a request's lists only
+// more. gqlgenx.RequestLimit's document limits bound a request's lists only
 // loosely (Limits.MaxVariableNodes is 100000), and an input's Setters has no
 // context to read the Limits from, so the bound is fixed here.
 const MaxIDs = 1000

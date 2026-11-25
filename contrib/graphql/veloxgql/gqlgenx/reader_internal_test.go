@@ -20,7 +20,7 @@ func rootCount() int {
 // TestReaderRoots: the reader gives every field under one root the root's
 // table, another root another table, nothing outside a gqlgen field, and
 // drops a root's state once the root is unreachable, so a server with no
-// Extension keeps no rows after its responses.
+// setup keeps no rows after its responses.
 func TestReaderRoots(t *testing.T) {
 	base := rootCount()
 	oc := &graphql.OperationContext{Doc: &ast.QueryDocument{}}

@@ -1,19 +1,21 @@
 package veloxgql
 
 import (
-	"context"
+	"fmt"
+	"reflect"
 	"time"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	"github.com/syssam/velox"
 )
 
-// Limits caps what a client may ask for. Each bounds one argument or one
-// edge. A zero field means the default.
+// Limits caps what a client may ask for. A zero field means the default.
 //
-// The limits of an operation are its adapter's, which it puts in the
-// operation's context, where LimitsFromContext reads them: gqlgenx's those
-// gqlgenx.WithLimits gives, so two servers in one process can have
-// different limits, and graphqlgo's always DefaultLimits().
+// The limits are the DB's, which WithLimits gives and LimitsOf reads: a
+// connection reads those of its query's DB, and an edge those of the DB that
+// read its row (decision 0175). Generated code holds to MaxPage, MaxList,
+// MaxOrderTerms and the filter limits. The others bound a whole request, and
+// only gqlgenx's opt-in extensions read them: gqlgenx.CostLimit,
+// gqlgenx.RequestLimit and gqlgenx.ResponseLimit.
 type Limits struct {
 	// MaxPage is the largest first or last a connection takes, and the page
 	// size when neither is given. More is ErrPageTooLarge, not a shorter
@@ -77,7 +79,7 @@ type Limits struct {
 
 	// MaxTokens is the most lexer tokens a request's query may have. More is the
 	// parser's error, GRAPHQL_PARSE_FAILED, before any of it is validated.
-	// gqlgenx.Extension enforces it, and gqlgenx.Setup gives it to gqlgen too.
+	// gqlgenx.RequestLimit enforces it.
 	MaxTokens int
 
 	// MaxFields is the most fields a request's query may hold, as written, a
@@ -116,17 +118,16 @@ type Limits struct {
 	// reads any of them.
 	MaxVariableNodes int
 
-	// MaxErrors is the most errors a response may hold, and one that says there are
-	// more. Each pair of fields that differ and each unknown name makes one of
-	// validation's, held to this on a server gqlgenx.Setup made; a list of a field that a
+	// MaxErrors is the most errors a response may hold: a list of a field that a
 	// directive refuses makes one for each row, and over the limit the request stops
-	// (ErrTooManyErrors) with data null, under gqlgenx.Extension and gqlgenx.ErrorPresenter.
+	// (ErrTooManyErrors) with data null, under gqlgenx.ResponseLimit.
 	MaxErrors int
 
-	// MaxBodyBytes is the most bytes the body of a request may have, its
-	// variables and any upload included. More is refused with 413, by the handler
-	// gqlgenx.Setup returns, as nothing else bounds it. The same handler holds a websocket's
-	// messages to it, and closes the connection of one over.
+	// MaxBodyBytes is the most bytes a request's query may have, and the most
+	// its variables may hold. More is ErrRequestTooLarge, under
+	// gqlgenx.RequestLimit, before gqlgen reads them. The body of an HTTP
+	// request, uploads included, and a websocket's messages are bounded by
+	// gqlgenx.MaxBodyBytes, which takes its own limit.
 	MaxBodyBytes int
 
 	// MaxResponseBytes is the most bytes the strings, the bytes and the JSON of a
@@ -157,16 +158,46 @@ func DefaultLimits() Limits {
 	}
 }
 
-// LimitsFromContext returns the limits an adapter put in ctx, or
-// DefaultLimits() when there are none. Under graphqlgo they are always
-// DefaultLimits(), and velox enforces only the ones generated code reads
-// (MaxPage, MaxList, MaxOrderTerms and the filter limits): the fields that
-// limit a whole request (MaxCost, MaxIntrospectionCost and MaxTokens
-// through Timeout) are graphql-go's own options to set, and velox does not
-// enforce them.
-func LimitsFromContext(ctx context.Context) Limits {
-	if l, ok := gqlcore.LimitsOf(ctx).(*Limits); ok && l != nil {
-		return *l
+// limitsKey is the velox.WithValue key of a DB's *Limits.
+type limitsKey struct{}
+
+// WithLimits is the velox.Option that gives a DB the limits l, each zero
+// field of l taken from DefaultLimits(), which LimitsOf reads:
+//
+//	db, err := velox.Connect("sqlite", dsn, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 500}))
+//
+// Every DB derived from it has them, its transactions' and the DB a row was
+// read through. Given twice, the later wins. It panics on a negative limit,
+// naming it.
+func WithLimits(l Limits) velox.Option {
+	l = orDefault(l)
+	return velox.WithValue(limitsKey{}, &l)
+}
+
+// LimitsOf returns the limits WithLimits gave db, or DefaultLimits() when it
+// gave none or db is nil.
+func LimitsOf(db *velox.DB) Limits {
+	if db != nil {
+		if l, ok := velox.Value(db, limitsKey{}).(*Limits); ok {
+			return *l
+		}
 	}
 	return DefaultLimits()
+}
+
+// orDefault is l with each zero field taken from DefaultLimits(). It panics
+// on a negative field, naming it.
+func orDefault(l Limits) Limits {
+	v := reflect.ValueOf(&l).Elem()
+	d := reflect.ValueOf(DefaultLimits())
+	for i := range v.NumField() {
+		f := v.Field(i)
+		if f.Int() < 0 {
+			panic(fmt.Sprintf("veloxgql.WithLimits: Limits.%s is %v, and a limit must not be negative (zero is the default)", v.Type().Field(i).Name, f.Interface()))
+		}
+		if f.IsZero() {
+			f.Set(d.Field(i))
+		}
+	}
+	return l
 }

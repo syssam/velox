@@ -2,6 +2,7 @@ package veloxgql_test
 
 import (
 	"context"
+	"database/sql"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -14,16 +15,18 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
+	"github.com/syssam/velox/untyped"
 )
 
 // TestVariablesWeighWhatTheyTake: 13000 points of a GeoJSON, 39001 plain values, pass; the
 // objects of an input type weigh more, and as many of them do not.
 func TestVariablesWeighWhatTheyTake(t *testing.T) {
-	e := gqlgenx.NewExtension(&velox.DB{})
+	e := gqlgenx.RequestLimit(nil).(graphql.OperationParameterMutator)
 	points := make([]any, 13000)
 	for i := range points {
 		points[i] = []any{114.17, 22.32}
@@ -38,8 +41,8 @@ func TestDefaultLimits(t *testing.T) {
 	if got := veloxgql.DefaultLimits(); got != want {
 		t.Errorf("DefaultLimits() = %+v, want %+v", got, want)
 	}
-	if got := veloxgql.LimitsFromContext(context.Background()); got != want {
-		t.Errorf("LimitsFromContext(context.Background()) = %+v, want %+v", got, want)
+	if got := veloxgql.LimitsOf(nil); got != want {
+		t.Errorf("LimitsOf(nil) = %+v, want %+v", got, want)
 	}
 	// DefaultLimits is a function: changing what it returned changes no one
 	// else's.
@@ -50,46 +53,127 @@ func TestDefaultLimits(t *testing.T) {
 	}
 }
 
+// openDB opens an in-memory SQLite DB with opts and one table, items.
+func openDB(t *testing.T, opts ...velox.Option) *velox.DB {
+	t.Helper()
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
+	if _, err := sqlDB.Exec(`CREATE TABLE items (id INTEGER PRIMARY KEY); INSERT INTO items (id) VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+	return velox.Open(velox.SQLite, sqlDB, opts...)
+}
+
+// item is a hand-written entity, as velox-gen would write it.
+type item struct {
+	ID     int64
+	source velox.Source
+}
+
+var itemMeta velox.MetaOnce[item]
+
+func (*item) VeloxMeta() *velox.Meta[item] { return itemMeta.Load(itemDescriptor) }
+
+func itemDescriptor() velox.Descriptor[item] {
+	return velox.Descriptor[item]{
+		Table:      "items",
+		Columns:    []velox.ColumnDescriptor{{Field: "ID", Name: "id"}},
+		PrimaryKey: []int{0},
+		SourcePtr:  func(x *item) *velox.Source { return &x.source },
+		FieldPtr: func(x *item, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return nil
+		},
+	}
+}
+
 // TestMaxCostDefault: MaxCost is 150000 by default, and a zero MaxCost takes
-// it; a negative one is refused by Validate, naming the field.
+// it.
 func TestMaxCostDefault(t *testing.T) {
 	if got := veloxgql.DefaultLimits().MaxCost; got != 150000 {
 		t.Errorf("DefaultLimits().MaxCost = %d, want 150000", got)
 	}
-	db := &velox.DB{}
-	if got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())).MaxCost; got != 150000 {
+	if got := veloxgql.LimitsOf(openDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2}))).MaxCost; got != 150000 {
 		t.Errorf("a zero MaxCost became %d, want 150000", got)
 	}
-	if got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: 5})).NewContext(context.Background())).MaxCost; got != 5 {
+	if got := veloxgql.LimitsOf(openDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 5}))).MaxCost; got != 5 {
 		t.Errorf("MaxCost 5 became %d", got)
 	}
-	const want = "gqlgenx.NewExtension: Limits.MaxCost is -1, and a limit must not be negative (zero is the default)"
-	if err := gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxCost: -1})).Validate(nil); err == nil || err.Error() != want {
-		t.Errorf("Validate: %v, want %q", err, want)
+}
+
+// TestWithLimitsPanicsOnNegative: a negative limit panics, naming the
+// field; zero is the default.
+func TestWithLimitsPanicsOnNegative(t *testing.T) {
+	const tail = ", and a limit must not be negative (zero is the default)"
+	for _, c := range []struct {
+		l    veloxgql.Limits
+		want string
+	}{
+		{veloxgql.Limits{MaxCost: -1}, "veloxgql.WithLimits: Limits.MaxCost is -1" + tail},
+		{veloxgql.Limits{MaxPage: -3}, "veloxgql.WithLimits: Limits.MaxPage is -3" + tail},
+		{veloxgql.Limits{Timeout: -time.Second}, "veloxgql.WithLimits: Limits.Timeout is -1s" + tail},
+	} {
+		func() {
+			defer func() {
+				if got := recover(); got != c.want {
+					t.Errorf("WithLimits(%+v) panicked with %v, want %q", c.l, got, c.want)
+				}
+			}()
+			veloxgql.WithLimits(c.l)
+		}()
 	}
 }
 
 // TestWithLimitsZeroIsDefault: a zero field of WithLimits' Limits is the
 // default, and the last WithLimits wins.
 func TestWithLimitsZeroIsDefault(t *testing.T) {
-	db := &velox.DB{}
-	ctx := context.Background()
-	got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db, gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(ctx))
-	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 5000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 100000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}); got != want {
+	got := veloxgql.LimitsOf(openDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})))
+	want := veloxgql.DefaultLimits()
+	want.MaxPage = 2
+	if got != want {
 		t.Errorf("WithLimits(Limits{MaxPage: 2}): %+v, want %+v", got, want)
 	}
-	if got := veloxgql.LimitsFromContext(gqlgenx.NewExtension(db).NewContext(ctx)); got != veloxgql.DefaultLimits() {
+	if got := veloxgql.LimitsOf(openDB(t)); got != veloxgql.DefaultLimits() {
 		t.Errorf("no WithLimits: %+v, want the defaults", got)
 	}
-	got = veloxgql.LimitsFromContext(gqlgenx.NewExtension(db,
-		gqlgenx.WithLimits(veloxgql.Limits{MaxPage: 2, MaxList: 3}),
-		gqlgenx.WithLimits(veloxgql.Limits{MaxOrderTerms: 4, MaxCost: 150000}),
-	).NewContext(ctx))
-	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 5000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 100000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}); got != want {
+	got = veloxgql.LimitsOf(openDB(t,
+		veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2, MaxList: 3}),
+		veloxgql.WithLimits(veloxgql.Limits{MaxOrderTerms: 4, MaxCost: 150000}),
+	))
+	want = veloxgql.DefaultLimits()
+	want.MaxOrderTerms = 4
+	if got != want {
 		t.Errorf("WithLimits twice: %+v, want the last's, %+v", got, want)
 	}
-	if d, err := veloxgql.DBFromContext(gqlgenx.NewExtension(db).NewContext(ctx)); d != db || err != nil {
-		t.Errorf("DBFromContext(Context) = %p, %v, want %p", d, err, db)
+}
+
+// TestLimitsReachDerivedDBs: the limits of a DB are those of the DB of a
+// transaction begun on it, and of the DB a row was read through.
+func TestLimitsReachDerivedDBs(t *testing.T) {
+	ctx := context.Background()
+	db := openDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 7}))
+	err := db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
+		if got := veloxgql.LimitsOf(tx).MaxPage; got != 7 {
+			t.Errorf("a transaction's MaxPage = %d, want 7", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := db.Query[item]().AllowUnbounded().First(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := untyped.SourceDB(untyped.TableOf[item](), row)
+	if got := veloxgql.LimitsOf(src).MaxPage; got != 7 {
+		t.Errorf("a row's source DB has MaxPage %d, want 7", got)
 	}
 }
 

@@ -31,8 +31,8 @@ import (
 // So is the SQL that each caller's context would read the target with, after
 // the Read policy, the interceptors and the Rewrite hooks: callers whose
 // viewer or role those read differently never share a read, whatever context
-// values they read. Only an Around hook that reads a context value of its own
-// needs WithBatchScope.
+// values they read. An Around hook that reads a context value of its own
+// sees the first caller's for every row.
 func Batch[E any](ctx context.Context, rows []*E) {
 	xs := make([]any, len(rows))
 	for i, r := range rows {

@@ -7,34 +7,32 @@ import "errors"
 // a bare phrase; test for them with errors.Is. None of them echoes what the
 // client sent: the message names only what the server wanted.
 //
-// Each but ErrNoDB, ErrNoSelectionSource, ErrTooCostly, ErrResponseTooLarge,
-// ErrTooManyErrors and ErrTimeout is an error in the client's input, and is
-// returned in an error with the code CodeBadUserInput, which an adapter's
-// error presenter shows the client. ErrTooCostly, ErrResponseTooLarge and
-// ErrTooManyErrors have the code CodeTooCostly, and ErrTimeout CodeTimeout.
-// ErrNoDB is a programming error, which has no code: the presenter logs it
-// and shows "internal error".
+// Each but ErrTooCostly, ErrResponseTooLarge, ErrTooManyErrors and
+// ErrTimeout is an error in the client's input, and is returned in an error
+// with the code CodeBadUserInput, which an adapter's error presenter shows
+// the client. ErrTooCostly, ErrResponseTooLarge and ErrTooManyErrors have
+// the code CodeTooCostly, and ErrTimeout CodeTimeout.
 var (
 	// ErrBadCursor: a cursor that does not decode, or one taken on another
 	// type or under another order than the query's, or whose values are not
 	// of the order's types.
 	ErrBadCursor = errors.New("malformed cursor")
 	// ErrPageTooLarge: first or last over the MaxPage of
-	// LimitsFromContext(ctx).
+	// the limits (LimitsOf).
 	ErrPageTooLarge = errors.New("page is over the maximum")
 	// ErrBadPagination: first or last below 0, both given, another
 	// combination gqlgraph.Args refuses, or an orderBy over the MaxOrderTerms
-	// of LimitsFromContext(ctx).
+	// of the limits (LimitsOf).
 	ErrBadPagination = errors.New("bad pagination arguments")
 	// ErrFilterTooDeep: a where input nested deeper than the MaxFilterDepth
-	// of LimitsFromContext(ctx).
+	// of the limits (LimitsOf).
 	ErrFilterTooDeep = errors.New("filter is nested too deep")
 	// ErrFilterTooWide: a list of a where input (and, or, has<Edge>With, In,
-	// NotIn) with more than the MaxFilterWidth of LimitsFromContext(ctx)
+	// NotIn) with more than the MaxFilterWidth of the limits (LimitsOf)
 	// entries.
 	ErrFilterTooWide = errors.New("filter list is too long")
 	// ErrFilterTooLarge: a where argument over its budget of the
-	// MaxFilterNodes of LimitsFromContext(ctx) inputs, predicates and values.
+	// MaxFilterNodes of the limits (LimitsOf) inputs, predicates and values.
 	ErrFilterTooLarge = errors.New("filter is too large")
 	// ErrEmptyWhereInput: under gqlgraph.Type's LenientFilters
 	// (filters=lenient), a where input that sets no predicate, nested in an
@@ -45,8 +43,9 @@ var (
 	// adapter's limits. It is returned with the code CodeTooCostly, before
 	// any statement runs.
 	ErrTooCostly = errors.New("request is too costly")
-	// ErrRequestTooLarge: a request whose query is over the MaxFields, or whose
-	// body is over the MaxBodyBytes, of the limits. Nothing of it was validated.
+	// ErrRequestTooLarge: a request whose query is over the MaxFields of the
+	// limits, or whose body is over gqlgenx.MaxBodyBytes. Nothing of it was
+	// validated.
 	ErrRequestTooLarge = errors.New("request is too large")
 	// ErrResponseTooLarge: the strings and bytes of a response are over the
 	// MaxResponseBytes of the limits. The request stops there, and its data is null.
@@ -57,13 +56,4 @@ var (
 	// ErrTimeout: a query or a mutation ran over the Timeout of the limits, whose
 	// statements were cancelled. Its data is null.
 	ErrTimeout = errors.New("request timed out")
-	// ErrNoDB: DBFromContext found no DB in the context, which an adapter's
-	// setup (gqlgenx.NewExtension, graphqlgo.With), or Service, puts there.
-	// An edge of a row no DB read, such as one a test built, wraps it too.
-	ErrNoDB = errors.New("no DB in the context")
-	// ErrNoSelectionSource is not returned since GraphQL needs no setup
-	// (decision 0173): generated code finds its field from the engine's
-	// context, and reads every column outside one. It stays so that code
-	// that tests for it compiles.
-	ErrNoSelectionSource = errors.New("no selection source in the context")
 )

@@ -131,7 +131,7 @@ import (
 			opts = append(opts, fmt.Sprintf("gen.%s(%s)", w[1], w[2]))
 		}
 		call := strings.Join(append([]string{"after, first, before, last"}, opts...), ", ")
-		fmt.Fprintf(&b, "\n// E%[1]ds is the resolver for the e%[1]ds field.\nfunc (r *queryResolver) E%[1]ds(ctx context.Context, %[2]s) (*gen.%[3]s, error) {\n\tdb, err := veloxgql.DBFromContext(ctx)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn db.Query[gen.E%[1]d]().Paginate(ctx, %[4]s)\n}\n",
+		fmt.Fprintf(&b, "\n// E%[1]ds is the resolver for the e%[1]ds field.\nfunc (r *queryResolver) E%[1]ds(ctx context.Context, %[2]s) (*gen.%[3]s, error) {\n\treturn r.DB.Query[gen.E%[1]d]().Paginate(ctx, %[4]s)\n}\n",
 			i, genType.ReplaceAllString(params, "${1}gen.${2}"), m[2], call)
 	}
 	b.WriteString(`
@@ -203,6 +203,7 @@ func TestLargeSchemaServed(t *testing.T) {
 	step("velox-gen", "tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema")
 	for name, src := range map[string]string{
 		"graph/schema.resolvers.go": scaleResolvers(t, dir, n),
+		"graph/resolver.go":         e2eResolver,
 		"ddl_test.go":               scaleDDL(t, dir, n),
 		"scale_test.go":             strings.ReplaceAll(scaleInner, "__N__", strconv.Itoa(n)),
 	} {

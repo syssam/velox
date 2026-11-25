@@ -15,7 +15,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx"
+	_ "github.com/syssam/velox/contrib/graphql/veloxgql/gqlgenx" // registers the gqlgen reader
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlgraph"
 	gqlcore "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/untyped"
@@ -269,38 +269,38 @@ func edgeDB(t *testing.T, opts ...velox.Option) (*velox.DB, *sql.DB, *edgeLog) {
 }
 
 // operation returns ctx inside the operation query, parsed against
-// edgeSchema, with the extension's state for db and a response's table of
-// rows: the context gqlgen gives the operation's resolvers.
-func operation(t *testing.T, db *velox.DB, query string, opts ...gqlgenx.Option) context.Context {
-	t.Helper()
-	return operationIn(t, db, query, edgeSchema, opts...)
-}
-
-// operationIn is operation with schema, which may be nil, as the server's.
-func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, opts ...gqlgenx.Option) context.Context {
+// edgeSchema: the context gqlgen gives the operation's resolvers. The
+// registered gqlgen reader keeps the response's table for each root field
+// that field (below) opens.
+func operation(t *testing.T, query string) context.Context {
 	t.Helper()
 	doc, errs := gqlparser.LoadQueryWithRules(edgeSchema, query, nil)
 	if errs != nil {
 		t.Fatal(errs)
 	}
-	ext := gqlgenx.NewExtension(db, opts...)
-	if schema != nil {
-		// The server's schema, as its Use gives the extension.
-		if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ctx := gqlcore.WithTable(ext.NewContext(context.Background()), nil)
-	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
+	return graphql.WithOperationContext(context.Background(), &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
 }
+
+// fieldKey names the field context of a path in an operation.
+type fieldKey struct {
+	oc   *graphql.OperationContext
+	path string
+}
+
+// fieldContexts are the field contexts field made, so that every call with
+// one path, or a path under it, holds the one root field context, whose
+// table the reader keeps.
+var fieldContexts sync.Map
 
 // field returns ctx inside the field at path, each step a response key, as
 // gqlgen makes a field's context: the fields collected through fragments of
-// every type.
+// every type, each with its parent. A path of one operation has one field
+// context, so the fields of a root share the table of its response.
 func field(t *testing.T, ctx context.Context, path ...string) context.Context {
 	t.Helper()
 	oc := graphql.GetOperationContext(ctx)
 	sels := oc.Operation.SelectionSet
+	var parent *graphql.FieldContext
 	for i, key := range path {
 		var found *graphql.CollectedField
 		for _, f := range graphql.CollectFields(oc, sels, nil) {
@@ -312,7 +312,13 @@ func field(t *testing.T, ctx context.Context, path ...string) context.Context {
 		if found == nil {
 			t.Fatalf("the operation has no field %s", strings.Join(path[:i+1], "."))
 		}
-		ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{Object: found.ObjectDefinition.Name, Field: *found, IsMethod: true, IsResolver: true})
+		k := fieldKey{oc, strings.Join(path[:i+1], ".")}
+		fc, ok := fieldContexts.Load(k)
+		if !ok {
+			fc, _ = fieldContexts.LoadOrStore(k, &graphql.FieldContext{Parent: parent, Object: found.ObjectDefinition.Name, Field: *found, IsMethod: true, IsResolver: true})
+		}
+		parent = fc.(*graphql.FieldContext)
+		ctx = graphql.WithFieldContext(ctx, parent)
 		sels = found.Selections
 	}
 	return ctx
@@ -423,7 +429,7 @@ const childrenQuery = `{ owners { edges { node { children(first: 2) { totalCount
 // one more statement.
 func TestEdgeConnectionBatches(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	log.take("owners")
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
@@ -487,7 +493,7 @@ func TestEdgeConnectionBackwardAndAfter(t *testing.T) {
 		{"last 0", gqlgraph.Args{Last: new(0)}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := operation(t, db, childrenQuery)
+			ctx := operation(t, childrenQuery)
 			xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 			ectx := field(t, ctx, "owners", "edges", "node", "children")
 			log.take("")
@@ -515,7 +521,7 @@ func TestEdgeConnectionAlone(t *testing.T) {
 	db, _, log := edgeDB(t)
 	args := gqlgraph.Args{First: new(2)}
 	want, wn := ownPage(t, db, &owner{ID: 1}, db.Query[child](), args, titleOrder())
-	op := operation(t, db, childrenQuery)
+	op := operation(t, childrenQuery)
 	grouped := ownersPage(t, op, db, db.Query[owner](), gqlgraph.Args{})[0]
 	noTable := graphql.WithOperationContext(context.Background(), graphql.GetOperationContext(op))
 	for _, c := range []struct {
@@ -544,7 +550,7 @@ func TestEdgeConnectionAlone(t *testing.T) {
 // arguments, are two batches, and neither's rows are in the other's pages.
 func TestEdgeAliases(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, `{ owners { edges { node {
+	ctx := operation(t, `{ owners { edges { node {
 		a: children(first: 1) { edges { node { title } } }
 		b: children(title: "b") { edges { node { title } } }
 	} } } }`)
@@ -600,7 +606,7 @@ func TestEdgeScopes(t *testing.T) {
 
 func testEdgeScopes(t *testing.T, scope func(context.Context, string) context.Context, n int) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
 	scoped := map[int64]context.Context{1: scope(ectx, "a"), 2: scope(ectx, "b"), 3: scope(ectx, "a")}
@@ -631,7 +637,7 @@ func testEdgeScopes(t *testing.T, scope func(context.Context, string) context.Co
 // with different arguments, then the tags, an edge of another target type.
 func TestEdgeFromAppField(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, `{ owners { edges { node { name } } } }`)
+	ctx := operation(t, `{ owners { edges { node { name } } } }`)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	nctx := field(t, ctx, "owners", "edges", "node", "name")
 	log.take("")
@@ -673,7 +679,7 @@ func TestEdgeFromAppField(t *testing.T) {
 // batches.
 func TestEdgeOneOwnerAndEditor(t *testing.T) {
 	db, _, _ := edgeDB(t)
-	ctx := operation(t, db, `{ children { edges { node { title owner { name } } } } }`)
+	ctx := operation(t, `{ children { edges { node { title owner { name } } } } }`)
 	cctx := field(t, ctx, "children")
 	c, err := gqlgraph.NewConnectionOf(cctx, db.Query[child]().Where(children.OwnerID.NotNull()), "Child", gqlgraph.Args{}, nil, childKey())
 	if err != nil {
@@ -714,7 +720,7 @@ func TestEdgeOneOwnerAndEditor(t *testing.T) {
 // children are those not titled its name.
 func TestEdgePerRowArguments(t *testing.T) {
 	db, _, _ := edgeDB(t)
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
 	for _, x := range xs {
@@ -750,7 +756,7 @@ func TestPaginateEdgeWhere(t *testing.T) {
 		{"a where per row", func(x *owner) string { return x.Name }, 3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := operation(t, db, childrenQuery)
+			ctx := operation(t, childrenQuery)
 			xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 			ectx := field(t, ctx, "owners", "edges", "node", "children")
 			log.take("")
@@ -785,7 +791,7 @@ func TestPaginateEdgeWhere(t *testing.T) {
 // group reads its own.
 func TestEdgeOneBatches(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, `{ children { edges { node { owner { name } } } } }`)
+	ctx := operation(t, `{ children { edges { node { owner { name } } } } }`)
 	cctx := field(t, ctx, "children")
 	c, err := gqlgraph.NewConnectionOf(cctx, db.Query[child](), "Child", gqlgraph.Args{}, nil, childKey())
 	if err != nil {
@@ -825,7 +831,7 @@ func TestEdgeOneBatches(t *testing.T) {
 		t.Errorf("the orphan's owner: %q, want no statement", sql)
 	}
 
-	alone := child{ID: 9, OwnerID: new(int64(2))}
+	alone := *p.Rows[4] // a copy of child 5, of owner 2, in no group
 	if o, err := gqlgraph.EdgeOneOf(octx, &alone, children.Owner, "Child.owner"); err != nil || o == nil || o.Name != "b" {
 		t.Errorf("alone: %v, %v", o, err)
 	}
@@ -840,9 +846,9 @@ func TestEdgeOneBatches(t *testing.T) {
 func TestEdgeListCap(t *testing.T) {
 	db, _, log := edgeDB(t)
 	const query = `{ owners { edges { node { tags { name } } } } }`
-	list := func(t *testing.T, opts ...gqlgenx.Option) (map[int64][]int64, map[int64]error) {
+	list := func(t *testing.T, db *velox.DB, log *edgeLog) (map[int64][]int64, map[int64]error) {
 		t.Helper()
-		ctx := operation(t, db, query, opts...)
+		ctx := operation(t, query)
 		xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 		tctx := field(t, ctx, "owners", "edges", "node", "tags")
 		log.take("")
@@ -861,11 +867,12 @@ func TestEdgeListCap(t *testing.T) {
 		oneEach(t, "the tags", log.take("tags"))
 		return got, errs
 	}
-	got, errs := list(t)
+	got, errs := list(t, db, log)
 	if want := map[int64][]int64{1: {1, 2}, 2: {2}, 3: {}}; !reflect.DeepEqual(got, want) || len(errs) > 0 {
 		t.Errorf("tags %v, %v; want %v", got, errs, want)
 	}
-	got, errs = list(t, gqlgenx.WithLimits(veloxgql.Limits{MaxList: 1}))
+	capped, _, cappedLog := edgeDB(t, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1}))
+	got, errs = list(t, capped, cappedLog)
 	if want := map[int64][]int64{2: {2}, 3: {}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("tags under MaxList 1: %v, want %v", got, want)
 	}
@@ -882,7 +889,7 @@ func TestEdgeListCap(t *testing.T) {
 func TestBatchErrorShared(t *testing.T) {
 	db, _, log := edgeDB(t)
 	boom := errors.New("boom")
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
 	log.take("")
@@ -916,7 +923,7 @@ func TestBatchErrorShared(t *testing.T) {
 // that ran it, and fails the others; it runs once.
 func TestBatchPanicShared(t *testing.T) {
 	db, _, log := edgeDB(t)
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{})
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
 	log.take("")
@@ -964,7 +971,7 @@ func TestBatchRace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner]().Where(owners.ID.GTE(101)), gqlgraph.Args{First: new(50)})
 	if len(xs) != 50 {
 		t.Fatalf("%d owners", len(xs))
@@ -1011,7 +1018,7 @@ func TestBatchRace(t *testing.T) {
 // batches, is no group: a context kept long keeps no rows.
 func TestNoFieldNoGroup(t *testing.T) {
 	db, _, _ := edgeDB(t)
-	ctx := operation(t, db, childrenQuery)
+	ctx := operation(t, childrenQuery)
 	c, err := gqlgraph.NewConnectionOf(ctx, db.Query[owner](), "Owner", gqlgraph.Args{}, nil, ownerKey())
 	if err != nil {
 		t.Fatal(err)
@@ -1020,12 +1027,22 @@ func TestNoFieldNoGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), any(p.Rows[0])); ok {
+	fctx := field(t, ctx, "owners")
+	f, ok := gqlcore.FieldOf(fctx)
+	if !ok {
+		t.Fatal("no field in a gqlgen field context")
+	}
+	if _, _, _, ok := gqlcore.Find(f.Table, any(p.Rows[0])); ok {
 		t.Error("a page outside a field is a group")
 	}
-	if xs := ownersPage(t, ctx, db, db.Query[owner](), gqlgraph.Args{}); len(xs) == 0 {
-		t.Fatal("no owners")
-	} else if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), any(xs[0])); !ok {
+	c, err = gqlgraph.NewConnectionOf(fctx, db.Query[owner](), "Owner", gqlgraph.Args{}, nil, ownerKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err = c.Page(fctx); err != nil || len(p.Rows) == 0 {
+		t.Fatalf("no owners: %v", err)
+	}
+	if _, _, _, ok := gqlcore.Find(f.Table, any(p.Rows[0])); !ok {
 		t.Error("a page in a field is no group")
 	}
 }

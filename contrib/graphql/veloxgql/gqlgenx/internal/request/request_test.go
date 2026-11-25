@@ -31,7 +31,7 @@ func nest(depth int, open, inner, shut string) string {
 // does not allocate what it would through validation.
 func refusal(t *testing.T, l veloxgql.Limits, p *graphql.RawParams) string {
 	t.Helper()
-	b := request.NewBounds(request.OrDefault(l), nil)
+	b := request.NewBounds(l, nil)
 	if err := request.Check(p.OperationName, p.Query, p.Variables, b); err != nil {
 		return err.Message
 	}
@@ -83,7 +83,7 @@ func TestDocumentShapes(t *testing.T) {
 		{"a block string", `{ a(w: """` + strings.Repeat("s", 64<<10+1) + `""") }`, "a string of 65537 bytes"},
 		{"a string in a list", `{ a(w: ["` + strings.Repeat("s", 64<<10+1) + `"]) }`, "a string of 65537 bytes"},
 	} {
-		got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query})
+		got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: c.query})
 		if !strings.Contains(got, c.want) || !strings.Contains(got, "request is too large") {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
@@ -95,11 +95,11 @@ func TestDocumentShapes(t *testing.T) {
 		{"a name of 128 bytes", `{ ` + strings.Repeat("a", 128) + `: id }`},
 		{"a string of 64 KB", `{ a(w: "` + strings.Repeat("s", 64<<10) + `") }`},
 	} {
-		if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query}); got != "" {
+		if got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: c.query}); got != "" {
 			t.Errorf("%s: %q", c.name, got)
 		}
 	}
-	if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: `{ id }`, OperationName: strings.Repeat("a", 129)}); !strings.Contains(got, "a name of 129 bytes") {
+	if got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: `{ id }`, OperationName: strings.Repeat("a", 129)}); !strings.Contains(got, "a name of 129 bytes") {
 		t.Errorf("an operationName: %q", got)
 	}
 }
@@ -119,7 +119,7 @@ func TestDocumentPairs(t *testing.T) {
 		{"in 8 levels of inline fragments, compared at each", nest(8, "{ ... ", "{ "+spell(50, differ)+" }", "}"), "over 10000 pairs of its fields differ"},
 		{"1500 that agree", `{ ` + strings.Repeat("a: f ", 1500) + ` }`, "over 1000000 pairs of its fields share a response name"},
 	} {
-		if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query}); !strings.Contains(got, c.want) {
+		if got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: c.query}); !strings.Contains(got, c.want) {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -131,7 +131,7 @@ func TestDocumentPairs(t *testing.T) {
 			return fmt.Sprintf("fragment F%d on T { %s }", i, spell(10, func(j int) string { return fmt.Sprintf("f%d", j) }))
 		})},
 	} {
-		if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query}); got != "" {
+		if got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: c.query}); got != "" {
 			t.Errorf("%s: %q", c.name, got)
 		}
 	}
@@ -139,7 +139,7 @@ func TestDocumentPairs(t *testing.T) {
 	// each operation, as validation does.
 	ops := spell(1000, func(i int) string { return fmt.Sprintf("query Q%d { ...F0 }", i) })
 	chain := spell(300, func(i int) string { return fmt.Sprintf("fragment F%d on T { ...F%d }", i, i+1) })
-	if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: ops + chain + `fragment F300 on T { id }`}); !strings.Contains(got, "its fragments spread to over 200000") {
+	if got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: ops + chain + `fragment F300 on T { id }`}); !strings.Contains(got, "its fragments spread to over 200000") {
 		t.Errorf("a chain under many operations: %q", got)
 	}
 }
@@ -176,7 +176,7 @@ func TestVariablesShapes(t *testing.T) {
 		{"over its bytes, in a key", `{ id }`, map[string]any{"w": map[string]any{strings.Repeat("s", 1<<20+1): 1}}, "over 1048576 bytes"},
 		{"sent by its hash, no query", "", map[string]any{"w": list(100001, 1)}, "over 100000 nodes"},
 	} {
-		got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query, Variables: c.vars})
+		got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: c.query, Variables: c.vars})
 		if !strings.Contains(got, c.want) || !strings.Contains(got, "request is too large") {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
@@ -190,7 +190,7 @@ func TestVariablesShapes(t *testing.T) {
 		{"numbers, nulls and booleans", map[string]any{"a": 1, "b": nil, "c": true, "d": 1.5}},
 		{"a value gqlgen gave", map[string]any{"a": graphql.Upload{}}},
 	} {
-		if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: `{ id }`, Variables: c.vars}); got != "" {
+		if got := refusal(t, veloxgql.DefaultLimits(), &graphql.RawParams{Query: `{ id }`, Variables: c.vars}); got != "" {
 			t.Errorf("%s: %q", c.name, got)
 		}
 	}

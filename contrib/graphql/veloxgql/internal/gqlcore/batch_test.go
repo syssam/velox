@@ -3,72 +3,85 @@ package gqlcore
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// inFieldKey marks a context fakeSource finds a field in.
-type inFieldKey struct{}
+// fixtureKey marks a context testReader finds a field in; its value is the
+// field's fixture.
+type fixtureKey struct{}
 
-// fakeSource finds the field "T.f" in a context marked with inFieldKey, and
-// counts its waits.
-type fakeSource struct{ waits atomic.Int32 }
-
-func (*fakeSource) Field(ctx context.Context) (Field, bool) {
-	if ctx.Value(inFieldKey{}) == nil {
-		return Field{}, false
-	}
-	return Field{Object: "T", Name: "f", Key: "k"}, true
+// fixture is the field testReader finds in a context, and the count of its
+// waits.
+type fixture struct {
+	field Field
+	waits atomic.Int32
 }
 
-func (s *fakeSource) Wait(context.Context) func() {
-	s.waits.Add(1)
+// testReader is the one Reader the tests register: it knows only the
+// contexts marked with a fixture (inField).
+type testReader struct{}
+
+func fixtureOf(ctx context.Context) *fixture {
+	f, _ := ctx.Value(fixtureKey{}).(*fixture)
+	return f
+}
+
+func (testReader) In(ctx context.Context) bool { return fixtureOf(ctx) != nil }
+
+func (testReader) Field(ctx context.Context) (Field, bool) {
+	if f := fixtureOf(ctx); f != nil {
+		return f.field, true
+	}
+	return Field{}, false
+}
+
+func (testReader) Wait(ctx context.Context) func() {
+	if f := fixtureOf(ctx); f != nil {
+		f.waits.Add(1)
+	}
 	return func() {}
 }
 
-// inField is ctx inside a field fakeSource finds.
-func inField(ctx context.Context) context.Context {
-	return context.WithValue(ctx, inFieldKey{}, true)
+// TestMain registers testReader once: Register is global and append-only.
+func TestMain(m *testing.M) {
+	Register(testReader{})
+	os.Exit(m.Run())
 }
 
-// TestTable: Add groups rows only inside a field of a context with a table,
-// Find finds a row's group, a row moves to the group last added, and the
-// nil Table answers nothing.
+// inField is ctx inside the field f of testReader's engine, and its fixture.
+func inField(ctx context.Context, f Field) (context.Context, *fixture) {
+	fx := &fixture{field: f}
+	return context.WithValue(ctx, fixtureKey{}, fx), fx
+}
+
+// TestTable: Add groups rows only inside a field with a table, Find finds a
+// row's group, a row moves to the group last added, and the nil Table
+// answers nothing.
 func TestTable(t *testing.T) {
-	scoped := func(context.Context) any { return "scope" }
-	ctx := Install(WithTable(context.Background(), scoped), nil, nil, &fakeSource{})
-	tbl := TableFromContext(ctx)
-	if tbl.Scope(ctx) != "scope" {
-		t.Error("the table's scope")
-	}
-	var nilT *Table
-	if nilT.Scope(ctx) != nil || TableFromContext(context.Background()) != nil {
-		t.Error("the nil Table")
-	}
-	if (&Table{}).Scope(ctx) != nil {
-		t.Error("a table without a scope")
-	}
+	tbl := NewTable()
+	ctx, _ := inField(context.Background(), Field{Object: "T", Name: "f", Key: "k", Table: tbl})
 	a, b := new(int), new(int)
 	pa, pb := any(a), any(b)
-	Add(ctx, []any{pa}) // in no field: nothing
+	Add(context.Background(), []any{pa}) // in no field: nothing
 	if _, _, _, ok := Find(tbl, pa); ok {
 		t.Error("Add outside a field grouped a row")
 	}
-	// No source: nothing, though the context is marked in a field.
-	bare := WithTable(inField(context.Background()), nil)
+	// A field with no table: nothing.
+	bare, _ := inField(context.Background(), Field{Object: "T", Name: "f", Key: "k"})
 	Add(bare, []any{pa})
-	if _, _, _, ok := Find(TableFromContext(bare), pa); ok {
-		t.Error("Add without a source grouped a row")
+	if _, _, _, ok := Find(tbl, pa); ok {
+		t.Error("Add in a field with no table grouped a row")
 	}
-	fctx := inField(ctx)
-	Add(fctx, []any{nil, (*int)(nil)})
-	Add(fctx, []any{pa, nil, pb})
+	Add(ctx, []any{nil, (*int)(nil)})
+	Add(ctx, []any{pa, nil, pb})
 	if g, rows, i, ok := Find(tbl, pb); !ok || g == nil || len(rows) != 2 || i != 1 {
 		t.Errorf("Find: %v %v %d %v", g, rows, i, ok)
 	}
-	Add(fctx, []any{pb})
+	Add(ctx, []any{pb})
 	if _, rows, i, ok := Find(tbl, pb); !ok || len(rows) != 1 || i != 0 {
 		t.Errorf("a row moves to its new group: %v %d %v", rows, i, ok)
 	}
@@ -155,8 +168,7 @@ func TestSelected(t *testing.T) {
 // waits for it inside its source's Wait; the first caller, and a caller
 // after the read, do not wait.
 func TestBatchWaits(t *testing.T) {
-	src := &fakeSource{}
-	ctx := Install(context.Background(), nil, nil, src)
+	ctx, src := inField(context.Background(), Field{Object: "T", Name: "f", Key: "k"})
 	b := &Batch{}
 	started, release := make(chan struct{}), make(chan struct{})
 	var wg sync.WaitGroup

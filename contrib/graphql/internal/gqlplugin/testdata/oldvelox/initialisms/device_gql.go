@@ -333,7 +333,8 @@ type DeviceWhereInput struct {
 }
 
 // Pred is the condition w stands for on Device nodes, true for a nil or empty
-// w. It fails on a filter over the limits of veloxgql.LimitsFromContext(ctx).
+// w. It fails on a filter over the limits of the DB of the connection it
+// filters, or veloxgql.DefaultLimits() outside one.
 func (w *DeviceWhereInput) Pred(ctx context.Context) (velox.Pred[Device], error) {
 	p, err := w.Predicate(ctx)
 	return velox.Pred[Device](p), err

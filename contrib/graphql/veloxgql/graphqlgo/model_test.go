@@ -227,7 +227,7 @@ func postTags(ctx context.Context, p *post) ([]*tag, error) {
 }
 
 func node(ctx context.Context, id int64) (any, error) {
-	return gqlgraph.ResolveNode(ctx, veloxgql.DB(ctx), nodeTypes, id)
+	return gqlgraph.ResolveNode(ctx, resolverDB(ctx), nodeTypes, id)
 }
 
 // addPost inserts a post of the author, and fails after the insert when

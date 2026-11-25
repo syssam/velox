@@ -145,7 +145,7 @@ groups: { trimPrefix: velox_ }
 
 // gqlcServe is a test of the application's module: the schema gqlc
 // generated, bound to velox's code and a resolver of the root fields, each
-// one line, serves a query and a mutation through graphqlgo.With on SQLite.
+// one line, serves a query and a mutation on SQLite.
 const gqlcServe = `package app_test
 
 import (
@@ -166,36 +166,36 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/graphqlgo"
 )
 
-type root struct{}
+type root struct{ db *velox.DB }
 
 var (
 	_ vg.Resolver  = root{}
 	_ app.Resolver = root{}
 )
 
-func (root) Posts(ctx context.Context, a vg.PostsArgs) (*gen.PostConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Post]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithPostOrder(a.OrderBy), gen.WithPostFilter(a.Where))
+func (r root) Posts(ctx context.Context, a vg.PostsArgs) (*gen.PostConnection, error) {
+	return r.db.Query[gen.Post]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithPostOrder(a.OrderBy), gen.WithPostFilter(a.Where))
 }
 
-func (root) Labels(ctx context.Context, a vg.LabelsArgs) (*gen.LabelConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.Tag]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithLabelOrder(a.OrderBy), gen.WithLabelFilter(a.Where))
+func (r root) Labels(ctx context.Context, a vg.LabelsArgs) (*gen.LabelConnection, error) {
+	return r.db.Query[gen.Tag]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithLabelOrder(a.OrderBy), gen.WithLabelFilter(a.Where))
 }
 
-func (root) Users(ctx context.Context, a vg.UsersArgs) (*gen.UserConnection, error) {
-	return veloxgql.DB(ctx).Query[gen.User]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithUserOrder(a.OrderBy), gen.WithUserFilter(a.Where))
+func (r root) Users(ctx context.Context, a vg.UsersArgs) (*gen.UserConnection, error) {
+	return r.db.Query[gen.User]().Paginate(ctx, a.After, a.First, a.Before, a.Last, gen.WithUserOrder(a.OrderBy), gen.WithUserFilter(a.Where))
 }
 
 // UserPrefs is the one field gqlc leaves to the application: a JSON field,
 // read through its getter.
 func (root) UserPrefs(_ context.Context, obj *gen.User) (veloxgql.JSON, error) { return obj.PrefsGQL() }
 
-func (root) CreatePost(ctx context.Context, a app.CreatePostArgs) (*gen.Post, error) {
+func (r root) CreatePost(ctx context.Context, a app.CreatePostArgs) (*gen.Post, error) {
 	x := &gen.Post{}
-	return x, veloxgql.DB(ctx).Insert(x).SetInput(a.Input).Exec(ctx)
+	return x, r.db.Insert(x).SetInput(a.Input).Exec(ctx)
 }
 
-func (root) UpdatePost(ctx context.Context, a app.UpdatePostArgs) (*gen.Post, error) {
-	return veloxgql.DB(ctx).Update[gen.Post]().Where(gen.Posts.ID.EQ(a.ID)).SetInput(a.Input).One(ctx)
+func (r root) UpdatePost(ctx context.Context, a app.UpdatePostArgs) (*gen.Post, error) {
+	return r.db.Update[gen.Post]().Where(gen.Posts.ID.EQ(a.ID)).SetInput(a.Input).One(ctx)
 }
 
 const ddl = ` + "`" + `
@@ -224,11 +224,11 @@ func TestServe(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	s, err := graph.NewSchema(vg.Bindings(root{}), app.Bindings(root{}), graphqlgo.Scalars())
+	s, err := graph.NewSchema(vg.Bindings(root{db}), app.Bindings(root{db}), graphqlgo.Scalars())
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec := graphql.NewExecutor(s, graphqlgo.With(db), graphql.WithMaxDepth(12))
+	exec := graphql.NewExecutor(s, graphql.WithMaxDepth(12))
 	for _, c := range []struct{ query, want string }{
 		{
 			` + "`" + `{ posts(first: 2, orderBy: [{field: TITLE, direction: DESC}], where: {authorID: 1, hasTags: true, keywordsIsEmpty: false}) {
@@ -272,7 +272,7 @@ func TestServe(t *testing.T) {
 // and enum to velox's Go types, and no model is generated. Like is an edge
 // schema and binds like any type; UpdatePostInput, which has no field that
 // adds fans, binds too. The application's module then builds and serves a
-// query and mutations through graphqlgo.With on SQLite, and graphql-go binds
+// query and mutations on SQLite, and graphql-go binds
 // every input of the test model's Go, under the defaults and the old
 // velox's options, to its SDL by name
 // (TestInputNames).
