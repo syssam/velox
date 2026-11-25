@@ -5,9 +5,11 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"slices"
 	"strconv"
 
 	"golang.org/x/tools/go/analysis"
+	"golang.org/x/tools/go/ssa"
 )
 
 // ZeroDefault reports a field of an inserted entity that the code sets to
@@ -35,7 +37,9 @@ name the column in the insert: db.Insert(&u).Set(gen.Users.Active.Set(false)).
 
 The check follows a local variable of the entity type, or of a pointer to
 it, and only when the function does nothing else with it than read or set
-its fields and insert it. An insert whose query is held in a variable or
+its fields and insert it. A zero set to its field is reported when it is
+set before the insert on a path that reaches it: not in a branch that
+returns first. An insert whose query is held in a variable or
 passed to a function is not followed. A default is known from the
 Descriptor velox-gen writes: a Defaults fact of the entity's type, exported
 while the check runs on the generated package.
@@ -237,6 +241,57 @@ type zeroChecker struct {
 	ok      directives
 	parents map[ast.Node]ast.Node
 	seen    map[token.Pos]bool // the zeros reported, once each
+	instrs  []ssa.Instruction  // the package's SSA instructions, built on first use
+}
+
+// flows reports whether the statement assign, which sets a field, can run
+// before call on some path: the block of its store reaches the call's
+// block in the package's SSA form, or precedes the call in one block. When
+// either is not found, or they are in different functions, it reports
+// true, as the check did before it had paths.
+func (z *zeroChecker) flows(assign ast.Node, call *ast.CallExpr) bool {
+	if z.instrs == nil {
+		_, funcs := buildSSA(z.pass)
+		for _, fn := range funcs {
+			for _, b := range fn.Blocks {
+				z.instrs = append(z.instrs, b.Instrs...)
+			}
+		}
+	}
+	var store, run ssa.Instruction
+	for _, ins := range z.instrs {
+		switch ins := ins.(type) {
+		case *ssa.Store:
+			if assign != nil && assign.Pos() <= ins.Pos() && ins.Pos() < assign.End() && store == nil {
+				store = ins
+			}
+		case *ssa.Call:
+			if ins.Pos() == call.Lparen {
+				run = ins
+			}
+		}
+	}
+	if store == nil || run == nil || store.Parent() != run.Parent() {
+		return true
+	}
+	from, to := store.Block(), run.Block()
+	if from == to {
+		return slices.Index(from.Instrs, store) < slices.Index(to.Instrs, run)
+	}
+	seen := map[*ssa.BasicBlock]bool{}
+	work := slices.Clone(from.Succs)
+	for len(work) > 0 {
+		b := work[len(work)-1]
+		work = work[:len(work)-1]
+		if b == to {
+			return true
+		}
+		if !seen[b] {
+			seen[b] = true
+			work = append(work, b.Succs...)
+		}
+	}
+	return false
 }
 
 // zero is a constant zero given to a field with a default: the expression,
@@ -521,7 +576,7 @@ func (t *tracked) visit(n *ast.Ident) {
 	}
 	switch {
 	case rhs != nil && t.z.constZero(rhs):
-		if rhs.Pos() < t.call.Pos() {
+		if rhs.Pos() < t.call.Pos() && t.z.flows(t.z.parents[rhs], t.call) {
 			t.sets = append(t.sets, zero{rhs, field, t.defs})
 		}
 	case rhs != nil || t.z.addressed(n):

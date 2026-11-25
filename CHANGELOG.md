@@ -28,7 +28,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `""`) written to a field whose `Default` is not zero, or that has a
   `DefaultFunc`, in a struct that the same function inserts with no `Set`
   or `SetInput`: the insert stores the default instead. `//velox:zero-ok`
-  waives a report (decision 0177).
+  waives a report (decision 0177). A zero set in a branch that does not
+  reach the insert, such as one that returns first, is not reported.
 - veloxvet: `//velox:unbounded-ok` waives the statement that holds the
   read, on any of its lines or alone on the line before it, so it covers a
   chain spread over lines, but not a read in or around a function literal

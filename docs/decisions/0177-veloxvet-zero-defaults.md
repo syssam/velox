@@ -39,7 +39,10 @@ veloxvet gets a second analyzer, `ZeroDefault` (`zerodefault`), in
   nothing else with it than read or set its fields, call its value
   methods and insert it. A field the function sets to anything but a
   constant zero, changes with `++` or `op=`, or takes the address of is
-  left out; a zero set after the insert is not reported.
+  left out. A zero set after the insert is not reported, nor one whose
+  store does not reach the insert in the function's SSA form, such as a
+  zero set in a branch that returns first. A zero set in a function
+  literal is reported: its paths are not followed.
 - The defaults come from velox-gen's `Descriptor`: while it runs on a
   package, the analyzer reads every `velox.Descriptor[E]` literal's
   `Columns` and exports a `Defaults` fact on `E`, with the fields, their

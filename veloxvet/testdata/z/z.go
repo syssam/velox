@@ -4,6 +4,7 @@ package z
 
 import (
 	"context"
+	"errors"
 
 	"github.com/syssam/velox"
 	tm "github.com/syssam/velox/internal/testmodel"
@@ -127,6 +128,49 @@ func chains(ctx context.Context, db *velox.DB, xs []gen.User) {
 	x := gen.User{Seats: 0}
 	x.Seats, _ = two2()
 	db.Insert(&x).Exec(ctx)
+}
+
+// A zero set on a path that never reaches the insert is not reported.
+func paths(ctx context.Context, db *velox.DB, bad bool) error {
+	u := gen.User{Active: true}
+	if bad {
+		u.Active = false
+		return errors.New(u.Name)
+	}
+	db.Insert(&u).Exec(ctx)
+
+	v := gen.User{Active: true}
+	if bad {
+		v.Active = false // want `Active is false`
+	}
+	db.Insert(&v).Exec(ctx)
+
+	y := gen.User{Active: true}
+	if bad {
+		y.Plan = "" // want `Plan is ""`
+		if len(y.Name) > 1 {
+			y.Name = "long"
+		} else {
+			y.Name = "short"
+		}
+	}
+	db.Insert(&y).Exec(ctx)
+
+	w := gen.User{Active: true}
+	switch {
+	case bad:
+		w.Active = false
+		panic(w.Name)
+	default:
+		w.Seats = 0 // want `Seats is 0`
+	}
+	db.Insert(&w).Exec(ctx)
+
+	// In a function literal, the paths are not followed: reported.
+	x := gen.User{Active: true}
+	func() { x.Active = false }() // want `Active is false`
+	db.Insert(&x).Exec(ctx)
+	return nil
 }
 
 func run(velox.InsertQuery[gen.User]) {}
