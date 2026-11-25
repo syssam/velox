@@ -13,7 +13,7 @@ import (
 
 func TestGuardsOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
-		if _, err := tg.db.Query[testmodel.Invoice]().All(ctx); !errors.Is(err, velox.ErrUnbounded) {
+		if _, err := tg.db.Query[testmodel.Invoice]().All(ctx); !errors.Is(err, velox.ErrUnbounded) { //velox:unbounded-ok
 			t.Errorf("no limit: %v", err)
 		}
 		if _, err := tg.db.Delete[testmodel.Invoice]().Exec(ctx); !errors.Is(err, velox.ErrNoWhere) {

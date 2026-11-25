@@ -60,10 +60,10 @@ func TestValuesNullable(t *testing.T) {
 func TestValuesRefusals(t *testing.T) {
 	e := &fakeconn.Exec{}
 	db := openFake(velox.Postgres, e)
-	if _, err := db.Query[testmodel.Ticket]().Values(ctx, Tk.Title); !errors.Is(err, velox.ErrUnbounded) {
+	if _, err := db.Query[testmodel.Ticket]().Values(ctx, Tk.Title); !errors.Is(err, velox.ErrUnbounded) { //velox:unbounded-ok
 		t.Errorf("Values without Limit: %v", err)
 	}
-	if _, err := db.Query[testmodel.Ticket]().IDs(ctx); !errors.Is(err, velox.ErrUnbounded) {
+	if _, err := db.Query[testmodel.Ticket]().IDs(ctx); !errors.Is(err, velox.ErrUnbounded) { //velox:unbounded-ok
 		t.Errorf("IDs without Limit: %v", err)
 	}
 	if _, err := db.Query[testmodel.Ticket]().Join(Tk.Invoice).Limit(1).Values(ctx, Tk.Title); err == nil || !strings.Contains(err.Error(), "cannot join") {

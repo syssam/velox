@@ -100,10 +100,10 @@ func TestAfterNullable(t *testing.T) {
 func TestAfterNilRow(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{})
 	q := db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).After(nil)
-	if _, err := q.All(ctx); err == nil || !strings.HasPrefix(err.Error(), "velox: ") || !strings.HasSuffix(err.Error(), ": After was given a nil row") {
+	if _, err := q.All(ctx); err == nil || !strings.HasPrefix(err.Error(), "velox: ") || !strings.HasSuffix(err.Error(), ": After was given a nil row") { //velox:unbounded-ok
 		t.Errorf("%v", err)
 	}
-	if text, _, err := q.SQL(ctx); text != "" || err == nil || !strings.HasSuffix(err.Error(), ": After was given a nil row") {
+	if text, _, err := q.SQL(ctx); text != "" || err == nil || !strings.HasSuffix(err.Error(), ": After was given a nil row") { //velox:unbounded-ok
 		t.Errorf("SQL(ctx): %q %v", text, err)
 	}
 }

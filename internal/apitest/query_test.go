@@ -287,11 +287,11 @@ func TestBrokenMetadataIsAnErrorOnEveryUse(t *testing.T) {
 		}
 	}
 	check("Descriptor panics", "apitest.panickyEntity", "the generated metadata panicked: no schema today", func() error {
-		_, err := db.Query[panickyEntity]().All(ctx)
+		_, err := db.Query[panickyEntity]().All(ctx) //velox:unbounded-ok
 		return err
 	})
 	check("no FieldPtr", "apitest.addrlessEntity", "FieldPtr", func() error {
-		_, err := db.Query[addrlessEntity]().All(ctx)
+		_, err := db.Query[addrlessEntity]().All(ctx) //velox:unbounded-ok
 		return err
 	})
 	if e.Calls != 0 {

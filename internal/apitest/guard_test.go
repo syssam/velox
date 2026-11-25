@@ -14,7 +14,7 @@ import (
 func TestReadWithoutLimitIsRefused(t *testing.T) {
 	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
 	db := openFake(velox.Postgres, e)
-	if _, err := db.Query[testmodel.Invoice]().All(ctx); !errors.Is(err, velox.ErrUnbounded) {
+	if _, err := db.Query[testmodel.Invoice]().All(ctx); !errors.Is(err, velox.ErrUnbounded) { //velox:unbounded-ok
 		t.Errorf("All: %v", err)
 	}
 	for _, n := range []int{0, -1} {
@@ -29,7 +29,7 @@ func TestReadWithoutLimitIsRefused(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().With(testmodel.Invoices.Items.LimitEach(0)).Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "LimitEach must be positive") {
 		t.Errorf("LimitEach(0): %v, want LimitEach must be positive", err)
 	}
-	for _, err := range db.Query[testmodel.Invoice]().Iter(ctx) {
+	for _, err := range db.Query[testmodel.Invoice]().Iter(ctx) { //velox:unbounded-ok
 		if !errors.Is(err, velox.ErrUnbounded) {
 			t.Errorf("Iter: %v", err)
 		}

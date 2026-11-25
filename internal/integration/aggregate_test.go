@@ -396,7 +396,7 @@ func TestGroupedIsScopedAndCapped(t *testing.T) {
 		if got, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice]().AllowUnbounded().MaxRows(5), I.Number); err != nil || len(got) != 5 {
 			t.Errorf("at the cap: %v, %v", got, err)
 		}
-		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice](), I.OrgID); !errors.Is(err, velox.ErrUnbounded) {
+		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice](), I.OrgID); !errors.Is(err, velox.ErrUnbounded) { //velox:unbounded-ok
 			t.Errorf("no Unbounded: %v", err)
 		}
 

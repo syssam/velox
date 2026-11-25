@@ -310,7 +310,7 @@ func (t *tour) guards() error {
 	// 5. Guards are always on: a read without a Limit, and an update or
 	// delete without a Where, are refused before anything is sent.
 	say("\n== 5. Guards")
-	_, err := db.Query[veloxgen.Invoice]().All(acct)
+	_, err := db.Query[veloxgen.Invoice]().All(acct) //velox:unbounded-ok the guard is the demo
 	say("no Limit: ErrUnbounded=%t: %v", errors.Is(err, velox.ErrUnbounded), err)
 	_, err = db.Delete[veloxgen.Line]().Exec(acct)
 	say("no Where: ErrNoWhere=%t: %v", errors.Is(err, velox.ErrNoWhere), err)

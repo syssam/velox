@@ -144,7 +144,7 @@ func TestSQLNeverSends(t *testing.T) {
 // fail with, and no text.
 func TestSQLReportsTheRefusal(t *testing.T) {
 	db := openPolicied(velox.Postgres, &fakeconn.Exec{})
-	text, args, err := db.Query[testmodel.Ticket]().SQL(annIn7())
+	text, args, err := db.Query[testmodel.Ticket]().SQL(annIn7()) //velox:unbounded-ok
 	if !errors.Is(err, velox.ErrUnbounded) || text != "" || args != nil {
 		t.Errorf("unbounded: %q %v %v", text, args, err)
 	}

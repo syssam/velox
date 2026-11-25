@@ -221,7 +221,7 @@ func TestSelect(t *testing.T) {
 
 		// The projection is read with Limit, like any other read.
 		n := 0
-		for _, err := range tg.db.Query[inv]().Select(I.ID).Rows(ctx) {
+		for _, err := range tg.db.Query[inv]().Select(I.ID).Rows(ctx) { //velox:unbounded-ok
 			if err == nil {
 				n++
 			}

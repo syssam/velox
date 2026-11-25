@@ -156,8 +156,9 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// Guards are always on: a read with no Limit, and an update or delete
 	// with no Where, fail before anything is sent. AllowUnbounded() and All() are
-	// the per-query escapes.
-	_, err = db.Query[veloxgen.User]().All(ctx)
+	// the per-query escapes. veloxvet reports this read at build time; the
+	// directive at its end waives it, as the read is meant to fail.
+	_, err = db.Query[veloxgen.User]().All(ctx) //velox:unbounded-ok
 	say("no Limit: ErrUnbounded=%t", errors.Is(err, velox.ErrUnbounded))
 	_, err = db.Delete[veloxgen.User]().Exec(ctx)
 	say("no Where: ErrNoWhere=%t", errors.Is(err, velox.ErrNoWhere))
