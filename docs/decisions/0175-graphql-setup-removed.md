@@ -134,6 +134,12 @@ fixed with this change:
 the removed calls, the reader is linked by what a server binds, and
 velox-graphql's gqlgen.yml check stays.
 
+The check reads gqlgen.yml only, and only where velox-graphql finds it. A
+server that links no adapter (a graphql-go server without
+`graphqlgo.Scalars`, a gqlgen.yml elsewhere) would read each edge a row
+at a time with nothing to say so. So `FieldOf` logs one slog warning per
+process when no reader is registered (amended 2026-11-25, after review).
+
 Generated code keeps its shape: a where input's `Pred` doc comment names
 the DB's limits. `veloxgql.GeneratedCodeIsVersion31` stays.
 

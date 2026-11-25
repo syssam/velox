@@ -1,7 +1,11 @@
 package gqlcore
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -86,5 +90,29 @@ func TestTableEdges(t *testing.T) {
 	})
 	if !ok || len(got) != 1 || got[0] != "stored" {
 		t.Errorf("Selected = %v, %v; want the first stored result", got, ok)
+	}
+}
+
+// TestFieldOfWarnsWithoutReader: FieldOf with no reader registered logs one
+// warning per process that no adapter is linked, which would otherwise show
+// only as a statement per row; with a reader it logs nothing.
+func TestFieldOfWarnsWithoutReader(t *testing.T) {
+	withRegistered(t)
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	noReaderOnce = sync.Once{}
+	FieldOf(context.Background())
+	FieldOf(context.Background())
+	if n := strings.Count(buf.String(), "no GraphQL adapter is linked"); n != 1 {
+		t.Fatalf("warnings with no reader = %d, want 1: %s", n, buf.String())
+	}
+	buf.Reset()
+	noReaderOnce = sync.Once{}
+	Register(engineReader{"a"})
+	FieldOf(context.Background())
+	if buf.Len() != 0 {
+		t.Errorf("a warning with a reader registered: %s", buf.String())
 	}
 }

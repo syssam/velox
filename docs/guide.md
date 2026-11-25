@@ -2900,6 +2900,12 @@ walks through each step.
 
 #### Hardening a public server
 
+A bare `handler.New` server bounds each page (`MaxPage`, `MaxList`) and
+each filter, but not a request: nested connections multiply their pages,
+and nothing bounds its cost, response or time. A server open to clients
+adds `RequestLimit`, `CostLimit`, `ResponseLimit` and `MaxBodyBytes` at
+least; examples/graphql composes every knob below.
+
 Each knob is opt-in and does one thing; none changes a statement. velox's
 pieces bound what gqlgen cannot, and gqlgen's own options the rest:
 

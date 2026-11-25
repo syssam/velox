@@ -2,6 +2,7 @@ package gqlcore
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -92,15 +93,35 @@ func Register(r Reader) {
 // FieldOf returns the field of ctx, with its Table: the first registered
 // source's that knows a field in ctx, with the table that source keeps. ok
 // is false outside a field.
+//
+// With no reader registered it logs, once per process, a warning that no
+// adapter is linked: every field then reads alone, each edge a statement per
+// row, and nothing else would say so.
 func FieldOf(ctx context.Context) (Field, bool) {
-	if p := registered.Load(); p != nil {
-		for _, src := range *p {
-			if f, ok := src.Field(ctx); ok {
-				return f, true
-			}
+	p := registered.Load()
+	if p == nil || len(*p) == 0 {
+		noReader()
+		return Field{}, false
+	}
+	for _, src := range *p {
+		if f, ok := src.Field(ctx); ok {
+			return f, true
 		}
 	}
 	return Field{}, false
+}
+
+// noReaderWarning is what FieldOf logs when no adapter is linked.
+const noReaderWarning = "veloxgql: no GraphQL adapter is linked, so edges read a row at a time; " +
+	"a gqlgen server imports veloxgql/gqlgenx (its gqlgen.yml binds a scalar from it), " +
+	"a graphql-go server calls graphqlgo.Scalars"
+
+// noReaderOnce makes noReader's warning once per process.
+var noReaderOnce sync.Once
+
+// noReader logs noReaderWarning with slog.Warn, the first time only.
+func noReader() {
+	noReaderOnce.Do(func() { slog.Warn(noReaderWarning) })
 }
 
 // SourceOf returns the registered source whose engine ctx is in; nil when

@@ -21,6 +21,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- veloxgql logs one warning per process (slog.Warn) when a GraphQL field
+  reads with no adapter linked, which batches nothing: each edge read a
+  row at a time with nothing to say so.
 - veloxvet's `ZeroDefault` analyzer reports a constant zero (`false`, `0`,
   `""`) written to a field whose `Default` is not zero, or that has a
   `DefaultFunc`, in a struct that the same function inserts with no `Set`
