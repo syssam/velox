@@ -11,12 +11,25 @@ import (
 )
 
 // TestUnbounded runs the analyzer on testdata/a, which uses velox's real
-// packages and its test model. The package is copied into a temporary
-// module that reaches this repository's root through a replace, with the
-// root's go.sum, so that nothing here pins the root's dependencies.
-// analysistest loads it offline: the root's modules must be in the module
-// cache (go mod download in the root).
+// packages and its test model.
 func TestUnbounded(t *testing.T) {
+	analysistest.Run(t, testModule(t), veloxvet.Unbounded, "./a")
+}
+
+// TestZeroDefault runs the analyzer on testdata/gen, a hand-written entity
+// in velox-gen's shape, and testdata/z, which inserts it and the test
+// model's entities.
+func TestZeroDefault(t *testing.T) {
+	analysistest.Run(t, testModule(t), veloxvet.ZeroDefault, "./gen", "./z")
+}
+
+// testModule copies testdata's packages into a temporary module that
+// reaches this repository's root through a replace, with the root's go.sum,
+// so that nothing here pins the root's dependencies. analysistest loads it
+// offline: the root's modules must be in the module cache (go mod download
+// in the root).
+func testModule(t *testing.T) string {
+	t.Helper()
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)
@@ -27,14 +40,18 @@ func TestUnbounded(t *testing.T) {
 		"replace github.com/syssam/velox => " + root + "\n"
 	write(t, filepath.Join(dir, "go.mod"), []byte(mod))
 	write(t, filepath.Join(dir, "go.sum"), read(t, filepath.Join(root, "go.sum")))
-	files, err := filepath.Glob(filepath.Join("testdata", "a", "*.go"))
+	files, err := filepath.Glob(filepath.Join("testdata", "*", "*.go"))
 	if err != nil || len(files) == 0 {
-		t.Fatalf("testdata/a: %v %v", files, err)
+		t.Fatalf("testdata: %v %v", files, err)
 	}
 	for _, f := range files {
-		write(t, filepath.Join(dir, "a", filepath.Base(f)), read(t, f))
+		rel, err := filepath.Rel("testdata", f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		write(t, filepath.Join(dir, rel), read(t, f))
 	}
-	analysistest.Run(t, dir, veloxvet.Unbounded, "./a")
+	return dir
 }
 
 func read(t *testing.T, name string) []byte {

@@ -14,4 +14,4 @@ package veloxvet
 import "golang.org/x/tools/go/analysis"
 
 // Analyzers are every analyzer of the package.
-var Analyzers = []*analysis.Analyzer{Unbounded}
+var Analyzers = []*analysis.Analyzer{Unbounded, ZeroDefault}

@@ -1866,9 +1866,14 @@ type Config struct { TracerProvider trace.TracerProvider MeterProvider metric.Me
 type Target struct { Namespace string Address string Port int }
 
 package veloxvet
+func (*Defaults) AFact()
+func (*Defaults) String() string
 func (*FreshQuery) AFact()
 func (*FreshQuery) String() string
+type DefaultField struct { Name string Default string }
+type Defaults struct { Handles string Fields []DefaultField }
 type FreshQuery struct { }
 var Analyzers
 var Unbounded
+var ZeroDefault
 
