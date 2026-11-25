@@ -748,7 +748,7 @@ func insert[E any, PE velox.Entity[E]](t *testing.T, ctx context.Context, db *ve
 	}
 }
 
-func count[E any](t *testing.T, ctx context.Context, q velox.Query[E]) int64 {
+func count[E any](t *testing.T, ctx context.Context, q velox.Query[E]) int {
 	t.Helper()
 	n, err := q.Count(ctx)
 	if err != nil {
