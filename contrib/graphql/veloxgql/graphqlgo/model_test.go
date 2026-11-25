@@ -363,7 +363,7 @@ func postCount(t testing.TB, db *velox.DB, l *stmtLog) int {
 		t.Fatal(err)
 	}
 	l.take()
-	return int(n)
+	return n
 }
 
 // contains reports whether one of ss holds sub.

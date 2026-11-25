@@ -31,7 +31,7 @@ func TestAfterCommitRunsAfterTheCommit(t *testing.T) {
 				if ctx.Done() != nil || ctx.Value(afterKey{}) != "v" {
 					t.Errorf("%s: Done %v, value %v", name, ctx.Done(), ctx.Value(afterKey{}))
 				}
-				got = append(got, name+":"+strings.Repeat("x", int(invoiceCount(t, db))))
+				got = append(got, name+":"+strings.Repeat("x", invoiceCount(t, db)))
 			}); err != nil {
 				return err
 			}

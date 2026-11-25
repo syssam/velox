@@ -74,7 +74,7 @@ func TestAfterNullsExact(t *testing.T) {
 				if !slices.Equal(ids(got), ids(want)) {
 					t.Errorf("%s, %d a page:\n got %v\nwant %v", name, n, ids(got), ids(want))
 				}
-				if c, err := q.After(&want[3]).Count(ctx); err != nil || int(c) != len(want)-4 {
+				if c, err := q.After(&want[3]).Count(ctx); err != nil || c != len(want)-4 {
 					t.Errorf("%s: Count after the fourth: %d, %v, want %d", name, c, err, len(want)-4)
 				}
 			}

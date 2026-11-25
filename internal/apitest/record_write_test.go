@@ -423,7 +423,7 @@ func TestSinkGetsTx(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return int(n)
+		return n
 	}
 	if _, err := rdb.Update[testmodel.Invoice]().Where(I.OrgID.EQ(1)).Set(I.Paid.Set(true)).Exec(ctx); err != nil {
 		t.Fatal(err)

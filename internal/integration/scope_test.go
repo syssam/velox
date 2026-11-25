@@ -294,7 +294,7 @@ func TestScopeUpdate(t *testing.T) {
 		want := slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(before), visible[c.name]...))))
 		got := rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return r.done })
 		wantIDs(t, got, want)
-		if int(n) != len(want)-len(before) {
+		if n != len(want)-len(before) {
 			t.Errorf("updated %d rows, want %d", n, len(want)-len(before))
 		}
 	})
@@ -305,7 +305,7 @@ func TestScopeDelete(t *testing.T) {
 	deleted := map[string][]int64{"ann": {2}, "admin": {2, 3}, "anyone": {2, 3, 8}}
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		n, err := c.on(tg).Delete[testmodel.Ticket]().Where(Tk.Owner.In("ann", "bob")).Exec(c.ctx)
-		if err != nil || int(n) != len(deleted[c.name]) {
+		if err != nil || n != len(deleted[c.name]) {
 			t.Errorf("delete: %d, %v", n, err)
 		}
 		got := rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return true })
