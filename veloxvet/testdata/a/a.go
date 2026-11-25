@@ -151,6 +151,21 @@ func grouped(ctx context.Context, db *velox.DB) {
 	velox.CountBy(ctx, db.Query[tm.Invoice]().AllowUnbounded(), I.Paid)
 }
 
+// A constant Limit that is not positive does not bound the query: Query's
+// fails the read, TableQuery's removes the limit.
+
+const none = 0
+
+func nonPositive(ctx context.Context, db *velox.DB, n int) {
+	db.Query[tm.Invoice]().Limit(0).All(ctx)                           // want `All reads a query`
+	db.Query[tm.Invoice]().Limit(-1).All(ctx)                          // want `All reads a query`
+	db.Query[tm.Invoice]().Limit(10).Limit(none).All(ctx)              // want `All reads a query`
+	untyped.Query(db, untyped.TableOf[tm.Invoice]()).Limit(0).All(ctx) // want `All reads a query`
+	db.Query[tm.Invoice]().Limit(0).AllowUnbounded().All(ctx)
+	db.Query[tm.Invoice]().Limit(n).All(ctx)
+	db.Query[tm.Invoice]().Limit(1).All(ctx)
+}
+
 // Untyped queries.
 
 func untypedQueries(ctx context.Context, db *velox.DB) {

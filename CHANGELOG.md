@@ -33,6 +33,8 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   read, on any of its lines or alone on the line before it, so it covers a
   chain spread over lines, but not a read in or around a function literal
   of the statement; a method value's call no longer panics the analyzer.
+  A constant `Limit(n)` with `n <= 0` does not bound a read, as at run
+  time.
 - veloxvet, a module of its own (`github.com/syssam/velox/veloxvet`), reports
   at build time a read that fails with `ErrUnbounded`: `All`, `Iter`,
   `Values`, `IDs`, `Rows`, `SQL` or `velox.Scan` with no `Limit` or

@@ -23,6 +23,9 @@ The rule, as the guard and the readers enforce it:
   `AllowUnbounded` themselves. `Paginate` limits each page.
 - Every chaining method returns a copy. None but `Limit` and
   `AllowUnbounded` changes the bound.
+- A `Limit` that is not positive bounds nothing: `Query.Limit(0)` fails
+  the read, and `TableQuery.Limit(0)` removes the limit. The analyzer
+  treats a constant `Limit(n)` with `n <= 0` as no `Limit`.
 
 ## Decision
 
@@ -70,8 +73,8 @@ alone.
 Known false negatives: a query passed through a function's parameter or
 returned by a function that is not fresh on every path, a query in a
 field, a slice or a map, a closure's captured query, a method value
-(`f := q.All`), a read through an interface or an embedding type, and
-`TableQuery.Limit(0)`, which leaves the query unbounded.
+(`f := q.All`), a read through an interface or an embedding type, and a
+`Limit` whose argument is not positive but not a constant.
 
 Rejected: a check in velox-gen, which sees only the schema; an AST walk,
 which would need its own reaching definitions for variables and branches;

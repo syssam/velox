@@ -2,6 +2,7 @@ package veloxvet
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/types"
 
 	"golang.org/x/tools/go/analysis"
@@ -27,6 +28,7 @@ untyped's All, Rows and SQL) needs Limit or AllowUnbounded on its query,
 and a grouped aggregate (velox.CountBy, SumBy, ...) needs AllowUnbounded;
 otherwise it fails with velox.ErrUnbounded when it runs. One, First,
 Count, Exists, Paginate, ScanOne and the plain aggregates need neither.
+A constant Limit that is not positive, such as Limit(0), bounds nothing.
 
 The check follows a query through the function's local variables, its
 reassignments and its branches, and reports a read only when no path to
@@ -173,6 +175,23 @@ func limited(s state) state {
 		out |= sLimit
 	}
 	return out
+}
+
+// unlimited is s after a Limit that is not positive: Query's fails the
+// read and TableQuery's removes the limit, so it bounds nothing.
+func unlimited(s state) state {
+	out := s &^ (sFresh | sLimit)
+	if s&(sFresh|sLimit) != 0 {
+		out |= sFresh
+	}
+	return out
+}
+
+// nonPositive reports whether v, a Limit's argument, is a constant that
+// is not positive.
+func nonPositive(v ssa.Value) bool {
+	c, ok := v.(*ssa.Const)
+	return ok && c.Value != nil && c.Value.Kind() == constant.Int && constant.Sign(c.Value) <= 0
 }
 
 // allowed is s after AllowUnbounded.
@@ -371,6 +390,9 @@ func (c *checker) transfer(v ssa.Value, st map[ssa.Value]state) state {
 		case roleKeep, roleFrom:
 			return get(q, st)
 		case roleLimit:
+			if nonPositive(arg(v.Common(), r.arg+1)) {
+				return unlimited(get(q, st))
+			}
 			return limited(get(q, st))
 		case roleAllow:
 			return allowed(get(q, st))
