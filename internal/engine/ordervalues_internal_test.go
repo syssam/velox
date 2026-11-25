@@ -28,8 +28,10 @@ func (n numeric) NumericValue() (numeric, error) { return n, nil }
 // TestOrderValueKinds: a value the driver read becomes the order value its
 // column's database type says: MySQL's DECIMAL text a DecimalText, its
 // DATETIME text without parseTime a TimeText, pgx's NUMERIC text a
-// DecimalText, pgx's own pgtype.Numeric a DecimalText, other text a string,
-// and anything typed as it is.
+// DecimalText, pgx's own pgtype.Numeric a DecimalText, bytes (PostgreSQL's
+// bytea, MySQL's and SQLite's binary types, and a []byte of pgx's own rows,
+// which tell no type) a copy as a []byte, other text a string, and anything
+// typed as it is.
 func TestOrderValueKinds(t *testing.T) {
 	at := time.Date(2026, 3, 1, 10, 0, 0, 123456000, time.UTC)
 	for _, c := range []struct {
@@ -42,6 +44,13 @@ func TestOrderValueKinds(t *testing.T) {
 		{[]byte("2026-03-01 10:00:00.123456"), "DATETIME", TimeText("2026-03-01 10:00:00.123456")},
 		{[]byte("2026-03-01"), "DATE", TimeText("2026-03-01")},
 		{[]byte("abc"), "VARCHAR", "abc"},
+		{[]byte("abc"), "TEXT", "abc"},
+		{[]byte("\x00\x01"), "BYTEA", []byte("\x00\x01")},
+		{[]byte("\x00\x01"), "VARBINARY", []byte("\x00\x01")},
+		{[]byte("\x00\x01"), "BINARY", []byte("\x00\x01")},
+		{[]byte("\x00\x01"), "BLOB", []byte("\x00\x01")},
+		{[]byte("\x00\x01"), "LONGBLOB", []byte("\x00\x01")},
+		{[]byte("\x00\x01"), "", []byte("\x00\x01")},
 		{"abc", "", "abc"},
 		{numeric{"12.345"}, "", DecimalText("12.345")},
 		{numeric{}, "", nil},
@@ -70,6 +79,7 @@ func TestOrderValueRoundTrip(t *testing.T) {
 		{3.0, 3.0}, {0.1, 0.1}, {1e300, 1e300}, {float32(0.5), 0.5},
 		{math.Inf(1), math.Inf(1)}, {math.Inf(-1), math.Inf(-1)},
 		{"", ""}, {"s:x", "s:x"}, {"12", "12"},
+		{[]byte{}, []byte{}}, {[]byte("\x00\x01\xff"), []byte("\x00\x01\xff")},
 		{DecimalText("0.37500000000000000700"), DecimalText("0.37500000000000000700")},
 		{DecimalText("-12.500"), DecimalText("-12.500")},
 		{TimeText("2026-03-01"), TimeText("2026-03-01")},
@@ -120,7 +130,7 @@ func TestOrderValueRoundTrip(t *testing.T) {
 			t.Errorf("%#v: no error", bad)
 		}
 	}
-	for _, bad := range []any{"x", "u:12", "u:x", "d:abc", "t:now", "f:1.5", json.Number("1x"), 1.5, []any{},
+	for _, bad := range []any{"x", "b:!!", "b:AA=A", "u:12", "u:x", "d:abc", "t:now", "f:1.5", json.Number("1x"), 1.5, []any{},
 		"d:Inf", "d:0x1p-2", "d:1e999999", "d:1E+40", "d:+1", "d:1.", "d:.5", "d:",
 		"dt:yesterday", "dt:2026-13-45 99:00:00", "dt:2026-02-30", "dt:2026-03-01T10:00:00", "dt:2026-03-01 10:00:00.1234567", "dt:",
 		"u:018446744073709551615", "u:+18446744073709551615", "u:18446744073709551616", "u:9223372036854775807",

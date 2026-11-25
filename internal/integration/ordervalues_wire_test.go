@@ -217,7 +217,45 @@ func TestOrderValuesWire(t *testing.T) {
 		}
 		t.Run("typed terms", func(t *testing.T) { wireTypedTerms(t, tg) })
 		t.Run("mixed", func(t *testing.T) { wireMixed(t, tg, rows) })
+		t.Run("bytes", func(t *testing.T) { wireBytes(t, tg, rows) })
 	})
+}
+
+// wireBytes: an ordering by an expression that gives bytes holding NUL
+// bytes, the key's eight big-endian bytes, pages forward through the
+// cursor's JSON in key order: a bytea's value, read as a string, is not
+// refused as text holding a NUL would be on PostgreSQL. SQLite has no such
+// function in its core, so it is skipped there.
+func wireBytes(t *testing.T, tg target, rows []testmodel.Invoice) {
+	var text string
+	switch tg.d {
+	case velox.Postgres:
+		text = "int8send(?)"
+	case velox.MySQL:
+		text = "UNHEX(LPAD(HEX(?), 16, '0'))"
+	default:
+		t.Skip("SQLite has no function giving a key's bytes")
+	}
+	by := velox.Calc[testmodel.Invoice](text, I.ID)
+	q := untyped.FromQuery(tg.db.Query[testmodel.Invoice]().Where(I.ID.GTE(700)).OrderBy(by.Asc(), I.ID.Asc())).OrderValues()
+	want := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		want = append(want, r.ID)
+	}
+	slices.Sort(want)
+	var got []int64
+	page, err := q.Limit(2).All(ctx)
+	for err == nil && page.Len() > 0 && len(got) <= len(rows) {
+		got = append(got, ids(untyped.RowsOf[testmodel.Invoice](page))...)
+		last := page.Len() - 1
+		page, err = q.AfterValues(page.At(last), wireValues(t, page.OrderValues(last))).Limit(2).All(ctx)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
+	}
 }
 
 // wireTypedTerms: an ordering by a term whose kind velox knows, a JSON

@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"bytes"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -262,7 +264,7 @@ func columnKind(c ColumnInfo) valueKind {
 // text); a time a time.Time or a TimeText (MySQL's without parseTime), and
 // on SQLite, whose times are text, a string; text a string; a bool a bool,
 // and on MySQL and SQLite, whose booleans are integers, an integer; bytes a
-// string, as OrderValues copies them, or a []byte. A value of a term of
+// []byte, as OrderValues reads them, or a string. A value of a term of
 // unknown kind is bound as it is.
 func checkValueKind(d Dialect, in *EntityInfo, t Term, v any) error {
 	if v == nil {
@@ -559,11 +561,13 @@ type DecimalText string
 type TimeText string
 
 // orderValue is v, a value the driver read into an any, as an order value:
-// a driver.Valuer, such as pgx's pgtype.Numeric, as its value; text, or a
-// []byte copied as text since the driver may reuse its buffer, as a
-// DecimalText in a column whose database type typ is a decimal, a TimeText
-// in a date or time column, and a string otherwise. A pgtype.Numeric, from
-// pgx's own rows, which tell no column types, is a DecimalText.
+// a driver.Valuer, such as pgx's pgtype.Numeric, as its value; bytes, in a
+// column whose database type typ is binary (bytesType), as a copy, since
+// the driver may reuse its buffer, so that AfterValues binds bytes again;
+// text, or a []byte copied as text, as a DecimalText in a decimal column, a
+// TimeText in a date or time column, and a string otherwise. pgx's own rows
+// tell no column types: there a pgtype.Numeric is a DecimalText, and a
+// []byte, which they give for bytea alone, bytes.
 func orderValue(v any, typ string) any {
 	if v != nil && typ == "" {
 		// pgx's own rows tell no column types; its pgtype.Numeric, a
@@ -580,6 +584,9 @@ func orderValue(v any, typ string) any {
 	var text string
 	switch x := v.(type) {
 	case []byte:
+		if typ == "" || bytesType(typ) {
+			return bytes.Clone(x)
+		}
 		text = string(x)
 	case string:
 		text = x
@@ -595,12 +602,23 @@ func orderValue(v any, typ string) any {
 	return text
 }
 
+// bytesType reports whether typ, a database type name as the drivers give
+// it (sql.ColumnType.DatabaseTypeName, upper case), holds bytes, not text.
+func bytesType(typ string) bool {
+	switch typ {
+	case "BYTEA", "BINARY", "VARBINARY", "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB":
+		return true
+	}
+	return false
+}
+
 // EncodeOrderValue is v, an order value (TableRows.OrderValues), as a JSON
 // value that DecodeOrderValue reads back as the same value: a cursor holds
 // it. NULL is nil and a bool a bool; an integer is an int64, or "u:" and
 // its digits past the int64 range; a finite float is a json.Number with a
 // fraction or an exponent ("3.0"), NaN and the infinities "f:NaN", "f:+Inf"
-// and "f:-Inf"; text is "s:" and the text, a DecimalText "d:" and its text,
+// and "f:-Inf"; text is "s:" and the text, bytes "b:" and their standard
+// base64, a DecimalText "d:" and its text,
 // a TimeText "dt:" and its text, and a time.Time "t:" and RFC 3339 with
 // nanoseconds. Any other value is an error, and so is a DecimalText or a
 // TimeText that is not as the drivers print one (decimalText and
@@ -638,7 +656,7 @@ func EncodeOrderValue(v any) (any, error) {
 	case string:
 		return "s:" + x, nil
 	case []byte:
-		return "s:" + string(x), nil
+		return "b:" + base64.StdEncoding.EncodeToString(x), nil
 	case DecimalText:
 		if !decimalText(string(x)) && !specialDecimal(string(x)) {
 			return nil, fmt.Errorf("velox: an ordering by an expression read the decimal %q, which a cursor cannot hold", string(x))
@@ -826,6 +844,10 @@ func decodeTagged(x string) (any, error) {
 	case !ok:
 	case tag == "s":
 		return rest, nil
+	case tag == "b":
+		if b, err := base64.StdEncoding.Strict().DecodeString(rest); err == nil {
+			return b, nil
+		}
 	case tag == "d":
 		if decimalText(rest) || specialDecimal(rest) {
 			return DecimalText(rest), nil
