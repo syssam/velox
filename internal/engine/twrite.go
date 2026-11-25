@@ -189,7 +189,7 @@ func (q TableInsert) DoNothing() TableInsert {
 func (q TableInsert) Exec(ctx context.Context) error {
 	err := q.exec(ctx)
 	if err == nil && q.t != nil && q.t.info != nil {
-		PutInserted(q.e, q.t.info, q.one, q.many.p, q.many.size, q.many.n, q.bulk)
+		PutInserted(ctx, q.e, q.t.info, q.one, q.many.p, q.many.size, q.many.n, q.bulk)
 	}
 	return err
 }

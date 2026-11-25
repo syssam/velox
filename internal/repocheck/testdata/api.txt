@@ -566,7 +566,6 @@ func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) RawRo
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
-func (db *DB) Value(key any) any
 func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
@@ -854,6 +853,7 @@ func Unless(h Hook, cond Condition) Hook
 func UseTx(db *DB, tx *sql.Tx) (*DB, error)
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
+func Value(db *DB, key any) any
 func WithAround(a Around) Option
 func WithCallerSkip(pkgPath ...string) Option
 func WithCallers() Option

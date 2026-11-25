@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -56,8 +57,10 @@ type config struct {
 	// autoInc is MySQL's @@auto_increment_increment, read for a multi-row
 	// insert's keys (autoIncrementStep): 0 unknown.
 	autoInc atomic.Int64
-	// Values are WithValue's, in the order given.
-	Values []keyValue
+	// values are WithValue's, a []keyValue in the order given; an any, so
+	// that no type of it is in the export data of every package that uses a
+	// DB (TestGenericTypesCompileSmall).
+	values any
 }
 
 // keyValue is one WithValue.
@@ -85,16 +88,22 @@ func WithValue(key, value any) Option {
 	if !reflect.TypeOf(key).Comparable() {
 		panic(fmt.Sprintf("velox: WithValue with a key of %T, which is not comparable", key))
 	}
-	return Option{func(c *config) { c.Values = append(c.Values, keyValue{key, value}) }}
+	return Option{func(c *config) {
+		vs, _ := c.values.([]keyValue)
+		c.values = append(vs, keyValue{key, value})
+	}}
 }
 
 // Value returns the value WithValue attached to db under key, the last one
 // given; nil when there is none.
 func (db *DB) Value(key any) any {
-	vs := db.Cfg.Values
-	for i := len(vs) - 1; i >= 0; i-- {
-		if vs[i].key == key {
-			return vs[i].value
+	if db.Cfg == nil {
+		return nil // the zero DB
+	}
+	vs, _ := db.Cfg.values.([]keyValue)
+	for _, kv := range slices.Backward(vs) {
+		if kv.key == key {
+			return kv.value
 		}
 	}
 	return nil

@@ -370,7 +370,7 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 	if err != nil {
 		return nil, nil, at, err
 	}
-	q.s.DB.Source().PutRows(q.meta.Info, unsafe.Pointer(unsafe.SliceData(out)), unsafe.Sizeof(*new(E)), len(out), q.s.Joins.JoinFills())
+	q.s.DB.SourceIn(ctx).PutRows(q.meta.Info, unsafe.Pointer(unsafe.SliceData(out)), unsafe.Sizeof(*new(E)), len(out), q.s.Joins.JoinFills())
 	return out, ran, at, nil
 }
 
@@ -551,11 +551,11 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		engine.SetStmtIter(&st)
 		var stopped bool
 		if q.s.DB.Hooked() {
-			it := &iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, src: q.s.DB.Source(), yield: yield, timed: len(q.s.DB.Cfg.Arounds) > 0}
+			it := &iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, src: q.s.DB.SourceIn(ctx), yield: yield, timed: len(q.s.DB.Cfg.Arounds) > 0}
 			err = q.s.DB.Run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
-			it := iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, src: q.s.DB.Source(), yield: yield}
+			it := iterRun[E]{st: st, m: q.meta, joins: q.s.Joins, src: q.s.DB.SourceIn(ctx), yield: yield}
 			err = q.s.DB.Plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}

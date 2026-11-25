@@ -291,8 +291,11 @@ func (db *DB) observe(ctx context.Context, st *Statement) {
 // reading closure can stay on the stack.
 func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, res *execResult) error {
 	if j := db.joined(ctx); j != nil {
-		db, st.InTx = j, true
+		db = j
 	}
+	// A write on db.In(ctx) (Write, UpdateOne…) has a statement built on
+	// the caller's DB: it is in the transaction too.
+	st.InTx = st.InTx || db.InTx
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
@@ -367,8 +370,11 @@ func (db *DB) held(ctx context.Context, st *Statement) error {
 // a statement with no hooks of either kind uses plain.
 func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res *execResult) error {
 	if j := db.joined(ctx); j != nil {
-		db, st.InTx = j, true
+		db = j
 	}
+	// A write on db.In(ctx) (Write, UpdateOne…) has a statement built on
+	// the caller's DB: it is in the transaction too.
+	st.InTx = st.InTx || db.InTx
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
@@ -483,8 +489,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 // work. It never executes st, so no Around hook runs.
 func (db *DB) DryRun(ctx context.Context, st *Statement) (string, []any, error) {
 	if j := db.joined(ctx); j != nil {
-		db, st.InTx = j, true
+		db = j
 	}
+	// A write on db.In(ctx) (Write, UpdateOne…) has a statement built on
+	// the caller's DB: it is in the transaction too.
+	st.InTx = st.InTx || db.InTx
 	st.DryRun = true
 	if err := db.prepare(ctx, st); err != nil {
 		return "", nil, err

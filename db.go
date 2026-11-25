@@ -284,8 +284,9 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 func (db *DB) WithoutPolicy(reason string) *DB { return pub(db.e.WithoutPolicy(reason)) }
 
 // Value returns the value WithValue attached to db under key; nil when there
-// is none.
-func (db *DB) Value(key any) any { return db.e.Value(key) }
+// is none, and for the zero DB. It is a function, not a method, as Pool is: a method of DB is in
+// the export data of every package that uses a DB.
+func Value(db *DB, key any) any { return db.e.Value(key) }
 
 // PolicyBypass returns db's WithoutPolicy reason; "" when it has none.
 func (db *DB) PolicyBypass() string { return db.e.PolicyBypass() }

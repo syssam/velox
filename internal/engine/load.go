@@ -825,7 +825,7 @@ func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityI
 		if joins != nil && len(st.Joins) > 0 {
 			fills = joins.Fills
 		}
-		db.src.putBlocks(t, part, fills)
+		db.In(ctx).src.putBlocks(t, part, fills)
 	}
 	return part, owners, err
 }

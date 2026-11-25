@@ -2,6 +2,7 @@ package engine
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -78,6 +79,13 @@ func OwnSource(db *DB) {
 // Source returns the Source db's statements give the entities they read or
 // write; nil on a DB that has none.
 func (db *DB) Source() *Source { return db.src }
+
+// SourceIn returns the Source a statement on db under ctx gives its
+// entities: that of the transaction db joins under ctx (In), else db's. It
+// is a call, not inlined into the generic readers.
+//
+//go:noinline
+func (db *DB) SourceIn(ctx context.Context) *Source { return db.In(ctx).src }
 
 // txSource gives h, a transaction's (or savepoint's) handle, its Source:
 // one that resolves to h, or to a copy of h without its WithoutPolicy
@@ -255,11 +263,12 @@ func EdgeQuery(s *Source, owner any, edge int32, info *EntityInfo, one, many any
 	return q
 }
 
-// PutInserted stores db's Source in the rows of an insert of in that
-// succeeded: the one row at one, or the n rows size bytes apart from many,
-// and the rows of an InsertBulk that set holds (BulkSetters).
-func PutInserted(db *DB, in *EntityInfo, one, many unsafe.Pointer, size uintptr, n int, set Setters) {
-	s := db.src
+// PutInserted stores the Source of db under ctx (SourceIn) in the rows of an
+// insert of in that succeeded: the one row at one, or the n rows size bytes
+// apart from many, and the rows of an InsertBulk that set holds
+// (BulkSetters).
+func PutInserted(ctx context.Context, db *DB, in *EntityInfo, one, many unsafe.Pointer, size uintptr, n int, set Setters) {
+	s := db.SourceIn(ctx)
 	if set.bulk != nil {
 		for _, r := range set.bulk.rows {
 			if r.p != nil {

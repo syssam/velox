@@ -381,7 +381,7 @@ func (q TableQuery) read(ctx context.Context) (out TableRows, ran []int, at Targ
 	if err != nil {
 		return TableRows{}, nil, at, err
 	}
-	q.e.src.PutRows(q.t.info, out.p, out.size, out.n, q.joins.JoinFills())
+	q.e.In(ctx).src.PutRows(q.t.info, out.p, out.size, out.n, q.joins.JoinFills())
 	return out, ran, at, nil
 }
 

@@ -384,7 +384,9 @@ func SourceDB(t Table, row any) *velox.DB {
 }
 
 // QueryDB returns the DB q runs on, as Query or FromQuery gave it; nil for
-// the zero TableQuery.
+// the zero TableQuery. It is for code that is given a query and reads a
+// setting of its DB (velox.Value), as velox-graphql's connections read
+// their limits; SourceDB gives a row's DB the same way.
 func QueryDB(q TableQuery) *velox.DB {
 	return (*velox.DB)(unsafe.Pointer(engine.TableQueryDB(q)))
 }

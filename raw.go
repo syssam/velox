@@ -216,7 +216,7 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.Source()}
+	a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.SourceIn(ctx)}
 	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.Source(), limit: 2}
+	a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.SourceIn(ctx), limit: 2}
 	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			return
 		}
 		engine.SetStmtIter(&st)
-		a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.Source(), yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
+		a := &rawRun[E]{st: st, m: q.meta, src: q.db.e.SourceIn(ctx), yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
 		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {
 			var zero E
