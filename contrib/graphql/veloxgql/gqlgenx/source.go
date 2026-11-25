@@ -54,10 +54,11 @@ func (s *source) Field(ctx context.Context) (gqlcore.Field, bool) {
 
 // field is Field of fc, gqlgen's field context in ctx.
 func (s *source) field(ctx context.Context, fc *graphql.FieldContext) gqlcore.Field {
-	f := gqlcore.Field{Object: fc.Object, Name: fc.Field.Name}
+	f := gqlcore.Field{Object: fc.Object}
 	if fc.Field.Field == nil {
 		return f
 	}
+	f.Name = fc.Field.Name
 	var oc *graphql.OperationContext
 	if graphql.HasOperationContext(ctx) {
 		oc = graphql.GetOperationContext(ctx)

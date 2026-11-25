@@ -131,3 +131,14 @@ func TestSourceFieldWithoutOperation(t *testing.T) {
 	(&source{}).Wait(ctx)()
 	reader{}.Wait(ctx)()
 }
+
+// TestSourceFieldWithoutASTField: a field context with no *ast.Field gives
+// a field with no name, key or selection, read alone, and no panic.
+func TestSourceFieldWithoutASTField(t *testing.T) {
+	fc := &graphql.FieldContext{Object: "Query"}
+	ctx := graphql.WithFieldContext(context.Background(), fc)
+	f, ok := (&source{}).Field(ctx)
+	if !ok || f.Object != "Query" || f.Name != "" || f.Key != nil || f.Sel != nil {
+		t.Errorf("no *ast.Field: %+v, %v; want only the object", f, ok)
+	}
+}
