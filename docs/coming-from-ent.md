@@ -231,9 +231,11 @@ an Optional field, a slice or a map is `omitempty`; a time, UUID or other
 struct is `omitzero`. A field's `StructTag` replaces the tag, as in ent.
 
 **Relations load only when asked.** `With(P.Author)` loads one with one more
-query, and `Get()` reports whether it was loaded. Nothing loads lazily, and
-there is no `QueryPosts()`: read the posts with `db.Query[veloxgen.Post]()` and a
-condition, or use `A.Posts.Has()` and `HasWith` in a `Where`.
+query, and `Get()` reports whether it was loaded. Nothing loads lazily.
+`u.QueryPosts()` is ent's edge query: it returns a `velox.Query[Post]` on the
+DB that read `u`, so it needs a `Limit` like any read
+([decision 0171](decisions/0171-entities-carry-their-source.md)). `A.Posts.Has()` and
+`HasWith` filter by a relation in a `Where`.
 
 ## Queries and writes
 
@@ -532,6 +534,17 @@ flag, baseline records the database as it is, so the first `diff` adds
 every foreign key. Each fails on rows whose key matches no row of its
 target: find and fix those first
 ([ADR 0167](decisions/0167-no-foreign-keys.md)).
+
+### Keeping Atlas
+
+A team that runs ent's versioned migrations through Atlas can keep Atlas.
+`go tool velox-gen migrate sql -dialect postgres ./veloxschema` prints the
+schema's `CREATE` statements, which Atlas reads as an `external_schema`
+in place of ent's `ent://` URL; `atlas migrate diff` and `atlas migrate
+apply` then run as before. [examples/README.md](../examples/README.md#migrations)
+has the `atlas.hcl`. A directory is Atlas's or velox's, never both: to
+move one to velox, baseline the database as above and stop running Atlas
+on it ([decision 0006](decisions/0006-own-migrate-and-atlas.md)).
 
 A field made `Nillable` gets `DROP NOT NULL` from `diff`, so a hand step
 that relaxed such columns is not needed. When `apply` refuses or stops,

@@ -930,6 +930,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `migrate` lints a numeric that gains precision, or loses its bounds, as
+  `widen-type`, not `alter-type`: safe on PostgreSQL when the scale is kept
+  (no rewrite), review when the scale grows and the integer digits are
+  kept, and review for MySQL's `decimal`. A change that drops a digit on
+  either side is still destructive.
 - On PostgreSQL, a JSON path's `Text`, `Number` and `Bool` `EQ`, `Text`'s
   `In` and `ValueIsNull` are written as `col @> $1::jsonb` in a filter
   under an even number of `Not`s, so a GIN index on the jsonb column
@@ -1892,6 +1897,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- Keyset paging over an expression that gives bytes read them as text: on
+  PostgreSQL the next page bound them as text and failed, and on MySQL it
+  silently stopped early (2 of 13 rows). An order value of a binary column
+  (bytea; MySQL's and SQLite's binary and blob types) is now a `[]byte`,
+  which a cursor holds as `"b:"` and base64 and `AfterValues` binds as
+  bytes.
 - veloxgql: a connection's page and `totalCount` read with the values of
   the context given to Paginate, and the deadline and cancellation of the
   reading field's. A value an application set before paginating, which a

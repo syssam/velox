@@ -392,8 +392,11 @@ schemas (`internal/benchschema`); `docs/decisions/0147-sqlite-memory-and-fast-te
 has the figures.
 
 `bash bench/compare/run.sh` measures velox, veloxe and ent. It takes hours,
-starts PostgreSQL, and writes `bench/compare/results/`. The last report is
-`docs/history/reviews/2026-10-29-perf-comparison.md`.
+starts PostgreSQL, and writes `bench/compare/results/`. Each run's
+`report-tables.md` is its report; the latest run's directory is the
+newest under `bench/compare/results/`.
+`docs/history/reviews/2026-10-29-perf-comparison.md` is the first, with
+the method.
 
 ## Docs
 

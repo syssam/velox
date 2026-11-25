@@ -333,6 +333,17 @@ last applied version make on an empty database: a temporary SQLite file, or
 give a new one each time. `diff -check` applies the whole directory the same
 way and fails unless the result is `schema.json`.
 
+## Through a connection pooler
+
+On PostgreSQL, `apply`, `resolve` and `migrate.Up` hold one connection for
+the run. On it they take a session advisory lock, so that two runs never
+apply at once, and they set `lock_timeout` for the session. A pooler in
+transaction mode, such as PgBouncer's `pool_mode = transaction`, hands
+each transaction a server connection of its own, which breaks both: the
+lock is taken on one server connection and the statements run on others.
+Run migrations on a direct connection to PostgreSQL, or through a pool in
+session mode.
+
 ## Notes
 
 `apply` and `resolve` print `velox-gen: note:` lines for what stops nothing: a SQLite
