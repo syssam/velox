@@ -566,6 +566,7 @@ func (db *DB) Rows(ctx context.Context, reason, query string, args ...any) RawRo
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
+func (db *DB) Value(key any) any
 func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
@@ -878,6 +879,7 @@ func WithStatementCounting() Option
 func WithTags(ctx context.Context, kv ...string) context.Context
 func WithTxAround(h TxAround) Option
 func WithTxDefaults(opts ...TxOption) Option
+func WithValue(key, value any) Option
 func WithoutTx(ctx context.Context) context.Context
 type Aggregate = veloxtype.Aggregate
 type Annotation = schema.Annotation

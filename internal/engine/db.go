@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"sync/atomic"
 	"time"
 )
@@ -55,7 +56,12 @@ type config struct {
 	// autoInc is MySQL's @@auto_increment_increment, read for a multi-row
 	// insert's keys (autoIncrementStep): 0 unknown.
 	autoInc atomic.Int64
+	// Values are WithValue's, in the order given.
+	Values []keyValue
 }
+
+// keyValue is one WithValue.
+type keyValue struct{ key, value any }
 
 // Option configures a DB's pipeline. The With functions make them; the zero
 // Option is not valid, and Connect, Open, OpenConn and OpenShards panic on it.
@@ -68,6 +74,30 @@ func WithRewrite(r Rewrite) Option {
 		panic("velox: WithRewrite(nil)")
 	}
 	return Option{func(c *config) { c.Rewrites = append(c.Rewrites, r) }}
+}
+
+// WithValue attaches value to the DB under key, which Value reads. A nil
+// key, or one that is not comparable, panics.
+func WithValue(key, value any) Option {
+	if key == nil {
+		panic("velox: WithValue with a nil key")
+	}
+	if !reflect.TypeOf(key).Comparable() {
+		panic(fmt.Sprintf("velox: WithValue with a key of %T, which is not comparable", key))
+	}
+	return Option{func(c *config) { c.Values = append(c.Values, keyValue{key, value}) }}
+}
+
+// Value returns the value WithValue attached to db under key, the last one
+// given; nil when there is none.
+func (db *DB) Value(key any) any {
+	vs := db.Cfg.Values
+	for i := len(vs) - 1; i >= 0; i-- {
+		if vs[i].key == key {
+			return vs[i].value
+		}
+	}
+	return nil
 }
 
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.

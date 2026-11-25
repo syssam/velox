@@ -283,5 +283,9 @@ func UseTx(db *DB, tx *sql.Tx) (*DB, error) {
 // and options, and Close on it closes nothing.
 func (db *DB) WithoutPolicy(reason string) *DB { return pub(db.e.WithoutPolicy(reason)) }
 
+// Value returns the value WithValue attached to db under key; nil when there
+// is none.
+func (db *DB) Value(key any) any { return db.e.Value(key) }
+
 // PolicyBypass returns db's WithoutPolicy reason; "" when it has none.
 func (db *DB) PolicyBypass() string { return db.e.PolicyBypass() }

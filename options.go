@@ -183,6 +183,15 @@ func WithFilter(f Filter) Option {
 	})
 }
 
+// WithValue attaches value to the DB under key, for a package outside velox
+// that keeps a setting with the DB, as package context keeps request-scoped
+// values: DB.Value reads it back. Every DB derived from the DB, its
+// transactions, WithoutPolicy's and Record's, and the DB a row was read
+// through, has it. Use a key of an unexported type of the package's own, as
+// with context.WithValue. Given twice for one key, the later wins. A nil key,
+// or one that is not comparable, panics.
+func WithValue(key, value any) Option { return engine.WithValue(key, value) }
+
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.
 // n must be at least 2, the limit One uses; a smaller n panics.
 func WithMaxLimit(n int) Option { return engine.WithMaxLimit(n) }
