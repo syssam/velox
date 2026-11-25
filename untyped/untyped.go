@@ -383,6 +383,12 @@ func SourceDB(t Table, row any) *velox.DB {
 	return (*velox.DB)(unsafe.Pointer(e))
 }
 
+// QueryDB returns the DB q runs on, as Query or FromQuery gave it; nil for
+// the zero TableQuery.
+func QueryDB(q TableQuery) *velox.DB {
+	return (*velox.DB)(unsafe.Pointer(engine.TableQueryDB(q)))
+}
+
 // MutationTable returns the Table of m's entity, for a hook that makes the
 // write itself, such as a soft delete's update (see velox.Mutation).
 func MutationTable(m *velox.Mutation) Table {

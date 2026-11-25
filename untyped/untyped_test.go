@@ -114,3 +114,18 @@ INSERT INTO tickets VALUES (1, 'u', 1, 'o', 't', 0, 1, NULL)`); err != nil {
 		t.Error("a row db read: no source DB")
 	}
 }
+
+// TestQueryDB: a TableQuery gives the DB Query or FromQuery was given; the
+// zero TableQuery none.
+func TestQueryDB(t *testing.T) {
+	db := velox.Open(velox.SQLite, nil)
+	if got := untyped.QueryDB(untyped.Query(db, untyped.TableOf[testmodel.Ticket]())); got != db {
+		t.Errorf("QueryDB of Query = %p, want %p", got, db)
+	}
+	if got := untyped.QueryDB(untyped.FromQuery(db.Query[testmodel.Ticket]())); got != db {
+		t.Errorf("QueryDB of FromQuery = %p, want %p", got, db)
+	}
+	if got := untyped.QueryDB(untyped.TableQuery{}); got != nil {
+		t.Errorf("QueryDB of the zero TableQuery = %p, want nil", got)
+	}
+}

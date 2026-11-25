@@ -60,6 +60,9 @@ type TableQuery struct {
 	orderVals bool
 }
 
+// TableQueryDB returns the DB q runs on: untyped.QueryDB.
+func TableQueryDB(q TableQuery) *DB { return q.e }
+
 // QueryTable starts a query on t's entity through e: untyped.Query.
 func QueryTable(e *DB, t Table) TableQuery {
 	s := t.state()
