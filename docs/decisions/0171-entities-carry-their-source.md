@@ -103,6 +103,18 @@ the HundredRows benchmark.
   root (`txCtx.self`). It costs a statement on a DB outside a transaction
   one more context lookup. `TxFrom` stays for a helper whose DB differs from
   the beginner's.
+- A library function that holds the beginner's DB and calls `Tx` under the
+  caller's transaction context gets a savepoint. Options make that `Tx`
+  fail, as they do on any nested `Tx`. It applies no isolation or read
+  only of its own, and only the outermost `Tx` retries a serialization
+  failure. Such a function runs within its caller's transaction, as it
+  would with `TxFrom`. To run in a transaction of its own, it needs a
+  context from outside the caller's transaction.
+- Joining compares the DB's mode: its WithoutPolicy reason, its misuse (a
+  WithoutPolicy with no reason) and its recording (`sameMode`). A
+  WithoutPolicy copy with no reason does not join, so it fails in a
+  transaction as it does outside one. `TestDBFieldsClassified` fails on a
+  new DB field until it is a mode or handle state.
 - velox-graphql: an edge's DB is its row's (`untyped.SourceDB`), else the
   request's. A connection of a query still fails without an adapter or
   `veloxgql.Service` (0105, 0121). A resolver reads and writes on the one

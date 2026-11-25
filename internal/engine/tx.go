@@ -281,6 +281,11 @@ func WithTxDefaults(opts []TxOption) Option {
 // anything is sent or any TxAround hook runs. Its statements run on that
 // shard too, and one whose context names another fails.
 //
+// Under the context of a transaction db began, Tx makes a savepoint too, as
+// db joins the transaction: a function given db and its caller's ctx runs
+// in the caller's transaction, takes no options, and is retried only with
+// the outermost Tx.
+//
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. When releasing the savepoint fails, the
 // nested Tx rolls back to the savepoint, on a context without ctx's
@@ -899,14 +904,14 @@ func (db *DB) In(ctx context.Context) *DB {
 
 // joined is the handle In returns in a transaction db began; nil when ctx
 // has no live transaction's mark, or db is in a transaction, or db did not
-// begin the transaction: its Source, WithoutPolicy reason and recording are
-// not the beginner's, or are not those of the savepoint whose fn got ctx.
+// begin the transaction: its Source or mode (sameMode) is not the
+// beginner's, or its mode is not that of the savepoint whose fn got ctx.
 func (db *DB) joined(ctx context.Context) *DB {
 	if db.txRoot != nil || db.src == nil {
 		return nil
 	}
 	root, _ := ctx.Value(txKey{}).(*txFrame)
-	if root == nil || root.origin != db.src || root.ended.Load() || root.db.bypass != db.bypass || root.db.rec != db.rec {
+	if root == nil || root.origin != db.src || root.ended.Load() || !sameMode(&root.db, db) {
 		return nil
 	}
 	if self, _ := ctx.Value(txSelfKey{}).(*txFrame); self != nil && self.db.txRoot == root && !self.ended.Load() {
@@ -914,12 +919,22 @@ func (db *DB) joined(ctx context.Context) *DB {
 		// transaction has that copy's reason or recording: db would
 		// skip its policies, or write to the copy's sink. It does not
 		// join; the root's handle would run in the savepoint too.
-		if self.db.bypass != db.bypass || self.db.rec != db.rec {
+		if !sameMode(&self.db, db) {
 			return nil
 		}
 		return &self.db
 	}
 	return &root.db
+}
+
+// sameMode reports whether a and b treat a statement alike: the same
+// WithoutPolicy reason, misuse and recording. A DB joins a transaction only
+// when its mode is the transaction's; the handle it gets back runs its
+// statements, so a mode that differs would be lost. Every field of DB is
+// either a mode compared here or handle state: TestDBFieldsClassified fails
+// on a field that is neither.
+func sameMode(a, b *DB) bool {
+	return a.bypass == b.bypass && a.misuse == b.misuse && a.rec == b.rec //nolint:errorlint // the same misuse value, not a match in a tree
 }
 
 // bypassFrame is the frame of a transaction or savepoint begun with a

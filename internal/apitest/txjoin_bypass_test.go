@@ -88,3 +88,24 @@ func TestJoinedWriteIsInTx(t *testing.T) {
 		t.Errorf("statements in the joined transaction without InTx: %q", outside)
 	}
 }
+
+// TestNoReasonCopyFailsInTheBeginnersTx: a WithoutPolicy copy with no reason
+// fails its statements and its Tx under the context of a transaction its
+// base began, as it does outside one; before, it joined the transaction and
+// ran on the transaction's handle, which has no misuse.
+func TestNoReasonCopyFailsInTheBeginnersTx(t *testing.T) {
+	db := sourceDB(t)
+	bad := db.WithoutPolicy("")
+	err := db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
+		if _, err := bad.Query[testmodel.Sample]().Count(ctx); err == nil {
+			t.Error("Count on a copy with no reason in the transaction: nil error")
+		}
+		if err := bad.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err == nil {
+			t.Error("Tx on a copy with no reason in the transaction: nil error")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
