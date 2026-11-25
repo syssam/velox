@@ -30,3 +30,7 @@ server target is 32-bit.
 
 Each Count and Exec caller that held the result in an `int64` takes an
 `int`. `docs/coming-from-ent.md` lists the types.
+
+The conversions add about 1 KB to a package that uses `Count` or `Exec`
+(`entityDescUse` 806950 to 808042 bytes, `entityDescHooks` 892988 to
+894078); the recorded limits in `compilecost_test.go` rose by 1 KB.
