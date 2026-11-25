@@ -90,3 +90,48 @@ func TestGenerateChecksGQLGenConfig(t *testing.T) {
 		}
 	}
 }
+
+// TestCheckGQLGenConfigEdges: a directory with no go.mod above it, or one
+// whose go.mod names no module, is checked against nothing; a
+// configuration that cannot be read fails with its error; and a package at
+// the module's own path reads the configuration in its root.
+func TestCheckGQLGenConfigEdges(t *testing.T) {
+	bare := t.TempDir()
+	if err := checkGQLGenConfig(bare, "example.com/app/veloxgen"); err != nil {
+		t.Errorf("no go.mod: %v, want nil", err)
+	}
+	writeFiles(t, bare, map[string]string{"go.mod": "go 1.27\n", "gqlgen.yml": "models: {}\n"})
+	if err := checkGQLGenConfig(bare, "example.com/app/veloxgen"); err != nil {
+		t.Errorf("a go.mod with no module: %v, want nil", err)
+	}
+
+	root := t.TempDir()
+	writeFiles(t, root, map[string]string{"go.mod": "module example.com/app\n"})
+	if err := os.Mkdir(filepath.Join(root, "gqlgen.yml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkGQLGenConfig(root, "example.com/app/veloxgen"); err == nil || !strings.Contains(err.Error(), "gqlgen.yml") {
+		t.Errorf("an unreadable configuration: %v, want its error", err)
+	}
+
+	own := t.TempDir()
+	writeFiles(t, own, map[string]string{"go.mod": "module example.com/app\n", "gqlgen.yml": "models: {}\n"})
+	if err := checkGQLGenConfig(own, "example.com/app"); err == nil || !strings.Contains(err.Error(), "binds nothing") {
+		t.Errorf("a package at the module's path: %v, want a refusal", err)
+	}
+}
+
+// TestModulePath: the module directive's path, quoted or not, after lines
+// that are not it; "" when there is none.
+func TestModulePath(t *testing.T) {
+	for _, c := range []struct{ src, want string }{
+		{"// c\nmodule example.com/a\n", "example.com/a"},
+		{"go 1.27\nmodule \"example.com/q\"\n", "example.com/q"},
+		{"module\ngo 1.27\n", ""},
+		{"", ""},
+	} {
+		if got := modulePath([]byte(c.src)); got != c.want {
+			t.Errorf("modulePath(%q) = %q, want %q", c.src, got, c.want)
+		}
+	}
+}
