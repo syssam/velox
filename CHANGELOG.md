@@ -21,6 +21,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- veloxvet, a module of its own (`github.com/syssam/velox/veloxvet`), reports
+  at build time a read that fails with `ErrUnbounded`: `All`, `Iter`,
+  `Values`, `IDs`, `Rows`, `SQL` or `velox.Scan` with no `Limit` or
+  `AllowUnbounded` on any path, and a grouped aggregate with no
+  `AllowUnbounded`. Run `go vet -vettool=$(which veloxvet) ./...`, or import
+  `veloxvet.Analyzers` into another driver. `//velox:unbounded-ok` waives a
+  read a test expects to fail. The root module gains no dependency
+  (decision 0176).
 - `JSONCol.ValueIsNull(keys...)` and `NullJSONCol.ValueIsNull`, ent's
   `sqljson.ValueIsNull`: true where the path holds a JSON null, on every
   dialect. `Or(Not(c.HasKey(k)), c.ValueIsNull(k))` is "missing or null",

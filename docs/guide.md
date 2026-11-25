@@ -677,6 +677,38 @@ for x, err := range db.Query[veloxgen.Invoice]().OrderBy(I.ID.Asc()).AllowUnboun
 `Count` and `Exists` need no `Limit`, as they return one value. A DB can also
 cap every read with `velox.WithMaxLimit` and `velox.WithMaxRows`.
 
+### Catch unbounded reads at build time
+
+veloxvet reports a read that would fail with `ErrUnbounded`, before the
+program runs. Run it as go vet's tool:
+
+```sh
+go install github.com/syssam/velox/veloxvet/cmd/veloxvet@latest
+go vet -vettool=$(which veloxvet) ./...
+```
+
+It reports `All`, `Iter`, `Values`, `IDs`, `Rows`, `SQL` and `velox.Scan`
+on a query with no `Limit` or `AllowUnbounded`, and a grouped aggregate
+such as `velox.CountBy` with no `AllowUnbounded`. It follows the query
+through variables, reassignments and branches, and reports a read only
+when no path to it sets a bound:
+
+```go
+q := db.Query[veloxgen.Invoice]()
+if paid {
+	q = q.Where(I.Status.EQ(veloxgen.InvoiceStatusPaid))
+}
+rows, err := q.All(ctx) // reported: no path sets a Limit
+```
+
+It also follows a function that returns a new query on every path, such
+as an entity's `QueryX` method, into the package that calls it. A query
+from a parameter, a field or a closure is not reported, so it finds most
+unbounded reads, not all. A test that expects the error waives the report
+with `//velox:unbounded-ok` at the end of the read's line.
+`veloxvet.Analyzers` are go/analysis analyzers, for golangci-lint's plugins
+and other drivers.
+
 ### Reading one column: Values and IDs
 
 `Values` reads one column of the rows a query reads, and `IDs` reads their

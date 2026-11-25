@@ -45,7 +45,10 @@ Each rule names the test that backs it.
 
 - **A read needs `Limit` or `AllowUnbounded()`**, or it fails with
   `ErrUnbounded`. `Count` and `Exists` need neither
-  (`TestReadWithoutLimitIsRefused`).
+  (`TestReadWithoutLimitIsRefused`). A grouped aggregate (`CountBy`, `SumBy`
+  …) needs `AllowUnbounded()`; a `Limit` does not replace it. veloxvet
+  reports such a read at build time: `go vet -vettool=$(which veloxvet)
+  ./...` (`TestUnbounded`).
 - **An update or delete needs `Where` or `All()`**, or it fails with
   `ErrNoWhere` (`TestWriteWithoutWhereIsRefused`).
 - **`Optional()` stays NOT NULL.** It only means the field may be left out on
@@ -99,5 +102,8 @@ never by message.
 ## Before you say it works
 
 Run `go build ./...`, `go vet ./...` and `go test ./...`, and in CI
-`go tool velox-gen -check ./veloxschema`. PostgreSQL and MySQL tests need their
+`go tool velox-gen -check ./veloxschema`. Run veloxvet too
+(`go install github.com/syssam/velox/veloxvet/cmd/veloxvet@latest`, then
+`go vet -vettool=$(which veloxvet) ./...`): it finds the reads that would
+fail with `ErrUnbounded`. PostgreSQL and MySQL tests need their
 own DSNs; say so when you only ran SQLite.
