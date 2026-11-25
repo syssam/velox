@@ -18,7 +18,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 ## Unreleased
 
 - `Query.Count`, `UpdateQuery.Exec` and `DeleteQuery.Exec` return an `int`, as
-  ent's do; they returned an `int64` (decision 0178).
+  ent's do, and so do the untyped package's `Count` and `Exec`,
+  `Mutation.Affected` and `Mutation.SetAffected`; they used an `int64`
+  (decision 0178).
 
 1.0.0 will be the first release from this repository.
 

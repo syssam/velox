@@ -318,7 +318,7 @@ func (m *Mutation) DB() *DB {
 // which sends nothing, and when a hook skipped next without calling
 // SetAffected. It is -1 for a write whose driver could not report its
 // count.
-func (m *Mutation) Affected() int64 { return m.mu.Affected }
+func (m *Mutation) Affected() int { return int(m.mu.Affected) }
 
 // SetAffected is for a hook that makes an update or a delete itself instead
 // of calling next, such as a soft delete (see Mutation): n is the rows its
@@ -328,7 +328,7 @@ func (m *Mutation) Affected() int64 { return m.mu.Affected }
 // own Exec returns it, and is passed on. Calling it and next both, in
 // either order, with a negative n other than -1, or on an insert, whose
 // count is its rows, is a misuse.
-func (m *Mutation) SetAffected(n int64) { m.mu.SetAffected(n) }
+func (m *Mutation) SetAffected(n int) { m.mu.SetAffected(int64(n)) }
 
 // Interceptor filters an entity's rows for the application. Filter's
 // condition is ANDed into every statement that reads or changes the rows:

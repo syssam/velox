@@ -166,7 +166,7 @@ const (
 //	All(ctx context.Context) (Rows, error)
 //	One(ctx context.Context) (any, error)
 //	First(ctx context.Context) (any, error)
-//	Count(ctx context.Context) (int64, error)
+//	Count(ctx context.Context) (int, error)
 //	Exists(ctx context.Context) (bool, error)
 //	SQL(ctx context.Context) (string, []any, error)
 //	LoadEach(ctx context.Context, owner Table, edge, each int, owners []any) ([]Rows, error)
@@ -330,7 +330,7 @@ type TableInsert = engine.TableInsert
 //	KeepDefaults(cols ...int) TableUpdate // UpdateQuery.KeepDefaults, by column index
 //	Where(ps ...velox.Predicate) TableUpdate
 //	All() TableUpdate
-//	Exec(ctx context.Context) (int64, error)
+//	Exec(ctx context.Context) (int, error)
 //	SQL(ctx context.Context) (string, []any, error)
 type TableUpdate = engine.TableUpdate
 
@@ -341,7 +341,7 @@ type TableUpdate = engine.TableUpdate
 //
 //	Where(ps ...velox.Predicate) TableDelete
 //	All() TableDelete
-//	Exec(ctx context.Context) (int64, error)
+//	Exec(ctx context.Context) (int, error)
 //	SQL(ctx context.Context) (string, []any, error)
 type TableDelete = engine.TableDelete
 

@@ -570,7 +570,7 @@ func (db *DB) WithoutPolicy(reason string) *DB
 func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error
 func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error
 func (m *Meta[E]) HasRowFilter[_ Lazy[E]]() bool
-func (m *Mutation) Affected() int64
+func (m *Mutation) Affected() int
 func (m *Mutation) Cleared(name string) bool
 func (m *Mutation) Columns() []string
 func (m *Mutation) DB() *DB
@@ -581,7 +581,7 @@ func (m *Mutation) Op() Op
 func (m *Mutation) Predicates() []Predicate
 func (m *Mutation) Rows() iter.Seq[Row]
 func (m *Mutation) Set(name string, v any) error
-func (m *Mutation) SetAffected(n int64)
+func (m *Mutation) SetAffected(n int)
 func (m *Mutation) Value(name string) (any, bool)
 func (m *Mutation) Where(ps ...Predicate)
 func (m JSONTime[E]) Asc[_ Lazy[E]]() Order[E]
@@ -1571,7 +1571,7 @@ Table.Validate(row any, cols ...int) error
 Table.ValidateSet(set ...Assignment) error
 Table.Value(row any, col int) any
 TableDelete.All() TableDelete
-TableDelete.Exec(ctx context.Context) (int64, error)
+TableDelete.Exec(ctx context.Context) (int, error)
 TableDelete.SQL(ctx context.Context) (string, []any, error)
 TableDelete.Where(ps ...Predicate) TableDelete
 TableInsert.DoNothing() TableInsert
@@ -1584,7 +1584,7 @@ TableQuery.AfterValues(row any, vals []any) TableQuery
 TableQuery.All(ctx context.Context) (TableRows, error)
 TableQuery.AllowUnbounded() TableQuery
 TableQuery.Columns(cs ...int) TableQuery
-TableQuery.Count(ctx context.Context) (int64, error)
+TableQuery.Count(ctx context.Context) (int, error)
 TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)
 TableQuery.Exists(ctx context.Context) (bool, error)
 TableQuery.First(ctx context.Context) (any, error)
@@ -1613,7 +1613,7 @@ TableQuery.Where(ps ...Predicate) TableQuery
 TableQuery.Writable() TableQuery
 TableUpdate.All() TableUpdate
 TableUpdate.Assign(as ...Assignment) TableUpdate
-TableUpdate.Exec(ctx context.Context) (int64, error)
+TableUpdate.Exec(ctx context.Context) (int, error)
 TableUpdate.KeepDefaults(cols ...int) TableUpdate
 TableUpdate.SQL(ctx context.Context) (string, []any, error)
 TableUpdate.Set(col int, v any) TableUpdate

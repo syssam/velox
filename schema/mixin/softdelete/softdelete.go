@@ -248,7 +248,7 @@ func (sd Mixin) Hooks() []velox.Hook {
 // where is the delete's All, as velox refused a delete with neither a Where
 // nor All before the hooks ran. Under Unfiltered, where no interceptor
 // hides deleted rows, it ANDs deleted_at IS NULL itself.
-func (sd Mixin) softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int64, error) {
+func (sd Mixin) softDelete(ctx context.Context, m *velox.Mutation, now time.Time) (int, error) {
 	t := untyped.MutationTable(m)
 	in := t.Info()
 	col, ok := in.Column(Column)

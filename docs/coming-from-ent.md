@@ -276,10 +276,11 @@ DB that read `u`, so it needs a `Limit` like any read
 
 `Query.Count`, `UpdateQuery.Exec` (ent's `Update.Save`; ent's
 `Update.Exec` returns only an error) and `DeleteQuery.Exec` return an `int`,
-as ent's do (decision 0178). `DB.Exec`, `Mutation.Affected`, the counts of
-the untyped package, `CountBy` and `CountEach` return an `int64`, the type
-`database/sql` gives a driver's count. `DeleteQuery.Exec` returns -1 when
-the driver cannot report its count.
+as ent's do (decision 0178), and so do the untyped package's `Count` and
+`Exec`, `Mutation.Affected` and `Mutation.SetAffected`. `DB.Exec`, which
+returns a driver's count as `database/sql` gives it, `CountBy` and
+`CountEach` return an `int64`. `DeleteQuery.Exec` returns -1 when the
+driver cannot report its count.
 
 Inside `db.Tx`, a statement on the outer `db` under fn's `ctx` runs in the
 transaction, where ent's client runs it outside; one on another DB fails

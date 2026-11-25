@@ -706,7 +706,7 @@ func (c *Connection) TotalCount(ctx context.Context) (int, error) {
 			return
 		}
 		n, err := c.query.Count(c.readIn(ctx))
-		c.count, c.countErr = int(n), err
+		c.count, c.countErr = n, err
 	})
 	return c.count, c.countErr
 }

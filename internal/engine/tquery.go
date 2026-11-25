@@ -461,7 +461,7 @@ func (q TableQuery) First(ctx context.Context) (any, error) {
 }
 
 // Count is Query.Count.
-func (q TableQuery) Count(ctx context.Context) (int64, error) {
+func (q TableQuery) Count(ctx context.Context) (int, error) {
 	if err := q.check(); err != nil {
 		return 0, err
 	}
@@ -470,7 +470,8 @@ func (q TableQuery) Count(ctx context.Context) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return CountStmt(ctx, q.e, st)
+	n, err := CountStmt(ctx, q.e, st)
+	return int(n), err
 }
 
 // Exists is Query.Exists.

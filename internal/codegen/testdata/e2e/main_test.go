@@ -416,7 +416,7 @@ func TestInterceptors(t *testing.T) {
 	db := open(t)
 	ada, _, _, _, _ := seed(t, db)
 	mustInsert(t, db, &gen.Post{AuthorID: ada.ID, Title: "archived", Status: gen.PostStatusPublished})
-	count := func(ctx context.Context, dbs ...*velox.DB) int64 {
+	count := func(ctx context.Context, dbs ...*velox.DB) int {
 		t.Helper()
 		on := db
 		if len(dbs) > 0 {

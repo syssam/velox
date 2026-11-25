@@ -80,7 +80,7 @@ var bidiSeen struct {
 	inserted []bnodeFriendP // the rows Policy.Insert was asked about
 	hookRows int            // the rows the hook saw
 	calls    int            // the hook's calls
-	affected int64          // Mutation.Affected after next
+	affected int            // Mutation.Affected after next
 }
 
 func (*bnodeFriendP) Policy() velox.Policy {
@@ -298,7 +298,7 @@ var bspouses = struct {
 }{velox.NumberCol[bspouse, int64]{I: 0}, velox.NullNumberCol[bspouse, int64]{I: 1}}
 
 // bspouseAffected is what bspouse's hook read from Mutation.Affected.
-var bspouseAffected int64
+var bspouseAffected int
 
 func (*bspouse) Hooks() []velox.Hook {
 	return []velox.Hook{func(next velox.Mutator) velox.Mutator {

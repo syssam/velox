@@ -676,7 +676,7 @@ var hUps = struct {
 	ID, N velox.NumberCol[hUp, int64]
 }{velox.NumberCol[hUp, int64]{I: 0}, velox.NumberCol[hUp, int64]{I: 1}}
 
-var hUpAffected int64 = -1
+var hUpAffected int = -1
 
 func (*hUp) Policy() velox.Policy {
 	return velox.Policy{Read: func(context.Context, *velox.DB) (velox.Predicate, error) { return velox.FieldGT("n", 0), nil }}
@@ -709,7 +709,7 @@ func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 // upsert whose existing row the policy hides fails after the statement ran,
 // and reports none of the rows it affected.
 func TestMutationAffected(t *testing.T) {
-	var got int64 = -1
+	got := -1
 	flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 		if m.Affected() != 0 {
 			t.Errorf("before next Affected is %d", m.Affected())
@@ -1035,7 +1035,7 @@ func TestSetAffectedOnAnInsert(t *testing.T) {
 func TestSaveWithAHooksOwnWrite(t *testing.T) {
 	e := &fakeconn.Exec{Affected: 1}
 	db := openFake(velox.Postgres, e)
-	for _, n := range []int64{0, 1} {
+	for _, n := range []int{0, 1} {
 		flexHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
 			_ = m.Set("title", "hooked")
 			m.SetAffected(n)

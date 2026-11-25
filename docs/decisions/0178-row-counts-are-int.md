@@ -12,12 +12,16 @@ ent, or from veloxe, that stores a count in an `int` failed to compile.
 
 ## Decision
 
-The three root methods return an `int`. The engine still counts in an
-`int64`, and the root converts.
+The three root methods return an `int`, and so do their untyped twins
+(`TableQuery.Count`, `TableUpdate.Exec`, `TableDelete.Exec`) and
+`Mutation.Affected` and `SetAffected`: a hook that makes its own write
+passes an update's `Exec` count to `SetAffected`, and the two must be one
+type. The engine's statements still count in an `int64`; the root and the
+untyped handles convert.
 
-`DB.Exec`, `Mutation.Affected` and `SetAffected`, the untyped package's
-`Count` and `Exec`, `CountBy` and `CountEach` keep the `int64`: ent has no
-counterpart for them, and they report what the driver does.
+`DB.Exec`, `CountBy` and `CountEach` keep the `int64`: `DB.Exec` returns
+what the driver reports, and the other two return the counts of a group
+and of an owner's rows, which have no ent method to match.
 
 ## Consequences
 

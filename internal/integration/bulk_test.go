@@ -191,7 +191,7 @@ func TestInsertBulkHooks(t *testing.T) {
 	var (
 		mu       sync.Mutex
 		order    []string
-		affected []int64
+		affected []int
 	)
 	hook := func(next velox.Mutator) velox.Mutator {
 		return velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {

@@ -676,7 +676,7 @@ func (u TableUpdate) statement() (Statement, error) {
 }
 
 // Exec is UpdateQuery.Exec.
-func (u TableUpdate) Exec(ctx context.Context) (int64, error) {
+func (u TableUpdate) Exec(ctx context.Context) (int, error) {
 	st, err := u.statement()
 	if err != nil {
 		return 0, err
@@ -685,7 +685,7 @@ func (u TableUpdate) Exec(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	n, _, _, err := Write(ctx, u.e, &st, false, false)
-	return n, err
+	return int(n), err
 }
 
 // SQL is UpdateQuery.SQL.
@@ -728,7 +728,7 @@ func (d TableDelete) All() TableDelete {
 }
 
 // Exec is DeleteQuery.Exec.
-func (d TableDelete) Exec(ctx context.Context) (int64, error) {
+func (d TableDelete) Exec(ctx context.Context) (int, error) {
 	if d.t.err != nil {
 		return 0, d.t.err
 	}
@@ -740,7 +740,7 @@ func (d TableDelete) Exec(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	n, _, _, err := Write(ctx, d.e, &st, false, false)
-	return n, err
+	return int(n), err
 }
 
 // SQL is DeleteQuery.SQL.

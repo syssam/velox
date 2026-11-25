@@ -78,7 +78,7 @@ func Check[E any, V comparable](ctx context.Context, db *velox.DB, key *scope.Ke
 	set := func(x *E, v V) { _ = t.SetField(x, ci, v) }
 	inA, inB := key.With(ctx, a), key.With(ctx, b)
 	ofA := t.Pred(ci, untyped.PredEQ, a)
-	count := func(ctx context.Context, where ...velox.Predicate) (int64, error) {
+	count := func(ctx context.Context, where ...velox.Predicate) (int, error) {
 		return untyped.Query(db, t).Where(where...).Count(ctx)
 	}
 	before, err := count(inA)

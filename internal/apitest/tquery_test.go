@@ -216,7 +216,7 @@ func TestTableQueryRows(t *testing.T) {
 	if _, err := uq.Where(itTable.Pred(col(It.SKU), untyped.PredEQ, "nope")).One(ctx); !velox.IsNotFound(err) || err.Error() != "velox: testmodel.Item: velox: not found" && !strings.Contains(err.Error(), "testmodel.Item") {
 		t.Errorf("One of none: %v", err)
 	}
-	if n, err := uq.Count(ctx); err != nil || n != int64(len(want)) {
+	if n, err := uq.Count(ctx); err != nil || n != len(want) {
 		t.Errorf("Count: %d %v", n, err)
 	}
 	if ok, err := uq.Exists(ctx); err != nil || !ok {

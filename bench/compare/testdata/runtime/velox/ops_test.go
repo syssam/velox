@@ -199,7 +199,7 @@ func (a *app) update(ctx context.Context, i int, name string) error {
 
 func (a *app) count(ctx context.Context) (int, error) {
 	n, err := a.db.Query[gen.E1]().Where(gen.E1s.Active.EQ(true)).Count(ctx)
-	return int(n), err
+	return n, err
 }
 
 func (a *app) rows(ctx context.Context) (e1, e2, e3 int, err error) {
@@ -212,7 +212,7 @@ func (a *app) rows(ctx context.Context) (e1, e2, e3 int, err error) {
 		return 0, 0, 0, err
 	}
 	n3, err := a.db.Query[gen.E3]().Count(ctx)
-	return int(n1), int(n2), int(n3), err
+	return n1, n2, n3, err
 }
 
 // seedPages seeds one E3 under the seeded E2, the items under it, and the
