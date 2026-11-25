@@ -908,51 +908,82 @@ func sqliteKeepsValues(from, to string) bool {
 func widening(d velox.Dialect, from, to string) (Class, bool) {
 	switch d {
 	case velox.Postgres:
-		ints := []string{"smallint", "integer", "bigint"}
-		if a, b := slices.Index(ints, from), slices.Index(ints, to); a >= 0 && b > a {
-			return Review, true
-		}
-		if from == "real" && to == "double precision" {
-			return Review, true
-		}
-		// Unbounded character varying is text.
-		unbounded := func(t string) bool { return t == "text" || t == "character varying" }
-		if unbounded(from) && unbounded(to) {
+		return pgWidening(from, to)
+	case velox.MySQL:
+		return mysqlWidening(from, to)
+	}
+	return 0, false
+}
+
+// pgWidening is widening on PostgreSQL.
+func pgWidening(from, to string) (Class, bool) {
+	ints := []string{"smallint", "integer", "bigint"}
+	if a, b := slices.Index(ints, from), slices.Index(ints, to); a >= 0 && b > a {
+		return Review, true
+	}
+	if from == "real" && to == "double precision" {
+		return Review, true
+	}
+	// Unbounded character varying is text.
+	unbounded := func(t string) bool { return t == "text" || t == "character varying" }
+	if unbounded(from) && unbounded(to) {
+		return Safe, true
+	}
+	if n, ok := sizeOf(from, "character varying"); ok {
+		m, sized := sizeOf(to, "character varying")
+		if unbounded(to) || sized && m > n {
 			return Safe, true
 		}
-		if n, ok := sizeOf(from, "character varying"); ok {
-			m, sized := sizeOf(to, "character varying")
-			if unbounded(to) || sized && m > n {
+	}
+	// A numeric that keeps its scale and gains precision, or loses
+	// its bounds, is not rewritten; one that gains scale keeping its
+	// integer digits loses no value but is rewritten.
+	if p, sc, ok := decimalOf(from, "numeric"); ok {
+		if to == "numeric" {
+			return Safe, true
+		}
+		if q, tc, ok := decimalOf(to, "numeric"); ok && decimalWidens(p, sc, q, tc) {
+			if tc == sc {
 				return Safe, true
 			}
+			return Review, true
 		}
-	case velox.MySQL:
-		base := func(t string) (string, bool) {
-			t, unsigned := strings.CutSuffix(t, " unsigned")
-			if t == "integer" {
-				t = "int"
-			}
-			return t, unsigned
+	}
+	return 0, false
+}
+
+// mysqlWidening is widening on MySQL.
+func mysqlWidening(from, to string) (Class, bool) {
+	base := func(t string) (string, bool) {
+		t, unsigned := strings.CutSuffix(t, " unsigned")
+		if t == "integer" {
+			t = "int"
 		}
-		a, sa := base(from)
-		b, sb := base(to)
-		for _, family := range [][]string{
-			{"tinyint", "smallint", "mediumint", "int", "bigint"},
-			{"float", "double"},
-			{"tinytext", "text", "mediumtext", "longtext"},
-			{"tinyblob", "blob", "mediumblob", "longblob"},
-		} {
-			if x, y := slices.Index(family, a), slices.Index(family, b); x >= 0 && y > x && sa == sb {
-				return Review, true
-			}
+		return t, unsigned
+	}
+	a, sa := base(from)
+	b, sb := base(to)
+	for _, family := range [][]string{
+		{"tinyint", "smallint", "mediumint", "int", "bigint"},
+		{"float", "double"},
+		{"tinytext", "text", "mediumtext", "longtext"},
+		{"tinyblob", "blob", "mediumblob", "longblob"},
+	} {
+		if x, y := slices.Index(family, a), slices.Index(family, b); x >= 0 && y > x && sa == sb {
+			return Review, true
 		}
-		if n, ok := sizeOf(from, "varchar"); ok {
-			if m, ok := sizeOf(to, "varchar"); ok && m > n {
-				return Review, true
-			}
-			if mysqlVarcharToText(from, to) {
-				return Review, true
-			}
+	}
+	if p, sc, ok := decimalOf(a, "decimal"); ok && sa == sb {
+		if q, tc, ok := decimalOf(b, "decimal"); ok && decimalWidens(p, sc, q, tc) {
+			return Review, true
+		}
+	}
+	if n, ok := sizeOf(from, "varchar"); ok {
+		if m, ok := sizeOf(to, "varchar"); ok && m > n {
+			return Review, true
+		}
+		if mysqlVarcharToText(from, to) {
+			return Review, true
 		}
 	}
 	return 0, false
@@ -985,6 +1016,29 @@ func (l *linter) textIndexNote(c alterColumn) string {
 		more += ", so MODIFY fails while " + strings.Join(over, ", ") + " holds the whole column"
 	}
 	return more
+}
+
+// decimalOf is p and s of a type of the form base(p,s).
+func decimalOf(t, base string) (p, s int, ok bool) {
+	in, ok := strings.CutPrefix(t, base+"(")
+	if !ok {
+		return 0, 0, false
+	}
+	in, ok = strings.CutSuffix(in, ")")
+	ps, ss, comma := strings.Cut(in, ",")
+	if !ok || !comma {
+		return 0, 0, false
+	}
+	p, err1 := strconv.Atoi(strings.TrimSpace(ps))
+	s, err2 := strconv.Atoi(strings.TrimSpace(ss))
+	return p, s, err1 == nil && err2 == nil
+}
+
+// decimalWidens says whether every value of a decimal(p,s) fits a
+// decimal(q,t) unchanged: as many fraction digits or more, and as many
+// integer digits or more, and not the same type.
+func decimalWidens(p, s, q, t int) bool {
+	return t >= s && q-t >= p-s && (q != p || t != s)
 }
 
 // sizeOf is n of a type of the form base(n).
