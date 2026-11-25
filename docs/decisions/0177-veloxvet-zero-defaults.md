@@ -62,7 +62,12 @@ field, a slice or a map, or given to any function but the insert; a
 query held in a variable; `InsertAll` of a slice variable; a `Default`
 that is not a constant; a zero that is not a constant, such as a
 variable's `false`; a hand-written insert path such as a hook's
-`Mutation.Set`. The untyped `Table` insert is not checked.
+`Mutation.Set`. The untyped `Table` insert is not checked. A zero set
+after the insert in the source but before it on a loop's next pass,
+`for { db.Insert(&u).Exec(ctx); u.Active = false }`, is not reported:
+the check needs the set to come first in the source as well as on a
+path, and a loop that reuses one struct for every insert is rare enough
+to accept the miss.
 
 Rejected: a field comment alone, which is already generated and which
 the code that writes the zero never reads; a run-time warning, which
