@@ -57,15 +57,7 @@ func (r *queryResolver) Tasks(ctx context.Context, status *gen.TaskStatus) ([]*g
 	if status != nil {
 		q = q.Where(gen.Tasks.Status.EQ(*status))
 	}
-	rows, err := q.All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*gen.Task, len(rows))
-	for i := range rows {
-		out[i] = &rows[i]
-	}
-	return out, nil
+	return q.All(ctx)
 }
 
 // Query returns QueryResolver implementation.

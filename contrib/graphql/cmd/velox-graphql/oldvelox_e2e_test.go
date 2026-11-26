@@ -169,15 +169,7 @@ func (r *queryResolver) SalesOrders(ctx context.Context, after *veloxgql.Cursor,
 // Workspaces is the resolver for the workspaces field: a list, as a type
 // with a QueryField and no RelayConnection has, bounded as every read is.
 func (r *queryResolver) Workspaces(ctx context.Context) ([]*gen.Workspace, error) {
-	rows, err := r.DB.Query[gen.Workspace]().Limit(100).All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*gen.Workspace, len(rows))
-	for i := range rows {
-		out[i] = &rows[i]
-	}
-	return out, nil
+	return r.DB.Query[gen.Workspace]().Limit(100).All(ctx)
 }
 
 // Node is the resolver for the node field.

@@ -236,7 +236,7 @@ func (r *queryResolver) Books(ctx context.Context, ids []int64) ([]*gen.Book, er
 	}
 	byID := make(map[int64]*gen.Book, len(bs))
 	for i := range bs {
-		byID[bs[i].ID] = &bs[i]
+		byID[bs[i].ID] = bs[i]
 	}
 	out := make([]*gen.Book, len(ids))
 	for i, id := range ids {
