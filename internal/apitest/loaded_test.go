@@ -21,7 +21,7 @@ func TestLoadedRelations(t *testing.T) {
 	if p, ok := none.Get(); !ok || p != nil {
 		t.Fatalf("LoadedOne(nil).Get() = %v, %t; want nil, loaded", p, ok)
 	}
-	many := velox.LoadedMany([]loadedThing{{Name: "a"}, {Name: "b"}})
+	many := velox.LoadedMany([]*loadedThing{{Name: "a"}, {Name: "b"}})
 	if s, ok := many.Get(); !ok || len(s) != 2 {
 		t.Fatalf("LoadedMany.Get() = %v, %t; want 2 rows, loaded", s, ok)
 	}

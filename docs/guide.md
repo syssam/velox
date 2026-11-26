@@ -617,7 +617,7 @@ The terminal methods:
 
 | Method | Returns |
 |---|---|
-| `All(ctx)` | every matching row, as `[]veloxgen.Invoice` |
+| `All(ctx)` | every matching row, as `[]*veloxgen.Invoice`, ent's shape; the pointers are into one array of rows |
 | `One(ctx)` | exactly one row; `ErrNotFound` for none, `ErrNotSingular` for several |
 | `First(ctx)` | the first row in the query's order |
 | `Count(ctx)` | the number of matching rows |
@@ -851,7 +851,7 @@ first, err := db.Query[veloxgen.Invoice]().
 if err != nil {
 	return err
 }
-lines, loaded := first.Edges.Lines.Get() // loaded is false when With was not used
+lines, loaded := first.Edges.Lines.Get() // a []*veloxgen.Line; loaded is false when With was not used
 ```
 
 A relation handle takes its own `Where`, `OrderBy` and nested `With`:

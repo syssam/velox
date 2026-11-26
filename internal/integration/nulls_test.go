@@ -80,9 +80,9 @@ func TestNullsOrderExact(t *testing.T) {
 			}
 			wantIDs(t, ids(all), ids(want))
 			for n := 1; n <= 4; n++ {
-				var got []testmodel.Invoice
+				var got []*testmodel.Invoice
 				page, err := q.Limit(n).All(ctx)
-				for ; err == nil && len(page) > 0; page, err = q.After(&page[len(page)-1]).Limit(n).All(ctx) {
+				for ; err == nil && len(page) > 0; page, err = q.After(page[len(page)-1]).Limit(n).All(ctx) {
 					got = append(got, page...)
 					if len(got) > len(rows) {
 						break

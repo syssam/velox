@@ -183,7 +183,7 @@ func TestRelAggregateAfter(t *testing.T) {
 		q := db.Query[fixture.IOwner]().OrderBy(tc.order...)
 		var got []int64
 		page, err := q.Limit(1).All(ctx)
-		for ; err == nil && len(page) > 0 && len(got) < 5; page, err = q.After(&page[0]).Limit(1).All(ctx) {
+		for ; err == nil && len(page) > 0 && len(got) < 5; page, err = q.After(page[0]).Limit(1).All(ctx) {
 			got = append(got, page[0].ID)
 		}
 		if err != nil {

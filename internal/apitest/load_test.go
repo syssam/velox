@@ -140,7 +140,7 @@ func TestWithManyOwnersDoNotShareRows(t *testing.T) {
 		t.Fatalf("len %d cap %d, want 1 and 1", len(first), cap(first))
 	}
 	first[0].SKU = "changed"
-	_ = append(first, testmodel.Item{SKU: "appended"})
+	_ = append(first, &testmodel.Item{SKU: "appended"})
 	if len(second) != 1 || second[0].SKU != "B" {
 		t.Errorf("the second owner's rows are %v, want one row B", second)
 	}

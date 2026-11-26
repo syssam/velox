@@ -68,7 +68,7 @@ func TestJSONReads(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if want := (fixture.JDoc{ID: 2, OwnerID: 2, Nums: fixture.Ints(1, 2)}); len(xs) != 2 || !reflect.DeepEqual(xs[0], jWant(1)) || !reflect.DeepEqual(xs[1], want) {
+		if want := (fixture.JDoc{ID: 2, OwnerID: 2, Nums: fixture.Ints(1, 2)}); len(xs) != 2 || !reflect.DeepEqual(*xs[0], jWant(1)) || !reflect.DeepEqual(*xs[1], want) {
 			t.Fatalf("All read %+v", xs)
 		}
 	})
@@ -79,7 +79,7 @@ func TestJSONReads(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(xs) != 1 || !reflect.DeepEqual(xs[0], fixture.JDoc{ID: 4, Tags: []string{"z"}}) {
+		if len(xs) != 1 || !reflect.DeepEqual(*xs[0], fixture.JDoc{ID: 4, Tags: []string{"z"}}) {
 			t.Fatalf("Columns read %+v", xs)
 		}
 	})
@@ -114,7 +114,7 @@ func TestJSONReads(t *testing.T) {
 			t.Fatal(err)
 		}
 		docs, ok := owners[0].Docs.Get()
-		if !ok || len(docs) != 2 || !reflect.DeepEqual(docs[0], jWant(1)) || !reflect.DeepEqual(docs[1], jWant(3)) {
+		if !ok || len(docs) != 2 || !reflect.DeepEqual(*docs[0], jWant(1)) || !reflect.DeepEqual(*docs[1], jWant(3)) {
 			t.Fatalf("With loaded %+v", docs)
 		}
 	})
@@ -199,11 +199,12 @@ func TestJSONPredicatesRefused(t *testing.T) {
 }
 
 // jsonAllocs is the allocations of a one-row read of a jDoc whose four JSON
-// columns hold values, measured: 18. Hand-written code that scans each JSON
-// column into a []byte and decodes it makes 16: velox's +2 is its one-row
-// budget's (TestOneRowAllocationBudget), as its one scanner per JSON column
-// costs what hand-written code's []byte per column does.
-const jsonAllocs = 18
+// columns hold values, measured: 19, one of them the []*E that All returns.
+// Hand-written code that scans each JSON column into a []byte and decodes it
+// makes 16: velox's +3 is its one-row budget's (TestOneRowAllocationBudget)
+// and the pointer slice, as its one scanner per JSON column costs what
+// hand-written code's []byte per column does.
+const jsonAllocs = 19
 
 // TestJSONAllocations pins the cost of a JSON column: a one-row read makes at
 // most one allocation per JSON column beyond what hand-written code that

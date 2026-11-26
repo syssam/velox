@@ -106,7 +106,7 @@ func total(t *testing.T, raw *sql.DB) int64 {
 	return n
 }
 
-func docIDs(ds []fixture.SDoc) []int64 {
+func docIDs(ds []*fixture.SDoc) []int64 {
 	out := []int64{}
 	for _, d := range ds {
 		out = append(out, d.ID)

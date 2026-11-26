@@ -16,7 +16,7 @@ func BenchmarkJoin(b *testing.B) {
 		b.Run(tg.name, func(b *testing.B) {
 			setup(b, tg)
 			seedScan(b, tg)
-			check := func(b *testing.B, rows []testmodel.Item, wantInvoice bool) {
+			check := func(b *testing.B, rows []*testmodel.Item, wantInvoice bool) {
 				if len(rows) != 100 {
 					b.Fatalf("got %d rows, want 100", len(rows))
 				}

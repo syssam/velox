@@ -114,7 +114,7 @@ func TestAfterPages(t *testing.T) {
 					for _, r := range rows {
 						got = append(got, r.ID)
 					}
-					last = &rows[len(rows)-1]
+					last = rows[len(rows)-1]
 				}
 				wantIDs(t, got, c.want)
 			})
@@ -410,7 +410,7 @@ func shelves(ids ...int64) []*shelf {
 }
 
 // noteIDs is each list of notes' ids.
-func noteIDs(lists [][]note) [][]int64 {
+func noteIDs(lists [][]*note) [][]int64 {
 	out := [][]int64{}
 	for _, ns := range lists {
 		ids := []int64{}
@@ -423,7 +423,7 @@ func noteIDs(lists [][]note) [][]int64 {
 }
 
 // tagIDLists is each list of tags' ids.
-func tagIDLists(lists [][]tag) [][]int64 {
+func tagIDLists(lists [][]*tag) [][]int64 {
 	out := [][]int64{}
 	for _, ts := range lists {
 		ids := []int64{}

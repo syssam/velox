@@ -403,7 +403,7 @@ func (q Query[E]) load[_ Lazy[E]](ctx context.Context, rows []E, ran []int, at e
 }
 
 // All runs the query and returns every row.
-func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
+func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]*E, error) {
 	out, ran, at, err := q.read(ctx)
 	if err != nil {
 		return nil, err
@@ -411,7 +411,16 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if err := q.load(ctx, out, ran, at); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return ptrsOf(out), nil
+}
+
+// ptrsOf returns a pointer to each row of rows, which stays the one array
+// the rows were scanned into: two allocations a query, not one per row.
+func ptrsOf[E any](rows []E) []*E {
+	// engine.PtrRows is not generic, so it is compiled once; a []*E has the
+	// layout of a []unsafe.Pointer, as in Rel.Of.
+	ps := engine.PtrRows(unsafe.Pointer(unsafe.SliceData(rows)), len(rows), unsafe.Sizeof(*new(E)))
+	return unsafe.Slice((**E)(unsafe.Pointer(unsafe.SliceData(ps))), len(ps))
 }
 
 // One runs the query for exactly one row. Its error wraps ErrNotFound when no

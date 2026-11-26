@@ -74,7 +74,7 @@ func TestSourceReads(t *testing.T) {
 	if err != nil || len(all) != 1 {
 		t.Fatal(all, err)
 	}
-	wantLines(t, ctx, "All", &all[0], 2)
+	wantLines(t, ctx, "All", all[0], 2)
 
 	first, err := q.First(ctx)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestSourceReads(t *testing.T) {
 	if err != nil || len(raw) != 1 {
 		t.Fatal(raw, err)
 	}
-	wantLines(t, ctx, "Raw.All", &raw[0], 2)
+	wantLines(t, ctx, "Raw.All", raw[0], 2)
 	rawOne, err := db.Raw[testmodel.Sample]("test", "SELECT * FROM samples WHERE name = 'a'").One(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +136,7 @@ func TestSourceReads(t *testing.T) {
 	if err != nil || len(lines) != 2 {
 		t.Fatal(lines, err)
 	}
-	wantSample(t, "the owner of With", &lines[0], "a")
+	wantSample(t, "the owner of With", lines[0], "a")
 	ls, _ := lines[0].Edges.Sample.Get()
 	wantLines(t, ctx, "With", ls, 2)
 
@@ -145,7 +145,7 @@ func TestSourceReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	nl, _ := nested.Edges.Lines.Get()
-	wantSample(t, "With", &nl[0], "a")
+	wantSample(t, "With", nl[0], "a")
 	ns, _ := nl[1].Edges.Sample.Get()
 	wantLines(t, ctx, "nested With", ns, 2)
 
@@ -153,7 +153,7 @@ func TestSourceReads(t *testing.T) {
 	if err != nil || len(each[0]) != 2 {
 		t.Fatal(each, err)
 	}
-	wantSample(t, "LoadEach", &each[0][0], "a")
+	wantSample(t, "LoadEach", each[0][0], "a")
 
 	joined, err := db.Query[testmodel.Line]().Join(L.Sample).Limit(10).All(ctx)
 	if err != nil || len(joined) != 2 {
@@ -205,7 +205,7 @@ func TestSourceLeftJoinDenied(t *testing.T) {
 	if _, err := lines[0].QuerySample().One(denied); !errors.Is(err, velox.ErrDenied) {
 		t.Errorf("QuerySample under the denial: %v, want ErrDenied", err)
 	}
-	wantSample(t, "the denied target's owner", &lines[0], "a")
+	wantSample(t, "the denied target's owner", lines[0], "a")
 }
 
 // TestSourceWrites: an entity inserted, upserted, updated or saved reads

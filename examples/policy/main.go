@@ -146,7 +146,7 @@ func run(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-func titles(ds []veloxgen.Doc) string {
+func titles(ds []*veloxgen.Doc) string {
 	var s []string
 	for _, d := range ds {
 		s = append(s, d.Title)

@@ -34,13 +34,13 @@ func (o One[T]) Get[_ Lazy[T]]() (*T, bool) {
 // Many holds a to-many relation, filled by With. Its zero value means not
 // loaded; the value is held as any for the reason given on One.
 type Many[T any] struct {
-	v      any // []T
+	v      any // []*T
 	loaded bool
 }
 
 // Get returns the related entities and whether the relation was loaded.
-func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool) {
-	s, _ := m.v.([]T)
+func (m Many[T]) Get[_ Lazy[T]]() ([]*T, bool) {
+	s, _ := m.v.([]*T)
 	return s, m.loaded
 }
 
@@ -52,9 +52,9 @@ func LoadedOne[T any](p *T) One[T] { return One[T]{v: p, loaded: true} }
 
 // LoadedMany returns a loaded Many holding s: nil s is a relation that was
 // loaded and is empty, written to JSON as []. It is LoadedOne's counterpart for a to-many edge.
-func LoadedMany[T any](s []T) Many[T] {
+func LoadedMany[T any](s []*T) Many[T] {
 	if s == nil {
-		s = []T{} // loaded: its JSON is [], not a not-loaded relation's null
+		s = []*T{} // loaded: its JSON is [], not a not-loaded relation's null
 	}
 	return Many[T]{v: s, loaded: true}
 }

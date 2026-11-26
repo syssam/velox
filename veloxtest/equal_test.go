@@ -34,7 +34,7 @@ func TestEqualIgnoresTheSource(t *testing.T) {
 	got.When = got.When.UTC()
 	lines, _ := got.Edges.Lines.Get()
 	want := testmodel.Sample{ID: s.ID, Name: "a", Status: "new", When: when, Blob: []byte("b")}
-	want.Edges.Lines = velox.LoadedMany([]testmodel.Line{{ID: lines[0].ID, SampleID: s.ID}})
+	want.Edges.Lines = velox.LoadedMany([]*testmodel.Line{{ID: lines[0].ID, SampleID: s.ID}})
 	if reflect.DeepEqual(*got, want) {
 		t.Error("reflect.DeepEqual does not see the Source: the test proves nothing")
 	}
@@ -47,7 +47,7 @@ func TestEqualIgnoresTheSource(t *testing.T) {
 		t.Error("Equal of another name")
 	}
 	other = want
-	other.Edges.Lines = velox.LoadedMany([]testmodel.Line{})
+	other.Edges.Lines = velox.LoadedMany([]*testmodel.Line{})
 	if veloxtest.Equal(*got, other) {
 		t.Error("Equal of other lines")
 	}

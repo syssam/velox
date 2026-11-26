@@ -438,11 +438,11 @@ var genericObjects = []struct {
 	// to 882202 and entityDescMixin from 927064 to 927682: the two methods'
 	// declarations in Order[E]'s method set. A NullOrder type for the field,
 	// and OrderTerm methods, would have added about 90 and 200 more.
-	{"entityDescUse", "", entityDescUseSrc, 808960}, // measured 808042
+	{"entityDescUse", "", entityDescUseSrc, 818176}, // measured 817276
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.
-	{"entityDescHooks", "", entityDescHooksBound, 894976}, // measured 894078
+	{"entityDescHooks", "", entityDescHooksBound, 904192}, // measured 903374
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -450,7 +450,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 940032}, // measured 939034
+	{"entityDescMixin", "", entityDescMixinSrc, 949248}, // measured 948854
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's

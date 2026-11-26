@@ -75,7 +75,7 @@ func TestThroughLoadOwnersDoNotShareRows(t *testing.T) {
 	}
 	first, _ := bs[0].Tags.Get()
 	first[0].Name, first[1].Name = "changed", "changed"
-	_ = append(first, fixture.DTag{Name: "appended"})
+	_ = append(first, &fixture.DTag{Name: "appended"})
 	if got := tagNames(t, bs[1].Tags); !reflect.DeepEqual(got, []string{"db"}) {
 		t.Errorf("book 2: tags %v, want [db]", got)
 	}

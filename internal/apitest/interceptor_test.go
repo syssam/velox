@@ -46,7 +46,7 @@ func interceptorDB(t *testing.T, opts ...velox.Option) *velox.DB {
 	return velox.Open(velox.SQLite, raw, opts...)
 }
 
-func noteIDs(ns []fixture.INote) []int64 {
+func noteIDs(ns []*fixture.INote) []int64 {
 	out := []int64{}
 	for _, n := range ns {
 		out = append(out, n.ID)
@@ -54,7 +54,7 @@ func noteIDs(ns []fixture.INote) []int64 {
 	return out
 }
 
-func ownerIDs(os []fixture.IOwner) []int64 {
+func ownerIDs(os []*fixture.IOwner) []int64 {
 	out := []int64{}
 	for _, o := range os {
 		out = append(out, o.ID)
@@ -164,7 +164,7 @@ func TestInterceptorReachesRelations(t *testing.T) {
 		t.Errorf("LeftJoin's ON lacks the interceptor: %s, %v", sqlText, err)
 	}
 
-	ptrs := []*fixture.IOwner{&owners[0], &owners[1]}
+	ptrs := []*fixture.IOwner{owners[0], owners[1]}
 	counts, err := velox.CountEach(ctx, db.Query[fixture.INote](), fixture.IOwners.Notes, ptrs)
 	if err != nil || !slices.Equal(counts, []int64{1, 1}) {
 		t.Errorf("CountEach: %v, %v", counts, err)

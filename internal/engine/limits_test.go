@@ -252,7 +252,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 	// KeysPer leaves 36 keys, an IN list of 32 (inFit): with the policy's 80
 	// values, 112 parameters, 12 too many, so the chunks hold 16 keys.
 	pctx := ovReading(80)
-	owners := func(t *testing.T, db *velox.DB, r velox.Rel[ovOwner, ovNote]) []ovOwner {
+	owners := func(t *testing.T, db *velox.DB, r velox.Rel[ovOwner, ovNote]) []*ovOwner {
 		t.Helper()
 		os, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(r).Limit(50).All(pctx)
 		if err != nil {
@@ -263,7 +263,7 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		}
 		return os
 	}
-	ids := func(t *testing.T, o ovOwner, m velox.Many[ovNote]) []int64 {
+	ids := func(t *testing.T, o *ovOwner, m velox.Many[ovNote]) []int64 {
 		t.Helper()
 		ns, ok := m.Get()
 		if !ok {

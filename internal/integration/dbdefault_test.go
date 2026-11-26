@@ -90,7 +90,7 @@ func TestInsertDatabaseDefaults(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		slices.SortFunc(got, func(x, y gadget) int { return int(x.ID - y.ID) })
+		slices.SortFunc(got, func(x, y *gadget) int { return int(x.ID - y.ID) })
 		want := append([]gadget{a, b}, xs...)
 		if len(got) != len(want) {
 			t.Fatalf("stored %d rows, want %d", len(got), len(want))
@@ -214,7 +214,7 @@ func TestInsertAllOneStatementWithDefaultCells(t *testing.T) {
 		}
 		byID := map[int64]gadget{}
 		for _, g := range got {
-			byID[g.ID] = g
+			byID[g.ID] = *g
 		}
 		for i, x := range xs {
 			want := int64(7)

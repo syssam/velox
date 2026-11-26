@@ -113,7 +113,7 @@ func rowIDs(rows []ticketRow, keep func(ticketRow) bool) []int64 {
 	return out
 }
 
-func ticketIDs(xs []testmodel.Ticket) []int64 {
+func ticketIDs(xs []*testmodel.Ticket) []int64 {
 	var out []int64
 	for i := range xs {
 		out = append(out, xs[i].ID)

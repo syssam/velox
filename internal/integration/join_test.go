@@ -105,7 +105,7 @@ func TestJoinFiltersAndOrdersByTheJoinedColumns(t *testing.T) {
 // same invoice, each hidden or shown by its own policy.
 func TestJoinAgreesWithWith(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
-		view := func(xs []testmodel.Ticket) string {
+		view := func(xs []*testmodel.Ticket) string {
 			var out []string
 			for _, x := range xs {
 				p, ploaded := x.Edges.Parent.Get()
@@ -169,7 +169,7 @@ func TestJoinAfterPagesByAJoinedColumn(t *testing.T) {
 				break
 			}
 			got = append(got, ticketIDs(xs)...)
-			last = &xs[len(xs)-1]
+			last = xs[len(xs)-1]
 		}
 		wantOrder(t, got, []int64{2, 7, 8, 4, 5})
 		// Count with After counts the rows past it.
@@ -198,10 +198,7 @@ func TestJoinInAPerOwnerRead(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		owners := make([]*testmodel.Ticket, len(xs))
-		for i := range xs {
-			owners[i] = &xs[i]
-		}
+		owners := xs
 		plain, err := velox.LoadEach(c.ctx, tg.db.Query[testmodel.Ticket]().With(Tk.Invoice).OrderBy(Tk.ID.Asc()), Tk.Children, owners)
 		if err != nil {
 			t.Fatal(err)
@@ -218,7 +215,7 @@ func TestJoinInAPerOwnerRead(t *testing.T) {
 				}
 			}
 		}
-		check := func(name string, got [][]testmodel.Ticket, per int) {
+		check := func(name string, got [][]*testmodel.Ticket, per int) {
 			t.Helper()
 			if len(got) != len(want) {
 				t.Fatalf("%s: %d lists, want %d", name, len(got), len(want))

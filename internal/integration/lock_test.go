@@ -215,7 +215,7 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 	})
 }
 
-func wantTicketIDs(t *testing.T, got []testmodel.Ticket, want ...int64) {
+func wantTicketIDs(t *testing.T, got []*testmodel.Ticket, want ...int64) {
 	t.Helper()
 	ids := make([]int64, len(got))
 	for i, x := range got {

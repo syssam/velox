@@ -141,7 +141,7 @@ func run(ctx context.Context, w io.Writer) error {
 			break
 		}
 		say("page %d: %s", i, titles(got))
-		page = page.After(&got[len(got)-1])
+		page = page.After(got[len(got)-1])
 	}
 	if err := manyToMany(ctx, db, say); err != nil {
 		return err
@@ -306,7 +306,7 @@ func manyToMany(ctx context.Context, db *velox.DB, say func(string, ...any)) err
 	return nil
 }
 
-func tagNames(ts []veloxgen.Tag) string {
+func tagNames(ts []*veloxgen.Tag) string {
 	var s []string
 	for _, t := range ts {
 		s = append(s, t.Name)
@@ -345,7 +345,7 @@ func seed(ctx context.Context, db *velox.DB) error {
 	}).Exec(ctx)
 }
 
-func titles(ps []veloxgen.Post) string {
+func titles(ps []*veloxgen.Post) string {
 	var s []string
 	for _, p := range ps {
 		s = append(s, p.Title)
@@ -353,7 +353,7 @@ func titles(ps []veloxgen.Post) string {
 	return "[" + strings.Join(s, ", ") + "]"
 }
 
-func names(as []veloxgen.Author) string {
+func names(as []*veloxgen.Author) string {
 	var s []string
 	for _, a := range as {
 		s = append(s, a.Name)

@@ -17,6 +17,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- `Query.All` and `RawQuery.All` return a `[]*E`, `Many.Get` a `[]*T`,
+  `LoadedMany` takes a `[]*T` and `LoadEach` returns a `[][]*T`, as ent's reads
+  do; they used `[]E` and `[]T` (decision 0179).
+
 - `Query.Count`, `UpdateQuery.Exec` and `DeleteQuery.Exec` return an `int`, as
   ent's do, and so do the untyped package's `Count` and `Exec`,
   `Mutation.Affected` and `Mutation.SetAffected`; they used an `int64`

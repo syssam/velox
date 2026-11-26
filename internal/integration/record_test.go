@@ -579,7 +579,7 @@ func TestRecordOnRealDatabases(t *testing.T) {
 	run := func(t *testing.T, tg target) {
 		var rec velox.Recorder
 		rdb := tg.db.Record(&rec)
-		read := func(ps ...velox.Pred[testmodel.Invoice]) []testmodel.Invoice {
+		read := func(ps ...velox.Pred[testmodel.Invoice]) []*testmodel.Invoice {
 			t.Helper()
 			xs, err := tg.db.Query[testmodel.Invoice]().Where(ps...).OrderBy(I.ID.Asc()).AllowUnbounded().All(ctx)
 			if err != nil {
@@ -606,8 +606,8 @@ func TestRecordOnRealDatabases(t *testing.T) {
 			if !ok || cs[i].Op != velox.OpUpdate || cs[i].Key != before[i].ID {
 				t.Fatalf("update %d: %+v", i, cs[i])
 			}
-			sameRow(t, fmt.Sprintf("update %d old", i), old, &before[i])
-			sameRow(t, fmt.Sprintf("update %d new", i), cur, &after[i])
+			sameRow(t, fmt.Sprintf("update %d old", i), old, before[i])
+			sameRow(t, fmt.Sprintf("update %d new", i), cur, after[i])
 		}
 		if f, ok := changed(cs[2], "paid"); !ok || f.Old != true || f.New != false || cs[2].Key != int64(3) {
 			t.Errorf("update by key: %+v", cs[2].Diff())
@@ -630,7 +630,7 @@ func TestRecordOnRealDatabases(t *testing.T) {
 			if c.Op != velox.OpDelete || cur != nil || c.Key != gone[i].ID {
 				t.Errorf("delete %d: %+v", i, c)
 			}
-			sameRow(t, fmt.Sprintf("delete %d old", i), old, &gone[i])
+			sameRow(t, fmt.Sprintf("delete %d old", i), old, gone[i])
 		}
 		if len(read(I.ID.In(4, 5))) != 0 {
 			t.Error("the deleted rows are still there")

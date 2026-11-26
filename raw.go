@@ -211,7 +211,7 @@ func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 }
 
 // All runs the query and returns every row.
-func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
+func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]*E, error) {
 	st, err := q.statement()
 	if err != nil {
 		return nil, err
@@ -220,7 +220,7 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
-	return a.out, nil
+	return ptrsOf(a.out), nil
 }
 
 // One runs the query for exactly one row, reading at most two. Its error

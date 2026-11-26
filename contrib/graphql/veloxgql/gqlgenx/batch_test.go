@@ -201,16 +201,15 @@ func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)
 			if err != nil {
 				return nil, err
 			}
-			ptrs := make([]*keeper, len(rows))
 			out := make([]any, len(rows))
 			for i := range rows {
-				ptrs[i], out[i] = &rows[i], &rows[i]
+				out[i] = rows[i]
 			}
 			if batch {
-				veloxgql.Batch(ctx, ptrs)
+				veloxgql.Batch(ctx, rows)
 			}
 			for _, f := range seen {
-				f(ctx, ptrs)
+				f(ctx, rows)
 			}
 			return out, nil
 		}

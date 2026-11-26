@@ -541,7 +541,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 		for i, g := range ownerKey {
 			idx[i] = x.Of(g)
 		}
-		picked = infoKit(t).Pick(all, targets, idx)
+		picked = PtrParts(infoKit(t).Pick(all, targets, idx))
 	}
 	for i, p := range ptrs {
 		h := (*Holder)(unsafe.Add(p, r.Off))
@@ -550,7 +550,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 		case r.Many && all != nil:
 			h.V = picked[i]
 		case r.Many:
-			h.V = infoKit(t).Empty() // no keys, so nothing was fetched: still loaded, and empty
+			h.V = PtrParts([]any{infoKit(t).Empty()})[0] // no keys, so nothing was fetched: still loaded, and empty
 		case len(idx) > 0:
 			h.V = infoKit(t).Ptr(targets[idx[0]])
 		default:
@@ -846,4 +846,45 @@ func loadJoined(ctx context.Context, db *DB, pin Target, target *EntityInfo, r *
 		return nil
 	}
 	return LoadRelations(ctx, db, pin, target, joined, sp.With, maxRows)
+}
+
+// PtrParts returns each []E of parts, which a kit's Pick gave, as a []*E of
+// pointers to its rows, all the slices cut from one array of pointers. It is
+// not generic, so it is compiled once, where a kit's closure would be
+// compiled for each entity; reflect makes the slices of the entity's pointer
+// type, which Many.Get asserts, and a []*E compares deeply as a []E does.
+func PtrParts(parts []any) []any {
+	n := 0
+	for _, p := range parts {
+		n += reflect.ValueOf(p).Len()
+	}
+	out := make([]any, len(parts))
+	if len(parts) == 0 {
+		return out
+	}
+	elem := reflect.TypeOf(parts[0]).Elem()
+	size := elem.Size()
+	all := reflect.MakeSlice(reflect.SliceOf(reflect.PointerTo(elem)), n, n)
+	buf := unsafe.Slice((*unsafe.Pointer)(all.UnsafePointer()), n)
+	at := 0
+	for i, p := range parts {
+		v := reflect.ValueOf(p)
+		base := v.UnsafePointer()
+		for k := range v.Len() {
+			buf[at+k] = unsafe.Add(base, uintptr(k)*size)
+		}
+		out[i] = all.Slice3(at, at+v.Len(), at+v.Len()).Interface()
+		at += v.Len()
+	}
+	return out
+}
+
+// PtrRows returns a pointer to each of the n rows, size bytes each, that
+// start at base.
+func PtrRows(base unsafe.Pointer, n int, size uintptr) []unsafe.Pointer {
+	ps := make([]unsafe.Pointer, n)
+	for i := range ps {
+		ps[i] = unsafe.Add(base, uintptr(i)*size)
+	}
+	return ps
 }

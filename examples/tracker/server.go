@@ -67,19 +67,15 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, next := cut(rows, limit, func(p *veloxgen.Project) int64 { return p.ID })
-	owners := make([]*veloxgen.Project, len(rows))
-	for i := range rows {
-		owners[i] = &rows[i]
-	}
 	open := s.db.Query[veloxgen.Issue]().Where(I.Status.EQ(veloxgen.IssueStatusOpen))
-	counts, err := velox.CountEach(ctx, open, P.Issues, owners)
+	counts, err := velox.CountEach(ctx, open, P.Issues, rows)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	views := make([]projectView, len(rows))
 	for i := range rows {
-		views[i] = projectView{owners[i], counts[i]}
+		views[i] = projectView{rows[i], counts[i]}
 	}
 	writeJSON(w, http.StatusOK, pageOf(views, next))
 }
@@ -451,12 +447,12 @@ func page(w http.ResponseWriter, r *http.Request) (after int64, limit int, ok bo
 
 // cut trims rows, read with one more than limit, to limit, and returns the cursor
 // of the next page: the last row's key, or nil when there is no next page.
-func cut[E any](rows []E, limit int, key func(*E) int64) ([]E, *int64) {
+func cut[E any](rows []*E, limit int, key func(*E) int64) ([]*E, *int64) {
 	if len(rows) <= limit {
 		return rows, nil
 	}
 	rows = rows[:limit]
-	next := key(&rows[limit-1])
+	next := key(rows[limit-1])
 	return rows, &next
 }
 

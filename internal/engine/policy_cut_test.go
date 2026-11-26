@@ -309,7 +309,7 @@ func pcIDs[E any, PE velox.Entity[E]](ctx context.Context, t *testing.T, db *vel
 	}
 	ids := make([]int64, len(rows))
 	for i := range rows {
-		ids[i] = id(&rows[i])
+		ids[i] = id(rows[i])
 	}
 	slices.Sort(ids)
 	return ids

@@ -298,7 +298,7 @@ func (a *app) pageKeyset(ctx context.Context) ([]int64, error) {
 	return e5IDs(ks), err
 }
 
-func e4IDs(xs []gen.E4) []int64 {
+func e4IDs(xs []*gen.E4) []int64 {
 	ids := make([]int64, len(xs))
 	for i, x := range xs {
 		ids[i] = x.ID
@@ -306,7 +306,7 @@ func e4IDs(xs []gen.E4) []int64 {
 	return ids
 }
 
-func e5IDs(xs []gen.E5) []int64 {
+func e5IDs(xs []*gen.E5) []int64 {
 	ids := make([]int64, len(xs))
 	for i, x := range xs {
 		ids[i] = x.ID

@@ -27,7 +27,7 @@ func TestRaw(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if want := []testmodel.Invoice{{OrgID: 1, Total: 100}, {OrgID: 2, Total: 50}}; !veloxtest.Equal(totals, want) {
+		if want := []*testmodel.Invoice{{OrgID: 1, Total: 100}, {OrgID: 2, Total: 50}}; !veloxtest.Equal(totals, want) {
 			t.Errorf("totals %+v, want %+v", totals, want)
 		}
 

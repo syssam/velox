@@ -67,7 +67,7 @@ func TestSQLiteDefaultTimePagesWithAfter(t *testing.T) {
 			}
 			seen[inv.ID] = true
 		}
-		q = q.After(&page[len(page)-1])
+		q = q.After(page[len(page)-1])
 	}
 	if len(seen) != rows {
 		t.Errorf("%d rows of %d", len(seen), rows)

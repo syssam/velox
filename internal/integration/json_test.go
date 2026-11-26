@@ -268,14 +268,14 @@ func TestJSONInsertAndRead(t *testing.T) {
 		if err != nil || len(all) != 3 {
 			t.Fatalf("All: %d rows, %v", len(all), err)
 		}
-		wantRec(t, all[2], rows[1])
+		wantRec(t, *all[2], rows[1])
 		var n int
 		for x, err := range tg.db.Query[jrec]().OrderBy(JR.ID.Asc()).AllowUnbounded().Iter(ctx) {
 			if err != nil {
 				t.Fatal(err)
 			}
 			n++
-			wantRec(t, x, all[n-1])
+			wantRec(t, x, *all[n-1])
 		}
 		if n != 3 {
 			t.Errorf("Iter saw %d rows", n)

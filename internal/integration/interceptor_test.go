@@ -34,7 +34,7 @@ func interceptorTables(t *testing.T, tg target) {
 	tg.exec(t, "INSERT INTO owner_notes (owner_id, note_id) VALUES (?, ?), (?, ?), (?, ?)", 1, 1, 1, 2, 2, 2)
 }
 
-func inoteIDs(ns []fixture.INote) []int64 {
+func inoteIDs(ns []*fixture.INote) []int64 {
 	out := []int64{}
 	for _, n := range ns {
 		out = append(out, n.ID)

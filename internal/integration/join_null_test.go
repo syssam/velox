@@ -70,9 +70,9 @@ func TestJoinAfterNullsExact(t *testing.T) {
 			}
 			wantIDs(t, itemIDs(all), itemIDs(want))
 			for n := 1; n <= 4; n++ {
-				var got []testmodel.Item
+				var got []*testmodel.Item
 				page, err := q.Limit(n).All(ctx)
-				for ; err == nil && len(page) > 0; page, err = q.After(&page[len(page)-1]).Limit(n).All(ctx) {
+				for ; err == nil && len(page) > 0; page, err = q.After(page[len(page)-1]).Limit(n).All(ctx) {
 					got = append(got, page...)
 					if len(got) > len(items) {
 						break
@@ -89,10 +89,15 @@ func TestJoinAfterNullsExact(t *testing.T) {
 	})
 }
 
-func itemIDs(xs []testmodel.Item) []int64 {
+func itemIDs[R testmodel.Item | *testmodel.Item](xs []R) []int64 {
 	out := make([]int64, len(xs))
-	for i, x := range xs {
-		out[i] = x.ID
+	for i := range xs {
+		switch x := any(xs[i]).(type) {
+		case testmodel.Item:
+			out[i] = x.ID
+		case *testmodel.Item:
+			out[i] = x.ID
+		}
 	}
 	return out
 }

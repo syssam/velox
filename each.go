@@ -26,7 +26,7 @@ import (
 // MaxRows, else q's, else LimitEach's bound (LimitEach rows per owner), else
 // the DB's. A many-to-many relation is read in the same one statement, joined
 // to its join table, as Rel.LimitEach reads it.
-func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error) {
+func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]*T, error) {
 	owner, err := ownerOf[E]()
 	// A []*E has the layout of a []unsafe.Pointer, as in Rel.Of: the work is
 	// not generic, so that it is compiled once.
@@ -35,9 +35,19 @@ func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*
 	if err != nil {
 		return nil, err
 	}
-	out := make([][]T, len(parts))
+	n := 0
+	for _, p := range parts {
+		n += len(p.([]T))
+	}
+	buf := make([]*T, n) // one array for every owner's pointers
+	out := make([][]*T, len(parts))
 	for i, p := range parts {
-		out[i] = p.([]T)
+		rows := p.([]T)
+		out[i] = buf[:len(rows):len(rows)]
+		for k := range rows {
+			out[i][k] = &rows[k]
+		}
+		buf = buf[len(rows):]
 	}
 	return out, nil
 }

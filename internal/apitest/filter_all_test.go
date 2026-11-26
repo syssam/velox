@@ -174,7 +174,7 @@ func TestFilterReachesRelations(t *testing.T) {
 	}
 	wantIDs(t, "Join(Pinned)", ownerIDs(joined))
 
-	ptrs := []*fixture.IOwner{&owners[0], &owners[1]}
+	ptrs := []*fixture.IOwner{owners[0], owners[1]}
 	counts, err := velox.CountEach(ctx, db.Query[fixture.INote](), fixture.IOwners.Notes, ptrs)
 	if err != nil || !slices.Equal(counts, []int64{0, 1}) {
 		t.Errorf("CountEach: %v, %v", counts, err)

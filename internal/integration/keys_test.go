@@ -62,7 +62,7 @@ func keysTables(t *testing.T, tg target) {
 	t.Cleanup(drop)
 }
 
-func topicIDs(ts []testmodel.Topic) []string {
+func topicIDs(ts []*testmodel.Topic) []string {
 	out := make([]string, len(ts))
 	for i := range ts {
 		out[i] = ts[i].ID
@@ -166,7 +166,7 @@ func TestNonIntegerKeys(t *testing.T) {
 		if err != nil || len(all) != 2 {
 			t.Fatalf("papers: %+v, %v", all, err)
 		}
-		next, err := db.Query[testmodel.Paper]().OrderBy(P.ID.Asc()).After(&all[0]).Limit(10).All(ctx)
+		next, err := db.Query[testmodel.Paper]().OrderBy(P.ID.Asc()).After(all[0]).Limit(10).All(ctx)
 		if err != nil || len(next) != 1 || next[0].ID != all[1].ID {
 			t.Errorf("after the first paper: %+v, %v", next, err)
 		}

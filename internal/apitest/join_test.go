@@ -303,7 +303,7 @@ func TestJoinAfterPagesOverAJoinedColumn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err := q.After(&page[1]).All(ctx)
+	next, err := q.After(page[1]).All(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +340,7 @@ func TestJoinAfterARowWithoutAJoinedRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = q.After(&page[0]).All(ctx); err != nil {
+	if _, err = q.After(page[0]).All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if want := ` WHERE (("vxj1"."number" IS NULL AND "items"."id" > $1)) `; !strings.Contains(e.Log[1], want) {
@@ -349,7 +349,7 @@ func TestJoinAfterARowWithoutAJoinedRow(t *testing.T) {
 	if page, err = q.All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = q.After(&page[0]).All(ctx); err != nil {
+	if _, err = q.After(page[0]).All(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if want := ` WHERE (("vxj1"."number" > $1 OR "vxj1"."number" IS NULL) OR ("vxj1"."number" = $2 AND "items"."id" > $3)) `; !strings.Contains(e.Log[3], want) {

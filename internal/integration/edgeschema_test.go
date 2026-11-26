@@ -68,7 +68,7 @@ func rosters(t *testing.T, tg target, p int64) map[int64]tm.Roster {
 	}
 	out := map[int64]tm.Roster{}
 	for _, r := range rs {
-		out[r.TeamID] = r
+		out[r.TeamID] = *r
 	}
 	return out
 }

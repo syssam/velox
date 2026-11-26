@@ -177,7 +177,7 @@ func TestOfThroughOnRealDatabases(t *testing.T) {
 			for _, b := range loaded {
 				want = append(want, b.ID)
 			}
-			got, err := tg.db.Query[book]().Where(Tags.Books.Of(&tags[i])).OrderBy(Books.ID.Asc()).Limit(10).All(ctx)
+			got, err := tg.db.Query[book]().Where(Tags.Books.Of(tags[i])).OrderBy(Books.ID.Asc()).Limit(10).All(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -293,7 +293,7 @@ func TestEachThroughRepeatedLinksOnRealDatabases(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var with [][]tag
+			var with [][]*tag
 			for _, s := range ss {
 				ts, _ := s.Tags.Get()
 				with = append(with, ts)

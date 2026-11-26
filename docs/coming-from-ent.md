@@ -222,7 +222,16 @@ the write. velox-gen warns of an edge schema with such a key.
 edge is a `velox.One[T]` or `velox.Many[T]` whose `Get()` returns the value
 and whether it was loaded, so there is no `AuthorOrErr`. Where ent's code
 assigns `post.Edges.Author = u`, such as a test's fixture, velox's assigns
-`velox.LoadedOne(u)` (`velox.LoadedMany(s)` for a to-many edge).
+`velox.LoadedOne(u)` (`velox.LoadedMany(s)` for a to-many edge, `s` a
+`[]*T`).
+
+**A read returns pointers, as ent's does.** `Query.All` and `RawQuery.All`
+return a `[]*E`, `Many.Get()` a `[]*T` and `LoadEach` a `[][]*T`, where ent's
+`All` returns a `[]*User`. The rows of a read are scanned into one array and
+the pointers point into it, so a read is two allocations, not one per row
+(decision 0179). Unlike ent, the owners of a to-many edge do not share a
+target: each owner's pointers are into its own rows, as its `[]T` was.
+`One` and `First` already return a `*E`; `InsertAll` takes values.
 
 **A required field is always in JSON.** ent tags every field
 `json:"name,omitempty"`, so a stored 0, false or "" is left out. velox leaves

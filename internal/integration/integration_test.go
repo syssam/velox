@@ -350,10 +350,17 @@ func each(t *testing.T, f func(t *testing.T, tg target), opts ...velox.Option) {
 	}
 }
 
-func ids(xs []testmodel.Invoice) []int64 {
+// ids lists the IDs of rows, which are values (a fixture) or pointers (a
+// read).
+func ids[R testmodel.Invoice | *testmodel.Invoice](xs []R) []int64 {
 	out := make([]int64, len(xs))
 	for i := range xs {
-		out[i] = xs[i].ID
+		switch x := any(xs[i]).(type) {
+		case testmodel.Invoice:
+			out[i] = x.ID
+		case *testmodel.Invoice:
+			out[i] = x.ID
+		}
 	}
 	return out
 }

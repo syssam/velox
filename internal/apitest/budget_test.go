@@ -447,13 +447,13 @@ func TestLoadAllocationBudgets(t *testing.T) {
 		}
 	}
 	samples := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{sampleRow(1, int64(1))}}) // its own parent
-	measure("an All with one With load", 42, func() error {
+	measure("an All with one With load", 43, func() error {
 		_, err := samples.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
 		return err
 	})
 	owners := []*testmodel.Invoice{{ID: 1}, {ID: 2}}
 	items := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)}})
-	measure("LoadEach", 32, func() error {
+	measure("LoadEach", 33, func() error {
 		_, err := velox.LoadEach(ctx, items.Query[testmodel.Item](), I.Items, owners)
 		return err
 	})
@@ -500,13 +500,12 @@ func TestLimitIsNotASize(t *testing.T) {
 	}
 }
 
-// TestPageLimitIsASize: a Limit up to engine.PageRows is a page's size, and
-// All allocates it in full at once; a larger Limit starts at FirstRows and
-// grows.
+// TestPageLimitIsASize: All's pointers are into one array of rows, however
+// many rows and whatever the Limit; a Limit's size of the array is bounded by
+// TestLimitIsNotASize's byte count.
 func TestPageLimitIsASize(t *testing.T) {
-	for _, c := range []struct{ limit, rows, cap int }{
-		{20, 20, 20}, {20, 1, 20}, {100, 100, 100}, {engine.PageRows, 1, engine.PageRows},
-		{engine.PageRows + 1, 1, engine.FirstRows},
+	for _, c := range []struct{ limit, rows int }{
+		{20, 20}, {20, 1}, {100, 100}, {engine.PageRows, 1}, {engine.PageRows + 1, 1}, {engine.PageRows + 1, 40},
 	} {
 		rows := make([][]any, c.rows)
 		for i := range rows {
@@ -514,8 +513,15 @@ func TestPageLimitIsASize(t *testing.T) {
 		}
 		db := openFake(velox.Postgres, &fakeconn.Exec{Rows: rows})
 		got, err := db.Query[testmodel.Invoice]().Limit(c.limit).All(ctx)
-		if err != nil || len(got) != c.rows || cap(got) != c.cap {
-			t.Errorf("Limit(%d) of %d rows: len %d cap %d, %v; want cap %d", c.limit, c.rows, len(got), cap(got), err, c.cap)
+		if err != nil || len(got) != c.rows {
+			t.Errorf("Limit(%d) of %d rows: len %d, %v", c.limit, c.rows, len(got), err)
+			continue
+		}
+		for i := 1; i < len(got); i++ {
+			if want := unsafe.Add(unsafe.Pointer(got[i-1]), unsafe.Sizeof(*got[0])); unsafe.Pointer(got[i]) != want {
+				t.Errorf("Limit(%d) of %d rows: row %d is not next to row %d", c.limit, c.rows, i, i-1)
+				break
+			}
 		}
 	}
 }

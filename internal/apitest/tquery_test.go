@@ -162,7 +162,12 @@ func TestTableQueryRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rows := untyped.RowsOf[testmodel.Item](got); !reflect.DeepEqual(rows, want) || got.Len() != len(want) {
+	rows := untyped.RowsOf[testmodel.Item](got)
+	same := len(rows) == len(want) && got.Len() == len(want)
+	for i := 0; same && i < len(rows); i++ {
+		same = reflect.DeepEqual(rows[i], *want[i])
+	}
+	if !same {
 		t.Errorf("All: got %v, want %v", rows, want)
 	}
 	for i := range got.Len() {
@@ -237,7 +242,12 @@ func TestTableQueryRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range wantEach {
-		if g := untyped.RowsOf[testmodel.Item](gotEach[i]); len(g) != len(wantEach[i]) || len(g) > 0 && !reflect.DeepEqual(g, wantEach[i]) {
+		g := untyped.RowsOf[testmodel.Item](gotEach[i])
+		same := len(g) == len(wantEach[i])
+		for j := 0; same && j < len(g); j++ {
+			same = reflect.DeepEqual(g[j], *wantEach[i][j])
+		}
+		if !same {
 			t.Errorf("LoadEach %d: got %v, want %v", i, g, wantEach[i])
 		}
 	}

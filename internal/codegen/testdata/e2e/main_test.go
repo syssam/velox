@@ -112,7 +112,7 @@ func seed(t *testing.T, db *velox.DB) (ada, bob, carol gen.User, devs, ops gen.G
 	return
 }
 
-func names(us []gen.User) []string {
+func names(us []*gen.User) []string {
 	var out []string
 	for _, u := range us {
 		out = append(out, u.Name)
@@ -120,7 +120,7 @@ func names(us []gen.User) []string {
 	return out
 }
 
-func titles(ps []gen.Post) []string {
+func titles(ps []*gen.Post) []string {
 	var out []string
 	for _, p := range ps {
 		out = append(out, p.Title)
@@ -506,7 +506,11 @@ func TestSensitiveNeverPrints(t *testing.T) {
 	if us[0].PasswordHash != "s3cret" {
 		t.Fatalf("password not read: %+v", us[0])
 	}
-	u := us[0] // a value, as All returns it
+	u := *us[0] // a value
+	vals := make([]gen.User, len(us))
+	for i := range us {
+		vals[i] = *us[i]
+	}
 	for what, s := range map[string]string{
 		"%v value":        fmt.Sprintf("%v", u),
 		"%+v value":       fmt.Sprintf("%+v", u),
@@ -516,10 +520,10 @@ func TestSensitiveNeverPrints(t *testing.T) {
 		"%v pointer":      fmt.Sprintf("%v", &u),
 		"%+v pointer":     fmt.Sprintf("%+v", &u),
 		"%#v pointer":     fmt.Sprintf("%#v", &u),
-		"%v slice":        fmt.Sprintf("%v", us),
-		"%+v slice":       fmt.Sprintf("%+v", us),
-		"%#v slice":       fmt.Sprintf("%#v", us),
-		"%v element":      fmt.Sprintf("%v", us[1]),
+		"%v slice":        fmt.Sprintf("%v", vals),
+		"%+v slice":       fmt.Sprintf("%+v", vals),
+		"%#v slice":       fmt.Sprintf("%#v", vals),
+		"%v element":      fmt.Sprintf("%v", vals[1]),
 		"%+v in a struct": fmt.Sprintf("%+v", struct{ U gen.User }{u}),
 		"%v in a map":     fmt.Sprintf("%v", map[string]gen.User{"a": u}),
 	} {

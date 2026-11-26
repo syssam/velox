@@ -212,7 +212,7 @@ func eachPolicied(t *testing.T, opts ...velox.Option) (*velox.DB, *eachLog) {
 }
 
 // invoiceSKUs is each invoice's loaded items' SKUs, by invoice id.
-func invoiceSKUs(t *testing.T, invs []testmodel.Invoice) map[int64][]string {
+func invoiceSKUs(t *testing.T, invs []*testmodel.Invoice) map[int64][]string {
 	t.Helper()
 	got := map[int64][]string{}
 	for _, inv := range invs {
@@ -254,7 +254,7 @@ func TestLimitEachWith(t *testing.T) {
 }
 
 // bookTagNames is each book's loaded tags' names, by book id.
-func bookTagNames(t *testing.T, bs []fixture.DBook) map[int64][]string {
+func bookTagNames(t *testing.T, bs []*fixture.DBook) map[int64][]string {
 	t.Helper()
 	got := map[int64][]string{}
 	for _, b := range bs {
@@ -424,7 +424,7 @@ func TestLimitEachNotPositive(t *testing.T) {
 }
 
 // skuLists is each list of items' SKUs.
-func skuLists(lists [][]testmodel.Item) [][]string {
+func skuLists(lists [][]*testmodel.Item) [][]string {
 	out := [][]string{}
 	for _, items := range lists {
 		skus := []string{}
@@ -437,7 +437,7 @@ func skuLists(lists [][]testmodel.Item) [][]string {
 }
 
 // nameLists is each list of tags' names.
-func nameLists(lists [][]fixture.DTag) [][]string {
+func nameLists(lists [][]*fixture.DTag) [][]string {
 	out := [][]string{}
 	for _, tags := range lists {
 		names := []string{}
@@ -458,7 +458,7 @@ func eachInvoices(t *testing.T, db *velox.DB, ids ...int64) []*testmodel.Invoice
 	}
 	byID := map[int64]*testmodel.Invoice{}
 	for i := range invs {
-		byID[invs[i].ID] = &invs[i]
+		byID[invs[i].ID] = invs[i]
 	}
 	out := make([]*testmodel.Invoice, len(ids))
 	for i, id := range ids {
@@ -838,7 +838,7 @@ func TestLoadEachJoin(t *testing.T) {
 	db, log := eachDB(t)
 	owners := eachInvoices(t, db, 2, 1, 3, 1)
 	log.reset()
-	numbers := func(lists [][]testmodel.Item) [][]string {
+	numbers := func(lists [][]*testmodel.Item) [][]string {
 		out := [][]string{}
 		for _, items := range lists {
 			ns := []string{}

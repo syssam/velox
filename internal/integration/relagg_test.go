@@ -18,9 +18,9 @@ func pageAll[E any](t *testing.T, q velox.Query[E], n, most int, id func(*E) int
 	t.Helper()
 	var got []int64
 	page, err := q.Limit(n).All(ctx)
-	for ; err == nil && len(page) > 0; page, err = q.After(&page[len(page)-1]).Limit(n).All(ctx) {
+	for ; err == nil && len(page) > 0; page, err = q.After(page[len(page)-1]).Limit(n).All(ctx) {
 		for i := range page {
-			got = append(got, id(&page[i]))
+			got = append(got, id(page[i]))
 		}
 		if len(got) > most {
 			break
@@ -205,7 +205,7 @@ func TestRelAggregateEdgeSchemaOnRealDatabases(t *testing.T) {
 	})
 }
 
-func ownerIDs(os []fixture.IOwner) []int64 {
+func ownerIDs(os []*fixture.IOwner) []int64 {
 	out := []int64{}
 	for _, o := range os {
 		out = append(out, o.ID)
