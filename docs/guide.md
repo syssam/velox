@@ -2265,6 +2265,21 @@ velox.WithFilter(func(ctx context.Context, db *velox.DB, e velox.FilterEntity, o
 })
 ```
 
+A filter or hook that needs a service that takes the DB cannot be given at
+`Connect`. `velox.NewDeferred()` installs a slot there that fails closed: every
+statement fails with `ErrNotReady` until `Set` gives the filter (nil for none)
+and the hooks, once
+([ADR 0181](decisions/0181-deferred-filter-and-hooks.md)).
+
+```go
+late := velox.NewDeferred()
+db, err := velox.Connect("postgres", dsn, late.Option())
+svc := newService(db)
+err = late.Set(svc.RowScope, svc.CheckAccess)
+```
+
+Call `Set` before anything reads: `WithoutPolicy` does not lift the refusal.
+
 A schema written as ent's are keeps its `privacy` rules
 ([ADR 0089](decisions/0089-veloxe-privacy-shape.md)).
 

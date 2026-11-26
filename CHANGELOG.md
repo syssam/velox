@@ -20,7 +20,9 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 - `TxRetrySerializable` is `TxRetryRolledBack`, and it also runs the
   transaction again after a lost or refused connection at BEGIN or in one of
   its statements, as the server rolls that transaction back (decision 0180).
-
+- `velox.Deferred`: a filter and write hooks that a DB installs at open and
+  is given later, once, with `Set`; until then every statement fails with
+  `ErrNotReady` (decision 0181).
 - `Query.All` and `RawQuery.All` return a `[]*E`, `Many.Get` a `[]*T`,
   `LoadedMany` takes a `[]*T` and `LoadEach` returns a `[][]*T`, as ent's reads
   do; they used `[]E` and `[]T` (decision 0179).

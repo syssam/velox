@@ -168,6 +168,15 @@ const (
 	defaultBackoff   = 5 * time.Second
 )
 
+// CombineOptions is the one Option that applies opts in order.
+func CombineOptions(opts ...Option) Option {
+	return Option{func(c *config) {
+		for _, o := range opts {
+			o.apply(c)
+		}
+	}}
+}
+
 // newConfig returns the configuration opts make.
 func newConfig(opts []Option) *config {
 	cfg := &config{PinWindow: defaultPinWindow, Backoff: defaultBackoff}

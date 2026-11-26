@@ -546,6 +546,8 @@ func (c TimeCol[E, V]) Select[_ Lazy[V]](ps ...Pred[E]) Subquery[V]
 func (c TimeCol[E, V]) SetPtr[_ Lazy[V]](p *V) Setter[E]
 func (c TimeCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
 func (c TimeCol[E, V]) Value[_ Lazy[V]](m *Mutation) (V, bool)
+func (d *Deferred) Option() Option
+func (d *Deferred) Set(filter Filter, hs ...Hook) error
 func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int, error)
 func (d DeleteQuery[E]) One[_ Lazy[E]](ctx context.Context) error
@@ -815,6 +817,7 @@ func MinByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Quer
 func MinBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, V], error)
 func MinNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (V, bool, error)
 func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func NewDeferred() *Deferred
 func None() Predicate
 func Not[E any](p Pred[E]) Pred[E]
 func On(h Hook, ops ...Op) Hook
@@ -902,6 +905,7 @@ type DB struct { }
 type DateOption struct { }
 type DateUnit = engine.DateUnit
 type Deadlines = veloxtype.Deadlines
+type Deferred struct { }
 type DeleteQuery[E any] struct { }
 type Descriptor[E any] struct { Table string TableSchema string Columns []ColumnDescriptor PrimaryKey []int Bidi bool Indexes []IndexInfo Edges []EdgeDescriptor Entities func() *EntityTable FieldPtr func(x *E, i int) any EdgeFieldPtr func(x *E, i int) any SourcePtr func(x *E) *Source Check func(col int, v any) error Schema any }
 type Dialect = veloxtype.Dialect
@@ -1019,6 +1023,7 @@ var ErrNoShard
 var ErrNoSource
 var ErrNoWhere
 var ErrNotFound
+var ErrNotReady
 var ErrNotSingular
 var ErrOutOfRange
 var ErrOutsideTx
