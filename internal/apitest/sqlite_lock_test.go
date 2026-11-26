@@ -159,7 +159,7 @@ func price(t *testing.T, db *velox.DB) wgCents {
 // Connect's one connection, transactions take turns. On two connections a
 // DEFERRED transaction takes the write lock at its write: the one that
 // writes second fails with SQLITE_BUSY, losing no update, and
-// TxRetrySerializable runs it again. Under _txlock=immediate the second
+// TxRetryRolledBack runs it again. Under _txlock=immediate the second
 // transaction waits at its BEGIN and reads what the first wrote.
 func TestSQLiteLockingReadSemantics(t *testing.T) {
 	t.Run("one connection", func(t *testing.T) {
@@ -199,7 +199,7 @@ func TestSQLiteLockingReadSemantics(t *testing.T) {
 					}
 				})
 				return err
-			}, velox.TxRetrySerializable(retries))
+			}, velox.TxRetryRolledBack(retries))
 			switch retries {
 			case 0:
 				if err == nil || !strings.Contains(err.Error(), "locked") || price(t, db) != 1 {

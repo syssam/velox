@@ -56,9 +56,9 @@ import (
 // inside a mutation is unsupported; use it in queries.
 //
 // The server's Use panics when DB is nil or Options holds
-// velox.TxRetrySerializable: gqlgen makes the response once, so the
+// velox.TxRetryRolledBack: gqlgen makes the response once, so the
 // operation cannot run again. For the same reason the transaction does not
-// retry under a TxRetrySerializable of the DB's velox.WithTxDefaults.
+// retry under a TxRetryRolledBack of the DB's velox.WithTxDefaults.
 type Transactioner struct {
 	// DB is the DB the transactions begin on: the one the Resolver holds.
 	DB *velox.DB
@@ -93,13 +93,13 @@ var errRollback = errors.New("veloxgql: the response has errors")
 func (Transactioner) ExtensionName() string { return "VeloxTransactioner" }
 
 // Validate implements graphql.HandlerExtension: it refuses a nil DB and
-// options that ask for velox.TxRetrySerializable.
+// options that ask for velox.TxRetryRolledBack.
 func (t Transactioner) Validate(graphql.ExecutableSchema) error {
 	if t.DB == nil {
 		return errors.New("gqlgenx.Transactioner: nil DB")
 	}
 	if n := velox.TxRetries(t.Options...); n > 0 {
-		return fmt.Errorf("gqlgenx.Transactioner: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
+		return fmt.Errorf("gqlgenx.Transactioner: TxRetryRolledBack(%d) would run the mutation again, and gqlgen makes its response once", n)
 	}
 	return nil
 }
@@ -126,9 +126,9 @@ func (t Transactioner) InterceptResponse(ctx context.Context, next graphql.Respo
 		return next(ctx)
 	}
 	var resp *graphql.Response
-	// TxRetrySerializable(0), last, overrides a retry of the DB's
+	// TxRetryRolledBack(0), last, overrides a retry of the DB's
 	// velox.WithTxDefaults.
-	opts := append(slices.Clip(t.Options), velox.TxRetrySerializable(0))
+	opts := append(slices.Clip(t.Options), velox.TxRetryRolledBack(0))
 	err := t.DB.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
 		// The transaction's ctx: its deadline, and the TxAround hooks' values.
 		resp = next(ctx)

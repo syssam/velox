@@ -77,7 +77,7 @@ func TestTxAroundSeesEveryAttempt(t *testing.T) {
 			attempts = append(attempts, st.Tx.Attempt)
 			return next(ctx)
 		}))
-	if err := db.Tx(ctx, touch, velox.TxRetrySerializable(2)); err != nil {
+	if err := db.Tx(ctx, touch, velox.TxRetryRolledBack(2)); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 || !reflect.DeepEqual(attempts, []int{1, 2}) || info.Attempt != 2 || info.Outcome != velox.TxCommit {
@@ -101,7 +101,7 @@ func TestRetryExhaustedWithTxAround(t *testing.T) {
 		info = tx
 		return next(ctx)
 	}))
-	err := db.Tx(ctx, touch, velox.TxRetrySerializable(2))
+	err := db.Tx(ctx, touch, velox.TxRetryRolledBack(2))
 	if !errors.Is(err, ser) {
 		t.Errorf("got %v, want the serialization failure", err)
 	}
@@ -185,7 +185,7 @@ func TestStatementTx(t *testing.T) {
 	if err := touch(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Tx(ctx, touch, velox.TxRetrySerializable(1)); err != nil {
+	if err := db.Tx(ctx, touch, velox.TxRetryRolledBack(1)); err != nil {
 		t.Fatal(err)
 	}
 	if len(seen) != 2 || seen[0] != nil || seen[1] == nil || seen[1].ID == 0 || seen[1].Attempt != 1 || seen[1].Outcome != velox.TxCommit {

@@ -39,7 +39,7 @@ func TestRetryBacksOff(t *testing.T) {
 			t.Errorf("attempt %d ran after %d waits", calls, len(*waits))
 		}
 		return dead
-	}, TxRetrySerializable(retries))
+	}, TxRetryRolledBack(retries))
 	if !dberr.Is(err, dead) {
 		t.Fatalf("%v", err)
 	}
@@ -84,7 +84,7 @@ func TestRetryWaitEndsWithContext(t *testing.T) {
 		calls++
 		time.AfterFunc(time.Millisecond, cancel)
 		return dead
-	}, TxRetrySerializable(3))
+	}, TxRetryRolledBack(3))
 	if !dberr.Is(err, dead) || calls != 1 {
 		t.Errorf("%v after %d attempts", err, calls)
 	}
@@ -112,7 +112,7 @@ func TestRetryWaitStopsAtTheTimeout(t *testing.T) {
 	dead := &mysql.MySQLError{Number: 1213, Message: "Deadlock found"}
 	db := newDB(MySQL, &fakeconn.Exec{}, nil)
 	calls := 0
-	err := db.Tx(context.Background(), func(context.Context, *DB) error { calls++; return dead }, TxRetrySerializable(3), TxTimeout(5*time.Millisecond))
+	err := db.Tx(context.Background(), func(context.Context, *DB) error { calls++; return dead }, TxRetryRolledBack(3), TxTimeout(5*time.Millisecond))
 	if !dberr.Is(err, dead) || !dberr.Is(err, ErrTimeout) || calls != 1 {
 		t.Errorf("%v after %d attempts", err, calls)
 	}
@@ -169,7 +169,7 @@ func TestRetryEndedMatchesTheContext(t *testing.T) {
 				calls++
 				c.fn(cancel)
 				return dead
-			}, TxRetrySerializable(3))
+			}, TxRetryRolledBack(3))
 			if calls != 1 || !dberr.Is(err, dead) {
 				t.Errorf("%v after %d attempts", err, calls)
 			}
@@ -200,7 +200,7 @@ func TestRetryEndedThroughATxAround(t *testing.T) {
 	err := db.Tx(ctx, func(context.Context, *DB) error {
 		time.AfterFunc(time.Millisecond, cancel)
 		return dead
-	}, TxRetrySerializable(3))
+	}, TxRetryRolledBack(3))
 	if !dberr.Is(err, dead) || !dberr.Is(err, context.Canceled) {
 		t.Errorf("%v", err)
 	}
@@ -214,7 +214,7 @@ func TestRetryEndedAtTheTimeoutBeforeTheWait(t *testing.T) {
 	err := db.Tx(context.Background(), func(ctx context.Context, _ *DB) error {
 		<-ctx.Done()
 		return dead
-	}, TxRetrySerializable(3), TxTimeout(time.Millisecond))
+	}, TxRetryRolledBack(3), TxTimeout(time.Millisecond))
 	if !dberr.Is(err, dead) || !dberr.Is(err, ErrTimeout) || strings.Count(err.Error(), ErrTimeout.Error()) != 1 {
 		t.Errorf("%v", err)
 	}

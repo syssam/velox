@@ -237,7 +237,7 @@
 // # Options
 //
 // Open's options are WithX, as WithMaxRows; a transaction's are TxIsolation,
-// TxReadOnly, TxTimeout and TxRetrySerializable; a context is changed by WithX
+// TxReadOnly, TxTimeout and TxRetryRolledBack; a context is changed by WithX
 // or WithoutX, as WithShard and WithoutTx, and read by XFromContext, as
 // RowScopeFromContext.
 //
@@ -284,7 +284,7 @@
 // # Transaction options
 //
 // A TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
-// TxRetrySerializable and TxTimeout.
+// TxRetryRolledBack and TxTimeout.
 //
 // # Errors
 //

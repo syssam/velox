@@ -95,7 +95,7 @@ func TestCommitUnknownWhenCanceledDuringCommit(t *testing.T) {
 	}
 }
 
-// TestCommitUnknownIsNotRetried: TxRetrySerializable never runs fn again after
+// TestCommitUnknownIsNotRetried: TxRetryRolledBack never runs fn again after
 // a COMMIT whose outcome is unknown, so a committed transaction is not
 // applied twice.
 func TestCommitUnknownIsNotRetried(t *testing.T) {
@@ -104,7 +104,7 @@ func TestCommitUnknownIsNotRetried(t *testing.T) {
 	err := openFake(velox.Postgres, e).Tx(context.Background(), func(context.Context, *velox.DB) error {
 		runs++
 		return nil
-	}, velox.TxRetrySerializable(3))
+	}, velox.TxRetryRolledBack(3))
 	if !errors.Is(err, velox.ErrCommitUnknown) || runs != 1 {
 		t.Errorf("%v, runs %d: want ErrCommitUnknown after one run", err, runs)
 	}
@@ -112,7 +112,7 @@ func TestCommitUnknownIsNotRetried(t *testing.T) {
 
 // TestCommitUnknownRetryableIsNotRetried: a MySQL lock wait timeout is
 // retryable before COMMIT, but at COMMIT it does not say the transaction
-// rolled back, so TxRetrySerializable does not run fn again. A deadlock at
+// rolled back, so TxRetryRolledBack does not run fn again. A deadlock at
 // COMMIT rolled back, and is retried.
 func TestCommitUnknownRetryableIsNotRetried(t *testing.T) {
 	for _, tc := range []struct {
@@ -125,7 +125,7 @@ func TestCommitUnknownRetryableIsNotRetried(t *testing.T) {
 		err := openFake(velox.MySQL, e).Tx(context.Background(), func(context.Context, *velox.DB) error {
 			runs++
 			return nil
-		}, velox.TxRetrySerializable(3))
+		}, velox.TxRetryRolledBack(3))
 		if errors.Is(err, velox.ErrCommitUnknown) != tc.unknown || runs != tc.runs {
 			t.Errorf("MySQL %d at commit: %v, runs %d: want unknown %v after %d runs", tc.n, err, runs, tc.unknown, tc.runs)
 		}

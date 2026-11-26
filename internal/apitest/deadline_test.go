@@ -316,7 +316,7 @@ func TestRetriesStopAtTheTxDeadline(t *testing.T) {
 			runs++
 			time.Sleep(20 * time.Millisecond)
 			return &pgconn.PgError{Code: "40001"}
-		}, velox.TxRetrySerializable(1000), velox.TxTimeout(100*time.Millisecond))
+		}, velox.TxRetryRolledBack(1000), velox.TxTimeout(100*time.Millisecond))
 		if !errors.Is(err, velox.ErrTimeout) || runs < 2 || runs > 10 {
 			t.Errorf("%v after %d runs", err, runs)
 		}

@@ -9,7 +9,7 @@ import (
 
 // WithDeadlines sets the DB's time limits. A statement's limit covers its
 // Around hooks and, with Iter, the caller's loop body. A transaction's covers
-// fn, every TxRetrySerializable attempt and the commit.
+// fn, every TxRetryRolledBack attempt and the commit.
 //
 // A transaction's effective deadline is velox's or the one on the context
 // given to Tx, whichever is earlier. It bounds every statement inside the

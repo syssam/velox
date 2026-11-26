@@ -366,7 +366,7 @@ func copyColumn(in *EntityInfo, col int, dst, src unsafe.Pointer) {
 //     insert although the upsert updated it.
 //   - On MySQL the locked read takes gap (next-key) locks: two recorded
 //     upserts of new keys in the same gap, at once, can deadlock, and one
-//     fails with ER_LOCK_DEADLOCK, which TxRetrySerializable retries.
+//     fails with ER_LOCK_DEADLOCK, which TxRetryRolledBack retries.
 //   - Rows of one InsertAll that share a conflict key give one Change per
 //     row stored; on MySQL their count differs, and the write fails.
 //   - The reads see the rows without the scope or the Read policy: the

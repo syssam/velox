@@ -257,7 +257,7 @@ func TestTxCommitPins(t *testing.T) {
 				return &pgconn.PgError{Code: "40001"}
 			}
 			return nil
-		}, velox.TxRetrySerializable(1))
+		}, velox.TxRetryRolledBack(1))
 		if err != nil || attempt != 2 {
 			t.Fatalf("attempt %d, err %v; want the second attempt to commit", attempt, err)
 		}

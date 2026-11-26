@@ -213,7 +213,7 @@ func WithMaxLimit(n int) Option { return engine.WithMaxLimit(n) }
 // SQLite runs DEFERRED, unless the DSN asks otherwise. A DEFERRED
 // transaction takes the write lock at its first write, not at the read: two
 // of them may read the same row, and when one has written it, the other's
-// write fails with SQLITE_BUSY, which TxRetrySerializable retries. No
+// write fails with SQLITE_BUSY, which TxRetryRolledBack retries. No
 // update is lost, but the second transaction fails where FOR UPDATE would
 // have made it wait. Open the database with _txlock=immediate in the DSN
 // to make every Tx take the write lock at its BEGIN: a second writer then
@@ -245,7 +245,7 @@ type Deadlines = veloxtype.Deadlines
 
 // WithDeadlines sets the DB's time limits. A statement's limit covers its
 // Around hooks and, with Iter, the caller's loop body. A transaction's covers
-// fn, every TxRetrySerializable attempt and the commit.
+// fn, every TxRetryRolledBack attempt and the commit.
 //
 // A transaction's effective deadline is velox's or the one on the context
 // given to Tx, whichever is earlier. It bounds every statement inside the

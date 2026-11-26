@@ -334,7 +334,7 @@ func TestTxDurationMetric(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.errs = []error{nil, &pgconn.PgError{Code: "40001"}}
-	if err := db.Tx(ctx, fn, velox.TxRetrySerializable(1)); err != nil {
+	if err := db.Tx(ctx, fn, velox.TxRetryRolledBack(1)); err != nil {
 		t.Fatal(err)
 	}
 	boom := errors.New("boom")

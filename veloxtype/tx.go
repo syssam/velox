@@ -16,7 +16,7 @@ type Deadlines struct {
 }
 
 // TxAround is a hook that wraps a transaction: a db.Tx call, every attempt
-// velox.TxRetrySerializable makes and the commit included. It is called once
+// velox.TxRetryRolledBack makes and the commit included. It is called once
 // per db.Tx call, not for a nested Tx (a savepoint). A multi-batch InsertAll
 // outside a transaction runs in one db.Tx, so the hooks see it too.
 //
@@ -39,12 +39,12 @@ type TxInfo struct {
 	// Route is where the transaction runs: its shard ("" on an unsharded DB), on
 	// the primary, so Replica is always -1 and Fallback always false.
 	Route   Route
-	Attempt int       // 1 for the first try; velox.TxRetrySerializable increments it
-	Retries []TxRetry // the attempts velox.TxRetrySerializable retried, in order
+	Attempt int       // 1 for the first try; velox.TxRetryRolledBack increments it
+	Retries []TxRetry // the attempts velox.TxRetryRolledBack retried, in order
 	Outcome TxOutcome // how the last attempt ended; set before next returns
 }
 
-// TxRetry is an attempt that velox.TxRetrySerializable retried.
+// TxRetry is an attempt that velox.TxRetryRolledBack retried.
 type TxRetry struct {
 	Err error     // what the attempt failed with
 	At  time.Time // when velox decided to retry

@@ -15,7 +15,7 @@ func TestDBFieldsClassified(t *testing.T) {
 	modes := map[string]bool{"bypass": true, "misuse": true, "rec": true}
 	state := map[string]bool{
 		"D": true, "Ex": true, "Rt": true, "Cfg": true, "InTx": true,
-		"txDeadline": true, "txCause": true, "tx": true, "txWrote": true,
+		"txDeadline": true, "txCause": true, "tx": true, "txWrote": true, "txLost": true,
 		"txShard": true, "txRoot": true, "txSelf": true, "pool": true,
 		"owned": true, "batch": true, "src": true,
 	}

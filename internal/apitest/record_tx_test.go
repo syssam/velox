@@ -215,7 +215,7 @@ func TestRecorderSavepointRollback(t *testing.T) {
 	}
 }
 
-// TestRecorderRetry: an attempt of TxRetrySerializable that fails drops its
+// TestRecorderRetry: an attempt of TxRetryRolledBack that fails drops its
 // Changes; the Recorder holds those of the attempt that committed.
 func TestRecorderRetry(t *testing.T) {
 	db, _ := recInvoices(t)
@@ -230,7 +230,7 @@ func TestRecorderRetry(t *testing.T) {
 		}
 		setTotal(ctx, t, tx, 1, 12)
 		return nil
-	}, velox.TxRetrySerializable(2))
+	}, velox.TxRetryRolledBack(2))
 	if err != nil || attempts != 2 {
 		t.Fatalf("%v, %d attempts", err, attempts)
 	}

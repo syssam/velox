@@ -466,7 +466,7 @@ a table rebuild on SQLite.
 | a test's `tx, _ := c.Tx(ctx); defer tx.Rollback()` that never commits | `veloxtest.RolledBack(t, ctx, db, func(ctx context.Context, tx *velox.DB) { … })`: fn's writes roll back, a `t.Fatal` in fn included |
 | a failed COMMIT, told apart by its message | `errors.Is(err, velox.ErrCommitUnknown)`: the outcome is unknown, so retry nothing. A COMMIT that says it rolled back does not match, such as PostgreSQL's answer to an aborted transaction, `pgx.ErrTxCommitRollback` ([ADR 0134](decisions/0134-commit-unknown.md)) |
 | a helper returning a `nil` predicate for "no condition", checked with `p == nil` | the zero `velox.Predicate{}` or `Pred[E]{}`, checked with `velox.IsZero(p)`: a `Pred` holds a slice, so it has no `nil` and no `==`. A zero `Pred` that reaches a query fails the statement |
-| a retry and a timeout in a helper around every transaction | `velox.WithTxDefaults(velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
+| a retry and a timeout in a helper around every transaction | `velox.WithTxDefaults(velox.TxRetryRolledBack(3), velox.TxTimeout(30*time.Second))` at `Connect` ([ADR 0133](decisions/0133-tx-defaults-and-none.md)) |
 | `Select(f).Strings(ctx)`, `Ints(ctx)` | `q.Values(ctx, T.F)` |
 | `e.QueryPets()` | `e.QueryPets()`, a `velox.Query[Pet]` on the DB that read or wrote `e`, read only: a write names its DB. An entity built by hand fails with `velox.ErrNoSource` |
 | `cmp.Diff(want, got)` of two entities | `veloxtest.Equal(want, got)`, or go-cmp with `cmpopts.IgnoreUnexported`: an entity's unexported field holds its DB |

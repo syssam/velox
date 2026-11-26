@@ -72,7 +72,7 @@
 // # Transactions
 //
 // The transaction's span, velox.tx, is of kind internal and covers every
-// attempt TxRetrySerializable makes and the commit. It carries the isolation
+// attempt TxRetryRolledBack makes and the commit. It carries the isolation
 // level, the read-only flag, the final attempt count and the outcome (commit,
 // rollback or error), with a "retry" event per retried attempt. A savepoint
 // (a nested Tx) makes no span of its own.

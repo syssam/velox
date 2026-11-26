@@ -39,6 +39,11 @@ type DB struct {
 	// successful write; the commit then pins the session of the context given
 	// to Tx. Its savepoints share it. Nil elsewhere.
 	txWrote *atomic.Bool
+	// txLost is, in a transaction that may be retried (TxRetryRolledBack), set
+	// by the first statement that fails on a lost connection (connLost); the
+	// transaction runs again when it ends in an error. Its savepoints share
+	// it. Nil elsewhere.
+	txLost *atomic.Bool
 	// txShard is, in a transaction on a sharded DB, the shard it runs on;
 	// nil elsewhere.
 	txShard *shardConn
@@ -637,6 +642,15 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 // hook retries. Once Iter has handed the caller a row, the replica's error is
 // returned and only the back-off happens. Neither happens once ctx has ended.
 func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+	err := db.sendStatement(ctx, st, t, read, res)
+	if err != nil {
+		markLost(db.txLost, err)
+	}
+	return err
+}
+
+// sendStatement is send's body.
+func (db *DB) sendStatement(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db, st); err != nil {
 		return err

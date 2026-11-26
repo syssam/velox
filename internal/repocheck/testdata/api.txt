@@ -847,7 +847,7 @@ func TxFrom(ctx context.Context, db *DB) (*DB, bool)
 func TxIsolation(level sql.IsolationLevel) TxOption
 func TxReadOnly() TxOption
 func TxRetries(opts ...TxOption) int
-func TxRetrySerializable(n int) TxOption
+func TxRetryRolledBack(n int) TxOption
 func TxTimeout(d time.Duration) TxOption
 func Unless(h Hook, cond Condition) Hook
 func UseTx(db *DB, tx *sql.Tx) (*DB, error)

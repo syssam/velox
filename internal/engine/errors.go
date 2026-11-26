@@ -40,9 +40,9 @@ var (
 	// waiting: a NoWait read that met a row another transaction holds, or a
 	// PostgreSQL lock_timeout. It matches PostgreSQL's 55P03 (lock_not_available)
 	// and MySQL's 3572; the driver's error is wrapped with it, and
-	// TxRetrySerializable does not retry it. MySQL's lock wait timeout (1205,
+	// TxRetryRolledBack does not retry it. MySQL's lock wait timeout (1205,
 	// innodb_lock_wait_timeout), the same situation on that dialect, is not
-	// ErrLocked: TxRetrySerializable retries it, as a deadlock.
+	// ErrLocked: TxRetryRolledBack retries it, as a deadlock.
 	ErrLocked = errors.New("lock not available")
 	// ErrTimeout is returned by a statement or transaction when a deadline
 	// velox set (WithDeadlines, TxTimeout) passes. The error also matches
@@ -80,7 +80,7 @@ var (
 	// error, by a Tx whose COMMIT failed when the error does not say the
 	// transaction rolled back: a lost connection,
 	// a driver error, or a context that ended while COMMIT was sent. The
-	// database may have committed. TxRetrySerializable does not run fn again
+	// database may have committed. TxRetryRolledBack does not run fn again
 	// after it, and a caller that retries on its own should not either: it
 	// reconciles, as for a lost acknowledgement. An error that says the
 	// transaction rolled back does not match (dberr.RolledBack): a deferred

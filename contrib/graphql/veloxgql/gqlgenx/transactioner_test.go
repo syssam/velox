@@ -77,8 +77,8 @@ func TestTransactionerValidate(t *testing.T) {
 		handler.New(testSchema(nil)).Use(gqlgenx.Transactioner{})
 	}()
 
-	retry := gqlgenx.Transactioner{DB: db, Options: []velox.TxOption{velox.TxTimeout(time.Second), velox.TxRetrySerializable(3)}}
-	want := "gqlgenx.Transactioner: TxRetrySerializable(3) would run the mutation again, and gqlgen makes its response once"
+	retry := gqlgenx.Transactioner{DB: db, Options: []velox.TxOption{velox.TxTimeout(time.Second), velox.TxRetryRolledBack(3)}}
+	want := "gqlgenx.Transactioner: TxRetryRolledBack(3) would run the mutation again, and gqlgen makes its response once"
 	if err := retry.Validate(nil); err == nil || err.Error() != want {
 		t.Errorf("Validate = %v, want %q", err, want)
 	}
@@ -92,7 +92,7 @@ func TestTransactionerValidate(t *testing.T) {
 	}()
 	for name, opts := range map[string][]velox.TxOption{
 		"no options":                   nil,
-		"the last retry asks for none": {velox.TxRetrySerializable(3), velox.TxRetrySerializable(0)},
+		"the last retry asks for none": {velox.TxRetryRolledBack(3), velox.TxRetryRolledBack(0)},
 		"isolation":                    {velox.TxIsolation(sql.LevelSerializable)},
 	} {
 		if err := (gqlgenx.Transactioner{DB: db, Options: opts}).Validate(nil); err != nil {
@@ -104,7 +104,7 @@ func TestTransactionerValidate(t *testing.T) {
 // TestTransactionerIgnoresDBRetry: a retry among the DB's transaction
 // defaults does not run a mutation again.
 func TestTransactionerIgnoresDBRetry(t *testing.T) {
-	db, l := handlerDB(t, velox.WithTxDefaults(velox.TxRetrySerializable(3)))
+	db, l := handlerDB(t, velox.WithTxDefaults(velox.TxRetryRolledBack(3)))
 	var runs atomic.Int64
 	resolvers := handlerResolvers(db, nil)
 	fail := resolvers["fail"]

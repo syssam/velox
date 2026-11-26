@@ -140,7 +140,7 @@ func run(ctx context.Context, w io.Writer) error {
 	})
 	say("nested:   %s (err=%v)", balances(), err)
 
-	// TxRetrySerializable runs fn again, up to n more times, after a
+	// TxRetryRolledBack runs fn again, up to n more times, after a
 	// serialization failure or deadlock (SQLite: BUSY, LOCKED). fn must be
 	// safe to run again. This database has one connection, so no conflict
 	// happens and fn runs once.
@@ -148,7 +148,7 @@ func run(ctx context.Context, w io.Writer) error {
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		attempts++
 		return transfer(ctx, tx, "bob2", "alice", 5)
-	}, velox.TxRetrySerializable(3))
+	}, velox.TxRetryRolledBack(3))
 	say("retry:    %s (attempts=%d, err=%v)", balances(), attempts, err)
 
 	// TxTimeout bounds one transaction, within WithDeadlines' MaxTx. Every

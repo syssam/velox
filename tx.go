@@ -18,7 +18,7 @@ import (
 func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
-// TxRetrySerializable and TxTimeout. The zero TxOption is not valid: TxRetries
+// TxRetryRolledBack and TxTimeout. The zero TxOption is not valid: TxRetries
 // panics on it, and so does DB.Tx when it begins the transaction.
 type TxOption = engine.TxOption
 
@@ -33,16 +33,23 @@ func TxIsolation(level sql.IsolationLevel) TxOption { return engine.TxIsolation(
 // _txlock=immediate it holds SQLite's write lock all the same.
 func TxReadOnly() TxOption { return engine.TxReadOnly() }
 
-// TxRetrySerializable runs the transaction again, up to n more times, when it
-// fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
-// MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-// An error that matches ErrCommitUnknown is not retried, MySQL's 1205 at
-// COMMIT included. Each retry waits first, a random time from 5 ms that grows to at most a
-// second; the transaction's deadline or ctx's end stops the wait, and the
-// retry.
-func TxRetrySerializable(n int) TxOption { return engine.TxRetrySerializable(n) }
+// TxRetryRolledBack runs the transaction again, up to n more times, when the
+// database rolled it back before COMMIT, so that fn may run again: a
+// serialization failure or a deadlock (PostgreSQL 40001 and 40P01, MySQL 1213
+// and 1205, SQLite BUSY and LOCKED), or a BEGIN or statement of the
+// transaction's own that fails on a lost or refused connection, which the
+// server rolls back with it (a dropped connection, a server shutting down or
+// restarting, too many connections). An error of fn's own, such as an io.EOF,
+// is not a lost connection; a failed login and a blocked host are not retried.
+// fn must be safe to run again, and what it did outside the transaction, or
+// under WithoutTx, is done again. An error that matches ErrCommitUnknown is
+// not retried, MySQL's 1205 at COMMIT and a connection lost at COMMIT
+// included. Each retry waits first, a random time from 5 ms that grows to at
+// most a second; the transaction's deadline or ctx's end stops the wait, and
+// the retry.
+func TxRetryRolledBack(n int) TxOption { return engine.TxRetryRolledBack(n) }
 
-// TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
+// TxRetries returns the n of the last TxRetryRolledBack in opts, or 0 when
 // there is none. It reads options and is not one. It is for code that runs a
 // transaction's fn on an application's behalf and cannot run it again.
 func TxRetries(opts ...TxOption) int { return engine.TxRetries(opts...) }
@@ -66,7 +73,7 @@ type TxAround = veloxtype.TxAround
 // TxInfo describes a transaction to the hooks.
 type TxInfo = veloxtype.TxInfo
 
-// TxRetry is an attempt that TxRetrySerializable retried.
+// TxRetry is an attempt that TxRetryRolledBack retried.
 type TxRetry = veloxtype.TxRetry
 
 // TxOutcome is how a transaction's attempt ended.
@@ -87,7 +94,7 @@ func WithTxAround(h TxAround) Option { return engine.WithTxAround(h) }
 // own, as if each call began with them: every Tx on the DB, its shards and
 // the DBs derived from it (WithoutPolicy, Record), and the transactions
 // velox begins itself for a write that needs one. A call's own options come
-// after, so they override: TxRetrySerializable(0) runs a call once under a
+// after, so they override: TxRetryRolledBack(0) runs a call once under a
 // default of 3, TxTimeout(d) replaces a default timeout, and TxTimeout(0)
 // lifts it, leaving WithDeadlines' Tx and MaxTx. A nested Tx, a savepoint, applies none: it runs within the outermost
 // transaction, whose retry runs it again with the rest. UseTx applies none
@@ -96,5 +103,5 @@ func WithTxAround(h TxAround) Option { return engine.WithTxAround(h) }
 // TxOption panics.
 //
 //	db, err := velox.Connect("postgres", dsn, velox.WithTxDefaults(
-//		velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second)))
+//		velox.TxRetryRolledBack(3), velox.TxTimeout(30*time.Second)))
 func WithTxDefaults(opts ...TxOption) Option { return engine.WithTxDefaults(opts) }

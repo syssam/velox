@@ -237,7 +237,7 @@ func TestRetrySerializable(t *testing.T) {
 	e := &fakeconn.Exec{Errs: []error{serialization}}
 	db := openFake(velox.Postgres, e)
 	runs := 0
-	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(2))
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetryRolledBack(2))
 	if err != nil || runs != 2 {
 		t.Fatalf("%v, runs %d", err, runs)
 	}
@@ -248,12 +248,12 @@ func TestRetrySerializable(t *testing.T) {
 	e = &fakeconn.Exec{Errs: []error{serialization}}
 	db = openFake(velox.Postgres, e)
 	if err := db.Tx(ctx, touch); !errors.Is(err, serialization) {
-		t.Errorf("without TxRetrySerializable: %v", err)
+		t.Errorf("without TxRetryRolledBack: %v", err)
 	}
 	e = &fakeconn.Exec{Errs: []error{errors.New("not retryable")}}
 	db = openFake(velox.Postgres, e)
 	runs = 0
-	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(3)); err == nil || runs != 1 {
+	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetryRolledBack(3)); err == nil || runs != 1 {
 		t.Errorf("a non-retryable error: %v, runs %d", err, runs)
 	}
 }
@@ -280,9 +280,9 @@ func TestRetryBound(t *testing.T) {
 		e := &fakeconn.Exec{Err: serialization}
 		db := openFake(velox.Postgres, e)
 		runs := 0
-		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(tc.n))
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetryRolledBack(tc.n))
 		if !errors.Is(err, serialization) || runs != tc.runs {
-			t.Errorf("TxRetrySerializable(%d): runs %d, want %d; err %v", tc.n, runs, tc.runs, err)
+			t.Errorf("TxRetryRolledBack(%d): runs %d, want %d; err %v", tc.n, runs, tc.runs, err)
 		}
 	}
 }
@@ -298,7 +298,7 @@ func TestFailingCommit(t *testing.T) {
 			e.CommitErr = nil
 		}
 		return touch(ctx, tx)
-	}, velox.TxRetrySerializable(1))
+	}, velox.TxRetryRolledBack(1))
 	want := []string{"BEGIN", touchSQL, "COMMIT", "BEGIN", touchSQL, "COMMIT"}
 	if err != nil || runs != 2 || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v, runs %d\n got %q\nwant %q", err, runs, e.Log, want)
@@ -307,7 +307,7 @@ func TestFailingCommit(t *testing.T) {
 	boom := errors.New("boom")
 	e = &fakeconn.Exec{CommitErr: boom}
 	db = openFake(velox.Postgres, e)
-	err = db.Tx(ctx, touch, velox.TxRetrySerializable(2))
+	err = db.Tx(ctx, touch, velox.TxRetryRolledBack(2))
 	want = []string{"BEGIN", touchSQL, "COMMIT"}
 	if !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: commit: ") || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
@@ -463,7 +463,7 @@ func TestEndedTxMarksNothingOnEveryEnd(t *testing.T) {
 			t.Errorf("the first attempt's ctx, during the retry: %v", err)
 		}
 		return nil
-	}, velox.TxRetrySerializable(2))
+	}, velox.TxRetryRolledBack(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,8 +476,8 @@ func TestTxRetries(t *testing.T) {
 		want int
 	}{
 		{"none", nil, 0},
-		{"timeout then retry", []velox.TxOption{velox.TxTimeout(time.Second), velox.TxRetrySerializable(3)}, 3},
-		{"the last wins", []velox.TxOption{velox.TxRetrySerializable(3), velox.TxRetrySerializable(0)}, 0},
+		{"timeout then retry", []velox.TxOption{velox.TxTimeout(time.Second), velox.TxRetryRolledBack(3)}, 3},
+		{"the last wins", []velox.TxOption{velox.TxRetryRolledBack(3), velox.TxRetryRolledBack(0)}, 0},
 		{"no retry option", []velox.TxOption{velox.TxReadOnly(), velox.TxIsolation(sql.LevelSerializable)}, 0},
 	} {
 		if got := velox.TxRetries(c.opts...); got != c.want {
@@ -492,7 +492,7 @@ func TestNestedTxRefusesOptions(t *testing.T) {
 		"readonly":  velox.TxReadOnly(),
 		"isolation": velox.TxIsolation(sql.LevelSerializable),
 		"timeout":   velox.TxTimeout(time.Second),
-		"retry0":    velox.TxRetrySerializable(0),
+		"retry0":    velox.TxRetryRolledBack(0),
 	} {
 		e := &fakeconn.Exec{}
 		db := openFake(velox.Postgres, e)

@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -473,6 +474,30 @@ func failoverable(err error) bool {
 	}
 	op, ok := dberr.As[*net.OpError](err)
 	return !ne.Timeout() || ok && op.Op == "dial"
+}
+
+// connLost reports whether err is a connection that was lost or refused, which
+// a transaction run again may get past: failoverable's errors, less those a
+// retry cannot mend, a failed login (PostgreSQL's class 28, MySQL's 1045) and
+// a host that is blocked or not allowed (1129, 1130).
+func connLost(err error) bool {
+	if !failoverable(err) {
+		return false
+	}
+	if pg, ok := dberr.PgErrorOf(err); ok && strings.HasPrefix(pg.Code, "28") {
+		return false
+	}
+	if n, _, ok := dberr.MySQLError(err); ok && (n == 1045 || n == 1129 || n == 1130) {
+		return false
+	}
+	return true
+}
+
+// markLost sets lost, when it is not nil, if err is a lost connection.
+func markLost(lost *atomic.Bool, err error) {
+	if lost != nil && connLost(err) {
+		lost.Store(true)
+	}
 }
 
 // safeToRetry is pgx's pgconn.SafeToRetry over as, so that a nil pointer in err's

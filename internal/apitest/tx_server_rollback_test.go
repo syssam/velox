@@ -53,7 +53,7 @@ func TestMySQLDeadlockFromRowsBreaksTheTransaction(t *testing.T) {
 }
 
 // TestMySQLDeadlockSwallowedIsRetried: the commit's refusal carries the
-// deadlock, which TxRetrySerializable retries.
+// deadlock, which TxRetryRolledBack retries.
 func TestMySQLDeadlockSwallowedIsRetried(t *testing.T) {
 	dead := &mysql.MySQLError{Number: 1213, Message: "Deadlock found"}
 	e := &fakeconn.Exec{Errs: []error{dead}}
@@ -63,7 +63,7 @@ func TestMySQLDeadlockSwallowedIsRetried(t *testing.T) {
 		attempts++
 		_, _ = tx.Exec(ctx, "test", "UPDATE t SET a = 1")
 		return nil
-	}, velox.TxRetrySerializable(1))
+	}, velox.TxRetryRolledBack(1))
 	if err != nil || attempts != 2 {
 		t.Errorf("%v after %d attempts", err, attempts)
 	}

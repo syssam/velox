@@ -43,7 +43,7 @@ func (f RecordFunc) Record(ctx context.Context, tx *DB, changes []Change) error 
 // value is ready, and it is safe for concurrent use.
 //
 // A Recorder drops the Changes recorded in a transaction or savepoint that
-// rolls back, and in an attempt of TxRetrySerializable before its retry, so
+// rolls back, and in an attempt of TxRetryRolledBack before its retry, so
 // after Tx returns it holds what committed. Shared by concurrent
 // transactions, it drops only the Changes of the one that rolls back, and
 // until the others commit or roll back, All and Len include their Changes.

@@ -45,7 +45,7 @@ func TestTxSpanTree(t *testing.T) {
 		}
 		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
 		return err
-	}, velox.TxRetrySerializable(1))
+	}, velox.TxRetryRolledBack(1))
 	root.End()
 	if err != nil {
 		t.Fatal(err)

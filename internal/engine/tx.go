@@ -39,7 +39,7 @@ type txOptions struct {
 }
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
-// TxRetrySerializable and TxTimeout. The zero TxOption is not valid: TxRetries
+// TxRetryRolledBack and TxTimeout. The zero TxOption is not valid: TxRetries
 // panics on it, and so does DB.Tx when it begins the transaction.
 type TxOption struct{ apply func(*txOptions) }
 
@@ -56,16 +56,23 @@ func TxIsolation(level sql.IsolationLevel) TxOption {
 // _txlock=immediate it holds SQLite's write lock all the same.
 func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = true }} }
 
-// TxRetrySerializable runs the transaction again, up to n more times, when it
-// fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
-// MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-// An error that matches ErrCommitUnknown is not retried, MySQL's 1205 at
-// COMMIT included. Each retry waits first, a random time from 5 ms that grows to at most a
-// second; the transaction's deadline or ctx's end stops the wait, and the
-// retry.
-func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
+// TxRetryRolledBack runs the transaction again, up to n more times, when the
+// database rolled it back before COMMIT, so that fn may run again: a
+// serialization failure or a deadlock (PostgreSQL 40001 and 40P01, MySQL 1213
+// and 1205, SQLite BUSY and LOCKED), or a BEGIN or statement of the
+// transaction's own that fails on a lost or refused connection, which the
+// server rolls back with it (a dropped connection, a server shutting down or
+// restarting, too many connections). An error of fn's own, such as an io.EOF,
+// is not a lost connection; a failed login and a blocked host are not retried.
+// fn must be safe to run again, and what it did outside the transaction, or
+// under WithoutTx, is done again. An error that matches ErrCommitUnknown is
+// not retried, MySQL's 1205 at COMMIT and a connection lost at COMMIT
+// included. Each retry waits first, a random time from 5 ms that grows to at
+// most a second; the transaction's deadline or ctx's end stops the wait, and
+// the retry.
+func TxRetryRolledBack(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
 
-// TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
+// TxRetries returns the n of the last TxRetryRolledBack in opts, or 0 when
 // there is none. It reads options and is not one. It is for code that runs a
 // transaction's fn on an application's behalf and cannot run it again.
 func TxRetries(opts ...TxOption) int {
@@ -384,7 +391,11 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if db.Rt != nil {
 			wrote = new(atomic.Bool) // one per attempt: a retry forgets a rolled back write
 		}
-		committed, err := db.transaction(ctx, fn, o, deadline, cause, info, wrote, sh, after)
+		var lost *atomic.Bool
+		if o.Retries > 0 {
+			lost = new(atomic.Bool) // one per attempt, as wrote is
+		}
+		committed, err := db.transaction(ctx, fn, o, deadline, cause, info, wrote, lost, sh, after)
 		if committed && wrote != nil && wrote.Load() {
 			// A COMMIT that failed has an unknown outcome, as a write's that
 			// reached the database: it pins too.
@@ -394,8 +405,11 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 			err = errors.Join(timeoutError("transaction"), err)
 		}
 		// A COMMIT whose outcome is unknown is never run again, though its
-		// error be retryable before COMMIT (MySQL's 1205).
-		if err == nil || attempt > o.Retries || !dberr.Retryable(err) || dberr.Is(err, ErrCommitUnknown) {
+		// error be retryable before COMMIT (MySQL's 1205). A statement that
+		// lost its connection before COMMIT rolled the transaction back, as a
+		// deadlock does: the server rolls back what a dropped connection held.
+		if err == nil || attempt > o.Retries || dberr.Is(err, ErrCommitUnknown) ||
+			!dberr.Retryable(err) && (lost == nil || !lost.Load()) {
 			return err
 		}
 		if ctx.Err() != nil || tctx.Err() != nil || !retryWait(ctx, tctx, retryDelay(attempt)) {
@@ -489,7 +503,7 @@ func waitRetry(ctx, tctx context.Context, d time.Duration) bool {
 // functions of an attempt that rolled back, and, once COMMIT has
 // succeeded, those a rolled back savepoint made due, then the AfterCommit
 // functions. A panic or Goexit in fn appends none.
-func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shardConn, after *[]func(context.Context)) (committed bool, _ error) {
+func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote, lost *atomic.Bool, sh *shardConn, after *[]func(context.Context)) (committed bool, _ error) {
 	primary := db.Ex
 	var txShard *shardConn // its statements check their shard against it
 	if sh != nil {
@@ -503,9 +517,10 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	stop()
 	if err != nil {
 		endTx(info, TxError)
+		markLost(lost, err) // before any statement: nothing to roll back
 		return false, endedErr(ctx, "transaction", fmt.Errorf("velox: begin: %w", err))
 	}
-	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
+	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txLost: lost, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
 	defer releaseConn(db, holdConn(o.caller, db, f)) // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true)                        // before the note, and after the rollback
 	// Its entities read on it while it is live, then on db (Source).
@@ -641,7 +656,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
-	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
+	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txLost: db.txLost, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
 	defer f.ended.Store(true) // its handles are stale once it has returned (AfterCommit)
 	defer txSource(&f.db, db.src).end()
 	if err := fn(&f.ctx, &f.db); err != nil {

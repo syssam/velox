@@ -1848,8 +1848,12 @@ func WithTx(ctx context.Context, db *velox.DB, fn func(ctx context.Context, tx *
 
 Options go after the function:
 
-- `velox.TxRetrySerializable(n)` reruns the function after a serialization
-  failure or deadlock, up to n more times. The function must be safe to run
+- `velox.TxRetryRolledBack(n)` reruns the function, up to n more times, when
+  the database rolled the transaction back before COMMIT: after a
+  serialization failure or deadlock, or after a lost or refused connection
+  (a dropped connection, a server restarting, too many connections) at BEGIN
+  or in one of its statements. A connection lost at COMMIT is
+  `ErrCommitUnknown` and is not rerun. The function must be safe to run
   again.
 - `velox.TxIsolation(level)`, `velox.TxReadOnly()` and
   `velox.TxTimeout(d)`.
@@ -1861,7 +1865,7 @@ the outermost transaction's retry runs it again.
 
 ```go
 db, err := velox.Connect("postgres", dsn, velox.WithTxDefaults(
-	velox.TxRetrySerializable(3), velox.TxTimeout(30*time.Second)))
+	velox.TxRetryRolledBack(3), velox.TxTimeout(30*time.Second)))
 ```
 
 ### A transaction you began
@@ -2468,7 +2472,7 @@ adds:
 Below PostgreSQL 18 an upsert's first read cannot lock a row that is not
 there yet: a row another session inserts under the same key at that moment
 is reported as an insert. On MySQL two recorded upserts of new keys can
-deadlock; `TxRetrySerializable` retries them. An upsert's old rows are read
+deadlock; `TxRetryRolledBack` retries them. An upsert's old rows are read
 without the scope or the Read policy, so a sink can see values the caller
 cannot. [ADR 0094](decisions/0094-change-recording.md) has the details.
 
@@ -2674,7 +2678,7 @@ What stands in for the lock is SQLite's one writer at a time
   the driver's plain `BEGIN` does: it takes the write lock at its first
   write. Two transactions can read the same row. When one has written it,
   the other's write fails with SQLITE_BUSY. No update is lost, and
-  `velox.TxRetrySerializable(n)` runs the loser again.
+  `velox.TxRetryRolledBack(n)` runs the loser again.
 - With `_txlock=immediate` in the DSN, every `Tx` takes the write lock at
   its `BEGIN`. A second one waits, up to the busy timeout, and then reads
   what the first wrote, as it would behind a row lock.

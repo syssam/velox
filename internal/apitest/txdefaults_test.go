@@ -14,12 +14,12 @@ import (
 	"github.com/syssam/velox/internal/fakeconn"
 )
 
-// TestTxDefaultsRetry: a DB's TxRetrySerializable default retries every Tx,
-// and a call's TxRetrySerializable(0) overrides it.
+// TestTxDefaultsRetry: a DB's TxRetryRolledBack default retries every Tx,
+// and a call's TxRetryRolledBack(0) overrides it.
 func TestTxDefaultsRetry(t *testing.T) {
 	serialization := &pgconn.PgError{Code: "40001"}
 	e := &fakeconn.Exec{Errs: []error{serialization}}
-	db := openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxRetrySerializable(2)))
+	db := openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxRetryRolledBack(2)))
 	runs := 0
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) })
 	if err != nil || runs != 2 {
@@ -30,9 +30,9 @@ func TestTxDefaultsRetry(t *testing.T) {
 	}
 
 	e = &fakeconn.Exec{Errs: []error{serialization}}
-	db = openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxRetrySerializable(2)))
+	db = openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxRetryRolledBack(2)))
 	runs = 0
-	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(0))
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetryRolledBack(0))
 	if !errors.Is(err, serialization) || runs != 1 {
 		t.Errorf("overridden: %v, runs %d", err, runs)
 	}
@@ -43,7 +43,7 @@ func TestTxDefaultsRetry(t *testing.T) {
 func TestTxDefaultsNested(t *testing.T) {
 	serialization := &pgconn.PgError{Code: "40001"}
 	e := &fakeconn.Exec{Errs: []error{nil, serialization}} // SAVEPOINT, then touch
-	db := openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxRetrySerializable(3)))
+	db := openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxRetryRolledBack(3)))
 	outer, inner := 0, 0
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		outer++

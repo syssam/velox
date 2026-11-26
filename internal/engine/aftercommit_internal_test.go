@@ -34,7 +34,7 @@ func TestAfterCommitRetryDropsTheFailedAttempts(t *testing.T) {
 			return dead
 		}
 		return nil
-	}, TxRetrySerializable(5))
+	}, TxRetryRolledBack(5))
 	if err != nil {
 		t.Fatal(err)
 	}
