@@ -78,6 +78,11 @@ func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 // DB from OpenConn or OpenShards, and for a transaction's DB, whose statements
 // must not leave the transaction.
 //
+// A session below velox, a PostgreSQL advisory lock or LISTEN on a *sql.Conn
+// from the pool, takes it here. On a DB with replicas Pool is the primary's
+// pool, where the writes run. Nothing it runs is a velox statement: no policy,
+// filter, hook or Tx covers it.
+//
 // On a pool of one connection, as Connect makes on SQLite, a statement on the *sql.DB
 // in a Tx's fn, or in the body of a loop over Iter, waits for the connection they hold,
 // which they do not release until fn or the body returns: it hangs, with no deadline

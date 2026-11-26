@@ -136,3 +136,23 @@ func TestConnectSQLiteForeignKeys(t *testing.T) {
 		t.Errorf("foreign_keys(0): %d, %v; want 0 and the insert stored", on, err)
 	}
 }
+
+// TestPoolOfADBWithReplicas: Pool returns the primary's *sql.DB, whatever
+// the replicas are, so that a session below velox (an advisory lock, LISTEN)
+// takes its connection from the pool the writes use.
+func TestPoolOfADBWithReplicas(t *testing.T) {
+	primary, err := velox.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = primary.Close() }()
+	replica, err := velox.Connect("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = replica.Close() }()
+	db := velox.Open(velox.SQLite, velox.Pool(primary), velox.WithReplicas(velox.SQLConn(velox.Pool(replica))))
+	if velox.Pool(db) != velox.Pool(primary) {
+		t.Error("Pool of a DB with replicas is not the primary's *sql.DB")
+	}
+}
