@@ -33,13 +33,16 @@ type txOptions struct {
 	ReadOnly  bool
 	Retries   int
 	Timeout   time.Duration // TxTimeout; 0: the DB's Tx default
+	// CancelOnEnd is TxCancelOnEnd: fn's context is canceled when the
+	// attempt ends, and so is each savepoint's when it returns.
+	CancelOnEnd bool
 	// caller is the context Tx was given: a statement under it in fn, on a
 	// pool of one connection, is refused (iterconn.go).
 	caller context.Context
 }
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
-// TxRetryRolledBack and TxTimeout. The zero TxOption is not valid: TxRetries
+// TxRetryRolledBack, TxTimeout and TxCancelOnEnd. The zero TxOption is not valid: TxRetries
 // panics on it, and so does DB.Tx when it begins the transaction.
 type TxOption struct{ apply func(*txOptions) }
 
@@ -71,6 +74,21 @@ func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = t
 // most a second; the transaction's deadline or ctx's end stops the wait, and
 // the retry.
 func TxRetryRolledBack(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
+
+// TxCancelOnEnd cancels the context fn gets when the transaction's attempt
+// ends, committed or rolled back, and the context a nested Tx's fn gets when
+// that Tx returns, with the cause ErrTxEnded. A statement that a goroutine
+// sends under such a context after the end then fails with an error that
+// matches context.Canceled, and context.Cause(ctx) is ErrTxEnded, before
+// anything is sent: it does not run on its own, as under an ended
+// transaction's mark it otherwise does (see Tx). The commit and the
+// rollback run on the context Tx was given, so they are not affected, and
+// nor are the AfterCommit and AfterRollback functions. A retry gives its
+// attempt a fresh fn context. The context is a child of the one Tx runs on,
+// which costs a transaction one allocation. It is for WithTxDefaults, to set
+// once; a nested Tx refuses it as it refuses every option, and takes the
+// outermost Tx's choice.
+func TxCancelOnEnd() TxOption { return TxOption{func(o *txOptions) { o.CancelOnEnd = true }} }
 
 // TxRetries returns the n of the last TxRetryRolledBack in opts, or 0 when
 // there is none. It reads options and is not one. It is for code that runs a
@@ -520,12 +538,20 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		markLost(lost, err) // before any statement: nothing to roll back
 		return false, endedErr(ctx, "transaction", fmt.Errorf("velox: begin: %w", err))
 	}
-	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txLost: lost, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
+	fctx := ctx // the context fn gets is built on it
+	if o.CancelOnEnd {
+		// Deferred before the rollback's defer below, so it runs after it.
+		var cancel context.CancelCauseFunc
+		fctx, cancel = context.WithCancelCause(ctx)
+		defer cancel(ErrTxEnded)
+	}
+	f := newTxFrame(fctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txLost: lost, txShard: txShard, bypass: db.bypass, rec: db.rec}, nil)
 	defer releaseConn(db, holdConn(o.caller, db, f)) // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true)                        // before the note, and after the rollback
 	// Its entities read on it while it is live, then on db (Source).
 	defer txSource(&f.db, db.src).end()
 	f.origin = db.src
+	f.cancelEnd = o.CancelOnEnd
 	finished, committedOK := false, false
 	defer func() {
 		if !finished {
@@ -656,7 +682,13 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
-	f := newTxFrame(ctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txLost: db.txLost, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
+	fctx := ctx
+	if db.txRoot.cancelEnd {
+		var cancel context.CancelCauseFunc
+		fctx, cancel = context.WithCancelCause(ctx)
+		defer cancel(ErrTxEnded)
+	}
+	f := newTxFrame(fctx, DB{D: db.D, Ex: db.Ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txLost: db.txLost, txShard: db.txShard, bypass: db.bypass, rec: db.rec, batch: db.batch}, db.txRoot)
 	defer f.ended.Store(true) // its handles are stale once it has returned (AfterCommit)
 	defer txSource(&f.db, db.src).end()
 	if err := fn(&f.ctx, &f.db); err != nil {
@@ -843,6 +875,9 @@ type txFrame struct {
 	// statement does not set sending, as its loop body may run statements.
 	sending, shared atomic.Bool
 	broken          error
+	// cancelEnd is, on the root, TxCancelOnEnd: its savepoints cancel their
+	// fn's context when they return.
+	cancelEnd bool
 	// kept is, on the root, the rows Recorders kept in the transaction, in
 	// order: a savepoint that rolls back drops those after its mark, and a
 	// transaction that does not commit drops them all (unkeep).

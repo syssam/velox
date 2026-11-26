@@ -181,16 +181,10 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none: a statement
 // that a goroutine sends under fn's ctx after the end runs on its own, not in
-// the transaction and not refused. A caller that wants such a late statement
-// to fail gives fn a ctx it cancels when fn returns:
-//
-//	db.Tx(ctx, func(txCtx context.Context, tx *velox.DB) error {
-//		ctx, cancel := context.WithCancel(txCtx)
-//		defer cancel()
-//		return work(ctx, tx)
-//	})
-//
-// The statement then fails with context.Canceled, before anything is sent.
+// the transaction and not refused. TxCancelOnEnd, which WithTxDefaults
+// sets once, makes such a late statement fail: fn's ctx, and a nested Tx's, is
+// canceled when its Tx ends, and the statement fails with context.Canceled,
+// before anything is sent (ADR 0182).
 //
 // On a pool of one connection, as Connect makes on SQLite, the transaction holds
 // the connection, so a statement on db in fn would wait for itself. velox tells

@@ -846,6 +846,7 @@ func SumNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (
 func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error)
 func Text[E any](t Term[E]) Term[E]
 func Time[E any](t Term[E]) Term[E]
+func TxCancelOnEnd() TxOption
 func TxFrom(ctx context.Context, db *DB) (*DB, bool)
 func TxIsolation(level sql.IsolationLevel) TxOption
 func TxReadOnly() TxOption
@@ -1032,6 +1033,7 @@ var ErrStale
 var ErrTimeout
 var ErrTooManyRows
 var ErrTxControl
+var ErrTxEnded
 var ErrUnbounded
 var ErrVersionSet
 

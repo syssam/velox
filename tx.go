@@ -17,6 +17,16 @@ import (
 // enclosing transaction's deadline.
 func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
 
+// TxCancelOnEnd cancels the context fn gets when the transaction's attempt
+// ends, committed or rolled back, and a nested Tx's when it returns, with the
+// cause ErrTxEnded, so that a statement a goroutine sends under it after the
+// end fails with an error that matches context.Canceled, where it would run
+// on its own. The commit, the rollback and the AfterCommit functions are not
+// affected, a retry gets a fresh context, and the context costs one
+// allocation a transaction. Give it to WithTxDefaults, once. A nested Tx
+// refuses it as it refuses every option, and takes the outermost Tx's choice.
+func TxCancelOnEnd() TxOption { return engine.TxCancelOnEnd() }
+
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
 // TxRetryRolledBack and TxTimeout. The zero TxOption is not valid: TxRetries
 // panics on it, and so does DB.Tx when it begins the transaction.

@@ -17,6 +17,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- `TxCancelOnEnd` cancels fn's context, and a nested Tx's, when its
+  transaction ends, with the cause `ErrTxEnded`, so a statement a goroutine
+  sends after the end fails; the default is unchanged (decision 0182).
+
 - `TxRetrySerializable` is `TxRetryRolledBack`, and it also runs the
   transaction again after a lost or refused connection at BEGIN or in one of
   its statements, as the server rolls that transaction back (decision 0180).

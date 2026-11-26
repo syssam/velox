@@ -94,6 +94,10 @@ var (
 	// joins it, and the transaction has not ended: it was most likely meant
 	// for the transaction's DB. Nothing was sent. WithoutTx lifts the check.
 	ErrOutsideTx = engine.ErrOutsideTx
+	// ErrTxEnded is returned by context.Cause for the context TxCancelOnEnd
+	// cancels once its transaction or savepoint has ended; the context's own
+	// error is context.Canceled.
+	ErrTxEnded = engine.ErrTxEnded
 	// ErrCommitUnknown is returned, matched by errors.Is beside the driver's
 	// error, by a Tx whose COMMIT failed when the error does not say the
 	// transaction rolled back: a lost connection,

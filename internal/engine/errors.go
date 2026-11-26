@@ -76,6 +76,10 @@ var (
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = errors.New("statement outside its transaction")
+	// ErrTxEnded is returned by context.Cause for the context TxCancelOnEnd
+	// cancels once its transaction or savepoint has ended; the context's own
+	// error is context.Canceled.
+	ErrTxEnded = errors.New("the transaction ended")
 	// ErrCommitUnknown is returned, matched by errors.Is beside the driver's
 	// error, by a Tx whose COMMIT failed when the error does not say the
 	// transaction rolled back: a lost connection,

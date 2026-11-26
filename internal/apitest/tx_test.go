@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
@@ -706,5 +707,78 @@ func TestLateStatementUnderACanceledFnCtxFails(t *testing.T) {
 	}
 	if n := tableRows(t, db); n != 2 {
 		t.Errorf("%d rows, want 2: the late statement under fn's own ctx runs on its own", n)
+	}
+}
+
+// TestTxCancelOnEnd: with TxCancelOnEnd, set as a default, fn's ctx is
+// canceled once the transaction has committed, with the cause ErrTxEnded, and
+// a late statement under it fails with context.Canceled and writes nothing;
+// the commit is not affected. A nested Tx's ctx is canceled when it returns,
+// whatever options the outermost call was given, while the transaction lives.
+func TestTxCancelOnEnd(t *testing.T) {
+	db, err := velox.Connect("sqlite", filepath.Join(t.TempDir(), "t.db"), velox.WithTxDefaults(velox.TxCancelOnEnd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(ctx, "test", "CREATE TABLE t (id integer PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	var outer, inner context.Context
+	err = db.Tx(ctx, func(txCtx context.Context, tx *velox.DB) error {
+		outer = txCtx
+		if err := insertT(txCtx, db, "1"); err != nil {
+			return err
+		}
+		if err := tx.Tx(txCtx, func(sp context.Context, _ *velox.DB) error {
+			inner = sp
+			return insertT(sp, db, "2")
+		}); err != nil {
+			return err
+		}
+		if inner.Err() == nil {
+			t.Error("the savepoint's ctx is not canceled once its Tx returned")
+		}
+		if outer.Err() != nil {
+			t.Error("fn's ctx is canceled while the transaction lives")
+		}
+		return insertT(txCtx, db, "3")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(outer.Err(), context.Canceled) || !errors.Is(context.Cause(outer), velox.ErrTxEnded) {
+		t.Errorf("fn's ctx after the commit: %v, cause %v", outer.Err(), context.Cause(outer))
+	}
+	if n := tableRows(t, db); n != 3 {
+		t.Errorf("%d rows committed, want 3", n)
+	}
+	if err := insertT(outer, db, "4"); !errors.Is(err, context.Canceled) {
+		t.Errorf("late statement: %v, want context.Canceled", err)
+	}
+	if n := tableRows(t, db); n != 3 {
+		t.Errorf("%d rows after the late statement, want 3", n)
+	}
+
+	// A rollback cancels it too, and a retry gets a fresh ctx.
+	e := &fakeconn.Exec{Errs: []error{&pgconn.PgError{Code: "40001"}}}
+	fdb := openFake(velox.Postgres, e, velox.WithTxDefaults(velox.TxCancelOnEnd(), velox.TxRetryRolledBack(2)))
+	var first, second context.Context
+	err = fdb.Tx(ctx, func(c context.Context, tx *velox.DB) error {
+		if first == nil {
+			first = c
+		} else {
+			second = c
+			if first.Err() == nil {
+				t.Error("the first attempt's ctx is not canceled at the retry")
+			}
+		}
+		return touch(c, tx)
+	})
+	if err != nil || second == nil {
+		t.Fatalf("%v, second %v", err, second)
+	}
+	if second.Err() == nil || first == second {
+		t.Errorf("the second attempt's ctx is canceled after its commit: %v", second.Err())
 	}
 }
