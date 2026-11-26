@@ -5,6 +5,18 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 
+# net runs a command that reads the module proxy, up to three times: a lookup
+# that times out is the network's, not gqlgen's, and says nothing about it.
+net() {
+  local i
+  for i in 1 2 3; do
+    "$@" && return 0
+    echo "net: attempt $i of '$*' failed" >&2
+    sleep $((i * 5))
+  done
+  return 1
+}
+
 tmp=$(mktemp -d)
 # Remove the copy on exit. The module cache is not in it (GOMODCACHE is the
 # user's); chmod only makes any read-only file the tree holds removable.
@@ -15,8 +27,8 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 
 (
   cd "$tmp/contrib/graphql"
-  go get github.com/99designs/gqlgen@latest
-  go mod tidy
+  net go get github.com/99designs/gqlgen@latest
+  net go mod tidy
   # The itests build applications offline that require velox and this
   # module, with velox-gen and velox-graphql as tools: TestThroughTheLoader
   # (annotation_test.go) and app (cmd/velox-graphql/e2e_test.go) write their
@@ -28,7 +40,7 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
   mkdir "$tmp/warm"
   printf 'module example.com/warm\n\ngo %s\n\ntool (\n\tgithub.com/syssam/velox/cmd/velox-gen\n\tgithub.com/syssam/velox/contrib/graphql/cmd/velox-graphql\n)\n\nrequire (\n\tgithub.com/syssam/velox v0.0.0\n\tgithub.com/syssam/velox/contrib/graphql v0.0.0\n)\n\nreplace (\n\tgithub.com/syssam/velox => %s\n\tgithub.com/syssam/velox/contrib/graphql => %s\n)\n' \
     "$goline" "$tmp" "$tmp/contrib/graphql" > "$tmp/warm/go.mod"
-  (cd "$tmp/warm" && go mod tidy)
+  (cd "$tmp/warm" && net go mod tidy)
   go vet ./...
   # CI unset: this job has no databases, and the mutation integration test's TestMain
   # fails a CI run without them. It runs on SQLite here.
@@ -38,8 +50,8 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 )
 
 cd "$tmp/examples"
-go get github.com/99designs/gqlgen@latest
-go mod tidy
+net go get github.com/99designs/gqlgen@latest
+net go mod tidy
 # The new gqlgen's output is built and tested, not compared with the checked-in one.
 go -C graphql tool gqlgen generate
 go vet ./graphql/...
