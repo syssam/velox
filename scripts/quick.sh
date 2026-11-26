@@ -9,6 +9,8 @@
 #   scripts/quick.sh -all       every module
 #   scripts/quick.sh -race      with the race detector
 #   scripts/quick.sh -long      without -short
+#   scripts/quick.sh -lint      also golangci-lint, as CI runs it: the checks
+#                               (unconvert, staticcheck) that -short does not
 #
 # A change to the root reaches the other modules through their replace lines:
 # after one to the root's API, run it with -all.
@@ -18,12 +20,14 @@ cd "$(dirname "$0")/.."
 all=
 short=-short
 race=
+lint=
 for a in "$@"; do
   case $a in
     -all) all=1 ;;
+    -lint) lint=1 ;;
     -race) race=-race ;;
     -long) short= ;;
-    *) echo "usage: scripts/quick.sh [-all] [-race] [-long]" >&2; exit 2 ;;
+    *) echo "usage: scripts/quick.sh [-all] [-race] [-long] [-lint]" >&2; exit 2 ;;
   esac
 done
 
@@ -65,6 +69,9 @@ for m in "${selected[@]}"; do
     unformatted=$(gofmt -l . | grep -v '^\.claude/' || true)
     [ -z "$unformatted" ] || { echo "gofmt needed:"; echo "$unformatted"; exit 1; }
     go vet ./...
+    if [ -n "$lint" ]; then
+      go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+    fi
     go test $race $short ./...
   )
 done

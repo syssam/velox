@@ -26,7 +26,8 @@
 # servers, as each CI job gets its own containers. The finals (the coverage
 # floors and the benchmarks) run after the lanes, the benchmarks alone, so
 # that their times mean something. VELOX_CI_JOBS=n runs at most n lanes at
-# once (VELOX_CI_JOBS=1: one after another).
+# once (VELOX_CI_JOBS=1: one after another). VELOX_CI_KEEP_GOING=1 lets the
+# lanes after a failed one finish, so that a run lists every failure.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 root=$PWD
@@ -377,6 +378,7 @@ set -m
 max=${VELOX_CI_JOBS:-${#run[@]}}
 next=0 running=0 done_lanes=0
 summary=""
+failed=()
 named=$(echo $groups)
 if [ -n "$full" ]; then level=--full; else level="merge gate, groups: ${named:-none}"; fi
 echo "ci-local ($level): ${#run[@]} lanes, at most $max at once; logs in $logs"
@@ -400,10 +402,16 @@ while [ "$done_lanes" -lt "${#run[@]}" ]; do
     lane=${run[$i]}
     took=$(($(date +%s) - starts[i]))
     if [ "$rc" != 0 ]; then
-      stop_lanes
       echo "FAIL $lane (${took}s, exit $rc); its log, $logs/$lane.log:"
       cat "$logs/$lane.log"
-      exit 1
+      # VELOX_CI_KEEP_GOING=1 lets the other lanes finish, so that one run
+      # lists every failure; without it the first stops the rest.
+      if [ "${VELOX_CI_KEEP_GOING:-}" != 1 ]; then
+        stop_lanes
+        exit 1
+      fi
+      failed+=("$lane")
+      continue
     fi
     touch "$logs/$lane.ok"
     summary+=$(printf '%5ss  %s' "$took" "$lane")$'\n'
@@ -411,6 +419,11 @@ while [ "$done_lanes" -lt "${#run[@]}" ]; do
   done
 done
 set +m
+
+if [ "${#failed[@]}" != 0 ]; then
+  echo "ci-local: ${#failed[@]} lane(s) failed: ${failed[*]}"
+  exit 1
+fi
 
 for f in "${finals[@]}"; do
   if selected "${f#*:}"; then

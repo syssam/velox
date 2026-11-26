@@ -184,7 +184,9 @@ on the same servers (`velox_examples`, `velox_examples_graphql`,
 `velox_examples_otel`, `velox_veloxotel`, `velox_graphql`), as each CI job has
 its own containers. The fuzz, scale and gqlgen lanes run at a lower priority.
 `VELOX_CI_JOBS=n` runs at most `n` lanes at once; `VELOX_CI_JOBS=1` runs them
-one after another. In the merge gate, `VELOX_CI_GROUPS` names the groups in
+one after another. `VELOX_CI_KEEP_GOING=1` lets the lanes after a failed one
+finish, so that one run lists every failure; without it the first failure stops
+the rest. In the merge gate, `VELOX_CI_GROUPS` names the groups in
 place of `ci-changes.sh`: `VELOX_CI_GROUPS= bash scripts/ci-local.sh` runs the
 ORM's checks alone, and `VELOX_CI_GROUPS=otel` adds `otel`'s.
 
@@ -225,13 +227,17 @@ compose project `velox-ci`.
 `go vet` and `go test -short` in each module that has changed since `main`,
 committed or not, on SQLite only, without `-race`, and with go test's cache, so
 a package that did not change is not tested again. `-short` skips the tests
-that build whole modules.
+that build whole modules, and it runs no linter: a change to a signature that
+generated code or an embedded source calls shows only without `-short`, and
+`unconvert` and `staticcheck` findings only with `-lint`. Before the merge gate,
+run `scripts/quick.sh -lint -long`.
 
 ```sh
 scripts/quick.sh          # the changed modules
 scripts/quick.sh -all     # every module
 scripts/quick.sh -race    # with the race detector
 scripts/quick.sh -long    # without -short
+scripts/quick.sh -lint    # with golangci-lint, as CI runs it
 ```
 
 The other modules reach the root through a `replace`: after a change to the
