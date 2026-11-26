@@ -181,7 +181,9 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none: a statement
 // that a goroutine sends under fn's ctx after the end runs on its own, not in
-// the transaction and not refused. TxCancelOnEnd, which WithTxDefaults
+// the transaction and not refused, unless the Tx has a deadline of velox's own
+// (TxTimeout, WithDeadlines): its context ends when Tx returns, and the
+// statement fails with context.Canceled. TxCancelOnEnd, which WithTxDefaults
 // sets once, makes such a late statement fail: fn's ctx, and a nested Tx's, is
 // canceled when its Tx ends, and the statement fails with context.Canceled,
 // before anything is sent (ADR 0182).

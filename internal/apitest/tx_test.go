@@ -782,3 +782,26 @@ func TestTxCancelOnEnd(t *testing.T) {
 		t.Errorf("the second attempt's ctx is canceled after its commit: %v", second.Err())
 	}
 }
+
+// TestTxTimeoutCancelsFnCtxWhenTxReturns: a transaction with a deadline of
+// velox's own already cancels fn's ctx when Tx returns, with the cause
+// context.Canceled, so a late statement fails; TxCancelOnEnd names the cause.
+func TestTxTimeoutCancelsFnCtxWhenTxReturns(t *testing.T) {
+	db := sqliteTable(t)
+	var late context.Context
+	if err := db.Tx(ctx, func(c context.Context, tx *velox.DB) error {
+		late = c
+		return insertT(c, db, "1")
+	}, velox.TxTimeout(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := insertT(late, db, "2"); !errors.Is(err, context.Canceled) {
+		t.Errorf("late statement: %v, want context.Canceled", err)
+	}
+	if c := context.Cause(late); errors.Is(c, velox.ErrTxEnded) || !errors.Is(c, context.Canceled) {
+		t.Errorf("cause %v, want context.Canceled and not ErrTxEnded", c)
+	}
+	if n := tableRows(t, db); n != 1 {
+		t.Errorf("%d rows, want 1", n)
+	}
+}

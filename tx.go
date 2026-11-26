@@ -23,7 +23,11 @@ func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
 // end fails with an error that matches context.Canceled, where it would run
 // on its own. The commit, the rollback and the AfterCommit functions are not
 // affected, a retry gets a fresh context, and the context costs one
-// allocation a transaction. Give it to WithTxDefaults, once. A nested Tx
+// allocation a transaction. A DB with a transaction deadline (TxTimeout, or
+// WithDeadlines' Tx) already cancels fn's context when Tx returns, as the
+// deadline's context ends with the call, with the cause context.Canceled;
+// this option names the cause ErrTxEnded, ends a context at each attempt
+// and savepoint, and holds without a deadline. Give it to WithTxDefaults, once. A nested Tx
 // refuses it as it refuses every option, and takes the outermost Tx's choice.
 func TxCancelOnEnd() TxOption { return engine.TxCancelOnEnd() }
 

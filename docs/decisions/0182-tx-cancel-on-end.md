@@ -14,6 +14,13 @@ one. An application that treats the escape as a bug had no way to make it
 fail, short of wrapping every Tx in a function that cancels a child context
 (nextapp has about 1690 calls and no wrapper).
 
+A transaction with a deadline of velox's own (TxTimeout, WithDeadlines) is
+not in this case: Tx bounds its context with `context.WithDeadline`, whose
+cancel function runs when Tx returns, so fn's ctx already ends with the call
+and a late statement fails with `context.Canceled` (cause `context.Canceled`,
+`TestTxTimeoutCancelsFnCtxWhenTxReturns`). nextapp found it. Only a DB
+without a deadline fell through.
+
 ## Decision
 
 `velox.TxCancelOnEnd()` is a `TxOption`, meant for `WithTxDefaults`. With it,
@@ -22,7 +29,9 @@ fn's ctx is a child of the context the attempt runs on, canceled with cause
 context of a savepoint's fn is canceled when that nested Tx returns. A
 savepoint takes no options: it follows the root's choice.
 
-A late statement fails in database/sql with `context.Canceled` before
+With a deadline the option adds the cause `ErrTxEnded` and an end at each
+attempt and savepoint; without one it adds the whole behaviour. A late
+statement fails in database/sql with `context.Canceled` before
 anything is sent; `context.Cause(ctx)` is `ErrTxEnded`.
 
 The commit, the rollback and the AfterCommit functions run on the context Tx
