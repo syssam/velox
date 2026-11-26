@@ -1868,6 +1868,25 @@ db, err := velox.Connect("postgres", dsn, velox.WithTxDefaults(
 	velox.TxRetryRolledBack(3), velox.TxTimeout(30*time.Second)))
 ```
 
+### Which options to set
+
+Three settings cover almost every application. Set them once, at `Connect`,
+and a call adds an option only to differ.
+
+| You want | Set | Notes |
+|---|---|---|
+| A transaction that gives up | `TxTimeout(30*time.Second)` | Bounds the call, retries and commit included. Its context also ends when `Tx` returns, so a late statement fails. |
+| Transactions that survive a deadlock, a serialization failure or a lost connection | `TxRetryRolledBack(3)` | `fn` must be safe to run again. Never runs again after a failed COMMIT (`ErrCommitUnknown`). |
+| A statement sent from a goroutine after its transaction ended to fail | `TxCancelOnEnd()` | Needed only without a `TxTimeout`; it names the cause `ErrTxEnded`. |
+
+`TxIsolation` and `TxReadOnly` are per call. A filter or hook that needs a
+service built over the DB is `Deferred`, not an option.
+
+```go
+db, err := velox.Connect("postgres", dsn, velox.WithTxDefaults(
+	velox.TxTimeout(30*time.Second), velox.TxRetryRolledBack(3), velox.TxCancelOnEnd()))
+```
+
 ### A transaction you began
 
 Code that already holds a `*sql.Tx`, with raw SQL beside velox calls, runs
