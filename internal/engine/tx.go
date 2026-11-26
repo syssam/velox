@@ -573,22 +573,43 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	if err != nil {
 		finished = true
-		if ctx.Err() != nil || past(deadline) {
-			endTx(info, TxError)
-		} else {
-			endTx(info, TxRollback)
-		}
-		if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
-			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
-		}
-		if cause != nil && past(deadline) && !dberr.Is(err, ErrTimeout) {
-			// velox's deadline passed, whatever context fn's statements ran
-			// on: say so without waiting for the deadline's timer.
-			return false, errors.Join(timeoutError("transaction"), err)
-		}
-		return false, err
+		return false, db.abort(ctx, ctl, info, deadline, cause, err)
 	}
 	finished = true
+	if sent, err := db.commit(ctx, ctl, f, info, deadline, cause); err != nil {
+		return sent, err
+	}
+	committedOK = true
+	*after = append(*after, f.takeAfter()...)
+	return true, nil
+}
+
+// abort rolls the transaction back after fn, or a Before function, failed
+// with err, and returns the error Tx gives: err, joined with the rollback's
+// error when that failed on a live connection, or with ErrTimeout once
+// velox's deadline passed.
+func (db *DB) abort(ctx context.Context, ctl txControl, info *TxInfo, deadline time.Time, cause, err error) error {
+	if ctx.Err() != nil || past(deadline) {
+		endTx(info, TxError)
+	} else {
+		endTx(info, TxRollback)
+	}
+	if rerr := db.rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
+		return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
+	}
+	if cause != nil && past(deadline) && !dberr.Is(err, ErrTimeout) {
+		// velox's deadline passed, whatever context fn's statements ran
+		// on: say so without waiting for the deadline's timer.
+		return errors.Join(timeoutError("transaction"), err)
+	}
+	return err
+}
+
+// commit ends a transaction whose fn succeeded: it rolls it back when ctx or
+// the deadline ended or a savepoint broke it, and sends COMMIT otherwise. sent
+// reports whether COMMIT was sent, which is when a failure leaves the outcome
+// open; err is nil on a commit.
+func (db *DB) commit(ctx context.Context, ctl txControl, f *txFrame, info *TxInfo, deadline time.Time, cause error) (sent bool, _ error) {
 	if over(ctx) || past(deadline) {
 		endTx(info, TxError)
 		// past the deadline, or canceled: roll back on every driver rather
@@ -627,8 +648,6 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		return true, endedErr(ctx, "transaction", fmt.Errorf("velox: commit: %w", err))
 	}
 	endTx(info, TxCommit)
-	committedOK = true
-	*after = append(*after, f.takeAfter()...)
 	return true, nil
 }
 

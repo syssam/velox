@@ -450,7 +450,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 949248}, // measured 948854
+	{"entityDescMixin", "", entityDescMixinSrc, 950272}, // measured 949538
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
