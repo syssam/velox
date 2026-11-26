@@ -676,3 +676,35 @@ func TestNestedTxCanceledBeforeReleaseDoesNotCommit(t *testing.T) {
 		t.Errorf("a nested Tx that returned %v committed %d rows", nested, n)
 	}
 }
+
+// TestLateStatementUnderACanceledFnCtxFails: a statement that a goroutine
+// sends, after the transaction ended, under a ctx fn cancelled on return,
+// fails with context.Canceled and writes nothing, where under fn's own ctx it
+// runs on its own; the commit is not affected. On SQLite, as the fake
+// connection ignores a context that ended.
+func TestLateStatementUnderACanceledFnCtxFails(t *testing.T) {
+	db := sqliteTable(t)
+	var late, own context.Context
+	err := db.Tx(ctx, func(txCtx context.Context, tx *velox.DB) error {
+		own = txCtx
+		c, cancel := context.WithCancel(txCtx)
+		defer cancel()
+		late = c
+		return insertT(c, db, "1") // joins the transaction
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := insertT(late, db, "2"); !errors.Is(err, context.Canceled) {
+		t.Errorf("late statement under the canceled ctx: %v, want context.Canceled", err)
+	}
+	if n := tableRows(t, db); n != 1 {
+		t.Errorf("%d rows, want 1", n)
+	}
+	if err := insertT(own, db, "3"); err != nil {
+		t.Errorf("under fn's own ctx: %v", err)
+	}
+	if n := tableRows(t, db); n != 2 {
+		t.Errorf("%d rows, want 2: the late statement under fn's own ctx runs on its own", n)
+	}
+}
