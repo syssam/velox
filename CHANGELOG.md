@@ -23,6 +23,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   `graphql.OrderField` on such a field without `graphql.OrderUnguarded` stays;
   under `orderfields=all` `OrderUnguarded` now changes nothing. No output
   changes (decision 0185).
+- velox-graphql: `graphql.Resolvers` on a schema whose type `graphql.Skip`
+  leaves out is no longer warned of. A mixin's resolvers reach every schema
+  that uses the mixin, and a skipped one did not ask for them. No output
+  changes.
 - `ErrNoTx` and `ErrAdoptedTx` tell why `AfterCommit`, `BeforeCommit` and
   `AfterRollback` refused (`ErrNoTx`: not a running transaction's DB, which
   does not mean committed), and `ErrNoTx` is the locking read's refusal outside

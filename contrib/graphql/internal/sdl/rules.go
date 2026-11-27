@@ -63,7 +63,8 @@ func article(kind string) string { return english.Article(kind) + " " + kind }
 // directive; GraphQL's own are allowed. A join entity has no type, so nothing
 // that needs one applies to it. A schema whose type is skipped has no root
 // field and no mutation, so asking for one has no effect: it is a warning,
-// as ent ignores it.
+// as ent ignores it. Its Resolvers add to no type either, silently: a
+// mixin's reach every schema that uses the mixin, skipped ones included.
 func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) (warnings []string, _ error) {
 	if err := ownDirective(a.Directives, where); err != nil {
 		return nil, err
@@ -88,7 +89,6 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) (warnings
 		}{
 			{"graphql.QueryField", a.HasQueryField()},
 			{"graphql.Mutations", len(a.Mutations) > 0},
-			{"graphql.Resolvers", len(a.Resolvers) > 0},
 		} {
 			if p.set {
 				warnings = append(warnings, fmt.Sprintf("%s: %s has no effect on a schema whose type graphql.Skip leaves out", where, p.name))

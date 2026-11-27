@@ -508,11 +508,6 @@ func TestNoEffectWarns(t *testing.T) {
 		m    *plugin.Model
 		want string
 	}{
-		"resolvers on a skipped schema": {func() *plugin.Model {
-			e := entity("Thing", field("name", "string"))
-			e.Annotations = ann(t, graphql.Skip(graphql.SkipAll), graphql.Resolvers(graphql.Map("x", "String")))
-			return model(e, entity("Other"))
-		}(), "schema Thing: graphql.Resolvers has no effect on a schema whose type graphql.Skip leaves out"},
 		"where ops on a sensitive field":   {model(entity("Thing", field("name", "string"), secret(graphql.WhereOps()))), "Thing.secret: graphql.WhereOps has no effect on a sensitive field"},
 		"where input on a sensitive field": {model(entity("Thing", field("name", "string"), secret(graphql.WhereInput()))), "Thing.secret: graphql.WhereOps has no effect on a sensitive field"},
 		"order field on a sensitive field": {model(entity("Thing", field("name", "string"), secret(graphql.OrderField("SECRET")))), `Thing.secret: graphql.OrderField("SECRET") has no effect on a sensitive field`},
