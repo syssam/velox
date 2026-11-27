@@ -797,3 +797,44 @@ func TestOrderViaDeniedTarget(t *testing.T) {
 		t.Errorf("an inner join to a denied entity: %v, want ErrDenied", err)
 	}
 }
+
+// TestJoinedTermWindow: a window between two cursors of a connection ordered
+// by a related row's column holds the rows between them, ascending and
+// descending, with child 7, whose related row is missing and whose term is
+// NULL, at one end or the other.
+func TestJoinedTermWindow(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	ctx := context.Background()
+	page := func(args gqlgraph.Args, dir veloxgql.OrderDirection) *gqlgraph.PageOf[child] {
+		t.Helper()
+		c, err := gqlgraph.NewConnectionOf(ctx, db.Query[child](), "Child", args, ownerNameOrder(dir), childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := c.Page(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	for _, c := range []struct {
+		dir  veloxgql.OrderDirection
+		want []int64
+	}{
+		{veloxgql.OrderDirectionAsc, []int64{1, 2, 3, 4, 5, 6, 7}},
+		{veloxgql.OrderDirectionDesc, []int64{7, 6, 5, 4, 3, 2, 1}},
+	} {
+		all := page(gqlgraph.Args{First: new(7)}, c.dir)
+		if got := childIDs(all.Rows); !reflect.DeepEqual(got, c.want) {
+			t.Fatalf("%s: %v, want %v", c.dir, got, c.want)
+		}
+		for i := range c.want {
+			for j := i + 1; j < len(c.want); j++ {
+				args := gqlgraph.Args{After: wire(t, all.Cursors[i]), Before: wire(t, all.Cursors[j])}
+				if got := childIDs(page(args, c.dir).Rows); !reflect.DeepEqual(append([]int64{}, got...), append([]int64{}, c.want[i+1:j]...)) {
+					t.Errorf("%s: window %d to %d: %v, want %v", c.dir, c.want[i], c.want[j], got, c.want[i+1:j])
+				}
+			}
+		}
+	}
+}
