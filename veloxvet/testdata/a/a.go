@@ -324,3 +324,19 @@ func methodValues(ctx context.Context, db *velox.DB) {
 	scan := velox.Scan[struct{ Number string }, tm.Invoice]
 	scan(ctx, q) // want `velox.Scan reads a query`
 }
+
+// A helper that calls itself, or never returns, is not known to return a
+// new query: its reads are not reported.
+func recursive(db *velox.DB, n int) velox.Query[tm.Invoice] {
+	if n > 0 {
+		return recursive(db, n-1).Where(I.Paid.EQ(true))
+	}
+	return db.Query[tm.Invoice]()
+}
+
+func neverReturns() velox.Query[tm.Invoice] { panic("never") }
+
+func notFresh(ctx context.Context, db *velox.DB) {
+	recursive(db, 2).All(ctx)
+	neverReturns().All(ctx)
+}

@@ -635,3 +635,470 @@ func (s *Service) misc(ctx context.Context, sqltx *sql.Tx, l locker, id int64) e
 	m := s.own
 	return m(ctx, true)
 }
+
+// A lock under a condition the check cannot read counts as always taken: a
+// comparison with nil, with a float, with another parameter, an ordering,
+// and a computed value.
+func lockOdd(ctx context.Context, db, tx *velox.DB, f float64, n, a, b int) error { // want lockOdd:`LocksOnParam\(p1\)`
+	q := db.Query[tm.Invoice]()
+	if tx == nil {
+		q = q.ForUpdate()
+	}
+	if f == 1.5 {
+		q = q.ForUpdate()
+	}
+	if a == b {
+		q = q.ForUpdate()
+	}
+	if n > 0 {
+		q = q.ForUpdate()
+	}
+	if -n == 1 {
+		q = q.ForUpdate()
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+// A bool of a type parameter is not read either.
+func lockFlag[B ~bool](ctx context.Context, db *velox.DB, lock B) error { // want lockFlag:`LocksOnParam\(p1\)`
+	q := db.Query[tm.Invoice]()
+	if lock {
+		q = q.ForUpdate()
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+// The constant may come first.
+func lockFlipped(ctx context.Context, db *velox.DB, m lockMode) error { // want lockFlipped:`LocksOnParam\(p1 when p2==true\)`
+	q := db.Query[tm.Invoice]()
+	if lockRows == m {
+		q = q.ForUpdate()
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+func (s *Service) oddGates(ctx context.Context) {
+	lockOdd(ctx, s.client, nil, 0, 0, 0, 0) // want `lockOdd takes a row lock`
+	lockFlag(ctx, s.client, false)          // want `lockFlag takes a row lock`
+	lockFlipped(ctx, s.client, readOnly)
+	lockFlipped(ctx, s.client, lockRows) // want `lockFlipped takes a row lock`
+}
+
+// A repeated condition counts once, and two parameters make one gate.
+func lockNested(ctx context.Context, db *velox.DB, a, b bool) error { // want lockNested:`LocksOnParam\(p1 when p2==true and p3==true\)`
+	q := db.Query[tm.Invoice]()
+	if a {
+		if a {
+			if b {
+				q = q.ForUpdate()
+			}
+		}
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+// A lock taken on both branches keeps both conditions.
+func lockEither(ctx context.Context, db *velox.DB, share bool) error { // want lockEither:`LocksOnParam\(p1 when p2!=true or p2==true\)`
+	q := db.Query[tm.Invoice]()
+	if share {
+		q = q.ForShare()
+	} else {
+		q = q.ForUpdate()
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+func lockEitherNot(ctx context.Context, db *velox.DB, share bool) error { // want lockEitherNot:`LocksOnParam\(p1 when p2!=true or p2==true\)`
+	q := db.Query[tm.Invoice]()
+	if !share {
+		q = q.ForUpdate()
+	} else {
+		q = q.ForShare()
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+// A lock under conditions that cannot hold together is never taken: it is
+// neither reported nor passed on.
+func neverLocks(ctx context.Context, lock bool, m mode) {
+	q := global.Query[tm.Invoice]()
+	if lock && !lock {
+		q = q.ForUpdate()
+	}
+	if m == modeLock {
+		if m == modeShare {
+			q = q.ForShare()
+		}
+	}
+	q.All(ctx)
+}
+
+// Nor is a call that cannot happen, as load takes its lock only when lock
+// is true.
+func (s *Service) neverCalls(ctx context.Context, lock bool) {
+	if !lock {
+		load(ctx, s.client, 1, lock)
+	}
+}
+
+// Two locks on one parameter are one lock in its fact.
+func lockTwice(ctx context.Context, db *velox.DB) error { // want lockTwice:`LocksOnParam\(p1\)`
+	if _, err := db.Query[tm.Invoice]().ForUpdate().One(ctx); err != nil {
+		return err
+	}
+	_, err := db.Query[tm.Invoice]().ForShare().All(ctx)
+	return err
+}
+
+// A call that gives two handles that are not a transaction's is reported
+// once, for the first.
+func lockBoth(ctx context.Context, a, b *velox.DB) error { // want lockBoth:`LocksOnParam\(p1, p2\)`
+	if err := lockReturn(ctx, a, 1); err != nil {
+		return err
+	}
+	return lockReturn(ctx, b, 2)
+}
+
+func (s *Service) both(ctx context.Context) error {
+	lockBoth(ctx, s.client, global) // want `lockBoth takes a row lock .* its parameter a, given the field client`
+	return s.client.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		lockBoth(ctx, tx, tx)
+		return lockBoth(ctx, tx, global) // want `lockBoth takes a row lock .* its parameter b, given the package variable global`
+	})
+}
+
+// A method whose receiver is the handle, and one with a parameter after it.
+type rawDB velox.DB
+
+func (d *rawDB) lockAll(ctx context.Context) error { // want lockAll:`LocksOnParam\(p0\)`
+	_, err := (*velox.DB)(d).Query[tm.Invoice]().ForUpdate().All(ctx)
+	return err
+}
+
+func (s *Service) lockWith(ctx context.Context, db *velox.DB) error { // want lockWith:`LocksOnParam\(p2\)`
+	return lockReturn(ctx, db, 1)
+}
+
+func (s *Service) receivers(ctx context.Context) {
+	(*rawDB)(s.client).lockAll(ctx) // want `lockAll takes a row lock .* its parameter d, given the field client`
+	s.lockWith(ctx, s.client)       // want `lockWith takes a row lock .* its parameter db, given the field client`
+	s.lockWith(ctx, global)         // want `lockWith takes a row lock .* its parameter db, given the package variable global`
+}
+
+// A handle that is nil on a path adds nothing to the others.
+func (s *Service) nilFirst(ctx context.Context, tx *velox.DB) error { // want nilFirst:`LocksOnParam\(p2\)`
+	var db *velox.DB
+	if tx != nil {
+		db = tx
+	}
+	_, err := db.Query[tm.Invoice]().ForUpdate().All(ctx)
+	return err
+}
+
+// A handle that is a call's result: of a function, of a function value, of
+// a function with two results, or the field of a result.
+func open() (*velox.DB, error) { return global, nil }
+
+func mkInput() ApplyInput { return ApplyInput{Tx: global} }
+
+func results(ctx context.Context, pick func() *velox.DB, openFn func() (*velox.DB, error)) {
+	a, _ := open()
+	a.Query[tm.Invoice]().ForUpdate().All(ctx) // want `on the result of open,`
+	b, _ := openFn()
+	b.Query[tm.Invoice]().ForUpdate().All(ctx)            // want `on a call's result,`
+	pick().Query[tm.Invoice]().ForUpdate().All(ctx)       // want `on a call's result,`
+	mkInput().Tx.Query[tm.Invoice]().ForUpdate().All(ctx) // want `on the field Tx,`
+}
+
+// A handle four fields deep in a parameter is followed, one more is not.
+type chain struct {
+	next *chain
+	tx   *velox.DB
+}
+
+func chain4(ctx context.Context, c *chain) error { // want chain4:`LocksOnParam\(p1.next.next.next.next.tx\)`
+	return lockReturn(ctx, c.next.next.next.next.tx, 1)
+}
+
+func chain5(ctx context.Context, c *chain) error {
+	return lockReturn(ctx, c.next.next.next.next.next.tx, 1) // want `lockReturn takes a row lock .* given the field tx`
+}
+
+// Handles and queries the check cannot follow: an element of a slice or a
+// map, a package variable, a function literal's parameter.
+var gq velox.Query[tm.Invoice]
+
+func elements(ctx context.Context, dbs []*velox.DB, qs []velox.Query[tm.Invoice], byName map[string]velox.Query[tm.Invoice]) {
+	dbs[0].Query[tm.Invoice]().ForUpdate().All(ctx) // want `on a value the check cannot follow`
+	qs[0].ForUpdate().All(ctx)                      // want `on a value the check cannot follow`
+	byName["a"].ForUpdate().All(ctx)                // want `on a query the check cannot follow`
+	gq.ForUpdate().All(ctx)                         // want `on the package variable gq`
+	lit := func(q velox.Query[tm.Invoice]) {
+		q.ForUpdate().All(ctx) // want `on a function literal's parameter q`
+	}
+	lit(gq)
+}
+
+// A query converted to another type and back.
+type invoiceQ velox.Query[tm.Invoice]
+
+func lockNamed(ctx context.Context, q invoiceQ) error { // want lockNamed:`LocksOnParam\(p1\)`
+	_, err := velox.Query[tm.Invoice](q).ForUpdate().All(ctx)
+	return err
+}
+
+func (s *Service) named(ctx context.Context) {
+	lockNamed(ctx, invoiceQ(s.client.Query[tm.Invoice]())) // want `lockNamed takes a row lock .* given the field client`
+}
+
+// A query that starts as the zero value and is made from the handle later.
+func zeroQuery(ctx context.Context, tx *velox.DB) error { // want zeroQuery:`LocksOnParam\(p1\)`
+	var q velox.Query[tm.Invoice]
+	if tx != nil {
+		q = tx.Query[tm.Invoice]()
+	}
+	_, err := q.ForUpdate().All(ctx)
+	return err
+}
+
+// A query helper that starts from a field of its parameter has no QueryFrom
+// fact: its result is a query the check cannot trace to a handle.
+func baseOf(in ApplyInput) velox.Query[tm.Invoice] {
+	return in.Tx.Query[tm.Invoice]()
+}
+
+func (s *Service) fromField(ctx context.Context) {
+	baseOf(ApplyInput{Tx: s.client}).ForUpdate().All(ctx) // want `on the query baseOf returns`
+}
+
+// A struct variable whose address or whose field's address is stored or
+// passed on may be written there. A read of the field is not a write.
+var (
+	keepIn *ApplyInput
+	keepTx **velox.DB
+)
+
+func setTx(p **velox.DB, db *velox.DB) { *p = db }
+
+func (s *Service) addressed(ctx context.Context) {
+	a := ApplyInput{Tx: s.client}
+	keepIn = &a
+	apply(ctx, a) // want `apply takes a row lock .* cannot follow`
+	b := ApplyInput{Tx: s.client}
+	keepTx = &b.Tx
+	apply(ctx, b) // want `apply takes a row lock .* cannot follow`
+	c := ApplyInput{}
+	setTx(&c.Tx, s.client)
+	apply(ctx, c) // want `apply takes a row lock .* cannot follow`
+	d := ApplyInput{Tx: s.client}
+	_ = d.Tx == nil
+	apply(ctx, d) // want `apply takes a row lock .* given the field client`
+}
+
+// A struct in a field of the caller's parameter, and a zero struct, which
+// holds no handle.
+type batch struct{ legs legs }
+
+func clawAll(ctx context.Context, b batch) error { // want clawAll:`LocksOnParam\(p1.legs.in.Tx\)`
+	return clawBack(ctx, b.legs)
+}
+
+func (s *Service) batches(ctx context.Context) {
+	clawAll(ctx, batch{legs: legs{in: ApplyInput{Tx: s.client}}}) // want `clawAll takes a row lock .* given the field client`
+	clawBack(ctx, legs{})
+	apply(ctx, ApplyInput{})
+}
+
+// A struct parameter that a function literal captures.
+func applyLater(ctx context.Context, in ApplyInput) error { // want applyLater:`LocksOnParam\(p1.Tx\)`
+	do := func() error { return lockReturn(ctx, in.Tx, in.Amount) }
+	return do()
+}
+
+// A literal called with a handle that is not a transaction's is not a
+// transaction's closure, in any of its handle parameters.
+func (s *Service) literalHandles(ctx context.Context) error {
+	run := func(ctx context.Context, tx, other *velox.DB) error {
+		if err := lockReturn(ctx, tx, 1); err != nil { // want `lockReturn takes a row lock .* given a function literal's parameter tx`
+			return err
+		}
+		return lockReturn(ctx, other, 2) // want `lockReturn takes a row lock .* given a function literal's parameter other`
+	}
+	pair := func(ctx context.Context, a, b *velox.DB) error {
+		if err := lockReturn(ctx, a, 1); err != nil {
+			return err
+		}
+		return lockReturn(ctx, b, 2)
+	}
+	return s.client.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if err := pair(ctx, tx, tx); err != nil {
+			return err
+		}
+		return run(ctx, tx, s.client)
+	})
+}
+
+// A closure that leaves the function, or whose variable's address does, is
+// not known to be given a transaction's handle.
+func (s *Service) returned(id int64) func(ctx context.Context, tx *velox.DB) error {
+	return func(ctx context.Context, tx *velox.DB) error {
+		return lockReturn(ctx, tx, id) // want `lockReturn takes a row lock .* given a function literal's parameter tx`
+	}
+}
+
+var keepFn *func(ctx context.Context, tx *velox.DB) error
+
+func redirect(p *func(ctx context.Context, tx *velox.DB) error) { *p = nil }
+
+func (s *Service) addressedFn(ctx context.Context, id int64) {
+	fn := func(ctx context.Context, tx *velox.DB) error {
+		return lockReturn(ctx, tx, id) // want `lockReturn takes a row lock .* given a function literal's parameter tx`
+	}
+	keepFn = &fn
+	s.client.Tx(ctx, fn)
+	gn := func(ctx context.Context, tx *velox.DB) error {
+		return lockReturn(ctx, tx, id) // want `lockReturn takes a row lock .* given a function literal's parameter tx`
+	}
+	redirect(&gn)
+	s.client.Tx(ctx, gn)
+}
+
+// A wrapper called through an interface is not followed.
+type txRunner interface {
+	run(ctx context.Context, fn func(ctx context.Context, tx *velox.DB) error) error
+}
+
+func (s *Service) viaInterface(ctx context.Context, r txRunner, id int64) error {
+	return r.run(ctx, func(ctx context.Context, tx *velox.DB) error {
+		return lockReturn(ctx, tx, id) // want `lockReturn takes a row lock .* given a function literal's parameter tx`
+	})
+}
+
+// A negated bool kept in a variable is a condition too.
+func lockNot(ctx context.Context, db *velox.DB, lock bool) error { // want lockNot:`LocksOnParam\(p1 when p2!=true\)`
+	ready := !lock
+	q := db.Query[tm.Invoice]()
+	if ready {
+		q = q.ForUpdate()
+	}
+	_, err := q.All(ctx)
+	return err
+}
+
+// A handle in the field of an embedded struct of a parameter.
+type wrapIn struct{ ApplyInput }
+
+func lockWrapped(ctx context.Context, w wrapIn) error { // want lockWrapped:`LocksOnParam\(p1.ApplyInput.Tx\)`
+	return lockReturn(ctx, w.Tx, 1)
+}
+
+func lockWrappedPtr(ctx context.Context, w *wrapIn) error { // want lockWrappedPtr:`LocksOnParam\(p1.ApplyInput.Tx\)`
+	return lockReturn(ctx, w.Tx, 1)
+}
+
+// A recursive literal called with a handle that is not a transaction's.
+func (s *Service) swapRec(ctx context.Context, id int64) error {
+	var each func(ctx context.Context, a, b *velox.DB, n int) error
+	each = func(ctx context.Context, a, b *velox.DB, n int) error {
+		if err := lockReturn(ctx, a, id); err != nil { // want `lockReturn takes a row lock .* given a function literal's parameter a`
+			return err
+		}
+		if n > 0 {
+			return each(ctx, b, a, n-1)
+		}
+		return nil
+	}
+	return each(ctx, s.client, s.client, 2)
+}
+
+// A waiver in the header of an if covers the condition, not the body.
+func must(ok bool, err error) bool { return ok && err == nil }
+
+func waivedCond(ctx context.Context) {
+	if must(global.Query[tm.Invoice]().ForUpdate().Exists(ctx)) { //velox:lock-ok the condition only
+		global.Query[tm.Invoice]().ForUpdate().All(ctx) // want `on the package variable global`
+	}
+}
+
+// A helper with a lock under eight conditions, called under eight ifs: the
+// query has more paths than the check follows, so its lock counts, on a
+// handle it does not follow.
+func lockKind(q velox.Query[tm.Invoice], k int) velox.Query[tm.Invoice] { // want lockKind:`QueryFrom\(p0 locked when p1!=0 and .* or p1==0\)`
+	switch k {
+	case 0:
+		return q.ForUpdate()
+	case 1:
+		return q.ForUpdate()
+	case 2:
+		return q.ForUpdate()
+	case 3:
+		return q.ForUpdate()
+	case 4:
+		return q.ForUpdate()
+	case 5:
+		return q.ForUpdate()
+	case 6:
+		return q.ForUpdate()
+	case 7:
+		return q.ForUpdate()
+	}
+	return q
+}
+
+func manyLocks(ctx context.Context, n, k int) error {
+	q := global.Query[tm.Invoice]()
+	if n > 0 {
+		q = lockKind(q, k)
+	}
+	if n > 1 {
+		q = lockKind(q, k)
+	}
+	if n > 2 {
+		q = lockKind(q, k)
+	}
+	if n > 3 {
+		q = lockKind(q, k)
+	}
+	if n > 4 {
+		q = lockKind(q, k)
+	}
+	if n > 5 {
+		q = lockKind(q, k)
+	}
+	if n > 6 {
+		q = lockKind(q, k)
+	}
+	if n > 7 {
+		q = lockKind(q, k)
+	}
+	_, err := q.All(ctx) // want `All takes a row lock .* on a query with more paths than the check follows`
+	return err
+}
+
+// A callback of a named function type, called with a transaction's handle
+// by its method, and used through that method's value.
+type txFunc func(ctx context.Context, tx *velox.DB) error
+
+func (f txFunc) in(ctx context.Context, db *velox.DB) error { // want in:`TxCallback\(p0\)`
+	return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return f(ctx, tx) })
+}
+
+func (f txFunc) here(ctx context.Context, db *velox.DB) error {
+	return f(ctx, db)
+}
+
+func inTx(ctx context.Context, db *velox.DB, fn txFunc) error { // want inTx:`TxCallback\(p2\)`
+	run := fn.in
+	return run(ctx, db)
+}
+
+func notInTx(ctx context.Context, db *velox.DB, fn txFunc) error {
+	run := fn.here
+	return run(ctx, db)
+}

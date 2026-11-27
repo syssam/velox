@@ -66,3 +66,25 @@ func (*Plain) VeloxMeta() *velox.Meta[Plain] { return plainMeta.Load(plainDescri
 func plainDescriptor() velox.Descriptor[Plain] {
 	return velox.Descriptor[Plain]{Table: "plains", Columns: []velox.ColumnDescriptor{{Field: "ID", Name: "id"}}}
 }
+
+// Bare has a default and no handles variable.
+type Bare struct { // want Bare:"Defaults"
+	ID int64
+	On bool
+}
+
+var bareMeta velox.MetaOnce[Bare]
+
+// VeloxMeta is called by velox.
+func (*Bare) VeloxMeta() *velox.Meta[Bare] { return bareMeta.Load(bareDescriptor) }
+
+func bareDescriptor() velox.Descriptor[Bare] {
+	return velox.Descriptor[Bare]{
+		Table: "bares",
+		Columns: []velox.ColumnDescriptor{
+			{Field: "ID", Name: "id"},
+			{Field: "On", Name: "on", Default: true},
+		},
+		PrimaryKey: []int{0},
+	}
+}

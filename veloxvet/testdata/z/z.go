@@ -218,3 +218,27 @@ func waived(ctx context.Context, db *velox.DB) {
 	}
 	db.Insert(&u).Exec(ctx)
 }
+
+// An entity with a default and no handles variable has no Set to suggest.
+func bare(ctx context.Context, db *velox.DB) {
+	db.Insert(&gen.Bare{On: false}).Exec(ctx) // want `On is false, its zero value, which the field's default replaces: the insert stores true; a Set of the column in the insert stores false`
+}
+
+// More that the check does not follow: a field's address, a variable of an
+// entity without defaults, a variable from a call that returns two, and a
+// generic entity.
+func notFollowed(ctx context.Context, db *velox.DB) {
+	h := struct{ u gen.User }{u: gen.User{Active: false}}
+	db.Insert(&h.u).Exec(ctx)
+
+	p := gen.Plain{ID: 0}
+	db.Insert(&p).Exec(ctx)
+
+	v, _ := two()
+	db.Insert(&v).Exec(ctx)
+}
+
+func generic[E any, PE velox.Entity[E]](ctx context.Context, db *velox.DB) {
+	var e E
+	db.Insert[E, PE](&e).Exec(ctx)
+}
