@@ -76,6 +76,16 @@ var (
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = errors.New("statement outside its transaction")
+	// ErrNoTx is returned by AfterCommit, BeforeCommit and AfterRollback, and
+	// by a locking read, when the DB is in no transaction velox began or its
+	// transaction has ended: work done through it is not queued behind a
+	// commit, and is committed already when it returns. A UseTx DB is
+	// ErrAdoptedTx, not this.
+	ErrNoTx = errors.New("not in a running transaction")
+	// ErrAdoptedTx is returned by AfterCommit, BeforeCommit and
+	// AfterRollback on a UseTx DB: its commit is the caller's, and velox
+	// never sees it end, so nothing could be run after it.
+	ErrAdoptedTx = errors.New("the transaction is a UseTx one")
 	// ErrTxEnded is returned by context.Cause for the context TxCancelOnEnd
 	// cancels once its transaction or savepoint has ended; the context's own
 	// error is context.Canceled.

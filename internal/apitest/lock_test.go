@@ -90,7 +90,7 @@ func TestLockRefusals(t *testing.T) {
 		e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
 		db := openFake(velox.Postgres, e, opts...)
 		_, err := db.Query[testmodel.Invoice]().Limit(1).ForUpdate().All(ctx)
-		if want := pre + "a locking read (ForUpdate or ForShare) runs only inside Tx"; err == nil || err.Error() != want {
+		if want := pre + "a locking read (ForUpdate or ForShare) runs only inside Tx"; err == nil || err.Error() != want || !errors.Is(err, velox.ErrNoTx) {
 			t.Errorf("outside Tx (hooks %d): %v", len(opts), err)
 		}
 		if _, err := db.Query[testmodel.Invoice]().ForUpdate().Exists(ctx); err == nil || !strings.Contains(err.Error(), "runs only inside Tx") {

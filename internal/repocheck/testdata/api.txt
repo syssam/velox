@@ -741,6 +741,7 @@ func AfterRollback(tx *DB, fn func(context.Context)) error
 func Agg[E any](t Term[E]) Term[E]
 func Allow() Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
+func AsConstraintError(err error) (*ConstraintError, bool)
 func AvgByNull[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NullNumberCol[E, V]) ([]Group[K, float64], error)
 func AvgBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E], key H, c NumberCol[E, V]) ([]Group[K, float64], error)
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
@@ -795,6 +796,7 @@ func HasEdge(name string) Predicate
 func HasEdgeWith(name string, ps ...Predicate) Predicate
 func HasOp(ops ...Op) Condition
 func If(h Hook, cond Condition) Hook
+func InTx(db *DB) bool
 func InZone(name string) DateOption
 func Integer[E any](t Term[E]) Term[E]
 func IsConstraintError(err error) bool
@@ -1013,6 +1015,7 @@ type TxOutcome = veloxtype.TxOutcome
 type TxRetry = veloxtype.TxRetry
 type UpdateQuery[E any] struct { }
 type ValidationError = veloxtype.ValidationError
+var ErrAdoptedTx
 var ErrCommitUnknown
 var ErrDenied
 var ErrDryRun
@@ -1022,6 +1025,7 @@ var ErrLinked
 var ErrLocked
 var ErrNoShard
 var ErrNoSource
+var ErrNoTx
 var ErrNoWhere
 var ErrNotFound
 var ErrNotReady

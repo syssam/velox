@@ -55,8 +55,10 @@ func TxReadOnly() TxOption { return engine.TxReadOnly() }
 // server rolls back with it (a dropped connection, a server shutting down or
 // restarting, too many connections). An error of fn's own, such as an io.EOF,
 // is not a lost connection; a failed login and a blocked host are not retried.
-// fn must be safe to run again, and what it did outside the transaction, or
-// under WithoutTx, is done again. An error that matches ErrCommitUnknown is
+// fn must be safe to run again: what it did outside the transaction, or
+// under WithoutTx, is done again, and so is any state it changes that it did
+// not declare itself (a counter, a slice it appends to, a flag it sets), which
+// keeps the value of the failed attempt. An error that matches ErrCommitUnknown is
 // not retried, MySQL's 1205 at COMMIT and a connection lost at COMMIT
 // included. Each retry waits first, a random time from 5 ms that grows to at
 // most a second; the transaction's deadline or ctx's end stops the wait, and

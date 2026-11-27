@@ -276,10 +276,9 @@ func wantErrContains(t *testing.T, what string, err error, want string) {
 
 // TestBeforeRunsBeforeNext: Before runs f, then next when f returned nil,
 // for the ops it names: what f sets is what next writes, and an error from
-// f refuses the write before anything is sent. With no op it runs on no
-// write.
+// f refuses the write before anything is sent. With no op it panics
+// (TestOnWithNoOpPanics).
 func TestBeforeRunsBeforeNext(t *testing.T) {
-	var none int
 	upper := velox.Before(func(_ context.Context, m *velox.Mutation) error {
 		ubTrace = append(ubTrace, "before")
 		for r := range m.Rows() {
@@ -293,13 +292,12 @@ func TestBeforeRunsBeforeNext(t *testing.T) {
 		}
 		return nil
 	}, velox.OpInsert)
-	never := velox.Before(func(context.Context, *velox.Mutation) error { none++; return nil })
 	ubSet(t, func() {
 		ubHook = func(ctx context.Context, m *velox.Mutation, next velox.Mutator) error {
-			return upper(never(velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
+			return upper(velox.MutateFunc(func(ctx context.Context, m *velox.Mutation) error {
 				ubTrace = append(ubTrace, "next")
 				return next.Mutate(ctx, m)
-			}))).Mutate(ctx, m)
+			})).Mutate(ctx, m)
 		}
 	})
 	db := ubDB(t)
@@ -327,9 +325,6 @@ func TestBeforeRunsBeforeNext(t *testing.T) {
 	}
 	if slices.Contains(ubTrace, "before") || !slices.Contains(ubTrace, "next") {
 		t.Errorf("update: trace %v", ubTrace)
-	}
-	if none != 0 {
-		t.Errorf("Before with no op ran %d times", none)
 	}
 }
 

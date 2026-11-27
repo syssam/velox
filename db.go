@@ -92,6 +92,16 @@ func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 // every package that uses a DB larger to compile.
 func Pool(db *DB) *sql.DB { return engine.Pool(&db.e) }
 
+// InTx reports whether db is a transaction's DB: the tx a Tx gives its fn, a
+// savepoint's, a UseTx handle, or Mutation.DB inside one. It is false for the
+// pool DB even under a transaction's context, though a statement on that DB
+// joins the transaction (TxFrom finds the handle that does). The transaction
+// may have ended; AfterCommit and the other queue functions refuse it then
+// with ErrNoTx, and a UseTx one with ErrAdoptedTx.
+//
+// It is a function, as Pool is, so that DB's method set stays as it is.
+func InTx(db *DB) bool { return db.e.InTx }
+
 // Close closes the pool of a DB from Connect. It does nothing for any other DB,
 // whose pool belongs to whoever opened it, as do the Conns of WithReplicas. On a
 // transaction's DB it returns an error.

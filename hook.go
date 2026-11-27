@@ -66,10 +66,15 @@ func (f MutateFunc) Mutate(ctx context.Context, m *Mutation) error { return f(ct
 type Hook func(next Mutator) Mutator
 
 // On returns h applied only to the given kinds of write: OpInsert, OpUpdate,
-// OpDelete. Other writes skip it. On of a nil h is nil.
+// OpDelete. Other writes skip it. On of a nil h is nil. On with no op
+// panics: a hook that runs on no write is a forgotten argument, and an audit
+// or created_by hook that silently never ran would go unnoticed.
 func On(h Hook, ops ...Op) Hook {
 	if h == nil {
 		return nil
+	}
+	if len(ops) == 0 {
+		panicNoOp()
 	}
 	return func(next Mutator) Mutator {
 		wrapped := h(next)
@@ -82,9 +87,15 @@ func On(h Hook, ops ...Op) Hook {
 	}
 }
 
+// panicNoOp is On's refusal of no op, out of line so that On's body, which
+// the compiler may inline into each package that calls it, stays small.
+//
+//go:noinline
+func panicNoOp() { panic("velox: On: no op; give OpInsert, OpUpdate or OpDelete") }
+
 // Before returns the hook that runs f, then next when f returned nil, on
-// the given kinds of write, as On applies a hook. With no op it runs on no
-// write. It is the hook that fills or checks a write before velox makes it:
+// the given kinds of write, as On applies a hook, and panics, as On does, when
+// given none. It is the hook that fills or checks a write before velox makes it:
 //
 //	velox.Before(func(ctx context.Context, m *velox.Mutation) error {
 //		return m.Fill("created_by", userFrom(ctx))

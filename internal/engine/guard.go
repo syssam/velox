@@ -178,7 +178,7 @@ func (db *DB) guardLock(st *Statement) error {
 	case db.D == SQLite && !db.Cfg.SQLiteLocks:
 		return fmt.Errorf("velox: %s: SQLite has no locking reads; its transactions lock the whole database (WithSQLiteLockingReads runs them without the lock)", name)
 	case !st.InTx:
-		return fmt.Errorf("velox: %s: a locking read (ForUpdate or ForShare) runs only inside Tx", name)
+		return txRefusalError{"velox: " + name + ": a locking read (ForUpdate or ForShare) runs only inside Tx", ErrNoTx}
 	case st.Count || st.Aggregate != 0:
 		return fmt.Errorf("velox: %s: Count, Sum, Avg, Min and Max cannot lock rows; lock them with All, One, First, Iter or Exists", name)
 	}

@@ -17,6 +17,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- `ErrNoTx` and `ErrAdoptedTx` tell why `AfterCommit`, `BeforeCommit` and
+  `AfterRollback` refused, and `ErrNoTx` is the locking read's refusal outside
+  a transaction; the messages are as they were. `velox.InTx(db)` reports
+  whether a DB is a transaction's. `velox.AsConstraintError` returns the
+  `*ConstraintError` that `IsConstraintError` recognizes, including a driver's
+  raw one (decision 0184).
+- `velox.On` and `velox.Before` panic when given no op, as they ran on no
+  write before (decision 0184).
 - veloxvet's `LockTx` analyzer (`locktx`), off unless `-locktx.enable` is
   given, reports a locking read (`ForUpdate`, `ForShare`) whose handle is
   not provably a transaction's: a struct field, a package variable, a

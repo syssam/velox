@@ -40,6 +40,28 @@ func TestOnSelectsOps(t *testing.T) {
 	}
 }
 
+// TestOnWithNoOpPanics: a hook given no op would run on no write, an audit
+// hook that never ran; On and Before refuse it when built.
+func TestOnWithNoOpPanics(t *testing.T) {
+	noop := func(next velox.Mutator) velox.Mutator { return next }
+	for name, build := range map[string]func(){
+		"On":     func() { velox.On(noop) },
+		"Before": func() { velox.Before(func(context.Context, *velox.Mutation) error { return nil }) },
+	} {
+		func() {
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(r.(string), "no op") {
+					t.Errorf("%s with no op: recovered %v", name, r)
+				}
+			}()
+			build()
+		}()
+	}
+	if velox.On(nil) != nil || velox.Before(nil) != nil {
+		t.Error("a nil hook is not nil")
+	}
+}
+
 func TestHookErrorIsWrapped(t *testing.T) {
 	fixture.HookRefuses = true
 	defer func() { fixture.HookRefuses = false }()

@@ -37,15 +37,26 @@ type rolledFn struct {
 	due bool
 }
 
+// txRefusalError is an error whose text is msg and that matches target by
+// errors.Is: a refusal that names its cause for a program without
+// repeating the sentinel's words in the message.
+type txRefusalError struct {
+	msg    string
+	target error
+}
+
+func (e txRefusalError) Error() string        { return e.msg }
+func (e txRefusalError) Is(target error) bool { return target == e.target }
+
 // queueErr is why fn cannot be queued on db's transaction by the function
 // what, or nil. The caller holds the root frame's afterMu.
 func queueErr(db *DB, what string) error {
 	f := db.txRoot
 	if f.afterClosed || f.ended.Load() {
-		return errors.New("velox: " + what + ": the transaction has ended")
+		return txRefusalError{"velox: " + what + ": the transaction has ended", ErrNoTx}
 	}
 	if db.txSelf != nil && db.txSelf.ended.Load() {
-		return errors.New("velox: " + what + ": the DB is a nested Tx's that has returned; call it on a DB of the transaction that is still running")
+		return txRefusalError{"velox: " + what + ": the DB is a nested Tx's that has returned; call it on a DB of the transaction that is still running", ErrNoTx}
 	}
 	return nil
 }
@@ -57,9 +68,9 @@ func txOf(db *DB, isNil bool, what string) error {
 	case isNil:
 		return errors.New("velox: " + what + ": fn is nil")
 	case !db.InTx:
-		return errors.New("velox: " + what + ": the DB is in no transaction; call it on the tx that Tx gives fn")
+		return txRefusalError{"velox: " + what + ": the DB is in no transaction; call it on the tx that Tx gives fn", ErrNoTx}
 	case db.txRoot.adopted:
-		return errors.New("velox: " + what + ": the transaction is a UseTx one, which your code commits and velox never sees end")
+		return txRefusalError{"velox: " + what + ": the transaction is a UseTx one, which your code commits and velox never sees end", ErrAdoptedTx}
 	}
 	return nil
 }

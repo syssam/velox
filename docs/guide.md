@@ -1965,7 +1965,11 @@ the ones queued while it ran. A hook inside `db.Tx` queues with
 `velox.AfterCommit(m.DB(), fn)`. Call it from the goroutine that runs the
 transaction.
 Outside a transaction, and on a `UseTx` DB, whose commit velox never sees,
-`AfterCommit` returns an error. One function's panic does not stop the
+`AfterCommit` returns an error. It matches `ErrNoTx` for a DB in no running
+transaction, where the work is committed already, and `ErrAdoptedTx` for a
+`UseTx` one, where it is not: code that sends an event at once when it cannot
+queue must send only on `ErrNoTx`. `velox.InTx(db)` reports whether a DB is a
+transaction's. One function's panic does not stop the
 others: `Tx` panics again once all have run
 ([ADR 0100](decisions/0100-after-commit-values-and-log.md)).
 
@@ -2793,6 +2797,14 @@ if ce, ok := errors.AsType[*velox.ConstraintError](err); ok && ce.Kind == velox.
 `velox.IsConstraintError`, `IsValidationError` and `IsNotSingular` are the
 same tests by ent's names. Like `IsNotFound`, a driver's typed-nil error
 cannot make them panic.
+
+`errors.As` finds a `*ConstraintError` only where velox made it. An error from
+raw SQL or `velox.Pool` is the driver's, which `IsConstraintError` still
+recognizes on PostgreSQL, MySQL and SQLite. `velox.AsConstraintError(err)`
+returns the `*ConstraintError` for both, so the `Kind` and `Constraint` tell
+which constraint fired without matching the message. On SQLite `Constraint` is
+what the driver's text names ("table.col" for a unique key, the column for
+NOT NULL, nothing for a foreign key), as SQLite's message has no index name.
 
 The ones you will meet most:
 

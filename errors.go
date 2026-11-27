@@ -94,6 +94,16 @@ var (
 	// joins it, and the transaction has not ended: it was most likely meant
 	// for the transaction's DB. Nothing was sent. WithoutTx lifts the check.
 	ErrOutsideTx = engine.ErrOutsideTx
+	// ErrNoTx is returned by AfterCommit, BeforeCommit and AfterRollback, and
+	// by a locking read, when the DB is in no transaction velox began or its
+	// transaction has ended: work done through it is not queued behind a
+	// commit, and is committed already when it returns. A UseTx DB is
+	// ErrAdoptedTx, not this.
+	ErrNoTx = engine.ErrNoTx
+	// ErrAdoptedTx is returned by AfterCommit, BeforeCommit and
+	// AfterRollback on a UseTx DB: its commit is the caller's, and velox
+	// never sees it end, so nothing could be run after it.
+	ErrAdoptedTx = engine.ErrAdoptedTx
 	// ErrTxEnded is returned by context.Cause for the context TxCancelOnEnd
 	// cancels once its transaction or savepoint has ended; the context's own
 	// error is context.Canceled.
@@ -142,10 +152,26 @@ func IsNotSingular(err error) bool { return dberr.Is(err, ErrNotSingular) }
 // PostgreSQL, MySQL or SQLite. It walks err's tree as errors.As does, a
 // typed nil skipped. ent's IsConstraintError is the precedent.
 func IsConstraintError(err error) bool {
-	if _, ok := dberr.As[*ConstraintError](err); ok {
-		return true
+	_, ok := AsConstraintError(err)
+	return ok
+}
+
+// AsConstraintError returns the *ConstraintError in err's tree, or the one
+// velox reads from a driver's error on PostgreSQL, MySQL or SQLite, as
+// IsConstraintError does: it reports true exactly when that does. It is for a
+// raw SQL or Pool path, where errors.As alone finds nothing, and the Kind and
+// Constraint tell which constraint fired. Constraint is the index or
+// constraint name on PostgreSQL and MySQL; on SQLite it holds what the
+// driver's text names, as that names no index: "table.col, table.col" for a
+// unique or primary key, the column for NOT NULL, the expression of a CHECK,
+// and nothing for a foreign key. The Entity is empty for an error velox did
+// not make.
+func AsConstraintError(err error) (*ConstraintError, bool) {
+	if ce, ok := dberr.As[*ConstraintError](err); ok {
+		return ce, true
 	}
-	return dberr.Constraint("", err) != nil
+	ce := dberr.Constraint("", err)
+	return ce, ce != nil
 }
 
 // IsValidationError reports whether err is, or wraps, a *ValidationError: a
