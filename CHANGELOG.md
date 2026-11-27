@@ -29,6 +29,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   it under the context its `fn` got, on the savepoint under a savepoint's, as
   its statements join it; any other DB or context is as before (decision
   0184, which also lifts 0100's choice of the `*DB` alone).
+- `velox.On` and `velox.Before` are kept out of line, so a package that lists
+  hooks no longer carries a copy of their closures at each call: the
+  schema package of the compile-cost test shrinks by about 40 KB, and the
+  recorded bounds in `internal/repocheck` are tightened to hold it.
 - `velox.On` and `velox.Before` panic when given no op, as they ran on no
   write before (decision 0184).
 - veloxvet's `LockTx` analyzer (`locktx`), off unless `-locktx.enable` is

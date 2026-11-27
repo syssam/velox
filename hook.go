@@ -69,12 +69,21 @@ type Hook func(next Mutator) Mutator
 // OpDelete. Other writes skip it. On of a nil h is nil. On with no op
 // panics: a hook that runs on no write is a forgotten argument, and an audit
 // or created_by hook that silently never ran would go unnoticed.
+//
+// On is not inlined, on purpose: inlined, its closures and the generic
+// slices.Contains they call are copied into every package that builds a hook,
+// about 40 KB for the three calls of the schema package that
+// TestGenericTypesCompileSmall builds. It runs when an entity's hooks are
+// first read, once per entity, never per write, so the call costs nothing
+// that matters.
+//
+//go:noinline
 func On(h Hook, ops ...Op) Hook {
 	if h == nil {
 		return nil
 	}
 	if len(ops) == 0 {
-		panicNoOp()
+		panic("velox: On: no op; give OpInsert, OpUpdate or OpDelete")
 	}
 	return func(next Mutator) Mutator {
 		wrapped := h(next)
@@ -87,12 +96,6 @@ func On(h Hook, ops ...Op) Hook {
 	}
 }
 
-// panicNoOp is On's refusal of no op, out of line so that On's body, which
-// the compiler may inline into each package that calls it, stays small.
-//
-//go:noinline
-func panicNoOp() { panic("velox: On: no op; give OpInsert, OpUpdate or OpDelete") }
-
 // Before returns the hook that runs f, then next when f returned nil, on
 // the given kinds of write, as On applies a hook, and panics, as On does, when
 // given none. It is the hook that fills or checks a write before velox makes it:
@@ -101,7 +104,9 @@ func panicNoOp() { panic("velox: On: no op; give OpInsert, OpUpdate or OpDelete"
 //		return m.Fill("created_by", userFrom(ctx))
 //	}, velox.OpInsert)
 //
-// Before of a nil f is nil.
+// Before of a nil f is nil. Like On, it is not inlined.
+//
+//go:noinline
 func Before(f MutateFunc, ops ...Op) Hook {
 	if f == nil {
 		return nil

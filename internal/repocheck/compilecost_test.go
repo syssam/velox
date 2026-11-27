@@ -442,7 +442,7 @@ var genericObjects = []struct {
 	//
 	// ValidationError.Name and ColumnInfo.SchemaName (ADR 0144) took
 	// entityDescHooks to 881170 bytes, in the engine types it reaches.
-	{"entityDescHooks", "", entityDescHooksBound, 904192}, // measured 903374
+	{"entityDescHooks", "", entityDescHooksBound, 864256}, // measured 863618; 904056 while On and Before were inlined
 	// entityDescMixin is entityDescHooks with the Policy and hooks a mixin's,
 	// which a schema S lists. S, M and the schema and mixin types they name
 	// compile into this package: 45232 bytes more than an entity's own
@@ -450,7 +450,7 @@ var genericObjects = []struct {
 	// velox-gen's S and M live in the schema package, so gen does not pay
 	// it: at N=100 with a Policy each, gen's archive took 23896614 bytes,
 	// down from 24455668, and the schema's 5008904, up from 4959122.
-	{"entityDescMixin", "", entityDescMixinSrc, 950272}, // measured 949538
+	{"entityDescMixin", "", entityDescMixinSrc, 909824}, // measured 909002; 949538 while On and Before were inlined
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
@@ -458,7 +458,7 @@ var genericObjects = []struct {
 // about 1.2%, rounded up to the next KiB. velox instantiates no generic for
 // them; the cost is the methods' bodies and closures, and the export data of
 // the types they mention.
-const policyGrowthMax = 87040 // measured 85098; 83576 before Policy.Query and Policy.Mutation
+const policyGrowthMax = 47104 // measured 45656; 86096 while On and Before were inlined (hook.go keeps them out of line)
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package
