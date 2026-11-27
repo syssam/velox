@@ -349,17 +349,23 @@ type lockSum struct {
 
 // lockChecker checks one package.
 type lockChecker struct {
-	pass  *analysis.Pass
-	pkg   *ssa.Package
-	ok    directives
-	sums  map[*ssa.Function]*lockSum
-	cbs   map[*ssa.Function][]int
-	qfs   map[*ssa.Function]*QueryFrom
-	txFn  map[*ssa.Function]int8 // 1 a transaction's closure, -1 not, 0 being computed
-	hand  map[ssa.Value]*handle
-	paths map[ssa.Value][]qpath
-	seen  map[token.Pos]bool
-	litCB map[*ssa.Function]bool // literals whose parameters are being checked
+	pass *analysis.Pass
+	pkg  *ssa.Package
+	ok   directives
+	sums map[*ssa.Function]*lockSum
+	cbs  map[*ssa.Function][]int
+	qfs  map[*ssa.Function]*QueryFrom
+	txFn map[*ssa.Function]int8 // 1 a transaction's closure, -1 not, 0 being computed
+	// txDepth is the depth of each literal txClosure is computing, txLevel
+	// the count of them, and txHit the lowest depth of one that a use met
+	// while computing, as an assumption (noLow when none).
+	txDepth map[*ssa.Function]int
+	txLevel int
+	txHit   int
+	hand    map[ssa.Value]*handle
+	paths   map[ssa.Value][]qpath
+	seen    map[token.Pos]bool
+	litCB   map[*ssa.Function]bool // literals whose parameters are being checked
 
 	// The walks of provenance and queryPaths cache only what they
 	// computed with no open walk outside them: depth is the open walks'
@@ -388,6 +394,7 @@ func runLockTx(pass *analysis.Pass) (any, error) {
 		pass: pass, pkg: pkg, ok: findDirectives(pass, lockDirective),
 		sums: map[*ssa.Function]*lockSum{}, cbs: map[*ssa.Function][]int{},
 		qfs: map[*ssa.Function]*QueryFrom{}, txFn: map[*ssa.Function]int8{},
+		txDepth: map[*ssa.Function]int{}, txHit: noLow,
 		hand: map[ssa.Value]*handle{}, paths: map[ssa.Value][]qpath{}, seen: map[token.Pos]bool{},
 		litCB: map[*ssa.Function]bool{},
 		low:   noLow, openH: map[ssa.Value]int{}, openP: map[ssa.Value]int{},
@@ -1557,6 +1564,12 @@ func (c *lockChecker) bindings(fv *ssa.FreeVar) []ssa.Value {
 
 // txClosure reports whether the function literal fn is a transaction's
 // closure: every use of it hands it a transaction's handle.
+//
+// A literal that is being computed counts as one where a use of it needs
+// the answer, as a recursive call passes it its own handle: if every use
+// hands a handle, the recursion adds nothing. An answer that holds only
+// on such an assumption about an enclosing literal is not kept, as the
+// enclosing one may turn out not to be.
 func (c *lockChecker) txClosure(fn *ssa.Function) bool {
 	switch c.txFn[fn] {
 	case 1:
@@ -1564,19 +1577,32 @@ func (c *lockChecker) txClosure(fn *ssa.Function) bool {
 	case -1:
 		return false
 	}
-	if _, ok := c.txFn[fn]; ok {
-		return false // being computed
+	if d, ok := c.txDepth[fn]; ok {
+		c.txHit = min(c.txHit, d)
+		return true
 	}
 	c.txFn[fn] = 0
+	c.txLevel++
+	d, outer := c.txLevel, c.txHit
+	c.txDepth[fn], c.txHit = d, noLow
 	vals := c.closureValues(fn)
 	yes := len(vals) > 0
 	for _, v := range vals {
 		yes = yes && c.handsTx(v)
 	}
-	if yes {
-		c.txFn[fn] = 1
-	} else {
+	inner := c.txHit
+	delete(c.txDepth, fn)
+	c.txLevel--
+	switch {
+	case !yes:
 		c.txFn[fn] = -1
+		c.txHit = min(outer, inner)
+	case inner < d:
+		delete(c.txFn, fn) // holds if an enclosing literal does
+		c.txHit = min(outer, inner)
+	default:
+		c.txFn[fn] = 1
+		c.txHit = outer
 	}
 	return yes
 }
@@ -1633,6 +1659,10 @@ func (c *lockChecker) useOf(v ssa.Value, r ssa.Instruction, seen map[ssa.Value]b
 		return true, used
 	case *ssa.BinOp:
 		return nilCompare(r), false
+	case *ssa.Phi:
+		return c.uses(r, seen) // a choice between callbacks
+	case *ssa.ChangeType:
+		return c.uses(r, seen) // a conversion to a named function type
 	case *ssa.Store:
 		// A variable captured by a function literal: go/ssa
 		// spills it to an Alloc that the literal loads.
@@ -1644,11 +1674,25 @@ func (c *lockChecker) useOf(v ssa.Value, r ssa.Instruction, seen map[ssa.Value]b
 	return false, false
 }
 
+// isTxHandle reports whether the handle a is a transaction's. A parameter
+// of a literal that txClosure is computing counts as one, as txClosure
+// assumes of the literal itself: a walk of provenance that reaches it would
+// be a cycle and answer no.
+func (c *lockChecker) isTxHandle(a ssa.Value) bool {
+	if p, ok := a.(*ssa.Parameter); ok {
+		if d, in := c.txDepth[p.Parent()]; in {
+			c.txHit = min(c.txHit, d)
+			return true
+		}
+	}
+	return c.provenance(a).txOnly()
+}
+
 // callUse is uses for the call cm that has v as its callee or an argument.
 func (c *lockChecker) callUse(v ssa.Value, cm *ssa.CallCommon) (ok, used bool) {
 	if cm.Value == v && !cm.IsInvoke() {
 		for _, a := range cm.Args {
-			if isDB(a.Type()) && !c.provenance(a).txOnly() {
+			if isDB(a.Type()) && !c.isTxHandle(a) {
 				return false, false
 			}
 		}

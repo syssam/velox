@@ -1102,3 +1102,48 @@ func notInTx(ctx context.Context, db *velox.DB, fn txFunc) error {
 	run := fn.here
 	return run(ctx, db)
 }
+
+// A literal given to a TxCallback parameter of a named function type is a
+// transaction's closure: the conversion to the type is not another use.
+func (s *Service) namedCallback(ctx context.Context, id int64) error {
+	if err := inTx(ctx, s.client, func(ctx context.Context, tx *velox.DB) error { return lockReturn(ctx, tx, id) }); err != nil {
+		return err
+	}
+	return inTx(ctx, s.client, txFunc(func(ctx context.Context, tx *velox.DB) error { return lockReturn(ctx, tx, id) }))
+}
+
+// A callback chosen between two literals is a transaction's closure when
+// every use of the choice hands it a transaction's handle.
+func (s *Service) chosen(ctx context.Context, id int64, c bool) error {
+	fn := func(ctx context.Context, tx *velox.DB) error { return lockReturn(ctx, tx, id) }
+	if c {
+		fn = func(ctx context.Context, tx *velox.DB) error { return lockReturn(ctx, tx, id+1) }
+	}
+	return s.client.Tx(ctx, fn)
+}
+
+// A literal that calls itself with its own handle is a transaction's
+// closure when its outside use hands it one: the recursion adds nothing.
+func (s *Service) walkTx(ctx context.Context, id int64) error {
+	var walk func(ctx context.Context, tx *velox.DB, n int) error
+	walk = func(ctx context.Context, tx *velox.DB, n int) error {
+		if err := lockReturn(ctx, tx, id); err != nil || n == 0 {
+			return err
+		}
+		return walk(ctx, tx, n-1)
+	}
+	return s.client.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return walk(ctx, tx, 3) })
+}
+
+// The same literal called once with a handle that is not a transaction's is
+// not one, whatever its recursion does.
+func (s *Service) walkBad(ctx context.Context, id int64) error {
+	var walk func(ctx context.Context, tx *velox.DB, n int) error
+	walk = func(ctx context.Context, tx *velox.DB, n int) error {
+		if err := lockReturn(ctx, tx, id); err != nil || n == 0 { // want `lockReturn takes a row lock .* given a function literal's parameter tx`
+			return err
+		}
+		return walk(ctx, tx, n-1)
+	}
+	return walk(ctx, s.client, 3)
+}
