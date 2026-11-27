@@ -43,4 +43,6 @@ and -3 before both.
 ## Consequences
 
 - No generated code changes shape; generated code names a column's index
-  only, and the runtime reads the Go type.
+  only, and the runtime reads the Go type. An app that has `OrderField` on a
+  decimal gets new order values in its SDL and `*_gql.go` when it
+  regenerates.
