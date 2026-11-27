@@ -1946,7 +1946,7 @@ on pgx's transactions ([ADR 0066](decisions/0066-use-tx.md)).
 
 ### After the commit
 
-`velox.AfterCommit(tx, fn)` queues work that must not happen for a
+`velox.AfterCommit(ctx, tx, fn)` queues work that must not happen for a
 transaction that rolls back, such as publishing an event:
 
 ```go
@@ -1954,7 +1954,7 @@ err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 	if err := tx.Insert(&order).Exec(ctx); err != nil {
 		return err
 	}
-	return velox.AfterCommit(tx, func(ctx context.Context) { publish(ctx, order.ID) })
+	return velox.AfterCommit(ctx, tx, func(ctx context.Context) { publish(ctx, order.ID) })
 })
 ```
 
@@ -1962,22 +1962,24 @@ The functions run in the order queued, once the outermost transaction has
 committed and before `Tx` returns, on the `Tx` context without its
 cancellation. A rollback runs none. A nested `tx.Tx` that rolls back drops
 the ones queued while it ran. A hook inside `db.Tx` queues with
-`velox.AfterCommit(m.DB(), fn)`. Call it from the goroutine that runs the
+`velox.AfterCommit(ctx, m.DB(), fn)`. Call it from the goroutine that runs the
 transaction.
 Outside a transaction, and on a `UseTx` DB, whose commit velox never sees,
 `AfterCommit` returns an error. It matches `ErrNoTx` for a DB that is not a
-running transaction's, and `ErrAdoptedTx` for a `UseTx` one. `ErrNoTx` does not
-say the work is committed: the pool DB gets it under a transaction's context
-too, though its statements join that transaction. Code that sends an event at
-once when it cannot queue must first check `velox.TxFrom(ctx, db)` finds no
-transaction, and must wait for its own commit on `ErrAdoptedTx`.
-`velox.InTx(db)` reports whether a DB is a transaction's. One function's panic does not stop the
+running transaction's, and `ErrAdoptedTx` for a `UseTx` one. The DB that began
+a transaction queues on it under the context its `fn` got, as its statements
+join it, so `AfterCommit(ctx, db, fn)` on the pool DB works there, on the
+savepoint when `ctx` is a savepoint's. `ErrNoTx` does not say the work is
+committed: a transaction's DB after a rollback gets it too. Code that sends an
+event at once when it cannot queue should do so only on `ErrNoTx`, and wait
+for its own commit on `ErrAdoptedTx`. `velox.InTx(db)` reports whether a DB is
+a transaction's. One function's panic does not stop the
 others: `Tx` panics again once all have run
 ([ADR 0100](decisions/0100-after-commit-values-and-log.md)).
 
-`velox.BeforeCommit(tx, fn)` runs `fn(ctx) error` once the outermost `fn`
+`velox.BeforeCommit(ctx, tx, fn)` runs `fn(ctx) error` once the outermost `fn`
 has returned nil, before COMMIT, and its statements on `tx` join the
-transaction. An error rolls it back. `velox.AfterRollback(tx, fn)` runs `fn`
+transaction. An error rolls it back. `velox.AfterRollback(ctx, tx, fn)` runs `fn`
 once the work done through `tx` is undone: when the outermost transaction
 does not commit, or when `tx` is a nested `Tx`'s and its savepoint rolls
 back. A transaction that commits runs, in order: each recorded write's sink,

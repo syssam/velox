@@ -18,7 +18,8 @@ nothing queued work on one transaction from code inside it.
 ### AfterCommit
 
 `velox.AfterCommit(tx *DB, fn func(context.Context)) error` is a
-function. `fn` runs once the outermost transaction has committed.
+function (0184 adds ctx first and resolves the DB under the context, as
+statements do since 0171). `fn` runs once the outermost transaction has committed.
 
 - The functions run in the order queued. They run after COMMIT succeeded,
   the `TxAround` hooks returned and the connection went back to the pool,

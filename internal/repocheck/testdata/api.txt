@@ -736,8 +736,8 @@ func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 func (u UpdateQuery[E]) SetInput[_ Lazy[E]](in Input[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
 func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
-func AfterCommit(tx *DB, fn func(context.Context)) error
-func AfterRollback(tx *DB, fn func(context.Context)) error
+func AfterCommit(ctx context.Context, db *DB, fn func(context.Context)) error
+func AfterRollback(ctx context.Context, db *DB, fn func(context.Context)) error
 func Agg[E any](t Term[E]) Term[E]
 func Allow() Predicate
 func And[E any](ps ...Pred[E]) Pred[E]
@@ -747,7 +747,7 @@ func AvgBy[E any, H valueColumn[E, K], K, V any](ctx context.Context, q Query[E]
 func AvgNull[E, V any](ctx context.Context, q Query[E], c NullNumberCol[E, V]) (float64, bool, error)
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
 func Before(f MutateFunc, ops ...Op) Hook
-func BeforeCommit(tx *DB, fn func(context.Context) error) error
+func BeforeCommit(ctx context.Context, db *DB, fn func(context.Context) error) error
 func Bool[E any](t Term[E]) Term[E]
 func Calc[E any](text string, args ...any) Term[E]
 func CheckEntity[E any, PE Entity[E]]() error

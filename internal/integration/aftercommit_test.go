@@ -24,11 +24,11 @@ func TestAfterCommitSavepointOnRealDatabases(t *testing.T) {
 			return v
 		}
 		err := tg.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-			if err := velox.AfterCommit(tx, func(context.Context) { got = append(got, "outer") }); err != nil {
+			if err := velox.AfterCommit(ctx, tx, func(context.Context) { got = append(got, "outer") }); err != nil {
 				return err
 			}
 			if err := tx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error {
-				if err := velox.AfterCommit(sp, func(context.Context) { got = append(got, "savepoint") }); err != nil {
+				if err := velox.AfterCommit(ctx, sp, func(context.Context) { got = append(got, "savepoint") }); err != nil {
 					return err
 				}
 				// The row with id 1 exists: the insert fails.
@@ -39,7 +39,7 @@ func TestAfterCommitSavepointOnRealDatabases(t *testing.T) {
 			if _, err := tx.Update[testmodel.Invoice]().Set(I.Total.Set(42)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 				return err
 			}
-			return velox.AfterCommit(tx, func(context.Context) { got = append(got, "after-savepoint") })
+			return velox.AfterCommit(ctx, tx, func(context.Context) { got = append(got, "after-savepoint") })
 		})
 		if err != nil {
 			t.Fatal(err)

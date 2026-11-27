@@ -24,6 +24,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   whether a DB is a transaction's. `velox.AsConstraintError` returns the
   `*ConstraintError` that `IsConstraintError` recognizes, including a driver's
   raw one (decision 0184).
+- `AfterCommit`, `BeforeCommit` and `AfterRollback` take the context first:
+  `velox.AfterCommit(ctx, db, fn)`. The DB that began a transaction queues on
+  it under the context its `fn` got, on the savepoint under a savepoint's, as
+  its statements join it; any other DB or context is as before (decision
+  0184, which also lifts 0100's choice of the `*DB` alone).
 - `velox.On` and `velox.Before` panic when given no op, as they ran on no
   write before (decision 0184).
 - veloxvet's `LockTx` analyzer (`locktx`), off unless `-locktx.enable` is

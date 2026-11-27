@@ -99,7 +99,8 @@ Three ent features had no velox counterpart:
 ### BeforeCommit and AfterRollback
 
 - `velox.BeforeCommit(tx, func(ctx) error)` and
-  `velox.AfterRollback(tx, func(ctx))` are functions of the transaction's DB,
+  `velox.AfterRollback(tx, func(ctx))` (ctx first since 0184) are functions of
+  the transaction's DB,
   for `AfterCommit`'s reasons (0100). They refuse what `AfterCommit`
   refuses, and they share its mutex and closed flag.
 - BeforeCommit functions run after the outermost `fn` returned nil, in

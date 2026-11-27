@@ -6,7 +6,7 @@ import (
 	"github.com/syssam/velox/internal/engine"
 )
 
-// AfterCommit queues fn on tx's transaction, to run once the outermost
+// AfterCommit queues fn on db's transaction, to run once the outermost
 // transaction has committed, as for an event that must not go out for work
 // that rolls back:
 //
@@ -14,13 +14,15 @@ import (
 //		if err := tx.Insert(&order).Exec(ctx); err != nil {
 //			return err
 //		}
-//		return velox.AfterCommit(tx, func(ctx context.Context) { publish(ctx, order.ID) })
+//		return velox.AfterCommit(ctx, tx, func(ctx context.Context) { publish(ctx, order.ID) })
 //	})
 //
-// tx is the DB a Tx gives its fn, a nested Tx's, or Mutation.DB inside
-// one. Outside db.Tx, Mutation.DB is the database's, even for a write that
-// velox runs in a transaction of its own, inside the hooks, such as a
-// recorded one. The queued functions run in the order queued,
+// db is the DB a Tx gives its fn, a nested Tx's, or Mutation.DB inside
+// one, or the DB that began the transaction when ctx is the one its fn got:
+// there its statements join the transaction, and so does AfterCommit, on the
+// savepoint's handle when ctx is a savepoint's. Outside db.Tx,
+// Mutation.DB is the database's, even for a write that velox runs in a
+// transaction of its own, inside the hooks, such as a recorded one. The queued functions run in the order queued,
 // after COMMIT has succeeded and Tx's connection is back in the pool,
 // before Tx returns, on the context given to Tx without its cancellation or
 // deadline, even when a TxAround hook then returns an error of its own.
@@ -41,13 +43,15 @@ import (
 //
 // It is a function, not a method of DB: every method of DB is compiled into
 // each package of entities, used or not.
-func AfterCommit(tx *DB, fn func(context.Context)) error { return engine.AfterCommit(&tx.e, fn) }
+func AfterCommit(ctx context.Context, db *DB, fn func(context.Context)) error {
+	return engine.AfterCommit(db.e.In(ctx), fn)
+}
 
-// BeforeCommit queues fn on tx's transaction, to run once the outermost
+// BeforeCommit queues fn on db's transaction, to run once the outermost
 // Tx's fn has returned nil, before COMMIT, as ent's commit hooks do: a check
 // that must see the whole transaction's work, or a last write in it.
 //
-//	return velox.BeforeCommit(tx, func(ctx context.Context) error {
+//	return velox.BeforeCommit(ctx, tx, func(ctx context.Context) error {
 //		return checkBalanced(ctx, tx)
 //	})
 //
@@ -65,19 +69,19 @@ func AfterCommit(tx *DB, fn func(context.Context)) error { return engine.AfterCo
 // for AfterCommit. BeforeCommit returns an error, and queues nothing, where
 // AfterCommit does, and once the transaction's BeforeCommit functions have
 // run. It is a function, not a method of DB, for AfterCommit's reason.
-func BeforeCommit(tx *DB, fn func(context.Context) error) error {
-	return engine.BeforeCommit(&tx.e, fn)
+func BeforeCommit(ctx context.Context, db *DB, fn func(context.Context) error) error {
+	return engine.BeforeCommit(db.e.In(ctx), fn)
 }
 
-// AfterRollback queues fn on tx's transaction, to run once the work done
-// through tx has been rolled back, as ent's tx.OnRollback does: to undo
+// AfterRollback queues fn on db's transaction, to run once the work done
+// through db has been rolled back, as ent's tx.OnRollback does: to undo
 // what the transaction cannot, such as a file it uploaded.
 //
-//	return velox.AfterRollback(tx, func(ctx context.Context) { _ = store.Delete(ctx, key) })
+//	return velox.AfterRollback(ctx, tx, func(ctx context.Context) { _ = store.Delete(ctx, key) })
 //
 // It runs when the outermost transaction does not commit: fn's error, a
 // BeforeCommit function's error, a context that ended, a broken
-// transaction, or a COMMIT that failed. When tx is a nested Tx's, it also
+// transaction, or a COMMIT that failed. When db is a nested Tx's, it also
 // runs when that savepoint rolls back, its work being undone, whatever the
 // outer transaction then does. A retried attempt's run, as that attempt
 // rolled back.
@@ -89,6 +93,6 @@ func BeforeCommit(tx *DB, fn func(context.Context) error) error {
 // run before the AfterCommit functions. None runs when fn panics or calls
 // runtime.Goexit: Tx does not return normally. AfterRollback returns an
 // error, and queues nothing, where AfterCommit does.
-func AfterRollback(tx *DB, fn func(context.Context)) error {
-	return engine.AfterRollback(&tx.e, fn)
+func AfterRollback(ctx context.Context, db *DB, fn func(context.Context)) error {
+	return engine.AfterRollback(db.e.In(ctx), fn)
 }

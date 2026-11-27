@@ -21,13 +21,13 @@ func TestBeforeCommitOrder(t *testing.T) {
 			return nil
 		}))
 		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-			if err := velox.AfterCommit(tx, func(context.Context) { got = append(got, "after") }); err != nil {
+			if err := velox.AfterCommit(ctx, tx, func(context.Context) { got = append(got, "after") }); err != nil {
 				return err
 			}
-			if err := velox.AfterRollback(tx, func(context.Context) { got = append(got, "rolled") }); err != nil {
+			if err := velox.AfterRollback(ctx, tx, func(context.Context) { got = append(got, "rolled") }); err != nil {
 				return err
 			}
-			if err := velox.BeforeCommit(tx, func(ctx context.Context) error {
+			if err := velox.BeforeCommit(ctx, tx, func(ctx context.Context) error {
 				got = append(got, "before")
 				_, err := tx.Update[testmodel.Invoice]().Set(I.Total.Set(77)).Where(I.ID.EQ(1)).Exec(ctx)
 				return err
@@ -63,9 +63,9 @@ func TestBeforeCommitErrorRollsBack(t *testing.T) {
 			if _, err := tx.Update[testmodel.Invoice]().Set(I.Total.Set(42)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 				return err
 			}
-			_ = velox.AfterCommit(tx, func(context.Context) { got = append(got, "after") })
-			_ = velox.AfterRollback(tx, func(context.Context) { got = append(got, "rolled") })
-			return velox.BeforeCommit(tx, func(context.Context) error { return boom })
+			_ = velox.AfterCommit(ctx, tx, func(context.Context) { got = append(got, "after") })
+			_ = velox.AfterRollback(ctx, tx, func(context.Context) { got = append(got, "rolled") })
+			return velox.BeforeCommit(ctx, tx, func(context.Context) error { return boom })
 		})
 		if !errors.Is(err, boom) {
 			t.Fatalf("Tx: %v, want boom", err)
@@ -77,13 +77,13 @@ func TestBeforeCommitErrorRollsBack(t *testing.T) {
 		if err := tg.direct.QueryRowContext(ctx, rebind(tg.d, "SELECT total FROM invoices WHERE id = ?"), 1).Scan(&v); err != nil || v != 10 {
 			t.Errorf("total %v, %v; want 10, rolled back", v, err)
 		}
-		if err := velox.BeforeCommit(stale, func(context.Context) error { return nil }); err == nil {
+		if err := velox.BeforeCommit(ctx, stale, func(context.Context) error { return nil }); err == nil {
 			t.Error("BeforeCommit on an ended transaction")
 		}
-		if err := velox.AfterRollback(stale, func(context.Context) {}); err == nil {
+		if err := velox.AfterRollback(ctx, stale, func(context.Context) {}); err == nil {
 			t.Error("AfterRollback on an ended transaction")
 		}
-		if err := velox.AfterRollback(tg.db, func(context.Context) {}); err == nil {
+		if err := velox.AfterRollback(ctx, tg.db, func(context.Context) {}); err == nil {
 			t.Error("AfterRollback outside a transaction")
 		}
 	})
@@ -98,18 +98,18 @@ func TestSavepointRollbackHooks(t *testing.T) {
 		var got []string
 		note := func(s string) func(context.Context) { return func(context.Context) { got = append(got, s) } }
 		err := tg.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-			_ = velox.AfterRollback(tx, note("outer rolled"))
-			_ = velox.BeforeCommit(tx, func(context.Context) error { got = append(got, "outer before"); return nil })
+			_ = velox.AfterRollback(ctx, tx, note("outer rolled"))
+			_ = velox.BeforeCommit(ctx, tx, func(context.Context) error { got = append(got, "outer before"); return nil })
 			err := tx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error {
-				_ = velox.AfterRollback(sp, note("savepoint rolled"))
-				_ = velox.AfterCommit(sp, note("savepoint after"))
-				_ = velox.BeforeCommit(sp, func(context.Context) error { got = append(got, "savepoint before"); return nil })
+				_ = velox.AfterRollback(ctx, sp, note("savepoint rolled"))
+				_ = velox.AfterCommit(ctx, sp, note("savepoint after"))
+				_ = velox.BeforeCommit(ctx, sp, func(context.Context) error { got = append(got, "savepoint before"); return nil })
 				return errors.New("undo")
 			})
 			if err == nil {
 				t.Error("the nested Tx succeeded")
 			}
-			return velox.AfterCommit(tx, note("outer after"))
+			return velox.AfterCommit(ctx, tx, note("outer after"))
 		})
 		if err != nil {
 			t.Fatal(err)

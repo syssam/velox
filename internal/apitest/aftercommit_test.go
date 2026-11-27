@@ -27,7 +27,7 @@ func TestAfterCommitRunsAfterTheCommit(t *testing.T) {
 			return err
 		}
 		for _, name := range []string{"first", "second"} {
-			if err := velox.AfterCommit(tx, func(ctx context.Context) {
+			if err := velox.AfterCommit(ctx, tx, func(ctx context.Context) {
 				if ctx.Done() != nil || ctx.Value(afterKey{}) != "v" {
 					t.Errorf("%s: Done %v, value %v", name, ctx.Done(), ctx.Value(afterKey{}))
 				}
@@ -55,7 +55,7 @@ func TestAfterCommitNotOnRollback(t *testing.T) {
 	db := useTxDB(t)
 	ran := 0
 	queue := func(tx *velox.DB) {
-		if err := velox.AfterCommit(tx, func(context.Context) { ran++ }); err != nil {
+		if err := velox.AfterCommit(ctx, tx, func(context.Context) { ran++ }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -83,7 +83,7 @@ func TestAfterCommitSavepoint(t *testing.T) {
 	db := useTxDB(t)
 	var got []string
 	q := func(tx *velox.DB, s string) {
-		if err := velox.AfterCommit(tx, func(context.Context) { got = append(got, s) }); err != nil {
+		if err := velox.AfterCommit(ctx, tx, func(context.Context) { got = append(got, s) }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -140,13 +140,13 @@ func TestAfterCommitStaleSavepoint(t *testing.T) {
 		if err := tx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { released = sp; return nil }); err != nil {
 			return err
 		}
-		if err := velox.AfterCommit(rolled, fn); !errors.Is(err, velox.ErrNoTx) {
+		if err := velox.AfterCommit(ctx, rolled, fn); !errors.Is(err, velox.ErrNoTx) {
 			t.Error("a rolled-back savepoint's DB queued a function")
 		}
-		if err := velox.AfterCommit(released, fn); !errors.Is(err, velox.ErrNoTx) {
+		if err := velox.AfterCommit(ctx, released, fn); !errors.Is(err, velox.ErrNoTx) {
 			t.Error("a released savepoint's DB queued a function")
 		}
-		return velox.AfterCommit(tx, func(context.Context) {})
+		return velox.AfterCommit(ctx, tx, func(context.Context) {})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func TestAfterCommitRefusals(t *testing.T) {
 	db := useTxDB(t)
 	ran := false
 	fn := func(context.Context) { ran = true }
-	if err := velox.AfterCommit(db, fn); !errors.Is(err, velox.ErrNoTx) || errors.Is(err, velox.ErrAdoptedTx) || !strings.Contains(err.Error(), "no transaction") {
+	if err := velox.AfterCommit(ctx, db, fn); !errors.Is(err, velox.ErrNoTx) || errors.Is(err, velox.ErrAdoptedTx) || !strings.Contains(err.Error(), "no transaction") {
 		t.Errorf("outside a transaction: %v", err)
 	}
 	if velox.InTx(db) {
@@ -172,14 +172,14 @@ func TestAfterCommitRefusals(t *testing.T) {
 	var kept *velox.DB
 	if err := db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
 		kept = tx
-		if err := velox.AfterCommit(tx, nil); err == nil || !strings.Contains(err.Error(), "nil") {
+		if err := velox.AfterCommit(ctx, tx, nil); err == nil || !strings.Contains(err.Error(), "nil") {
 			t.Errorf("nil fn: %v", err)
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := velox.AfterCommit(kept, fn); !errors.Is(err, velox.ErrNoTx) || !strings.Contains(err.Error(), "ended") {
+	if err := velox.AfterCommit(ctx, kept, fn); !errors.Is(err, velox.ErrNoTx) || !strings.Contains(err.Error(), "ended") {
 		t.Errorf("after the transaction: %v", err)
 	}
 	if !velox.InTx(kept) {
@@ -190,9 +190,9 @@ func TestAfterCommitRefusals(t *testing.T) {
 		t.Error("InTx of a UseTx DB is false")
 	}
 	for _, refuse := range []func(*velox.DB) error{
-		func(d *velox.DB) error { return velox.AfterCommit(d, fn) },
-		func(d *velox.DB) error { return velox.AfterRollback(d, fn) },
-		func(d *velox.DB) error { return velox.BeforeCommit(d, func(context.Context) error { return nil }) },
+		func(d *velox.DB) error { return velox.AfterCommit(ctx, d, fn) },
+		func(d *velox.DB) error { return velox.AfterRollback(ctx, d, fn) },
+		func(d *velox.DB) error { return velox.BeforeCommit(ctx, d, func(context.Context) error { return nil }) },
 	} {
 		if err := refuse(vtx); !errors.Is(err, velox.ErrAdoptedTx) || errors.Is(err, velox.ErrNoTx) || !strings.Contains(err.Error(), "UseTx") {
 			t.Errorf("UseTx: %v", err)
@@ -225,7 +225,7 @@ func TestAfterCommitPanics(t *testing.T) {
 				return err
 			}
 			for i := range 3 {
-				if err := velox.AfterCommit(tx, func(context.Context) {
+				if err := velox.AfterCommit(ctx, tx, func(context.Context) {
 					got = append(got, i)
 					if i != 1 {
 						panic(i)
@@ -250,7 +250,7 @@ func TestAfterCommitFromAHook(t *testing.T) {
 	ran := 0
 	db := useTxDB(t)
 	hooked := velox.Open(velox.SQLite, velox.Pool(db), velox.WithHooks[testmodel.Invoice](velox.Before(func(_ context.Context, m *velox.Mutation) error {
-		return velox.AfterCommit(m.DB(), func(context.Context) { ran++ })
+		return velox.AfterCommit(ctx, m.DB(), func(context.Context) { ran++ })
 	}, velox.OpInsert))).WithoutPolicy("velox tests")
 	err := hooked.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		return tx.Insert(&testmodel.Invoice{OrgID: 1, Number: "a", Data: []byte{}}).Exec(ctx)
@@ -271,30 +271,57 @@ func TestAfterCommitFromAHook(t *testing.T) {
 	}
 }
 
-// TestNoTxDoesNotMeanCommitted: ErrNoTx says the DB given is not a running
-// transaction's, not that the work is committed. Under a transaction's
-// context the pool DB gets it though its statements join the transaction, a
-// savepoint's DB gets it once the savepoint returned while the transaction
-// runs, and an ended transaction's DB gets it after a rollback too.
-func TestNoTxDoesNotMeanCommitted(t *testing.T) {
-	db := useTxDB(t)
-	fn := func(context.Context) {}
+// TestQueueResolvesFromContext: under the context a transaction's fn got, the
+// DB that began it queues as its statements join (0171): on the transaction,
+// or on the savepoint whose fn got the context. The same DB under another
+// context, another DB under this one, and a handle whose transaction or
+// savepoint ended are refused with ErrNoTx, which says the handle is not a
+// running transaction's, not that the work is committed.
+func TestQueueResolvesFromContext(t *testing.T) {
+	db, other := useTxDB(t), useTxDB(t)
+	var got []string
+	note := func(s string) func(context.Context) { return func(context.Context) { got = append(got, s) } }
 	var released, kept *velox.DB
-	_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		if err := velox.AfterCommit(db, fn); !errors.Is(err, velox.ErrNoTx) {
+	err := db.Tx(ctx, func(tctx context.Context, tx *velox.DB) error {
+		if err := velox.AfterCommit(tctx, db, note("commit")); err != nil {
 			t.Errorf("pool DB under the transaction's ctx: %v", err)
 		}
-		if _, ok := velox.TxFrom(ctx, db); !ok {
-			t.Error("TxFrom finds no transaction for the pool DB under its ctx")
+		if err := velox.BeforeCommit(tctx, db, func(context.Context) error { got = append(got, "before"); return nil }); err != nil {
+			t.Errorf("BeforeCommit, pool DB under the transaction's ctx: %v", err)
 		}
-		_ = tx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { released = sp; return nil })
-		if err := velox.AfterCommit(released, fn); !errors.Is(err, velox.ErrNoTx) {
+		if err := velox.AfterCommit(ctx, db, note("never")); !errors.Is(err, velox.ErrNoTx) {
+			t.Errorf("pool DB under another ctx: %v", err)
+		}
+		if err := velox.AfterCommit(tctx, other, note("never")); !errors.Is(err, velox.ErrNoTx) {
+			t.Errorf("another DB under the transaction's ctx: %v", err)
+		}
+		_ = tx.Tx(tctx, func(sctx context.Context, sp *velox.DB) error {
+			released = sp
+			if err := velox.AfterRollback(sctx, db, note("savepoint rolled back")); err != nil {
+				t.Errorf("AfterRollback, pool DB under a savepoint's ctx: %v", err)
+			}
+			return errors.New("roll the savepoint back")
+		})
+		if err := velox.AfterCommit(tctx, released, note("never")); !errors.Is(err, velox.ErrNoTx) {
 			t.Errorf("returned savepoint's DB, transaction running: %v", err)
 		}
 		kept = tx
-		return errors.New("roll back")
+		return nil
 	})
-	if err := velox.AfterCommit(kept, fn); !errors.Is(err, velox.ErrNoTx) {
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"before", "savepoint rolled back", "commit"}; !slices.Equal(got, want) {
+		t.Errorf("ran %v, want %v", got, want)
+	}
+	if err := velox.AfterCommit(ctx, kept, note("never")); !errors.Is(err, velox.ErrNoTx) {
+		t.Errorf("ended transaction's DB: %v", err)
+	}
+	_ = db.Tx(ctx, func(tctx context.Context, tx *velox.DB) error { kept = tx; return errors.New("roll back") })
+	if err := velox.AfterCommit(ctx, kept, note("never")); !errors.Is(err, velox.ErrNoTx) {
 		t.Errorf("rolled-back transaction's DB: %v", err)
+	}
+	if slices.Contains(got, "never") {
+		t.Errorf("a refused function ran: %v", got)
 	}
 }
