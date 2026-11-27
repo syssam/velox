@@ -110,7 +110,7 @@ var roles = func() map[string]funcRole {
 	for _, name := range []string{"With", "SkipLocked", "NoWait", "Omit", "SelectRaw", "Distinct"} {
 		m[veloxPath+".Query."+name] = funcRole{roleKeep, 0}
 	}
-	for _, name := range []string{"Unordered", "OrderValues", "AfterValues"} {
+	for _, name := range []string{"Unordered", "OrderValues", "AfterValues", "Before"} {
 		m[enginePath+".TableQuery."+name] = funcRole{roleKeep, 0}
 	}
 	for _, name := range []string{"All", "Iter", "Values", "IDs", "Rows", "SQL"} {
