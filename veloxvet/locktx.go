@@ -403,7 +403,7 @@ func runLockTx(pass *analysis.Pass) (any, error) {
 	// A function that calls one whose summary is being computed, through
 	// recursion, sees that one's locks from the previous pass; the passes
 	// go on until no lock changes.
-	for round := 0; round < maxRounds; round++ {
+	for range maxRounds {
 		c.sums, c.seen, c.recur = map[*ssa.Function]*lockSum{}, map[token.Pos]bool{}, false
 		for _, fn := range roots {
 			c.summary(fn)
@@ -899,7 +899,7 @@ func (c *lockChecker) provenance(v ssa.Value) *handle {
 	d, outer := c.depth, c.low
 	c.openH[v], c.provH[v] = d, &handle{}
 	var h *handle
-	done := false
+	var done bool
 	for round := 0; ; round++ {
 		c.low = noLow
 		h = c.provenance1(v)
@@ -1135,45 +1135,51 @@ func (c *lockChecker) fieldProvenance(a ssa.Value, field string, at ssa.Instruct
 		if r == at {
 			continue // the call being judged, given the struct's address
 		}
-		switch r := r.(type) {
-		case *ssa.DebugRef:
-		case *ssa.UnOp:
-			if r.Op != token.MUL {
-				h.merge(unseen)
-			}
-		case *ssa.Store:
-			if r.Addr != alloc {
-				h.merge(unseen) // the address is stored
-				continue
-			}
-			h.merge(c.fieldProvenance(r.Val, field, nil))
-		case *ssa.FieldAddr:
-			if fieldName(r.X.Type(), r.Field) != first {
-				continue
-			}
-			if r.Referrers() == nil {
-				continue
-			}
-			for _, w := range *r.Referrers() {
-				switch w := w.(type) {
-				case *ssa.DebugRef:
-				case *ssa.Store:
-					if w.Addr == r {
-						h.merge(c.fieldProvenance(w.Val, rest, nil))
-					} else {
-						h.merge(unseen)
-					}
-				case *ssa.UnOp:
-					if w.Op != token.MUL {
-						h.merge(unseen)
-					}
-				default:
-					h.merge(unseen) // such as a FieldAddr of a field of the field
-				}
-			}
-		default:
+		h.merge(c.fieldStore(r, alloc, field, first, rest, unseen))
+	}
+	return h
+}
+
+// fieldStore is what fieldProvenance learns of the field from one referrer
+// r of the struct variable alloc: the handles stored in it, or unseen when r
+// could write it in a way the check cannot follow.
+func (c *lockChecker) fieldStore(r ssa.Instruction, alloc *ssa.Alloc, field, first, rest string, unseen *handle) *handle {
+	h := &handle{}
+	switch r := r.(type) {
+	case *ssa.DebugRef:
+	case *ssa.UnOp:
+		if r.Op != token.MUL {
 			h.merge(unseen)
 		}
+	case *ssa.Store:
+		if r.Addr != alloc {
+			h.merge(unseen) // the address is stored
+			break
+		}
+		h.merge(c.fieldProvenance(r.Val, field, nil))
+	case *ssa.FieldAddr:
+		if fieldName(r.X.Type(), r.Field) != first || r.Referrers() == nil {
+			break
+		}
+		for _, w := range *r.Referrers() {
+			switch w := w.(type) {
+			case *ssa.DebugRef:
+			case *ssa.Store:
+				if w.Addr == r {
+					h.merge(c.fieldProvenance(w.Val, rest, nil))
+				} else {
+					h.merge(unseen)
+				}
+			case *ssa.UnOp:
+				if w.Op != token.MUL {
+					h.merge(unseen)
+				}
+			default:
+				h.merge(unseen) // such as a FieldAddr of a field of the field
+			}
+		}
+	default:
+		h.merge(unseen)
 	}
 	return h
 }
@@ -1283,7 +1289,7 @@ func (c *lockChecker) queryPaths(v ssa.Value) []qpath {
 	d, outer := c.depth, c.low
 	c.openP[v], c.provP[v] = d, nil
 	var ps []qpath
-	done := false
+	var done bool
 	for round := 0; ; round++ {
 		c.low = noLow
 		ps = dedupPaths(c.queryPaths1(v))
@@ -1344,8 +1350,10 @@ func pathsKey(ps []qpath) string {
 	return strings.Join(ks, ";")
 }
 
+// onePath is the paths of a query that comes from the handle h alone.
+func onePath(h *handle) []qpath { return []qpath{{h: h}} }
+
 func (c *lockChecker) queryPaths1(v ssa.Value) []qpath {
-	one := func(h *handle) []qpath { return []qpath{{h: h}} }
 	switch v := v.(type) {
 	case *ssa.Phi:
 		var ps []qpath
@@ -1354,67 +1362,23 @@ func (c *lockChecker) queryPaths1(v ssa.Value) []qpath {
 		}
 		return ps
 	case *ssa.Call:
-		fn, obj := callee(v.Common())
-		if obj == nil {
-			return one(other("a query a call returns"))
+		return c.callQueryPaths(v)
+	case *ssa.FreeVar:
+		var ps []qpath
+		for _, b := range c.bindings(v) {
+			ps = append(ps, c.queryPaths(b)...)
 		}
-		key := funcKey(obj)
-		if lockApply[key] {
-			var ps []qpath
-			for _, p := range c.queryPaths(arg(v.Common(), 0)) {
-				ps = append(ps, qpath{h: p.h, lock: v})
-			}
-			return ps
+		return ps
+	case *ssa.Parameter:
+		if v.Parent().Parent() == nil {
+			return onePath(param(slices.Index(v.Parent().Params, v), ""))
 		}
-		if i, ok := queryHandle[key]; ok {
-			return one(c.provenance(arg(v.Common(), i)))
-		}
-		switch r := roles[key]; r.role {
-		case roleKeep, roleLimit, roleAllow, roleFrom:
-			return c.queryPaths(arg(v.Common(), r.arg))
-		case roleNew:
-			return one(other("an entity's edge query"))
-		}
-		if qf := c.queryFromOf(fn, obj); qf != nil {
-			h := &handle{}
-			for _, p := range qf.Params {
-				if a := arg(v.Common(), p); a != nil {
-					h.merge(c.provenance(a))
-				}
-			}
-			ps := []qpath{{h: h}}
-			if qf.Locked {
-				when := qf.When
-				if len(when) == 0 {
-					when = [][]LockCond{{}} // a fact without conditions
-				}
-				for _, g := range when {
-					if gate, live := c.translate(g, v.Common()); live {
-						ps = append(ps, qpath{h: h, lock: v, gate: gate})
-					}
-				}
-			}
-			return ps
-		}
-		return one(other("the query " + obj.Name() + " returns"))
-	case *ssa.Parameter, *ssa.FreeVar:
-		if _, ok := v.(*ssa.FreeVar); ok {
-			var ps []qpath
-			for _, b := range c.bindings(v.(*ssa.FreeVar)) {
-				ps = append(ps, c.queryPaths(b)...)
-			}
-			return ps
-		}
-		p := v.(*ssa.Parameter)
-		if p.Parent().Parent() == nil {
-			return one(param(slices.Index(p.Parent().Params, p), ""))
-		}
-		return one(other("a function literal's parameter " + p.Name()))
+		return onePath(other("a function literal's parameter " + v.Name()))
 	case *ssa.UnOp:
 		if v.Op == token.MUL {
 			vals, ok := c.stored(v.X)
 			if !ok {
-				return one(c.loaded(v.X, c.provenance))
+				return onePath(c.loaded(v.X, c.provenance))
 			}
 			var ps []qpath
 			for _, s := range vals {
@@ -1427,7 +1391,62 @@ func (c *lockChecker) queryPaths1(v ssa.Value) []qpath {
 	case *ssa.Const:
 		return nil
 	}
-	return one(other("a query the check cannot follow"))
+	return onePath(other("a query the check cannot follow"))
+}
+
+// callQueryPaths is queryPaths1 for the query a call returns.
+func (c *lockChecker) callQueryPaths(v *ssa.Call) []qpath {
+	fn, obj := callee(v.Common())
+	if obj == nil {
+		return onePath(other("a query a call returns"))
+	}
+	key := funcKey(obj)
+	if lockApply[key] {
+		var ps []qpath
+		for _, p := range c.queryPaths(arg(v.Common(), 0)) {
+			ps = append(ps, qpath{h: p.h, lock: v})
+		}
+		return ps
+	}
+	if i, ok := queryHandle[key]; ok {
+		return onePath(c.provenance(arg(v.Common(), i)))
+	}
+	switch r := roles[key]; r.role {
+	case roleKeep, roleLimit, roleAllow, roleFrom:
+		return c.queryPaths(arg(v.Common(), r.arg))
+	case roleNew:
+		return onePath(other("an entity's edge query"))
+	}
+	if qf := c.queryFromOf(fn, obj); qf != nil {
+		return c.fromPaths(v, qf)
+	}
+	return onePath(other("the query " + obj.Name() + " returns"))
+}
+
+// fromPaths is the paths of the query the call v returns, a function whose
+// QueryFrom is qf: the handles of the arguments it starts from, and one
+// locked path for each of qf's conditions that can hold.
+func (c *lockChecker) fromPaths(v *ssa.Call, qf *QueryFrom) []qpath {
+	h := &handle{}
+	for _, p := range qf.Params {
+		if a := arg(v.Common(), p); a != nil {
+			h.merge(c.provenance(a))
+		}
+	}
+	ps := []qpath{{h: h}}
+	if !qf.Locked {
+		return ps
+	}
+	when := qf.When
+	if len(when) == 0 {
+		when = [][]LockCond{{}} // a fact without conditions
+	}
+	for _, g := range when {
+		if gate, live := c.translate(g, v.Common()); live {
+			ps = append(ps, qpath{h: h, lock: v, gate: gate})
+		}
+	}
+	return ps
 }
 
 // queryFromOf is the QueryFrom of a call's function: by its summary in
@@ -1584,56 +1603,65 @@ func (c *lockChecker) uses(v ssa.Value, seen map[ssa.Value]bool) (ok, used bool)
 		return false, false
 	}
 	for _, r := range *refs {
-		switch r := r.(type) {
-		case *ssa.DebugRef:
-		case ssa.CallInstruction:
-			cm := r.Common()
-			if cm.Value == v && !cm.IsInvoke() {
-				for _, a := range cm.Args {
-					if isDB(a.Type()) && !c.provenance(a).txOnly() {
-						return false, false
-					}
-				}
-				used = true
-			}
-			for j, a := range cm.Args {
-				if a != v {
-					continue
-				}
-				if !c.txArg(cm, j) {
-					return false, false
-				}
-				used = true
-			}
-		case *ssa.MakeClosure:
-			lit := r.Fn.(*ssa.Function)
-			for k, b := range r.Bindings {
-				if b == v {
-					ok, u := c.uses(lit.FreeVars[k], seen)
-					if !ok {
-						return false, false
-					}
-					used = used || u
-				}
-			}
-		case *ssa.BinOp:
-			if !nilCompare(r) {
-				return false, false
-			}
-		case *ssa.Store:
-			// A variable captured by a function literal: go/ssa
-			// spills it to an Alloc that the literal loads.
-			if r.Val != v {
-				return false, false
-			}
-			ok, u := c.loads(r.Addr, seen)
-			if !ok {
-				return false, false
-			}
-			used = used || u
-		default:
+		ok, u := c.useOf(v, r, seen)
+		if !ok {
 			return false, false
 		}
+		used = used || u
+	}
+	return true, used
+}
+
+// useOf is uses for one referrer r of v.
+func (c *lockChecker) useOf(v ssa.Value, r ssa.Instruction, seen map[ssa.Value]bool) (ok, used bool) {
+	switch r := r.(type) {
+	case *ssa.DebugRef:
+		return true, false
+	case ssa.CallInstruction:
+		return c.callUse(v, r.Common())
+	case *ssa.MakeClosure:
+		lit := r.Fn.(*ssa.Function)
+		for k, b := range r.Bindings {
+			if b == v {
+				ok, u := c.uses(lit.FreeVars[k], seen)
+				if !ok {
+					return false, false
+				}
+				used = used || u
+			}
+		}
+		return true, used
+	case *ssa.BinOp:
+		return nilCompare(r), false
+	case *ssa.Store:
+		// A variable captured by a function literal: go/ssa
+		// spills it to an Alloc that the literal loads.
+		if r.Val != v {
+			return false, false
+		}
+		return c.loads(r.Addr, seen)
+	}
+	return false, false
+}
+
+// callUse is uses for the call cm that has v as its callee or an argument.
+func (c *lockChecker) callUse(v ssa.Value, cm *ssa.CallCommon) (ok, used bool) {
+	if cm.Value == v && !cm.IsInvoke() {
+		for _, a := range cm.Args {
+			if isDB(a.Type()) && !c.provenance(a).txOnly() {
+				return false, false
+			}
+		}
+		used = true
+	}
+	for j, a := range cm.Args {
+		if a != v {
+			continue
+		}
+		if !c.txArg(cm, j) {
+			return false, false
+		}
+		used = true
 	}
 	return true, used
 }
