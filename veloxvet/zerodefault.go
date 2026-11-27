@@ -437,8 +437,8 @@ func (z *zeroChecker) zeros(body *ast.BlockStmt, call *ast.CallExpr, arg ast.Exp
 	}
 	switch x := arg.(type) {
 	case *ast.CompositeLit: // InsertAll's []E{...}
-		if _, ok := types.Unalias(z.pass.TypesInfo.TypeOf(x)).(*types.Slice); !ok {
-			return nil
+		if _, ok := types.Unalias(z.pass.TypesInfo.TypeOf(x)).Underlying().(*types.Slice); !ok {
+			return nil // a named slice type counts, as InsertAll takes its elements
 		}
 		var out []zero
 		for _, el := range x.Elts {
@@ -455,6 +455,23 @@ func (z *zeroChecker) zeros(body *ast.BlockStmt, call *ast.CallExpr, arg ast.Exp
 	return nil
 }
 
+// literalField is the field name and value of the i-th element el of a
+// struct literal of type st: by its key, or by its position when it has
+// none.
+func literalField(st *types.Struct, i int, el ast.Expr) (name string, val ast.Expr, ok bool) {
+	if kv, isKV := el.(*ast.KeyValueExpr); isKV {
+		key, isIdent := kv.Key.(*ast.Ident)
+		if !isIdent {
+			return "", nil, false
+		}
+		return key.Name, kv.Value, true
+	}
+	if st == nil || i >= st.NumFields() {
+		return "", nil, false
+	}
+	return st.Field(i).Name(), el, true
+}
+
 // literal returns the constant zeros lit, an entity's composite literal,
 // gives fields with defaults, but those in skip.
 func (z *zeroChecker) literal(lit *ast.CompositeLit, skip map[string]bool) []zero {
@@ -463,17 +480,14 @@ func (z *zeroChecker) literal(lit *ast.CompositeLit, skip map[string]bool) []zer
 		return nil
 	}
 	var out []zero
-	for _, el := range lit.Elts {
-		kv, ok := el.(*ast.KeyValueExpr)
-		if !ok {
+	st, _ := types.Unalias(z.pass.TypesInfo.TypeOf(lit)).Underlying().(*types.Struct)
+	for i, el := range lit.Elts {
+		name, val, ok := literalField(st, i, el)
+		if !ok || skip[name] {
 			continue
 		}
-		key, ok := kv.Key.(*ast.Ident)
-		if !ok || skip[key.Name] {
-			continue
-		}
-		if _, has := defs.field(key.Name); has && z.constZero(kv.Value) {
-			out = append(out, zero{kv.Value, key.Name, defs})
+		if _, has := defs.field(name); has && z.constZero(val) {
+			out = append(out, zero{val, name, defs})
 		}
 	}
 	return out

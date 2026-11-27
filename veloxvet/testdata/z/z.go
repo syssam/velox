@@ -242,3 +242,13 @@ func generic[E any, PE velox.Entity[E]](ctx context.Context, db *velox.DB) {
 	var e E
 	db.Insert[E, PE](&e).Exec(ctx)
 }
+
+type bareList []gen.Bare
+
+// A named slice type is InsertAll's slice, and an element without a key
+// names its field by position.
+func shapes(ctx context.Context, db *velox.DB) {
+	db.InsertAll(bareList{{On: false}}).Exec(ctx) // want `On is false, its zero value, which the field's default replaces: the insert stores true; a Set of the column in the insert stores false`
+	db.Insert(&gen.Bare{1, false}).Exec(ctx)      // want `On is false, its zero value, which the field's default replaces: the insert stores true; a Set of the column in the insert stores false`
+	db.Insert(&gen.Bare{1, true}).Exec(ctx)
+}
