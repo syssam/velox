@@ -108,11 +108,10 @@ func orderThing(t *testing.T) *plugin.Model {
 }
 
 // annotatedOrder strips from orderThing what orderfields=annotated refuses:
-// an order on a json field, an order on a decimal, and an unguarded order on
-// a field with a directive.
+// an order on a json field and an unguarded order on a field with a
+// directive.
 func annotatedOrder(t *testing.T, m *plugin.Model) *plugin.Model {
 	m.Entities[0].Fields[10].Annotations = nil // data
-	m.Entities[0].Fields[11].Annotations = ann(t, graphql.Type("Decimal"))
 	m.Entities[0].Fields[14].Annotations = ann(t, graphql.OrderField("TAG"), graphql.OrderUnguarded(), sensitiveDir())
 	return m
 }
@@ -120,13 +119,14 @@ func annotatedOrder(t *testing.T, m *plugin.Model) *plugin.Model {
 // Under orderfields=all the order enum lists every orderable field: the key
 // first, as its OrderField asks, then each string that is not Text, time,
 // int, int64, bool, enum and float in the schema's order, named by its
-// OrderField or its name upper-cased; a foreign key it declares too. An
+// OrderField or its name upper-cased; a foreign key it declares too; an
+// Other field (a decimal) only when its OrderField asks. An
 // application's directive does not guard the order. By default the order is
 // the annotated fields alone, and a directive guards it.
 func TestOrderFieldsAll(t *testing.T) {
 	m := orderThing(t)
 	s, sdl := loadWith(t, m, Config{OrderFields: "all"}, "scalar Decimal\n"+sensitiveDecl)
-	want := []string{"ID", "NAME", "CREATED_AT", "COUNT", "BIG", "ACTIVE", "STATUS", "RATIO", "TAG", "CUSTOMER_ID"}
+	want := []string{"ID", "NAME", "CREATED_AT", "COUNT", "BIG", "ACTIVE", "STATUS", "RATIO", "AMOUNT", "TAG", "CUSTOMER_ID"}
 	if got := enumValuesOf(s, "ThingOrderField"); !slices.Equal(got, want) {
 		t.Errorf("ThingOrderField: %v, want %v\n%s", got, want, sdl)
 	}
@@ -143,7 +143,7 @@ func TestOrderFieldsAll(t *testing.T) {
 		t.Errorf("annotated, an order on a field with a directive: %v", err)
 	}
 	s, sdl = load(t, annotatedOrder(t, orderThing(t)), "scalar Decimal\n"+sensitiveDecl)
-	if got := enumValuesOf(s, "ThingOrderField"); !slices.Equal(got, []string{"ID", "TAG"}) {
+	if got := enumValuesOf(s, "ThingOrderField"); !slices.Equal(got, []string{"ID", "AMOUNT", "TAG"}) {
 		t.Errorf("annotated: %v\n%s", got, sdl)
 	}
 
@@ -165,7 +165,6 @@ func TestOrderFieldsAllWarns(t *testing.T) {
 	want := []string{
 		`Thing.body: graphql.OrderUnguarded() is dropped: orderfields=all orders no field of type string of unbounded size (field.Text)`,
 		`Thing.data: graphql.OrderField("DATA") is dropped: orderfields=all orders no field of type json (map[string]any)`,
-		`Thing.amount: graphql.OrderField("AMOUNT") is dropped: orderfields=all orders no field of type other (decimal.Decimal)`,
 	}
 	if got := warningsOf(t, m, Config{OrderFields: "all"}); !slices.Equal(got, want) {
 		t.Errorf("warnings:\n got %q\nwant %q", got, want)

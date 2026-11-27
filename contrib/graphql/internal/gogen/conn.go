@@ -335,8 +335,24 @@ func termBase(f *file, e *plugin.Entity, fd *plugin.Field) (string, error) {
 		return f.use("time", "time") + ".Time", nil
 	case "uuid":
 		return "[16]byte", nil
+	case "other":
+		return otherBase(e, fd)
 	}
 	return "", fmt.Errorf("schema %s, field %s: a connection orders by it, and keyset paging cannot continue after %s %s value", e.Name, fd.Name, english.Article(fd.Type), fd.Type)
+}
+
+// otherBase is the Go type a cursor holds the values of the Other field fd
+// as: a struct (a decimal library's type) is held as its text, so its own
+// type, which gqlgraph checks at run time has the text form and Value that
+// needs; any other Go type is held as the predeclared type of its kind.
+func otherBase(e *plugin.Entity, fd *plugin.Field) (string, error) {
+	switch k := fd.Kind; {
+	case k == "struct":
+		return fd.ElemType, nil
+	case k == "string" || k == "bool" || floatKinds[k] || integerKinds[k]:
+		return k, nil
+	}
+	return "", fmt.Errorf("schema %s, field %s: a connection orders by it, and keyset paging cannot continue after an other value of Go type %s: its kind is %q, and a cursor holds a number, a string, a bool or a struct with a text form", e.Name, fd.Name, fd.ElemType, fd.Kind)
 }
 
 // integerKinds and floatKinds are the reflect kinds of the Go types that

@@ -17,6 +17,13 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- velox-graphql: `graphql.OrderField` on an Other field of a decimal type (a
+  struct with `MarshalText`, `UnmarshalText` and `Value`, such as
+  shopspring's `decimal.Decimal`) orders a connection and pages it by keyset.
+  The cursor holds the decimal's text. The column must be numeric
+  (`SchemaType`). `orderfields=all` lists such a field only when
+  `OrderField` asks. No generated output changes for other fields
+  (decision 0186).
 - velox-graphql: a field with an application directive that has where
   predicates or an order value is no longer warned of. Filtering and ordering
   by it is the application's access control, as under entgql. The refusal of

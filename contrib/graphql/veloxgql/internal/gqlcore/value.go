@@ -26,7 +26,8 @@ var (
 
 // JSONValue is v as a cursor holds it in JSON: integers stay numbers, so
 // that json.Marshal writes every digit; times are RFC 3339 with nanoseconds
-// and the zone offset; UUIDs are strings; floats with no JSON number are the
+// and the zone offset; UUIDs are strings; a type with a text form (a
+// decimal's) is that text; floats with no JSON number are the
 // strings NaN, +Inf and -Inf.
 func JSONValue(v any) any {
 	switch x := v.(type) {
@@ -34,6 +35,12 @@ func JSONValue(v any) any {
 		return x.Format(time.RFC3339Nano)
 	case [16]byte:
 		return FormatUUID(x)
+	case encoding.TextMarshaler:
+		// A decimal's type: its text, which SetValue reads back through
+		// UnmarshalText, whatever its MarshalJSON writes.
+		if b, err := x.MarshalText(); err == nil {
+			return string(b)
+		}
 	case float64:
 		if math.IsNaN(x) || math.IsInf(x, 0) {
 			return strconv.FormatFloat(x, 'g', -1, 64)

@@ -2,6 +2,8 @@ package gqlgraph
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding"
 	"errors"
 	"fmt"
 	"reflect"
@@ -280,7 +282,7 @@ func newTerm(t untyped.Table, c *Column, dir veloxgql.OrderDirection) (term, err
 	}
 	tm.base = baseType(ft)
 	if tm.base == nil {
-		return tm, fmt.Errorf("veloxgql: %s.%s: keyset paging cannot continue after a %v", info.Name, info.Columns[c.Index].Field, ft)
+		return tm, fmt.Errorf("veloxgql: %s.%s: keyset paging cannot continue after a %v: a cursor holds a struct only through its text, so its type needs encoding.TextMarshaler, encoding.TextUnmarshaler and driver.Valuer", info.Name, info.Columns[c.Index].Field, ft)
 	}
 	return tm, nil
 }
@@ -301,17 +303,35 @@ var (
 
 // baseType is the base type of a field of the type ft, the type the
 // generated code's term converted it to: a time.Time is one, a 16-byte array
-// is a [16]byte, and any other the predeclared type of its kind; nil for a
-// type keyset paging does not continue after.
+// is a [16]byte, a struct with a text form that the database reads and writes
+// (a decimal's type) is itself, and any other the predeclared type of its
+// kind; nil for a type keyset paging does not continue after.
 func baseType(ft reflect.Type) reflect.Type {
 	switch {
 	case ft.Kind() == reflect.Struct && ft.ConvertibleTo(timeType):
 		return timeType
 	case ft.Kind() == reflect.Array && ft.Len() == 16 && ft.Elem().Kind() == reflect.Uint8:
 		return uuidType
+	case ft.Kind() == reflect.Struct && textValue(ft):
+		return ft
 	}
 	return kindType[ft.Kind()]
 }
+
+// textValue reports whether a cursor can hold a value of the struct type ft:
+// as its text (ft's MarshalText, read back by *ft's UnmarshalText), which
+// the database takes and gives as ft's Value and *ft's Scan. A decimal's
+// type has all three.
+func textValue(ft reflect.Type) bool {
+	return ft.Implements(textMarshalerType) && ft.Implements(valuerType) &&
+		reflect.PointerTo(ft).Implements(textUnmarshalerType)
+}
+
+var (
+	textMarshalerType   = reflect.TypeFor[encoding.TextMarshaler]()
+	textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
+	valuerType          = reflect.TypeFor[driver.Valuer]()
+)
 
 // order is the term's column ordered ascending, or descending for desc.
 // An expression keeps its NULL placement, turned with its direction.

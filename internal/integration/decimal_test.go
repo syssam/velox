@@ -2,6 +2,7 @@ package integration
 
 import (
 	"math/big"
+	"slices"
 	"testing"
 
 	"github.com/syssam/velox"
@@ -251,6 +252,61 @@ func TestDecimalExprArgument(t *testing.T) {
 		} {
 			if c, err := tg.db.Query[testmodel.Ledger]().Where(p).Count(ctx); err != nil || c != 1 {
 				t.Errorf("Where %d: %d %v", i, c, err)
+			}
+		}
+	})
+}
+
+// TestDecimalKeysetPaging: a query ordered by a decimal column, ascending
+// and descending with the key breaking the ties, pages exactly with After at
+// every page size, in numeric order on every dialect: 9 comes before 100,
+// and a negative one before both. The column is numeric, so the value After
+// compares with, bound as text, is a number there (decision 0148).
+func TestDecimalKeysetPaging(t *testing.T) {
+	eachJSON(t, func(t *testing.T, tg target) {
+		tg.exec(t, "DROP TABLE IF EXISTS ledgers")
+		tg.exec(t, ledgerDDL(tg.d))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS ledgers") })
+
+		L := testmodel.Ledgers
+		amounts := []testmodel.Dec{"9", "100", "25.5", "100", "-3", "0.5", "1000", "9.0001"}
+		rows := make([]testmodel.Ledger, len(amounts))
+		for i, a := range amounts {
+			rows[i] = testmodel.Ledger{Amount: a}
+		}
+		if err := tg.db.InsertAll(rows).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		// The ids in amount order: -3, 0.5, 9, 9.0001, 25.5, 100 and 100 (by key), 1000.
+		ids := func(rs []*testmodel.Ledger) (out []int64) {
+			for _, r := range rs {
+				out = append(out, r.ID)
+			}
+			return out
+		}
+		asc := []int64{rows[4].ID, rows[5].ID, rows[0].ID, rows[7].ID, rows[2].ID, rows[1].ID, rows[3].ID, rows[6].ID}
+		desc := []int64{rows[6].ID, rows[3].ID, rows[1].ID, rows[2].ID, rows[7].ID, rows[0].ID, rows[5].ID, rows[4].ID}
+		for _, c := range []struct {
+			name  string
+			order []velox.Order[testmodel.Ledger]
+			want  []int64
+		}{
+			{"asc", []velox.Order[testmodel.Ledger]{L.Amount.Asc(), L.ID.Asc()}, asc},
+			{"desc", []velox.Order[testmodel.Ledger]{L.Amount.Desc(), L.ID.Desc()}, desc},
+		} {
+			for n := 1; n <= len(c.want)+1; n++ {
+				q := tg.db.Query[testmodel.Ledger]().OrderBy(c.order...)
+				var got []int64
+				page, err := q.Limit(n).All(ctx)
+				for ; err == nil && len(page) > 0; page, err = q.After(page[len(page)-1]).Limit(n).All(ctx) {
+					got = append(got, ids(page)...)
+				}
+				if err != nil {
+					t.Fatalf("%s, pages of %d: %v", c.name, n, err)
+				}
+				if !slices.Equal(got, c.want) {
+					t.Errorf("%s, pages of %d: ids %v, want %v", c.name, n, got, c.want)
+				}
 			}
 		}
 	})

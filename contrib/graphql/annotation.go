@@ -400,6 +400,17 @@ func FieldName(name string) Annotation { return Annotation{FieldName: name} }
 
 // OrderField makes a field orderable, with this name for its order enum value.
 //
+// On an Other field whose Go type is a struct with a text form (a decimal
+// library's: encoding.TextMarshaler, encoding.TextUnmarshaler and
+// driver.Valuer), a cursor holds the value as its text. The column must be a
+// numeric type, as SchemaType names one, so that the database orders it as a
+// number; a text column orders "100" before "9". SQLite stores a numeric
+// column as a float, so a decimal of more than about 15 digits is rounded when
+// it is written, and two values may tie: use PostgreSQL or MySQL for money.
+// orderfields=all lists such a field only when OrderField asks for it. The
+// plugin refuses an Other field of a Go type with no such form at the first
+// connection that orders by it.
+//
 // On a to-many edge, as entgql's, it orders the connections to the edge's
 // entity by the number of the edge's nodes:
 //

@@ -20,9 +20,12 @@ import (
 // orderable reports whether orderfields=all lists the field f by its type:
 // a string that is not field.Text, a time, an int or an int64 (no other
 // width), a bool, an enum or a float. The key is listed only with
-// graphql.OrderField (allOrder).
-func orderable(f *plugin.Field) bool {
+// graphql.OrderField (allOrder), and so is an Other field, a decimal's: its
+// type may have no order the database keeps.
+func orderable(f *plugin.Field, a graphql.Annotation) bool {
 	switch f.Type {
+	case "other":
+		return a.OrderField != ""
 	case "string":
 		return f.Size < math.MaxInt32
 	case "time", "int", "int64", "bool", "enum", "float32", "float64":
@@ -146,9 +149,10 @@ func equalityDefault(name, kind string) bool {
 //     none: any json field but a slice of scalars.
 //
 // Under orderfields=all an order on a field of a type the order enum does
-// not list (a decimal, a json field, a Text) is dropped with a warning too,
-// and under jsontypes=named a json field of a named Go type takes the type's
-// name (jsonType), unless graphql.Type gives one.
+// not list (a json field, a Text) is dropped with a warning too; an Other
+// field (a decimal) is listed only when graphql.OrderField asks. Under
+// jsontypes=named a json field of a named Go type takes the type's name
+// (jsonType), unless graphql.Type gives one.
 func (g *graph) adjust(o *object, i int, a graphql.Annotation) (_ graphql.Annotation, warnings []string) {
 	f := o.ent.Fields[i]
 	pk := o.hasID && i == o.ent.PrimaryKey[0]
@@ -164,7 +168,7 @@ func (g *graph) adjust(o *object, i int, a graphql.Annotation) (_ graphql.Annota
 	case ordered && skipped:
 		warnings = append(warnings, field+": "+orderAsked(a)+" has no effect on a field graphql.Skip leaves out of the type, whose values would be in the cursors")
 		a.OrderField, a.OrderUnguarded = "", false
-	case ordered && g.cfg.orderAll() && !pk && !orderable(f):
+	case ordered && g.cfg.orderAll() && !pk && !orderable(f, a):
 		warnings = append(warnings, orderWarning(field, f, a))
 		a.OrderField, a.OrderUnguarded = "", false
 	}
@@ -201,8 +205,8 @@ func orderAsked(a graphql.Annotation) string {
 // named field (Entity.field) of a type orderfields=all does not order, is
 // dropped:
 //
-//	Thing.amount: graphql.OrderField("AMOUNT") is dropped: orderfields=all
-//	orders no field of type other (decimal.Decimal)
+//	Thing.meta: graphql.OrderField("META") is dropped: orderfields=all
+//	orders no field of type json (map[string]any)
 func orderWarning(field string, f *plugin.Field, a graphql.Annotation) string {
 	typ := f.Type
 	switch {
@@ -237,7 +241,7 @@ func allOrder(o *object, ord *order, by map[string]string) error {
 	for i, f := range e.Fields {
 		a := o.fanns[i]
 		switch {
-		case o.hasID && i == e.PrimaryKey[0], f.Implicit != "", f.Sensitive, !orderable(f),
+		case o.hasID && i == e.PrimaryKey[0], f.Implicit != "", f.Sensitive, !orderable(f, a),
 			a.Skip&(graphql.SkipType|graphql.SkipOrderField) != 0:
 			continue
 		}
