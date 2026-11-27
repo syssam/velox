@@ -951,8 +951,8 @@ func (q TableQuery) Before(row any, vals []any) TableQuery {
 	return q
 }
 
-// reverseOrder is os, each term the other way: its direction and its NULL
-// place flipped. The first term's own slice is never changed.
+// reverseOrder is a copy of os with each term the other way: its direction
+// and its NULL place flipped. os is not changed.
 func reverseOrder(os []OrderTerm) []OrderTerm {
 	out := slices.Clone(os)
 	for i := range out {

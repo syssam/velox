@@ -428,3 +428,46 @@ func TestForeignKeyGenerated(t *testing.T) {
 		}
 	}
 }
+
+// TestMsgpackWindow: msgpack cursors bound a window as velox's own do, the
+// one it ends at making that side's flag true. A window whose cursors are
+// the same row, or in the wrong order, holds no rows and is no error.
+func TestMsgpackWindow(t *testing.T) {
+	ctx := context.Background()
+	db := probeUsers(t)
+	id2, id4 := "gqFpAqF2wA", "gqFpBKF2wA" // the probe's cursors of users 2 and 4
+	for _, c := range []struct {
+		name          string
+		after, before string
+		first, last   *int
+		want          []int64
+	}{
+		{"between 2 and 4", id2, id4, nil, nil, []int64{3}},
+		{"first 1 between 2 and 4", id2, id4, new(1), nil, []int64{3}},
+		{"last 1 between 2 and 4", id2, id4, nil, new(1), []int64{3}},
+		{"the same row", id2, id2, nil, nil, []int64{}},
+		{"4 to 2", id4, id2, nil, nil, []int64{}},
+		{"first 2 before 4", "", id4, new(2), nil, []int64{1, 2}},
+		{"last 2 after 2", id2, "", nil, new(2), []int64{4, 5}},
+	} {
+		var args gqlgraph.Args
+		args.First, args.Last = c.first, c.last
+		if c.after != "" {
+			args.After = msgpackCursor(t, c.after)
+		}
+		if c.before != "" {
+			args.Before = msgpackCursor(t, c.before)
+		}
+		got, err := gqlgraph.PageWith(ctx, db.Query[user](), "User", args, nil, userKey())
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if ids := userIDs(got.Rows); !slices.Equal(ids, c.want) {
+			t.Errorf("%s: %v, want %v", c.name, ids, c.want)
+		}
+		if c.after != "" && c.before != "" && (!got.Info.HasNextPage || !got.Info.HasPreviousPage) {
+			t.Errorf("%s: next %v prev %v, want both: a window's cursors are rows beyond it", c.name, got.Info.HasNextPage, got.Info.HasPreviousPage)
+		}
+	}
+}
