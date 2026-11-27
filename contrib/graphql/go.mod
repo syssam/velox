@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/syssam/graphql-go v0.0.0-20261029022150-3e0050be7462
-	github.com/syssam/velox v0.0.0-00010101000000-000000000000
+	github.com/syssam/velox v1.0.0-rc.1
 	github.com/vektah/gqlparser/v2 v2.5.59
 	modernc.org/sqlite v1.60.1
 )
@@ -32,5 +32,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
-
-replace github.com/syssam/velox => ../..

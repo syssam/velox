@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/syssam/velox v0.0.0-00010101000000-000000000000
+	github.com/syssam/velox v1.0.0-rc.1
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/metric v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
@@ -28,5 +28,3 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
-
-replace github.com/syssam/velox => ../..
