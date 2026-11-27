@@ -11,7 +11,8 @@ found four places where code had to read a message or guess.
   `errors.New`. A caller could not tell a DB in no transaction, whose work is
   committed already, from a `UseTx` one, whose commit is the caller's. An
   event publisher that sends at once when it cannot queue is right for the
-  first and wrong for the second.
+  first and wrong for the second (and for the pool DB under a transaction's
+  context, which the queue functions refuse though its statements join).
 - `IsConstraintError` recognizes a driver's raw error (raw SQL, `Pool`), but
   `errors.As` finds a `*ConstraintError` only where velox made it, so callers
   matched index names in strings.
@@ -40,9 +41,18 @@ passed no op now panics when its hook list is built, which is the first
 `velox-gen` or test run; the one test that pinned the old behaviour is
 replaced by one that pins the panic.
 
-Not done: a context-aware `AfterCommit(ctx, db, fn)`. A statement on the pool
-DB joins the context's transaction (0171) and the queue functions do not, but
-the one-line `TxFrom(ctx, db)` serves, and a changed signature breaks every
-caller. Now that the refusal says `ErrNoTx`, the harm of the gap (a wrong
-guess) is gone. Not done: `HooksInTx`; a hook that must write atomically with
+`ErrNoTx` says the DB given is not a running transaction's. It does not say
+the work is committed: the pool DB gets it under a transaction's context
+(`TestNoTxDoesNotMeanCommitted`), as does a savepoint's DB once it returned
+while the transaction runs. So a publisher that sends at once on `ErrNoTx`
+alone is still wrong there. It must first ask `TxFrom(ctx, db)`. The
+sentinels remove the message matching and separate the `UseTx` case; they do
+not close the gap between the queue functions and 0171.
+
+Open: a context-aware `AfterCommit(ctx, db, fn)`, which resolves the handle
+as `TxFrom` does, is what closes it. It changes the signature of three
+functions, and nextapp builds against main, so it waits for nextapp to be
+clear. Until then `TxFrom(ctx, db)` first is the rule.
+
+Not done: `HooksInTx`; a hook that must write atomically with
 the mutation runs it in `db.Tx`.

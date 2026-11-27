@@ -1965,11 +1965,13 @@ the ones queued while it ran. A hook inside `db.Tx` queues with
 `velox.AfterCommit(m.DB(), fn)`. Call it from the goroutine that runs the
 transaction.
 Outside a transaction, and on a `UseTx` DB, whose commit velox never sees,
-`AfterCommit` returns an error. It matches `ErrNoTx` for a DB in no running
-transaction, where the work is committed already, and `ErrAdoptedTx` for a
-`UseTx` one, where it is not: code that sends an event at once when it cannot
-queue must send only on `ErrNoTx`. `velox.InTx(db)` reports whether a DB is a
-transaction's. One function's panic does not stop the
+`AfterCommit` returns an error. It matches `ErrNoTx` for a DB that is not a
+running transaction's, and `ErrAdoptedTx` for a `UseTx` one. `ErrNoTx` does not
+say the work is committed: the pool DB gets it under a transaction's context
+too, though its statements join that transaction. Code that sends an event at
+once when it cannot queue must first check `velox.TxFrom(ctx, db)` finds no
+transaction, and must wait for its own commit on `ErrAdoptedTx`.
+`velox.InTx(db)` reports whether a DB is a transaction's. One function's panic does not stop the
 others: `Tx` panics again once all have run
 ([ADR 0100](decisions/0100-after-commit-values-and-log.md)).
 

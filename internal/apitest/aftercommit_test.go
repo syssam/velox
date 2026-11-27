@@ -270,3 +270,31 @@ func TestAfterCommitFromAHook(t *testing.T) {
 		t.Errorf("a recorded write: ran %d, %v", ran, err)
 	}
 }
+
+// TestNoTxDoesNotMeanCommitted: ErrNoTx says the DB given is not a running
+// transaction's, not that the work is committed. Under a transaction's
+// context the pool DB gets it though its statements join the transaction, a
+// savepoint's DB gets it once the savepoint returned while the transaction
+// runs, and an ended transaction's DB gets it after a rollback too.
+func TestNoTxDoesNotMeanCommitted(t *testing.T) {
+	db := useTxDB(t)
+	fn := func(context.Context) {}
+	var released, kept *velox.DB
+	_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if err := velox.AfterCommit(db, fn); !errors.Is(err, velox.ErrNoTx) {
+			t.Errorf("pool DB under the transaction's ctx: %v", err)
+		}
+		if _, ok := velox.TxFrom(ctx, db); !ok {
+			t.Error("TxFrom finds no transaction for the pool DB under its ctx")
+		}
+		_ = tx.Tx(ctx, func(_ context.Context, sp *velox.DB) error { released = sp; return nil })
+		if err := velox.AfterCommit(released, fn); !errors.Is(err, velox.ErrNoTx) {
+			t.Errorf("returned savepoint's DB, transaction running: %v", err)
+		}
+		kept = tx
+		return errors.New("roll back")
+	})
+	if err := velox.AfterCommit(kept, fn); !errors.Is(err, velox.ErrNoTx) {
+		t.Errorf("rolled-back transaction's DB: %v", err)
+	}
+}

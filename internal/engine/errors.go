@@ -77,9 +77,11 @@ var (
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = errors.New("statement outside its transaction")
 	// ErrNoTx is returned by AfterCommit, BeforeCommit and AfterRollback, and
-	// by a locking read, when the DB is in no transaction velox began or its
-	// transaction has ended: work done through it is not queued behind a
-	// commit, and is committed already when it returns. A UseTx DB is
+	// by a locking read, when the DB it was given is not a running
+	// transaction's: the pool DB, even under a transaction's context, whose
+	// statements join it (TxFrom finds the handle that does); a transaction's
+	// DB once it ended, committed or rolled back; a savepoint's DB once it
+	// returned. It does not say the work is committed. A UseTx DB is
 	// ErrAdoptedTx, not this.
 	ErrNoTx = errors.New("not in a running transaction")
 	// ErrAdoptedTx is returned by AfterCommit, BeforeCommit and
