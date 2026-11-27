@@ -91,16 +91,10 @@
 // holds its zero value, so a directive that reads a field of the object
 // needs it selected (see "Loading").
 //
-// The application declares such a directive on FIELD_DEFINITION |
-// INPUT_FIELD_DEFINITION, or gqlgen refuses the schema:
-//
-//	directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
-//
-// Upgrading: this is a breaking change for an application that has a
-// directive on a filterable field or edge, or on one a mutation input sets.
-// It must also declare that directive on INPUT_FIELD_DEFINITION, since the
-// where and mutation inputs now carry it. Before, those filters and writes
-// were unguarded.
+// The directive reaches the object type's field only: no where predicate,
+// order value or mutation input carries it (ADR 0156). Which caller may filter
+// or order by such a field, or set it, is the application's access control,
+// as under entgql; the plugin does not warn of it (ADR 0185).
 //
 // An order is not guarded: the cursors hold the field's values and the order
 // of the nodes reveals them. So OrderField on a field with an application

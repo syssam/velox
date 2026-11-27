@@ -166,7 +166,6 @@ func TestOrderFieldsAllWarns(t *testing.T) {
 		`Thing.body: graphql.OrderUnguarded() is dropped: orderfields=all orders no field of type string of unbounded size (field.Text)`,
 		`Thing.data: graphql.OrderField("DATA") is dropped: orderfields=all orders no field of type json (map[string]any)`,
 		`Thing.amount: graphql.OrderField("AMOUNT") is dropped: orderfields=all orders no field of type other (decimal.Decimal)`,
-		unguardedOrder,
 	}
 	if got := warningsOf(t, m, Config{OrderFields: "all"}); !slices.Equal(got, want) {
 		t.Errorf("warnings:\n got %q\nwant %q", got, want)
@@ -176,54 +175,33 @@ func TestOrderFieldsAllWarns(t *testing.T) {
 	}
 }
 
-// unguardedOrder is the warning of orderThing's tagged field, which has
-// @sensitive and an order value orderfields=all gives it.
-const unguardedOrder = "Thing.tagged has @sensitive, but its order value is not guarded by it; drop the order (graphql.OrderField, or graphql.Skip(graphql.SkipOrderField) under orderfields=all), add graphql.OrderUnguarded() to accept it, or guard the field another way"
-
-// A field with an application directive that has where predicates or an
-// order value is warned of, naming the type, the field and the directive:
-// neither carries the directive. OrderUnguarded silences the order's
-// warning, and the output does not change.
-func TestUnguardedWarns(t *testing.T) {
-	const where = "Thing.tagged has @sensitive, but its where predicates are not guarded by it; drop graphql.WhereOps or graphql.WhereInput, or guard the field another way"
-	const both = "Thing.tagged has @sensitive, but its where predicates and order value are not guarded by it; drop graphql.WhereOps or graphql.WhereInput and the order (graphql.OrderField, or graphql.Skip(graphql.SkipOrderField) under orderfields=all), or guard the field another way"
+// A field with an application directive keeps its where predicates and its
+// order value without a warning: the directive guards the field in the type,
+// and which caller may filter or order by it is the application's access
+// control, as under entgql (ADR 0185). The output carries no directive on the
+// predicate.
+func TestDirectiveFieldFiltersAndOrdersWithoutWarning(t *testing.T) {
 	tagged := func(anns ...graphql.Annotation) *plugin.Model {
 		m := annotatedOrder(t, orderThing(t))
 		m.Entities[0].Fields[14].Annotations = ann(t, append(anns, sensitiveDir())...)
 		return m
 	}
-	unguarded := func(ws []string) []string {
-		var out []string
-		for _, w := range ws {
-			if strings.Contains(w, "not guarded") {
-				out = append(out, w)
-			}
-		}
-		return out
-	}
 	for _, c := range []struct {
 		name string
 		m    *plugin.Model
 		cfg  Config
-		want []string
 	}{
-		{"no predicates, no order", tagged(), Config{}, nil},
-		{"WhereOps", tagged(graphql.WhereOps(graphql.OpsEquality)), Config{}, []string{where}},
-		{"WhereInput", tagged(graphql.WhereInput()), Config{}, []string{where}},
-		{"WhereInput under where=whitelist", tagged(graphql.WhereInput()), Config{WhereWhitelist: true}, []string{where}},
-		{"WhereOps under where=whitelist", tagged(graphql.WhereOps(graphql.OpsEquality)), Config{WhereWhitelist: true}, nil},
-		{"OrderUnguarded", tagged(graphql.OrderField("TAG"), graphql.OrderUnguarded()), Config{}, nil},
-		{"OrderUnguarded and WhereOps", tagged(graphql.OrderField("TAG"), graphql.OrderUnguarded(), graphql.WhereOps(graphql.OpsEquality)), Config{}, []string{where}},
-		{"orderfields=all", tagged(), Config{OrderFields: "all"}, []string{unguardedOrder}},
-		{"orderfields=all and WhereOps", tagged(graphql.WhereOps(graphql.OpsEquality)), Config{OrderFields: "all"}, []string{both}},
-		{"orderfields=all, OrderUnguarded", tagged(graphql.OrderField("TAG"), graphql.OrderUnguarded()), Config{OrderFields: "all"}, nil},
-		{"orderfields=all, SkipOrderField", tagged(graphql.Skip(graphql.SkipOrderField)), Config{OrderFields: "all"}, nil},
+		{"WhereOps", tagged(graphql.WhereOps(graphql.OpsEquality)), Config{}},
+		{"WhereInput", tagged(graphql.WhereInput()), Config{}},
+		{"orderfields=all", tagged(), Config{OrderFields: "all"}},
+		{"orderfields=all and WhereOps", tagged(graphql.WhereOps(graphql.OpsEquality)), Config{OrderFields: "all"}},
 	} {
-		if got := unguarded(warningsOf(t, c.m, c.cfg)); !slices.Equal(got, c.want) {
-			t.Errorf("%s:\n got %q\nwant %q", c.name, got, c.want)
+		for _, w := range warningsOf(t, c.m, c.cfg) {
+			if strings.Contains(w, "Thing.tagged") {
+				t.Errorf("%s: warns %q, want nothing about Thing.tagged", c.name, w)
+			}
 		}
 	}
-	// The warning leaves the output as it was.
 	m := tagged(graphql.WhereOps(graphql.OpsEquality))
 	if _, sdl := loadWith(t, m, Config{}, "scalar Decimal\n"+sensitiveDecl); !strings.Contains(sdl, "  taggedNEQ: String\n") || strings.Contains(sdl, "taggedNEQ: String @") {
 		t.Errorf("the predicate changed:\n%s", sdl)

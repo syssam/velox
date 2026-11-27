@@ -193,6 +193,9 @@ mutation fields in app.graphql, the directive declared on
 
 ### Directives that do not reach predicates or orders
 
+> Superseded by [0185](0185-graphql-no-unguarded-filter-warning.md): the
+> warning below is gone; the `OrderField` refusal stays.
+
 Since a directive reaches no input or where field, a field it guards in
 the type would leak through a filter or an order unremarked. So a field
 with an application directive that has where predicates (from `WhereOps`

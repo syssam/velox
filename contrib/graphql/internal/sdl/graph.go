@@ -194,9 +194,6 @@ func build(m *plugin.Model, cfg Config) (*graph, error) {
 		}
 	}
 	for _, o := range g.objects {
-		g.warnings = append(g.warnings, o.warnUnguarded()...)
-	}
-	for _, o := range g.objects {
 		if err := g.mutationsOf(o); err != nil {
 			return nil, err
 		}

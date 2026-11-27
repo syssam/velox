@@ -417,10 +417,11 @@ func FieldName(name string) Annotation { return Annotation{FieldName: name} }
 func OrderField(name string) Annotation { return Annotation{OrderField: name} }
 
 // OrderUnguarded allows OrderField on a field with an application directive,
-// one other than GraphQL's own. Such a directive guards the field and its
-// filters, but not the order: the field's values would be in the cursors, and
-// the order of the nodes would reveal them. Without OrderUnguarded the plugin
-// refuses the pair. It applies to a field with OrderField only.
+// one other than GraphQL's own. Such a directive guards the field in the type,
+// not the order: the field's values would be in the cursors, and the order of
+// the nodes would reveal them. Without OrderUnguarded the plugin refuses the
+// pair. It applies to a field with OrderField only, and changes nothing under
+// orderfields=all, which orders such a field without refusing it.
 func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
 
 // OrderVia makes a field of a to-one edge's target orderable, on the

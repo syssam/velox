@@ -17,6 +17,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- velox-graphql: a field with an application directive that has where
+  predicates or an order value is no longer warned of. Filtering and ordering
+  by it is the application's access control, as under entgql. The refusal of
+  `graphql.OrderField` on such a field without `graphql.OrderUnguarded` stays;
+  under `orderfields=all` `OrderUnguarded` now changes nothing. No output
+  changes (decision 0185).
 - `ErrNoTx` and `ErrAdoptedTx` tell why `AfterCommit`, `BeforeCommit` and
   `AfterRollback` refused (`ErrNoTx`: not a running transaction's DB, which
   does not mean committed), and `ErrNoTx` is the locking read's refusal outside
