@@ -36,8 +36,8 @@ that touches more than one is checked in each.
 - `veloxvet`: the static checks of code that uses velox, as go/analysis
   analyzers, and the `veloxvet` command that runs them as go vet's tool. It
   requires only `golang.org/x/tools`, which the root does not
-  (decision 0176). Its tests copy `testdata/a` into a temporary module that
-  reaches the root through a replace.
+  (decision 0176). Its tests copy `testdata`'s packages into a temporary
+  module that reaches the root through a replace.
 - `examples`: the runnable examples. Each has its schema, its generated code and
   its migrations.
 - `bench/compare`: the harness that compares velox's build and runtime cost
@@ -166,7 +166,7 @@ group.
   the tests a step of the `test` job, whose coverage floors read their
   profile. A read a test or a demo means to fail carries
   `//velox:unbounded-ok`, and a zero it means the default to replace
-  `//velox:zero-ok`.
+  `//velox:zero-ok`. The opt-in `locktx` check does not run there.
 - `bench_compare` (bench): the tidy check, `go vet`, golangci-lint and
   `go test -race -short` in `bench/compare`, then the velox case of
   `TestGenerateCompiles`, which `-short` skips. The measurements never run

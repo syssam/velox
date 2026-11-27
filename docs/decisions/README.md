@@ -188,3 +188,4 @@ contributor needs to know.
 | [0180](0180-tx-retry-rolled-back.md) | `TxRetryRolledBack(n)` (was `TxRetrySerializable`) also retries a lost or refused connection before COMMIT, never after it |
 | [0181](0181-deferred-filter-and-hooks.md) | `velox.Deferred`: a filter and hooks given once after Open; every statement fails with `ErrNotReady` until then |
 | [0182](0182-tx-cancel-on-end.md) | `TxCancelOnEnd` cancels fn's ctx when its transaction ends, with cause `ErrTxEnded`; opt-in, default unchanged |
+| [0183](0183-veloxvet-lock-tx.md) | veloxvet's `LockTx` (`locktx`), off unless `-locktx.enable`, reports a locking read whose handle is not provably a transaction's, ignoring the context's transaction; a parameter's handle, or a non-receiver parameter's field, passes the check to the callers through a `LocksOnParam` fact; a lock under a constant condition on a parameter is not reported where the constant does not take it; `//velox:lock-ok` waives |

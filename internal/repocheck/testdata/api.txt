@@ -1878,10 +1878,22 @@ func (*Defaults) AFact()
 func (*Defaults) String() string
 func (*FreshQuery) AFact()
 func (*FreshQuery) String() string
+func (*LocksOnParam) AFact()
+func (*QueryFrom) AFact()
+func (*TxCallback) AFact()
+func (f *LocksOnParam) String() string
+func (f *QueryFrom) String() string
+func (f *TxCallback) String() string
 type DefaultField struct { Name string Default string }
 type Defaults struct { Handles string Fields []DefaultField }
 type FreshQuery struct { }
+type LockCond struct { Param int Equal bool Value string Kind constant.Kind }
+type LocksOnParam struct { Locks []ParamLock }
+type ParamLock struct { Param int Field string Handle string When [][]LockCond }
+type QueryFrom struct { Params []int Locked bool When [][]LockCond }
+type TxCallback struct { Params []int }
 var Analyzers
+var LockTx
 var Unbounded
 var ZeroDefault
 

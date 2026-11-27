@@ -17,6 +17,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- veloxvet's `LockTx` analyzer (`locktx`), off unless `-locktx.enable` is
+  given, reports a locking read (`ForUpdate`, `ForShare`) whose handle is
+  not provably a transaction's: a struct field, a package variable, a
+  call's result. A handle that is a parameter passes the check to the
+  callers through a `LocksOnParam` fact, across packages; a lock under a
+  constant condition on a parameter is not reported where the constant
+  does not take it. It ignores the transaction a context carries, so it is
+  for code that passes transaction handles explicitly. `//velox:lock-ok`
+  waives a report. `go vet -vettool=$(which veloxvet) -locktx.enable
+  ./...` runs it beside the other analyzers; the default run is unchanged
+  (decision 0183).
 - `TxCancelOnEnd` cancels fn's context, and a nested Tx's, when its
   transaction ends, with the cause `ErrTxEnded`, so a statement a goroutine
   sends after the end fails; the default is unchanged (decision 0182).

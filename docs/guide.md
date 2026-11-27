@@ -733,6 +733,35 @@ and insert it. `//velox:zero-ok` waives a report, by the rule
 `veloxvet.Analyzers` are go/analysis analyzers, for golangci-lint's plugins
 and other drivers.
 
+Its `locktx` check is off by default. It reports a locking read,
+`ForUpdate()` or `ForShare()`, whose handle is not provably a
+transaction's: the closure's `tx` of `db.Tx`, or a handle a function was
+given as a parameter, which its callers are then checked for. It ignores
+the transaction a context carries, so it is for code that passes the
+transaction's handle explicitly. Turn it on beside the other checks with
+its flag:
+
+```sh
+go vet -vettool=$(which veloxvet) -locktx.enable ./...
+```
+
+```go
+func lockRow(ctx context.Context, tx *velox.DB, id int64) error {
+	_, err := tx.Query[veloxgen.Job]().Where(J.ID.EQ(id)).ForUpdate().All(ctx)
+	return err
+}
+
+lockRow(ctx, s.db, id) // reported: s.db is a field, not a transaction's handle
+s.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+	return lockRow(ctx, tx, id) // not reported
+})
+```
+
+A lock taken only under a condition on a parameter, `if lock {
+q = q.ForUpdate() }`, is not reported where the argument is a constant
+that does not take it. `//velox:lock-ok` waives a report, by the rule
+`//velox:unbounded-ok` follows ([ADR 0183](decisions/0183-veloxvet-lock-tx.md)).
+
 ### Reading one column: Values and IDs
 
 `Values` reads one column of the rows a query reads, and `IDs` reads their
@@ -2677,7 +2706,9 @@ transaction's own writes. `velox.Pool(db)` is nil on a transaction's DB.
 `ForUpdate()` and `ForShare()` lock the rows a query reads until the
 transaction ends; `SkipLocked()` and `NoWait()` change what happens when
 another transaction holds a row. Locking reads run inside `Tx` only, on
-PostgreSQL and MySQL, and on SQLite under the option below. A job queue, for a `Job` entity with a `state` enum,
+PostgreSQL and MySQL, and on SQLite under the option below. veloxvet's
+opt-in `locktx` check reports one whose handle is not provably a
+transaction's at build time. A job queue, for a `Job` entity with a `state` enum,
 looks like this:
 
 ```go

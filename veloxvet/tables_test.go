@@ -63,6 +63,63 @@ var ignoredFuncs = map[string]bool{
 	untypedPath + ".QueryDB": true,
 }
 
+// lockIgnored are the exported functions and methods that take a query and
+// return none that LockTx leaves out of lockReads: they refuse a lock
+// whatever the handle (Count, the aggregates, LoadEach, CountEach), or read
+// no row.
+var lockIgnored = map[string]bool{
+	veloxPath + ".Query.Count":           true,
+	veloxPath + ".Query.Ordered":         true,
+	veloxPath + ".Query.Reads":           true,
+	enginePath + ".TableQuery.Count":     true,
+	enginePath + ".TableQuery.LoadEach":  true,
+	enginePath + ".TableQuery.CountEach": true,
+	enginePath + ".TableQuery.Order":     true,
+	enginePath + ".TableQuery.Ordered":   true,
+	enginePath + ".TableQuery.Selects":   true,
+	enginePath + ".TableQuery.Table":     true,
+	veloxPath + ".Sum":                   true,
+	veloxPath + ".SumNull":               true,
+	veloxPath + ".Avg":                   true,
+	veloxPath + ".AvgNull":               true,
+	veloxPath + ".Min":                   true,
+	veloxPath + ".MinNull":               true,
+	veloxPath + ".Max":                   true,
+	veloxPath + ".MaxNull":               true,
+	veloxPath + ".CountBy":               true,
+	veloxPath + ".SumBy":                 true,
+	veloxPath + ".AvgBy":                 true,
+	veloxPath + ".MinBy":                 true,
+	veloxPath + ".MaxBy":                 true,
+	veloxPath + ".SumByNull":             true,
+	veloxPath + ".AvgByNull":             true,
+	veloxPath + ".MinByNull":             true,
+	veloxPath + ".MaxByNull":             true,
+	veloxPath + ".LoadEach":              true,
+	veloxPath + ".CountEach":             true,
+	untypedPath + ".QueryDB":             true,
+}
+
+// dbIgnored are the exported functions and methods of velox and untyped
+// that return a *velox.DB which LockTx does not take for a transaction's:
+// a new DB, or one it cannot tell is in a transaction.
+var dbIgnored = map[string]bool{
+	veloxPath + ".Connect":     true,
+	veloxPath + ".Open":        true,
+	veloxPath + ".OpenConn":    true,
+	veloxPath + ".OpenShards":  true,
+	veloxPath + ".Mutation.DB": true,
+	untypedPath + ".SourceDB":  true,
+	untypedPath + ".QueryDB":   true,
+}
+
+// txIgnored are the functions that take a function of a DB and begin no
+// transaction for it: a filter's.
+var txIgnored = map[string]bool{
+	veloxPath + ".WithFilter":   true,
+	veloxPath + ".Deferred.Set": true,
+}
+
 // ignoredInsert are InsertQuery's exported methods that ZeroDefault treats
 // as writing a column: a chain through one is not checked.
 var ignoredInsert = map[string]bool{"Set": true, "SetInput": true}
@@ -130,7 +187,40 @@ func TestTablesMatchAPI(t *testing.T) {
 		}
 	}
 
-	for _, set := range []map[string]bool{veloxvet.Roles, ignoredQuery, ignoredFuncs} {
+	// LockTx's tables: every function that takes a query and returns none
+	// is a locking read or ignored, every function that takes a function of
+	// a DB opens a transaction, and every function that returns a DB is
+	// classified.
+	for k, f := range all {
+		recv := k[:strings.LastIndex(k, ".")]
+		if !f.Exported() || strings.HasPrefix(k, enginePath+".") && recv != enginePath+".TableQuery" {
+			continue
+		}
+		if r := f.Signature().Recv(); r != nil && !exportedRecv(r.Type()) {
+			continue
+		}
+		sig := f.Signature()
+		takesQuery := slices.Contains(queries, recv) || mentionsQuery(sig)
+		if takesQuery && !returnsQuery(sig) && !veloxvet.LockReads[k] && !lockIgnored[k] {
+			t.Errorf("%s reads a query and is neither in LockTx's lockReads nor in lockIgnored", k)
+		}
+		if takesDBFunc(sig) && !veloxvet.TxOpeners[k] && !txIgnored[k] {
+			t.Errorf("%s takes a function of a DB and is not in LockTx's txOpeners", k)
+		}
+		if returnsDB(sig) && !veloxvet.TxResults[k] && !veloxvet.SameHandle[k] && !dbIgnored[k] {
+			t.Errorf("%s returns a DB and is in none of LockTx's txResults and sameHandle, nor in dbIgnored", k)
+		}
+	}
+	for k := range veloxvet.QueryHandle {
+		if r := veloxvet.Roles[k]; !r {
+			t.Errorf("%s is in LockTx's queryHandle but not in Unbounded's roles", k)
+		}
+	}
+
+	for _, set := range []map[string]bool{
+		veloxvet.Roles, ignoredQuery, ignoredFuncs, veloxvet.LockApply, veloxvet.LockReads, veloxvet.TxOpeners,
+		veloxvet.TxResults, veloxvet.SameHandle, veloxvet.QueryHandle, lockIgnored, dbIgnored, txIgnored,
+	} {
 		for k := range set {
 			if all[k] == nil {
 				t.Errorf("%s is in a table but velox has no such function", k)
@@ -174,4 +264,57 @@ func isQueryType(t types.Type) bool {
 		return k == veloxPath+".Query" || k == enginePath+".TableQuery"
 	}
 	return false
+}
+
+// returnsQuery reports whether a result of sig is a query.
+func returnsQuery(sig *types.Signature) bool {
+	for v := range sig.Results().Variables() {
+		if isQueryType(v.Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// returnsDB reports whether a result of sig is a *velox.DB.
+func returnsDB(sig *types.Signature) bool {
+	for v := range sig.Results().Variables() {
+		if isDBType(v.Type()) {
+			return true
+		}
+	}
+	return false
+}
+
+// takesDBFunc reports whether a parameter of sig is a function that takes
+// a *velox.DB.
+func takesDBFunc(sig *types.Signature) bool {
+	for v := range sig.Params().Variables() {
+		if f, ok := v.Type().Underlying().(*types.Signature); ok {
+			for p := range f.Params().Variables() {
+				if isDBType(p.Type()) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func isDBType(t types.Type) bool {
+	p, ok := types.Unalias(t).(*types.Pointer)
+	if !ok {
+		return false
+	}
+	n, ok := types.Unalias(p.Elem()).(*types.Named)
+	return ok && n.Obj().Pkg() != nil && n.Obj().Pkg().Path() == veloxPath && n.Obj().Name() == "DB"
+}
+
+// exportedRecv reports whether a method's receiver type is exported.
+func exportedRecv(t types.Type) bool {
+	if p, ok := types.Unalias(t).(*types.Pointer); ok {
+		t = p.Elem()
+	}
+	n, ok := types.Unalias(t).(*types.Named)
+	return ok && n.Obj().Exported()
 }

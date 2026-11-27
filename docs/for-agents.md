@@ -107,5 +107,7 @@ Run `go build ./...`, `go vet ./...` and `go test ./...`, and in CI
 `go tool velox-gen -check ./veloxschema`. Run veloxvet too
 (`go install github.com/syssam/velox/veloxvet/cmd/veloxvet@latest`, then
 `go vet -vettool=$(which veloxvet) ./...`): it finds the reads that would
-fail with `ErrUnbounded`, and the zeros an insert's default would replace. PostgreSQL and MySQL tests need their
+fail with `ErrUnbounded`, and the zeros an insert's default would replace.
+Code that passes transaction handles explicitly can add `-locktx.enable`,
+which reports a locking read whose handle is not provably a transaction's. PostgreSQL and MySQL tests need their
 own DSNs; say so when you only ran SQLite.
