@@ -103,6 +103,23 @@ func TestOrderValuesKeyset(t *testing.T) {
 						t.Errorf("%s, %d a page:\n got %v\nwant %v", name, n, ids(got), ids(want))
 					}
 				}
+				// A window: Before takes the values of its row as AfterValues
+				// does, so rows past i and before j are exactly those between.
+				all, err := q.AllowUnbounded().All(ctx)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				for i := range want {
+					for j := i + 1; j < len(want); j++ {
+						rs, err := q.AfterValues(all.At(i), all.OrderValues(i)).Before(all.At(j), all.OrderValues(j)).AllowUnbounded().All(ctx)
+						if err != nil {
+							t.Fatalf("%s: window %d to %d: %v", name, i, j, err)
+						}
+						if got := untyped.RowsOf[testmodel.Invoice](rs); !slices.Equal(ids(got), ids(want[i+1:j])) {
+							t.Errorf("%s: window %d to %d: %v, want %v", name, i, j, ids(got), ids(want[i+1:j]))
+						}
+					}
+				}
 			}
 		}
 	})

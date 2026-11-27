@@ -1594,6 +1594,7 @@ TableQuery.After(row any) TableQuery
 TableQuery.AfterValues(row any, vals []any) TableQuery
 TableQuery.All(ctx context.Context) (TableRows, error)
 TableQuery.AllowUnbounded() TableQuery
+TableQuery.Before(row any, vals []any) TableQuery
 TableQuery.Columns(cs ...int) TableQuery
 TableQuery.Count(ctx context.Context) (int, error)
 TableQuery.CountEach(ctx context.Context, owner Table, edge int, owners []any) ([]int64, error)

@@ -20,9 +20,8 @@ var (
 	// ErrPageTooLarge: first or last over the MaxPage of
 	// the limits (LimitsOf).
 	ErrPageTooLarge = errors.New("page is over the maximum")
-	// ErrBadPagination: first or last below 0, both given, another
-	// combination gqlgraph.Args refuses, or an orderBy over the MaxOrderTerms
-	// of the limits (LimitsOf).
+	// ErrBadPagination: first or last below 0, both given, or an orderBy over
+	// the MaxOrderTerms of the limits (LimitsOf).
 	ErrBadPagination = errors.New("bad pagination arguments")
 	// ErrFilterTooDeep: a where input nested deeper than the MaxFilterDepth
 	// of the limits (LimitsOf).

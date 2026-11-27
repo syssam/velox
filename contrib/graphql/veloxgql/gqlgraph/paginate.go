@@ -20,12 +20,15 @@ import (
 
 // Args are a connection's paging arguments, as the client gave them.
 //
-// first (with or without after) pages forward and last (with or without before)
+// after and before bound a window of the list, rows strictly past one cursor
+// and strictly before the other, as Relay's ApplyCursorsToEdges does; first
+// then takes the window's first rows and last its last. first (with or
+// without after or before) pages forward and last (with or without either)
 // backward; with neither, the page is the MaxPage of the limits of the
-// query's DB (veloxgql.LimitsOf) rows forward, or backward from before when
-// before is given. first and last together, after and before together, first
-// with before and last with after all fail with ErrBadPagination: keyset paging
-// bounds a page on one side only.
+// query's DB (veloxgql.LimitsOf) rows forward from after, or backward from
+// before when only before is given. first and last together fail with
+// ErrBadPagination, as under entgql: which rows the page holds would not be
+// plain.
 //
 // Order is the orderBy argument, the order of the nodes before c's key.
 // Where is the where argument, WhereOf's.
@@ -496,6 +499,8 @@ type Connection struct {
 	exprs int                // the number of q's orderings, first in terms, each read beside the row
 	after any                // the row the page starts after, in the paging direction
 	vals  []any              // after's values of q's orderings by an expression
+	other any                // the row the window ends before, in the paging direction: the cursor of the other side
+	oVals []any              // other's values of q's orderings by an expression
 	// edge is set by edgeConnection when the connection is its part of a
 	// batch.
 	edge *edgeMode
@@ -543,7 +548,7 @@ type Connection struct {
 //
 // It fails with the where input's error; with an input error for an order
 // field c does not know; with ErrBadPagination for first and last together,
-// either below 0, another combination Args refuses, or an order of more
+// either below 0, or an order of more
 // than MaxOrderTerms terms; with ErrPageTooLarge for either over MaxPage
 // (both the limits of the query's DB, veloxgql.LimitsOf); and with
 // ErrBadCursor for a cursor of another type, taken under another order, or
@@ -672,12 +677,17 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 		}
 	}
 	conn.terms = terms
-	cur := args.After
+	from, to := args.After, args.Before // the page starts after from, and ends before to
 	if back {
-		cur = args.Before
+		from, to = to, from
 	}
-	if cur != nil {
-		if conn.after, err = conn.row(*cur); err != nil {
+	if from != nil {
+		if conn.after, conn.vals, err = conn.row(*from); err != nil {
+			return nil, err
+		}
+	}
+	if to != nil {
+		if conn.other, conn.oVals, err = conn.row(*to); err != nil {
 			return nil, err
 		}
 	}
@@ -689,11 +699,15 @@ func newConnection(ctx context.Context, q untyped.TableQuery, c *Type, args Args
 //   - Paging backward (last or before) reverses every term's direction,
 //     continues after the cursor with velox's Query.After on that order, and
 //     reverses the rows read.
+//   - With both cursors, the page is read from the one it pages from, and
+//     the other bounds the window: Query.Before on the same order, the
+//     condition After makes with every term the other way.
 //   - It reads one row more than the page: that row's presence is
-//     hasNextPage forward and hasPreviousPage backward. The other is true
-//     when the page starts at a cursor, after or before, as entgql says,
-//     and false otherwise: Relay lets a server say false when it cannot
-//     tell cheaply.
+//     hasNextPage forward and hasPreviousPage backward. The cursor the page
+//     ends at, when given, makes the same flag true too: the rows past the
+//     window are there. The other is true when the page starts at a cursor,
+//     as entgql says, and false otherwise: Relay lets a server say false when
+//     it cannot tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap: the
 // MaxPage of the limits of the query's DB bounds it. The base query's With
@@ -746,6 +760,10 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 	case c.after != nil:
 		q = q.After(c.after)
 	}
+	if c.other != nil {
+		// The window's far end: the rows before it in the order the page reads.
+		q = q.Before(c.other, c.oVals)
+	}
 	var rows untyped.Rows
 	var err error
 	if c.edge != nil {
@@ -795,12 +813,13 @@ func (c *Connection) run(ctx context.Context) (*Page, error) {
 		// A batch made its rows a group already.
 		gqlcore.Add(ctx, p.Rows)
 	}
+	// entgql's: a page that starts at a cursor has rows before it, and one
+	// that ends at a cursor has rows after it.
 	if c.back {
-		p.Info.HasPreviousPage = more
-		// entgql's: a page before a cursor has one after it.
+		p.Info.HasPreviousPage = more || c.other != nil
 		p.Info.HasNextPage = c.after != nil
 	} else {
-		p.Info.HasNextPage = more
+		p.Info.HasNextPage = more || c.other != nil
 		p.Info.HasPreviousPage = c.after != nil
 	}
 	if n > 0 {
@@ -830,12 +849,13 @@ func (c *Connection) field(i int) string {
 
 // row checks cur against the connection's type and order, and returns the
 // row it stands for: a zero row with the order's and the key's columns set
-// from it, for Query.After.
-func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
+// from it, for Query.After and Before, and its values of the orderings by
+// an expression.
+func (c *Connection) row(cur veloxgql.Cursor) (any, []any, error) {
 	if m, ok := cur.Key.(*gqlcore.MsgpackCursor); ok {
 		var err error
 		if cur, err = c.msgpack(m); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	last := len(c.terms) - 1
@@ -844,29 +864,30 @@ func (c *Connection) row(cur veloxgql.Cursor) (any, error) {
 		order[i] = cursorOrder{Field: c.field(i), Direction: c.terms[i].dir}
 	}
 	if err := checkCursor(cur, c.typ, order); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var vals []any
 	if c.exprs > 0 {
-		c.vals = make([]any, c.exprs)
-		for i := range c.vals {
+		vals = make([]any, c.exprs)
+		for i := range vals {
 			v, err := orderValue(cur.Terms[i].Value)
 			if err != nil {
-				return nil, gqlcore.Within(c.typ+" cursor", err)
+				return nil, nil, gqlcore.Within(c.typ+" cursor", err)
 			}
-			c.vals[i] = v
+			vals[i] = v
 		}
 	}
 	own := c.query.Table()
 	x := own.New()
 	for i := range c.terms[:last] {
 		if err := c.terms[i].set(x, own, cur.Terms[i].Value); err != nil {
-			return nil, gqlcore.Within(c.typ+" cursor", err)
+			return nil, nil, gqlcore.Within(c.typ+" cursor", err)
 		}
 	}
 	if err := c.terms[last].set(x, own, cur.Key); err != nil {
-		return nil, gqlcore.Within(c.typ+" cursor", err)
+		return nil, nil, gqlcore.Within(c.typ+" cursor", err)
 	}
-	return x, nil
+	return x, vals, nil
 }
 
 // msgpack is l, a msgpack cursor, as a cursor of the connection's own type
@@ -897,19 +918,13 @@ func (c *Connection) msgpack(l *gqlcore.MsgpackCursor) (veloxgql.Cursor, error) 
 }
 
 // pageSize is the page size args ask for, and whether they page backward;
-// maxPage is the most, and the size when args give none.
+// maxPage is the most, and the size when args give none. A page is backward
+// with last, and with before when neither first nor after is given.
 func pageSize(args Args, maxPage int) (int, bool, error) {
-	switch {
-	case args.First != nil && args.Last != nil:
+	if args.First != nil && args.Last != nil {
 		return 0, false, InputErrorf("%w: first and last given together", veloxgql.ErrBadPagination)
-	case args.After != nil && args.Before != nil:
-		return 0, false, InputErrorf("%w: after and before given together", veloxgql.ErrBadPagination)
-	case args.First != nil && args.Before != nil:
-		return 0, false, InputErrorf("%w: first pages forward, and before goes with last", veloxgql.ErrBadPagination)
-	case args.Last != nil && args.After != nil:
-		return 0, false, InputErrorf("%w: last pages backward, and after goes with first", veloxgql.ErrBadPagination)
 	}
-	back := args.Last != nil || args.Before != nil
+	back := args.Last != nil || (args.Before != nil && args.After == nil && args.First == nil)
 	n, name := args.First, "first"
 	if back {
 		n, name = args.Last, "last"

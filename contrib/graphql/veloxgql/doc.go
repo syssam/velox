@@ -80,7 +80,9 @@
 // TableQuery, and the generated code only names the columns. The order always
 // ends with the key. Paging is keyset, through velox's Query.After: last and
 // before reverse every term and reverse the rows read, and one row more than
-// the page sets hasNextPage or hasPreviousPage.
+// the page sets hasNextPage or hasPreviousPage. With both after and before the
+// connection reads the window between them, the second cursor as Before's
+// condition (ADR 0187).
 //
 // # Batches
 //

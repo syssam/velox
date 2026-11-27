@@ -17,6 +17,14 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ## Unreleased
 
+- velox-graphql: a connection takes `after` with `before`, `first` with
+  `before` and `last` with `after`, as entgql and veloxe do and the Relay
+  spec's algorithm says: the page is the first or the last rows of the
+  window between the cursors. These three combinations were
+  `ErrBadPagination`; `first` with `last` still is. The cursor a page ends at
+  makes that side's `hasNextPage` or `hasPreviousPage` true. New
+  `untyped.TableQuery.Before(row, vals)`, the condition of `After` on the
+  reversed order. No generated output changes (decision 0187).
 - velox-graphql: `graphql.OrderField` on an Other field of a decimal type (a
   struct with `MarshalText`, `UnmarshalText` and `Value`, such as
   shopspring's `decimal.Decimal`) orders a connection and pages it by keyset.

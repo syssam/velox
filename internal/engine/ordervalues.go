@@ -925,6 +925,48 @@ func (q TableQuery) AfterValues(row any, vals []any) TableQuery {
 	return q
 }
 
+// Before limits the query to the rows before row, a *E of its entity, in
+// its OrderBy as it stands now: the rows After row would skip. It is the
+// keyset condition of After on the same order reversed, so that a term
+// descends where it ascended and a NULL that sorted last sorts first, and
+// it holds whatever After or AfterValues says: the page is the rows past one
+// row and before another. vals are row's values of the orderings that are
+// expressions, as AfterValues takes them; nil when the query has none.
+// The order must be set before Before is called and not changed after it, and
+// like After's, row must be one a query returned.
+func (q TableQuery) Before(row any, vals []any) TableQuery {
+	if q.t.err != nil {
+		return q
+	}
+	p, err := q.t.rowOf(row)
+	if err != nil {
+		return q.fail(fmt.Errorf("velox: %s: Before: %w", q.t.info.Name, err))
+	}
+	rev := q.st
+	rev.Where, rev.OrderBy = nil, reverseOrder(q.st.OrderBy)
+	if err := AddAfterValues(&rev, q.t.info, q.t.copyRow(p), vals, q.e.D); err != nil {
+		return q.fail(err)
+	}
+	q.st.Where = append(slices.Clip(q.st.Where), rev.Where...)
+	return q
+}
+
+// reverseOrder is os, each term the other way: its direction and its NULL
+// place flipped. The first term's own slice is never changed.
+func reverseOrder(os []OrderTerm) []OrderTerm {
+	out := slices.Clone(os)
+	for i := range out {
+		out[i].Desc = !out[i].Desc
+		switch out[i].Nulls {
+		case NullsFirst:
+			out[i].Nulls = NullsLast
+		case NullsLast:
+			out[i].Nulls = NullsFirst
+		}
+	}
+	return out
+}
+
 // OrderValues returns row i's values of the query's orderings that are
 // expressions, as TableQuery.OrderValues read them; nil when the query did
 // not read them. The slice is the rows' own.

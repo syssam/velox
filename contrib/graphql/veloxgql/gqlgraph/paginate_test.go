@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -219,6 +220,29 @@ func TestPaginate(t *testing.T) {
 				check("last 2 before", page(gqlgraph.Args{Last: new(2), Before: cur}), c.want[max(i-2, 0):i], true, i > 2)
 			}
 
+			// A window: rows past the cursor of row i and before the cursor of
+			// row j. first takes its first rows, last its last, and with
+			// neither the page reads forward from i. The cursor the page ends
+			// at makes that side's flag true, as entgql says.
+			for i := range c.want {
+				for j := i + 1; j < len(c.want); j++ {
+					ci, cj := wire(t, all.Cursors[i]), wire(t, all.Cursors[j])
+					win := c.want[i+1 : j]
+					w := names[c.want[i]] + " to " + names[c.want[j]]
+					for _, n := range []int{1, 2, 20} {
+						front := win[:min(n, len(win))]
+						check(fmt.Sprintf("first %d after and before %s", n, w), page(gqlgraph.Args{First: new(n), After: ci, Before: cj}), front, true, true)
+						back := win[max(len(win)-n, 0):]
+						check(fmt.Sprintf("last %d after and before %s", n, w), page(gqlgraph.Args{Last: new(n), After: ci, Before: cj}), back, true, true)
+					}
+					check("after and before "+w, page(gqlgraph.Args{After: ci, Before: cj}), win, true, true)
+				}
+				// first with before alone: the rows ahead of the cursor.
+				check("first 2 before "+names[c.want[i]], page(gqlgraph.Args{First: new(2), Before: wire(t, all.Cursors[i])}), c.want[:min(2, i)], true, false)
+				// last with after alone: the rows past the cursor, from the end.
+				check("last 2 after "+names[c.want[i]], page(gqlgraph.Args{Last: new(2), After: wire(t, all.Cursors[i])}), c.want[max(i+1, len(c.want)-2):], false, true)
+			}
+
 			// Walking the pages forward, then backward, gives every row once.
 			var walk []int64
 			args := gqlgraph.Args{First: new(3)}
@@ -298,9 +322,6 @@ func TestPaginateRefuses(t *testing.T) {
 		{"last 101", gqlgraph.Args{Last: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
 		{"first -1", gqlgraph.Args{First: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
 		{"last -1", gqlgraph.Args{Last: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
-		{"after and before", gqlgraph.Args{After: byName, Before: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"first and before", gqlgraph.Args{First: new(1), Before: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"last and after", gqlgraph.Args{Last: new(1), After: byName}, name, []error{veloxgql.ErrBadPagination}},
 		{"name cursor under age", gqlgraph.Args{After: byName}, []gqlgraph.OrderTerm[person]{ageTerm(veloxgql.OrderDirectionAsc)}, []error{veloxgql.ErrBadCursor}},
 		{"name ASC cursor under name DESC", gqlgraph.Args{Before: byName}, []gqlgraph.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}, []error{veloxgql.ErrBadCursor}},
 		{"name cursor under the key", gqlgraph.Args{After: byName}, nil, []error{veloxgql.ErrBadCursor}},

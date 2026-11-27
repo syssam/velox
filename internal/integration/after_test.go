@@ -8,6 +8,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/untyped"
 )
 
 // TestAfterNullsExact: an order by a nullable column, with many NULLs and ties
@@ -93,4 +94,61 @@ func nullsLast(a, b *time.Time) int {
 		return -1
 	}
 	return a.Compare(*b)
+}
+
+// TestBeforeNullsExact: Before is After on the reversed order, so After(a)
+// with Before(b) is the rows strictly between a and b, and Before(b) alone
+// the rows ahead of b, on every dialect, in each direction of a nullable
+// column and of the key, among many NULLs and ties.
+func TestBeforeNullsExact(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		t1, t2 := t0.Add(time.Hour), t0.Add(2*time.Hour)
+		at := []*time.Time{nil, &t1, nil, &t2, &t1, nil, &t2, &t1, nil}
+		rows := make([]testmodel.Invoice, len(at))
+		for i, p := range at {
+			rows[i] = newInvoice(7, fmt.Sprintf("B-%02d", i))
+			rows[i].ID, rows[i].PaidAt = int64(100+i), p
+		}
+		if err := tg.db.InsertAll(rows).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		for _, o := range []struct{ paidDesc, idDesc bool }{{false, false}, {false, true}, {true, false}, {true, true}} {
+			name := fmt.Sprintf("paid desc %v, id desc %v", o.paidDesc, o.idDesc)
+			orders := []velox.Order[testmodel.Invoice]{I.PaidAt.Asc(), I.ID.Asc()}
+			if o.paidDesc {
+				orders[0] = I.PaidAt.Desc()
+			}
+			if o.idDesc {
+				orders[1] = I.ID.Desc()
+			}
+			q := tg.db.Query[testmodel.Invoice]().Where(I.OrgID.EQ(7)).OrderBy(orders...)
+			want, err := q.AllowUnbounded().All(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			read := func(u untyped.TableQuery) []int64 {
+				t.Helper()
+				rs, err := u.AllowUnbounded().All(ctx)
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				out := make([]int64, rs.Len())
+				for i := range out {
+					out[i] = rs.At(i).(*testmodel.Invoice).ID
+				}
+				return out
+			}
+			u := untyped.FromQuery(q)
+			for j := range want {
+				if got := read(u.Before(want[j], nil)); !slices.Equal(got, ids(want[:j])) {
+					t.Errorf("%s: Before %d: %v, want %v", name, want[j].ID, got, ids(want[:j]))
+				}
+				for i := range want[:j] {
+					if got := read(u.After(want[i]).Before(want[j], nil)); !slices.Equal(got, ids(want[i+1:j])) {
+						t.Errorf("%s: After %d, Before %d: %v, want %v", name, want[i].ID, want[j].ID, got, ids(want[i+1:j]))
+					}
+				}
+			}
+		}
+	})
 }

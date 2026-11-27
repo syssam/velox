@@ -157,6 +157,7 @@ const (
 //	Columns(cs ...int) TableQuery
 //	Selects(cs ...int) bool
 //	After(row any) TableQuery
+//	Before(row any, vals []any) TableQuery
 //	Join(edge int, target Table) TableQuery
 //	LeftJoin(edge int, target Table) TableQuery
 //	Select(ts ...Term) TableQuery
