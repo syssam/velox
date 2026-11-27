@@ -13,7 +13,7 @@ tool (
 require (
 	github.com/99designs/gqlgen v0.17.86
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/syssam/velox v1.0.0-rc.1
+	github.com/syssam/velox v0.0.0-00010101000000-000000000000
 	github.com/syssam/velox/contrib/graphql v0.0.0-00010101000000-000000000000
 	github.com/syssam/velox/contrib/veloxotel v0.0.0-00010101000000-000000000000
 	github.com/vektah/gqlparser/v2 v2.5.59

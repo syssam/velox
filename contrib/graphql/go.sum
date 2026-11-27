@@ -47,8 +47,6 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/syssam/graphql-go v0.0.0-20261029022150-3e0050be7462 h1:iOL7FKCQl1emXjEtdSGnzLsiePLuPp5vd/hwGvAVvBY=
 github.com/syssam/graphql-go v0.0.0-20261029022150-3e0050be7462/go.mod h1:JeQpBhU8Uac/Mt8B4/dZ190a0Fxbj4AlMOC+3sQmeo8=
-github.com/syssam/velox v1.0.0-rc.1 h1:CxI34k8+7jUZ94DaJUPhJFb9SX5nMCL7+bFupmxkzZs=
-github.com/syssam/velox v1.0.0-rc.1/go.mod h1:CRmyMA3W16YJt+RAs3rS2+SosQ+dkU4CxDeU49UuZIw=
 github.com/vektah/gqlparser/v2 v2.5.59 h1:7BfPIupBJ2yIKxD91/zv30d6chKQkerS4ylKmVy8r4g=
 github.com/vektah/gqlparser/v2 v2.5.59/go.mod h1:JNK+plRwKdXLsF/qPFPe5tE0z4s1WeroD9S5LR8um/Q=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
