@@ -10,8 +10,19 @@ import (
 	"time"
 )
 
-// TestJSONValue: times, UUIDs and the floats with no JSON number become
-// strings; other values stay as they are.
+// dec stands in for a decimal library's type: a text form whose JSON is
+// another.
+type dec struct{ s string }
+
+func (d dec) MarshalText() ([]byte, error) { return []byte(d.s), nil }
+func (d dec) MarshalJSON() ([]byte, error) { return []byte(`{"d":"` + d.s + `"}`), nil }
+
+type badDec struct{}
+
+func (badDec) MarshalText() ([]byte, error) { return nil, errors.New("no text") }
+
+// TestJSONValue: times, UUIDs, the floats with no JSON number and a type
+// with a text form become strings; other values stay as they are.
 func TestJSONValue(t *testing.T) {
 	when := time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)
 	for _, c := range []struct {
@@ -20,6 +31,8 @@ func TestJSONValue(t *testing.T) {
 		{when, "2026-01-02T03:04:05.000000006Z"}, {[16]byte{}, "00000000-0000-0000-0000-000000000000"},
 		{math.NaN(), "NaN"}, {math.Inf(1), "+Inf"}, {math.Inf(-1), "-Inf"}, {1.5, 1.5},
 		{float32(math.Inf(-1)), "-Inf"}, {float32(2), float32(2)}, {int64(3), int64(3)},
+		{dec{"12.50"}, "12.50"}, // a decimal's type is its text, not its MarshalJSON
+		{badDec{}, badDec{}},    // a MarshalText that fails leaves the value to json
 	} {
 		if got := JSONValue(c.v); got != c.want {
 			t.Errorf("JSONValue(%v) = %#v, want %#v", c.v, got, c.want)

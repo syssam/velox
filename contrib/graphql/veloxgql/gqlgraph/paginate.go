@@ -282,7 +282,7 @@ func newTerm(t untyped.Table, c *Column, dir veloxgql.OrderDirection) (term, err
 	}
 	tm.base = baseType(ft)
 	if tm.base == nil {
-		return tm, fmt.Errorf("veloxgql: %s.%s: keyset paging cannot continue after a %v: a cursor holds a struct only through its text, so its type needs encoding.TextMarshaler, encoding.TextUnmarshaler and driver.Valuer", info.Name, info.Columns[c.Index].Field, ft)
+		return tm, fmt.Errorf("veloxgql: %s.%s: keyset paging cannot continue after a %v: a cursor holds a struct only through its text, so its type needs MarshalText and Value on the value (encoding.TextMarshaler, driver.Valuer) and UnmarshalText on the pointer (encoding.TextUnmarshaler)", info.Name, info.Columns[c.Index].Field, ft)
 	}
 	return tm, nil
 }

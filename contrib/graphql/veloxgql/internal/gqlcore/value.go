@@ -35,12 +35,6 @@ func JSONValue(v any) any {
 		return x.Format(time.RFC3339Nano)
 	case [16]byte:
 		return FormatUUID(x)
-	case encoding.TextMarshaler:
-		// A decimal's type: its text, which SetValue reads back through
-		// UnmarshalText, whatever its MarshalJSON writes.
-		if b, err := x.MarshalText(); err == nil {
-			return string(b)
-		}
 	case float64:
 		if math.IsNaN(x) || math.IsInf(x, 0) {
 			return strconv.FormatFloat(x, 'g', -1, 64)
@@ -48,6 +42,13 @@ func JSONValue(v any) any {
 	case float32:
 		if f := float64(x); math.IsNaN(f) || math.IsInf(f, 0) {
 			return strconv.FormatFloat(f, 'g', -1, 32)
+		}
+	case encoding.TextMarshaler:
+		// A decimal's type: its text, which SetValue reads back through
+		// UnmarshalText, whatever its MarshalJSON writes. The case is last,
+		// so the types above keep their cost.
+		if b, err := x.MarshalText(); err == nil {
+			return string(b)
 		}
 	}
 	return v
